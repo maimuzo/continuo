@@ -4,7 +4,7 @@ Claude側を正本として維持し、Codexには公式の互換機能とsymlin
 推奨は「公式連携プラグイン＋CLAUDE.mdのfallback読み込み＋既存marketplaceの再利用」。
 高度なhooks制御と、このリポジトリ固有の移植設計は対象外とする。
 
-調査基準日: 2026-09-18。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節、未対応範囲の比較調査と選定は18〜20節に示す。
+調査基準日: 2026-09-18。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節、未対応範囲の比較調査と選定は18〜21節に示す。
 
 ## 1. 採用する構成
 
@@ -400,6 +400,7 @@ Claudeのhooksはprompt/agent hookと終了コード2によるイベント制御
 | 候補 | 共有できる範囲 | 保守負担 | Claude性能へのリスク | 判断 |
 | --- | --- | --- | --- | --- |
 | Claudeを正本にして標準SKILL.mdをsymlink | 本文・scripts・references・resources | 最小 | 共有対象を選べばなし | **採用** |
+| [OpenAI migrate-to-codex](https://github.com/openai/skills/tree/main/skills/.curated/migrate-to-codex) | Claudeのinstructions・skills・MCP・subagentsをCodex形式へ投影し、manual-reviewを報告 | 小〜中 | Codex側の生成物だけを変更。実行意味は一部lossy | **subagentsに限定採用** |
 | [Vercel Skills CLI](https://github.com/vercel-labs/skills) | Agent Skills対応のskill配布。symlinkが推奨 | 小 | Claude plugin/rules/agents/hooksは対象外 | 補助採用候補 |
 | [sync-claude-skills-to-codex](https://github.com/ariccb/sync-claude-skills-to-codex) | Claude plugin cacheと個人skillをCodexへsymlink | 小 | plugin更新でリンク再作成が必要。frontmatter意味は未変換 | 参考採用。全面導入しない |
 | [Rulesync](https://github.com/dyoshikawa/rulesync) | rules・commands・subagents・skills・hooksをimport/生成/convert | 中〜大 | 生成物と変換差分がClaude側へ影響し得る | 次点。厳密rulesが必要になったら限定導入 |
@@ -408,7 +409,7 @@ Claudeのhooksはprompt/agent hookと終了コード2によるイベント制御
 | 自作の全面変換器 | 全拡張を個別変換 | 最大 | Claude仕様を変換都合に合わせる危険 | 不採用 |
 | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | Claude内のCodex review・rescue・transfer | 小 | 既存Claude資産を変更しない | **採用済み** |
 
-Vercel CLIは「canonical copyから各agentへsymlinkする」設計で、単体の共通skillには適するが、Claude pluginのnamespaceやagent/hookを再現しない。RulesyncはCodexとClaudeの双方でhooksまで表に載せるが、共通の `.rulesync` を生成元にするか、変換出力を更新する運用が必要であり、今回の「Claudeを正本にしてClaude性能を落とさない」条件と反する。複数の個人製ツールは有効な実装例だが、plugin cache更新・lossy投影・新規canonical storeへの移行を伴うため、公式経路を置き換える根拠にはならない。
+OpenAIのmigrate-to-codexは、Codex公式skillsリポジトリで公開され、`--plan`・`--doctor`・`--dry-run`・`--validate-target`とmanual-reviewレポートを持つ。Claudeの正本を書き換えずCodex側へ投影できるため、agentだけを選ぶ用途に最も合う。Vercel CLIは単体skillには適するがagentを扱わず、Rulesyncは共通の `.rulesync` を生成元にする運用が必要である。複数の個人製ツールは有効な実装例だが、plugin cache更新・lossy投影・新規canonical storeへの移行を伴うため、公式経路を置き換える根拠にはならない。
 
 ## 19. 未対応項目への選定結果
 
@@ -441,14 +442,30 @@ Vercel CLIは「canonical copyから各agentへsymlinkする」設計で、単�
 
 ## 20. 未完了項目と判定
 
-低リスク範囲の追加検証は完了している。残る項目は、必要性が発生したときだけ別設計する非互換部分である。
+残件を低リスク範囲だけで打ち切らず、Codex公式の変換器を実際のagent fixtureで検証した。
+agentは限定投影を採用できるが、rulesの条件適用とhooksの同等化は別の非互換として残る。
 
 | 項目 | 判定 | 根拠・次の条件 |
 | --- | --- | --- |
 | skillの3群分類 | 完了 | 54件のfrontmatterキー・Claude専用参照・付属scriptを静的計測し、標準・Claude拡張・外部tool依存を判定できる材料を揃えた。結果は16・18節に記録 |
 | 拡張frontmatter代表3件 | 完了 | `github-project-update`・`naming-brainstorming`・`co-reviewer`をfixtureで発見・本文読取。実行意味の同等性は保証しない |
-| Codex TOML agent sidecar | 保留 | 今回の検証対象にClaude agentの同一実行を要する実タスクを設定しておらず、追加すると別ファイル保守が発生する。Go skill本文が実際にCodex agentを必要とする作業が出たとき、1件ずつfixtureで比較する |
-| Rulesyncのfixture比較 | 保留 | 条件付きrulesの漏れを示す実タスクがまだない。漏れが観測された場合だけ `import` / `convert` の生成物・更新・削除を比較する |
+| Claude agentのCodex投影 | 条件付き採用 | OpenAI公式migrate-to-codexを4 agent（planner・code-reviewer・e2e-runner・security-reviewer）のfixtureへ適用。`--plan`で4 TOML、`--doctor`で4件のmanual review（tools）、実行後の`--validate-target`で4件すべて必須フィールド合格。ClaudeのMarkdownは変更せず、必要なagentだけCodex側へ生成する |
+| Codex TOMLの実行意味 | manual review必須 | `tools` / `disallowedTools`はprompt guidanceに変換され、hard permissionではない。`skills` preload、`background`、`hooks`、`memory`、`maxTurns`、独立permissionは同等化されない。hard enforcementやlifecycle互換が必要なagentは採用せず、toolsだけのreviewerは制約を明記して採用候補にする |
+| Codex agent runtime | 未検証 | 4件のTOML生成・必須フィールド検証までは合格。実際のsubagent spawn、skill発見、sandboxとprompt guidanceの挙動は、最初に使うagentをread-only fixtureで300秒上限付き実行して確認する |
+| 条件付きrules | 保留（追加調査済み） | 公式migrate-to-codexはCLAUDE.md/AGENTS.mdを対象にし、`.claude/rules/`の`paths`条件は変換しない。現行のCodex向け読取指示を正本へ残し、実タスクで漏れが観測された場合だけRulesyncを隔離fixtureで比較する |
 | hooksの同等化 | 対象外 | ユーザー指定どおり高度なhooks制御は今回実装しない。Claude hooksをsymlinkせず、別設計として残す |
 
-これで、本文共有・plugin導入・Claudeからの委任・HerdrからのCodex直接利用・代表frontmatter検証までが完了した。Claude agentの同一実行、条件付きrulesの完全自動化、hooksの同等化は未対応だが、いずれも忘れた作業ではなく、Claude側の性能と正本を守るため意図的に残している。
+本文共有・plugin導入・Claudeからの委任・HerdrからのCodex直接利用・代表frontmatter検証に加え、agent投影の公式経路と限界まで確認した。未対応なのは、Codexの別形式が避けられない実行メタデータ、条件付きrulesの完全自動化、hooksであり、Claude側の性能と正本を守るため意図的に隔離する。
+
+## 21. 残件を実施するときの手順
+
+agentが実際に必要になった時だけ、Claudeの正本からCodex側の生成物を作る。
+生成物は正本ではなく、plugin更新時に再生成してreportとvalidationを確認する。
+
+1. 選択したClaude pluginの`agents/*.md`だけを一時fixtureの`.claude/agents/`へsymlinkする。Claudeのcacheや本文は直接編集しない。
+2. OpenAI公式migrate-to-codexを`--plan` → `--doctor` → `--dry-run`の順で実行し、manual-reviewが許容できるagentだけを選ぶ。
+3. Codexの`~/.codex/agents/*.toml`（プロジェクト固有なら`.codex/agents/*.toml`）へ生成し、`--validate-target`を通す。既存ファイルとのcollisionを事前に検出したら、実行を止めて上書きしない。
+4. plugin更新後は同じfixtureを作り直し、reportのmanual-review項目と生成差分を確認してから再生成する。生成TOMLをClaude側へ戻さない。
+5. 生成したagentを最初に使うときはread-only fixtureでsubagent spawnと結果を300秒上限で確認する。`.claude/rules/`の`paths`条件やhooksを同じ手順へ混ぜず、rulesの漏れが実測されたときだけRulesyncをfixtureで比較する。hooksは今回の課題として扱う。
+
+この運用なら、agent本文の二重保守を避けながらCodex側の形式差を吸収できる。ただし、CodexのsubagentはClaude agentの1:1実行ではなく、必要なagentだけを明示的に選ぶことが条件である。
