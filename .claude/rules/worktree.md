@@ -4,8 +4,8 @@
 
 **「あとで片付ける」と引き継ぎに書いて、次のセッションへ渡してはならない。**
 
-**実例。**17個まで溜まった。引き継ぎには「`git worktree prune` を1回叩けば済む」と
-書いてあったが、**prune では1つも消えなかった。**
+**引き継ぎに回すと、worktree は溜まり続ける。**
+「`git worktree prune` を1回叩けば済む」という引き継ぎは誤りで、**prune では1つも消えない**（下の節）。
 
 **消すのは、次のどれかになった時点である。**
 
@@ -35,10 +35,10 @@
 **手元の `origin/main` は、最後に fetch した時点で止まっている。**
 **その先でマージされたものは、手元から見ると「まだマージされていない」に見える。**
 
-**2026-09-02 に実際に踏んだ。**マージ済みの branch を消そうとしたところ、
-`git branch --merged origin/main` が**その branch を1行も返さなかった。**
-手元の `origin/main` が28分前の commit を指したままで、
-**マージ commit そのものが手元に存在していなかった**（`git cat-file -t` が落ちた）。
+**fetch していないと、マージ済みの branch でも
+`git branch --merged origin/main` が1行も返さない。**
+手元の `origin/main` が古い commit を指したままで、
+**マージ commit そのものが手元に存在しないためである**（`git cat-file -t` が落ちる）。
 
 **いちばん危ないのは、嘘が「安全側の顔」で出ることである。**
 **返らなかったときの見た目は「まだマージされていないので消さないでおこう」と全く同じで、区別が付かない。**
@@ -66,7 +66,7 @@ git fetch origin -q   # 検査の前に必ず打つ
 ```bash
 git fetch origin -q   # 上の絶対条件。これを先に打つ
 
-# 未コミットの変更（untracked も数える）
+# commit していない変更（untracked も数える）
 git -C <パス> status --porcelain --untracked-files=all
 
 # 未マージの commit。0件でなければ、その commit が origin にあるか確かめる
