@@ -1266,6 +1266,8 @@ const (
 	// KeyLockAcquireWaitTimeout は AcquireWait が上限まで待っても別のプロセスがロックを
 	// 放さなかったときに出る（GitHub App の資格情報のロック）。
 	KeyLockAcquireWaitTimeout Key = "lock.acquire_wait.timeout"
+	// KeyLockAcquireWaitCanceled は AcquireWait の待ちを、上限より先に ctx が打ち切ったときに出る。
+	KeyLockAcquireWaitCanceled Key = "lock.acquire_wait.canceled"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -3823,6 +3825,7 @@ var allKeys = []Key{
 	KeyDoctorGitHubAppOK,
 	// GitHub App の資格情報とトークンの取得（internal/githubapp。issue #245）。
 	KeyLockAcquireWaitTimeout,
+	KeyLockAcquireWaitCanceled,
 	KeyGitHubAppCredentialsNotFound,
 	KeyGitHubAppCredentialsNotFoundAt,
 	KeyGitHubAppCredentialsReadFailed,

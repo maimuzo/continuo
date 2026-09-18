@@ -119,11 +119,24 @@ func checkGitHubApp(ctx context.Context, opts Options, cfg loadedConfig, configS
 	}
 
 	if missing := missingCredentialFields(creds); len(missing) > 0 {
+		// **直し方は、欠けている欄で分かれる**（実装レビュー1周目の Low）。
+		// `client_id` か `client_secret` が無いのは「まだ GitHub App を作っていない」状態で、
+		// **その資格情報では `/github-app/authorize` を開いても「先に GitHub App を作ってください」で止まる。**
+		// 認可のやり直しを案内すると、指示どおり開いた人が1回無駄足を踏む。
+		remedy := []string{i18n.T(i18n.KeyDoctorGitHubAppRemedyReauthorize, portText)}
+		if !creds.HasApp() {
+			remedy = []string{
+				i18n.T(i18n.KeyDoctorGitHubAppRemedyStep1),
+				i18n.T(i18n.KeyDoctorGitHubAppRemedyStep2),
+				i18n.T(i18n.KeyDoctorGitHubAppRemedyStep3, portText),
+				i18n.T(i18n.KeyDoctorGitHubAppRemedyStep4),
+			}
+		}
 		res := Result{
 			Label:    LabelGitHubApp,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorGitHubAppIncomplete, store.Path(), strings.Join(missing, " / ")),
-			Remedies: appendPortRemedy([]string{i18n.T(i18n.KeyDoctorGitHubAppRemedyReauthorize, portText)}, port),
+			Remedies: appendPortRemedy(remedy, port),
 		}
 		if creds.AuthorizedLogin == "" {
 			// **`authorized_login` が欠けていたら、次の行（認可した人の突き合わせ）が比べる相手を失う**（3-82c）。

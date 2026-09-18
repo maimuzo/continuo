@@ -331,7 +331,7 @@ func TestAcquireToken_回して書き戻してロックを放す(t *testing.T) {
 	if strings.Contains(captured.buf.String(), "ghu_new") || strings.Contains(captured.buf.String(), "ghr_") {
 		t.Errorf("トークンがログに出ている: %s", captured.buf.String())
 	}
-	l, err := store.Lock(200 * time.Millisecond)
+	l, err := store.Lock(context.Background(), 200*time.Millisecond)
 	if err != nil {
 		t.Fatalf("AcquireToken のあとにロックが放されていない: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestAcquireToken_回転が落ちたら書き戻さない(t *testing.T) {
 	if got.RefreshToken != "ghr_example" {
 		t.Errorf("落ちたのに資格情報が書き換わった: %+v", got)
 	}
-	l, err := store.Lock(200 * time.Millisecond)
+	l, err := store.Lock(context.Background(), 200*time.Millisecond)
 	if err != nil {
 		t.Fatalf("落ちたあとにロックが放されていない: %v", err)
 	}

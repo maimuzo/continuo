@@ -6,6 +6,7 @@
 package githubapp_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -259,21 +260,21 @@ func TestStore_権限が違っても読んで権限を返す(t *testing.T) {
 // 成功条件: 2本目が lock.ErrAlreadyRunning を包んだエラーを返し、1本目を放したあとは取れること。
 func TestStore_ロックは放されるまで待つ(t *testing.T) {
 	store := githubapp.NewStore(t.TempDir())
-	first, err := store.Lock(time.Second)
+	first, err := store.Lock(context.Background(), time.Second)
 	if err != nil {
 		t.Fatalf("1本目のロックに失敗した: %v", err)
 	}
 	if _, err := os.Stat(store.LockPath()); err != nil {
 		t.Errorf("ロックファイルが無い: %v", err)
 	}
-	_, err = store.Lock(200 * time.Millisecond)
+	_, err = store.Lock(context.Background(), 200*time.Millisecond)
 	if !errors.Is(err, lock.ErrAlreadyRunning) {
 		t.Errorf("掴んだままなのに番兵を包んだエラーにならない: %v", err)
 	}
 	if err := first.Release(); err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.Lock(time.Second)
+	second, err := store.Lock(context.Background(), time.Second)
 	if err != nil {
 		t.Fatalf("放したあとに取れない: %v", err)
 	}

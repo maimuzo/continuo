@@ -392,7 +392,7 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 **2・3階層目がコードのリポジトリ、最下層が issue** である。**両方が1本のパスに出ている。**
 
 **`continuo status` は作らない。**存在しないコマンドである。
-[internal/cli/cli.go:172-186](../../../internal/cli/cli.go#L172-L186) の subcommand は
+[internal/cli/cli.go:187-201](../../../internal/cli/cli.go#L187-L201) の subcommand は
 `hook` / `init` / `setup` / `doctor` / `trust` / `abandon` / `allow-keychain-access` / `version` の
 8つだけであり、**13 / 13b の触るものの表にも `internal/cli` は1行も無い。**
 **走っている run の一覧は、ダッシュボードが identifier の昇順で既に出している**
@@ -956,7 +956,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **プロンプトからしか知れない。**その4つを変数で渡す。
 **リンクが0本なら、4つとも今までと同じ値になる。**
 
-[internal/orchestrator/prompt.go:39-51](../../../internal/orchestrator/prompt.go#L39-L51) の `data`。
+[internal/orchestrator/prompt.go:47-59](../../../internal/orchestrator/prompt.go#L47-L59) の `data`。
 
 | 変数 | 中身 | リンクが0本のとき |
 | --- | --- | --- |
@@ -982,7 +982,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
 
 **`missingkey=error` を理由に挙げない。**この設定
-（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）が落とすのは
+（[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）が落とすのは
 **テンプレートが `data` に無いキーを参照したとき**であり、**`data` にキーを足すこと自体は
 既存のテンプレートを1つも壊さない。**危ないのは逆で、**本文に `{{.push_branch}}` を入れて
 `data` に足さない側である**（13 の塊1）。
@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:282](../../../internal/orchestrator/prompt.go#L282) が書いているとおり
+[internal/orchestrator/prompt.go:333](../../../internal/orchestrator/prompt.go#L333) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
@@ -1223,7 +1223,7 @@ push した branch の名前でも引いてください。
 ```
 
 **`{{if .push_branch}}` を入れて `prompt.go` の `data` にキーが無い状態にすると、
-`missingkey=error`（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）で
+`missingkey=error`（[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）で
 全 issue の1回目のプロンプトの変数展開が失敗する。**
 **変数化は塊3で、`prompt.go` に `.push_branch` を足すのと同じ PR で行う**（12 の末尾の形へ差し替える）。
 

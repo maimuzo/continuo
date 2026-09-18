@@ -395,11 +395,19 @@ func (s *Server) newMux() http.Handler {
 		// **`/{$}` を付けない。**`/` で終わらないパターンは、そのパスちょうどにしか一致しない
 		// （付けると `/github-app` が `/github-app/` へ 307 で転送され、`?name=` が付いた form の
 		// 戻りも転送を1回挟む）。
-		mux.HandleFunc("GET "+GitHubAppPath, s.handleGitHubApp)
-		mux.HandleFunc("GET "+GitHubAppCreatedPath, s.handleGitHubAppCreated)
-		mux.HandleFunc("GET "+GitHubAppInstalledPath, s.handleGitHubAppInstalled)
-		mux.HandleFunc("GET "+GitHubAppAuthorizePath, s.handleGitHubAppAuthorize)
-		mux.HandleFunc("GET "+GitHubAppAuthorizedPath, s.handleGitHubAppAuthorized)
+		//
+		// **5本とも、応答を書き終えるまでの上限を延ばして包む**（`withGitHubAppDeadline`）。
+		// GitHub との往復とロックの待ちを直列で持つので、`DefaultWriteTimeout`（10秒）では
+		// 資格情報を書き終えたあとに応答だけが切れる。
+		for path, h := range map[string]http.HandlerFunc{
+			GitHubAppPath:           s.handleGitHubApp,
+			GitHubAppCreatedPath:    s.handleGitHubAppCreated,
+			GitHubAppInstalledPath:  s.handleGitHubAppInstalled,
+			GitHubAppAuthorizePath:  s.handleGitHubAppAuthorize,
+			GitHubAppAuthorizedPath: s.handleGitHubAppAuthorized,
+		} {
+			mux.Handle("GET "+path, s.withGitHubAppDeadline(h))
+		}
 	}
 	// **安全側のヘッダは外側で付ける。**断った応答（421）にも同じヘッダを載せる。
 	// GitHub App の5本だけは、ハンドラが CSP を自分の版で `Set` し直す（`githubAppCSP`）。

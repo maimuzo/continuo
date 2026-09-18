@@ -374,3 +374,34 @@ func TestDoctor_GitHubApp_壊れていれば消して作り直す案内を出す
 		}
 	}
 }
+
+// 目的: `client_id` と `client_secret` が欠けているときは、認可のやり直しではなく
+// GitHub App を作る4段の手順を直し方に出すことを確認する（実装レビュー1周目の Low）。
+//
+// **`/github-app/authorize` は `client_id` が無いと「先に GitHub App を作ってください」で止まる。**
+// そこを案内すると、指示どおり開いた人が1回無駄足を踏む。
+//
+// 与える情報: `github_app_attribution: true` と、更新用のトークンだけを持つ資格情報。
+// 成功条件: `✗` で、直し方が `/github-app` の4段の手順になり、`/github-app/authorize` を案内しないこと。
+func TestDoctor_GitHubApp_GitHubAppを作っていなければ作る手順を出す(t *testing.T) {
+	fx := newFixture(t)
+	enableAttribution(t, fx)
+	creds := validCredentials(180 * 24 * time.Hour)
+	creds.ClientID = ""
+	creds.ClientSecret = ""
+	writeCredentials(t, fx, creds)
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelGitHubApp, doctor.SymbolMissing)
+	if !strings.Contains(res.Detail, "client_id") || !strings.Contains(res.Detail, "client_secret") {
+		t.Fatalf("説明に欠けている欄の名前が入っていない: %q", res.Detail)
+	}
+	remedies := strings.Join(res.Remedies, "\n")
+	if strings.Contains(remedies, "/github-app/authorize") {
+		t.Fatalf("GitHub App を作っていないのに認可のやり直しを案内している: %v", res.Remedies)
+	}
+	if !strings.Contains(remedies, "/github-app") || !strings.Contains(remedies, "github_app_attribution") {
+		t.Fatalf("作る4段の手順が直し方に入っていない: %v", res.Remedies)
+	}
+}

@@ -49,6 +49,19 @@ const (
 	// githubAppStateBytes は `state` に使う乱数の長さである（`crypto/rand` で32バイト）。
 	githubAppStateBytes = 32
 
+	// githubAppWriteDeadline は、GitHub App の5本の経路だけに与える「応答を書き終えるまでの上限」である。
+	//
+	// **`DefaultWriteTimeout`（10秒）では足りない。**`net/http` の `WriteTimeout` は
+	// ヘッダを読み終えた時点から数え、**ハンドラの実行時間を含む。**この5本は、
+	// GitHub との往復（既定30秒）・資格情報のロックの待ち（既定60秒）・`gh api user`（10秒）を
+	// 直列で持つので、10秒を超えると**資格情報は書き終えているのに応答だけが切れる。**
+	// 人間はそれを失敗と読み、使い捨ての `code` を消費したまま認可をやり直す
+	// （段1 からやり直すと、既定の名前 `continuo-<ログイン名>` が衝突する）。
+	//
+	// **`DefaultWriteTimeout` そのものは変えない。**run の一覧と JSON を返す経路は、
+	// いままでどおり10秒で切る。**`DefaultShutdownTimeout`（1秒）も変えない**（3-82g）。
+	githubAppWriteDeadline = 3 * time.Minute
+
 	// githubAppGHLoginTimeout は `gh api user` を叩く外部プロセスに掛ける期限である
 	// （internal/orchestrator の `ghLoginTimeout` と同じ値）。
 	githubAppGHLoginTimeout = 10 * time.Second
@@ -227,6 +240,31 @@ type githubAppPage struct {
 	ErrorText string
 }
 
+// withGitHubAppDeadline は、GitHub App の5本の経路の応答の書き出しの期限を
+// githubAppWriteDeadline まで延ばす（実装レビュー1周目の Medium）。
+//
+// **1本ずつハンドラの先頭へ書かない。**経路を1本足したときに、そこだけ延ばし忘れる。
+// **`newMux` が5本まとめて包む。**
+//
+// **延ばせなかったときは、そのまま続ける。**`http.ResponseController` は、
+// 期限を持たない `ResponseWriter`（`httptest` の一部など）に `http.ErrNotSupported` を返す。
+// **そこで応答を止める理由は無い。**期限が短いまま走るだけで、書けることは変わらない。
+//
+// next: 実際の応答を組み立てるハンドラ。
+// 戻り値: 期限を延ばしてから next を呼ぶハンドラ。
+func (s *Server) withGitHubAppDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// **`s.now` ではなく `time.Now` を使う。**`s.now` は画面に出す時刻を差し替えるための口で、
+		// テストは固定の時刻を渡す。その時刻で期限を切ると、**過ぎた期限になって接続がすぐ落ちる。**
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(githubAppWriteDeadline)); err != nil {
+			s.logger.Warn("GitHub App の画面の、応答を書き終えるまでの上限を延ばせません"+
+				"（そのまま続けます。GitHub との往復が長いと応答だけが切れることがあります）",
+				"path", r.URL.Path, "error", err)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // githubAppCSPFor は GitHub App の5本の経路に付ける CSP を返す。
 //
 // **本番は `githubAppCSP` の定数そのものである。**テストが `Endpoints.Web` を httptest.Server に
@@ -388,6 +426,12 @@ func (s *Server) handleGitHubApp(w http.ResponseWriter, r *http.Request) {
 		s.renderGitHubApp(w, r, http.StatusOK, page)
 	case creds.RefreshTokenExpired(now):
 		s.renderAuthorize(w, r, creds, creds.RefreshTokenExpiresAt)
+	case creds.AuthorizedLogin == "":
+		// **認可は通ったが `GET /user` が落ちて、認可したアカウント名を書けなかった状態である**
+		// （`handleGitHubAppAuthorized`。`code` は使い捨てなので、名前が引けなくても更新用のトークンは書く）。
+		// **「設定済み」と出してはならない。**起動時の検査はこの状態で止まるので、
+		// 画面と起動の言うことが食い違い、人間はどちらを信じるか決められない。
+		s.renderAuthorize(w, r, creds, time.Time{})
 	default:
 		page := s.newGitHubAppPage(githubAppStageConfigured)
 		page.Slug = creds.Slug
@@ -505,20 +549,22 @@ func (s *Server) handleGitHubAppCreated(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// **ロックの中で読んで書く。**本体の回転の書き戻しと重なると、片方の書き込みが消える。
-	l, err := s.githubApp.Store.Lock(githubapp.DefaultLockTimeout)
+	l, err := s.githubApp.Store.Lock(r.Context(), githubapp.DefaultLockTimeout)
 	if err != nil {
 		s.renderGitHubAppError(w, r, http.StatusServiceUnavailable, i18n.KeyServerGitHubAppLockFailed, err)
 		return
 	}
 	defer s.releaseLock(l)
-	creds, err := s.readCredentials()
-	if err != nil {
-		s.renderGitHubAppError(w, r, http.StatusInternalServerError, i18n.KeyServerGitHubAppReadFailed, err)
-		return
+	// **在るものを読んで写すのではなく、3欄だけの資格情報を書く**（設計 3-82b「このファイルは2回書かれる」）。
+	// **読んで写すと、古い更新用のトークンが新しい `client_id` と組で残る。**
+	// `state` を出してから戻るまでの30分に、別のプロセス（同じホームを共有する2本目の continuo）が
+	// 認可まで通していると、その組で「設定済み」の画面が出て、起動時の検査だけが
+	// `bad_refresh_token` で止まる。**新しい GitHub App の認可は、これから段3 で取る。**
+	creds := githubapp.Credentials{
+		ClientID:     converted.ClientID,
+		ClientSecret: converted.ClientSecret,
+		Slug:         converted.Slug,
 	}
-	creds.ClientID = converted.ClientID
-	creds.ClientSecret = converted.ClientSecret
-	creds.Slug = converted.Slug
 	if err := s.githubApp.Store.Write(creds); err != nil {
 		s.renderGitHubAppError(w, r, http.StatusInternalServerError, i18n.KeyServerGitHubAppWriteFailed,
 			s.githubApp.Store.Path(), err)
@@ -596,7 +642,7 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	l, err := s.githubApp.Store.Lock(githubapp.DefaultLockTimeout)
+	l, err := s.githubApp.Store.Lock(r.Context(), githubapp.DefaultLockTimeout)
 	if err != nil {
 		s.renderGitHubAppError(w, r, http.StatusServiceUnavailable, i18n.KeyServerGitHubAppLockFailed, err)
 		return
@@ -648,7 +694,10 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 	case err != nil:
 		s.logger.Warn("gh api user を叩けなかったので、認可したアカウントとの突き合わせは起動時の検査に任せます", "error", err)
 		page.GHLoginUnknown = true
-	case ghLogin != login:
+	// **大文字小文字は見ない**（起動時の検査と doctor の `strings.EqualFold` に揃える。3-82f）。
+	// GitHub のログイン名は大文字小文字を区別しないので、ここだけ区別すると
+	// 画面が「違います」と出して、直後の起動は通る形になる。
+	case !strings.EqualFold(ghLogin, login):
 		s.logger.Warn("gh の持ち主と GitHub App を認可したアカウントが違います（起動時の検査で止まります）",
 			"gh_login", ghLogin, "authorized_login", login)
 		page.GHLogin = ghLogin

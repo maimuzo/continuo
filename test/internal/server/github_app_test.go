@@ -822,3 +822,90 @@ func TestGitHubApp_POSTは受け付けない(t *testing.T) {
 		t.Errorf("POST で資格情報のファイルが作られた（err=%v）", err)
 	}
 }
+
+// 目的: 認可したアカウント名だけが書けなかった資格情報で `/github-app` を開くと、
+// 「設定済み」ではなく段3（認可）が出ることを確認する（実装レビュー1周目の Low）。
+//
+// **`GET /user` が落ちても更新用のトークンは書く**（`code` は使い捨てなので、書かないと認可が丸ごと失われる）。
+// その状態で「設定済みです」と出すと、起動時の検査は止まるのに画面は通ったと言い、人間はどちらを信じるか決められない。
+//
+// 与える情報: `authorized_login` だけが空で、期限は切れていない資格情報。
+// 成功条件: 200 で段3 の見出しと認可のリンクが出て、「設定済み」と名乗らないこと。
+func TestGitHubApp_認可したアカウント名が無ければ段3を出す(t *testing.T) {
+	gh := newFakeGitHub(t, "octocat")
+	f := newGitHubAppFixture(t, gh, nil)
+	writeCredentials(t, f.store, githubapp.Credentials{
+		ClientID: fakeClientID, ClientSecret: fakeClientSecret, Slug: fakeSlug,
+		RefreshToken: fakeRefreshToken, RefreshTokenExpiresAt: testTime.Add(180 * 24 * time.Hour),
+	})
+	code, body, _ := getFull(t, f.s, server.GitHubAppPath)
+	if code != http.StatusOK {
+		t.Fatalf("状態コードが違う: got %d\n%s", code, body)
+	}
+	if !strings.Contains(body, "段3/3") || !authorizeStatePattern.MatchString(body) {
+		t.Errorf("段3 と認可のリンクが出ていない:\n%s", body)
+	}
+	if strings.Contains(body, "設定済み") {
+		t.Errorf("認可したアカウント名が無いのに「設定済み」と名乗っている:\n%s", body)
+	}
+}
+
+// 目的: 段1（作る）の戻りが、在った資格情報の更新用のトークンを持ち越さないことを確認する
+// （実装レビュー1周目の Low。設計 3-82b「このファイルは2回書かれる」）。
+//
+// **`state` を出してから戻るまでの30分に、別のプロセスが認可まで通していることがある。**
+// 読んで写すと、新しい `client_id` と古い更新用のトークンの組が残り、画面は「設定済み」を出すのに
+// 起動時の検査だけが `bad_refresh_token` で止まる。
+//
+// 与える情報: 認可まで通った資格情報を置いたうえで、段1 を開いて `/github-app/created` へ戻る。
+// 成功条件: 書かれた資格情報が新しい3欄だけになり、古い更新用のトークンと認可したアカウント名が消えること。
+func TestGitHubApp_作成の戻りは古い更新用のトークンを持ち越さない(t *testing.T) {
+	gh := newFakeGitHub(t, "octocat")
+	f := newGitHubAppFixture(t, gh, nil)
+	// 資格情報が無い状態で段1 を開き、`state` を取る。
+	_, body, _ := getFull(t, f.s, server.GitHubAppPath)
+	state := extractState(t, body, manifestStatePattern)
+	// **その30分のあいだに、別のプロセスが認可まで通した**（同じホームを共有する2本目の continuo）。
+	writeCredentials(t, f.store, githubapp.Credentials{
+		ClientID: "Iv23liOLDCLIENTID", ClientSecret: "old-secret", Slug: "continuo-old",
+		RefreshToken: fakeRefreshToken, RefreshTokenExpiresAt: testTime.Add(180 * 24 * time.Hour),
+		AuthorizedLogin: "octocat",
+	})
+	code, _, _ := getFull(t, f.s, server.GitHubAppCreatedPath+"?code=new-code&state="+state)
+	if code != http.StatusOK {
+		t.Fatalf("作成の戻りの状態コードが違う: got %d", code)
+	}
+
+	fields, raw, _ := readCredentialsFile(t, f.store)
+	if fields["client_id"] != fakeClientID || fields["slug"] != fakeSlug {
+		t.Errorf("新しい client_id と slug が書かれていない: %v", fields)
+	}
+	for _, gone := range []string{"refresh_token", "refresh_token_expires_at", "authorized_login"} {
+		if _, ok := fields[gone]; ok {
+			t.Errorf("段1 の書き込みに %s が残っている: %s", gone, raw)
+		}
+	}
+	if strings.Contains(raw, fakeRefreshToken) || strings.Contains(raw, "Iv23liOLDCLIENTID") {
+		t.Errorf("古い値がファイルに残っている: %s", raw)
+	}
+}
+
+// 目的: 段4 の突き合わせが大文字小文字を区別しないことを確認する
+// （実装レビュー1周目の Low。起動時の検査と doctor の `strings.EqualFold` に揃える）。
+//
+// 与える情報: `gh api user` が `OctoCat`、認可したアカウントが `octocat` を返す偽の GitHub。
+// 成功条件: 段4 が「違います」と出さないこと。
+func TestGitHubApp_段4の突き合わせは大文字小文字を見ない(t *testing.T) {
+	gh := newFakeGitHub(t, "octocat")
+	f := newGitHubAppFixture(t, gh, func(context.Context) (string, error) { return "OctoCat", nil })
+	writeCredentials(t, f.store, githubapp.Credentials{ClientID: fakeClientID, ClientSecret: fakeClientSecret, Slug: fakeSlug})
+	_, body, _ := getFull(t, f.s, server.GitHubAppAuthorizePath)
+	state := extractState(t, body, authorizeStatePattern)
+	code, body, _ := getFull(t, f.s, server.GitHubAppAuthorizedPath+"?code=auth-code&state="+state) //nolint:govet
+	if code != http.StatusOK {
+		t.Fatalf("状態コードが違う: got %d\n%s", code, body)
+	}
+	if strings.Contains(body, "違います") {
+		t.Errorf("大文字小文字だけの違いで食い違いを出している:\n%s", body)
+	}
+}

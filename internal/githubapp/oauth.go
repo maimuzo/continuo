@@ -66,11 +66,34 @@ func (c Client) http() *http.Client {
 const maxBodyForError = 300
 
 // truncate は応答本文をエラーの文言に載せる長さへ切る。
+//
+// **トークンを運ぶ端点（`POST /login/oauth/access_token`）の応答には使ってはならない。**
+// そちらは contentType を載せる（postToken）。
 func truncate(b []byte) string {
 	if len(b) > maxBodyForError {
 		return string(b[:maxBodyForError]) + "…"
 	}
 	return string(b)
+}
+
+// contentTypeOf は応答の `Content-Type` を返す。空なら `(無し)` と書く。
+//
+// **トークンを運ぶ端点で、応答本文の代わりにエラーの文言へ載せるものである。**
+// 本文には `access_token` と `refresh_token` がそのまま入っており、
+// GitHub が `Accept: application/json` を無視して form 形式
+// （`access_token=ghu_…&refresh_token=ghr_…`）で返すと、本文を載せた文言に
+// トークンが乗る。その文言は Adapter の Warn・`continuo github-app token` の標準エラー・
+// 起動時の検査の文面・ダッシュボードの画面の4つへ流れるので、
+// **設計 3-82d「トークンは1文字も出さない」がその1行で破れる。**
+// **`Content-Type` だけなら、何が返ったか（JSON か form か HTML か）は分かる。**
+//
+// resp: 読んだ応答。
+// 戻り値: `Content-Type` の値。無ければ `(無し)`。
+func contentTypeOf(resp *http.Response) string {
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		return ct
+	}
+	return "(無し)"
 }
 
 // tokenResponse は `POST /login/oauth/access_token` の応答である。
@@ -125,18 +148,20 @@ func (c Client) postToken(ctx context.Context, form url.Values) (tokenResponse, 
 	if err != nil {
 		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenRequestFailed, err)
 	}
+	// **この端点の応答本文は、エラーの文言へ1バイトも載せない**（contentTypeOf）。
+	// 本文そのものがトークンだからである。**代わりに状態コードと `Content-Type` を載せる。**
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenStatus, resp.StatusCode, truncate(body))
+		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenStatus, resp.StatusCode, contentTypeOf(resp))
 	}
 	var tr tokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenParseFailed, truncate(body), err)
+		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenParseFailed, contentTypeOf(resp), err)
 	}
 	if tr.Error != "" {
 		return tokenResponse{}, &DeniedError{Code: tr.Error, Description: tr.ErrorDescription}
 	}
 	if tr.AccessToken == "" {
-		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenEmpty, truncate(body))
+		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenEmpty, contentTypeOf(resp))
 	}
 	return tr, nil
 }

@@ -46,6 +46,7 @@ continuo --help
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを19の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
+| `continuo github-app token` | GitHub App のアクセストークンを標準出力へ1行出す（投稿は `gh` が行う） |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
@@ -293,13 +294,14 @@ language: ja
 **`ja` と書いておく意味。**書かずにいると、`LANG` を持たない環境（CI・コンテナ・`env -i`）では
 英語になります。**日本語で使い続けたいなら書いてください。**
 
-**`language:` を読まないコマンドが4つあります。**
+**`language:` を読まないコマンドが5つあります。**
 
 | コマンド | なぜ読まないか |
 | --- | --- |
 | `continuo init` | **`WORKFLOW.md` をこれから作るコマンドです。**読む相手がまだありません |
 | `continuo hook` | Claude Code が呼ぶもので、人間が直接叩くものではありません |
 | `continuo version` | 版を1行出すだけです |
+| `continuo github-app token` | **`~/.continuo/github-app-credentials.json` だけを読みます。**`WORKFLOW.md` もカンバンも読みません |
 | `continuo allow-keychain-access` | macOS で1回だけ叩くものです |
 
 **この4つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
@@ -1160,7 +1162,7 @@ GH_TOKEN="$TOKEN" gh issue comment https://github.com/<owner>/<repo>/issues/42 -
 読むのは `~/.continuo/github-app-credentials.json` だけで、`WORKFLOW.md` もカンバンも読みません。
 **資格情報が無ければ終了コード 1 で落ちます。**`gh auth token` へは落ちません。
 
-**1行の `GH_TOKEN=$(continuo github-app token) gh issue comment …` の形は使わないでください。**
+**`GH_TOKEN=$(…) gh …` のように、1行にまとめた形は使わないでください。**
 `continuo github-app token` が落ちても、シェルは空文字を `GH_TOKEN` に渡して `gh` を止めません。
 **`gh` はあなたの手元の認証で投稿してしまい、attribution の無い機械の投稿が、人間の投稿と見分けの付かない形で残ります。**
 
@@ -1182,7 +1184,7 @@ GitHub App のトークンで投稿できなかったので、attribution 無し
 | **install を外した** | 同じ画面の Install App から外れている |
 | **client secret を作り直した** | 資格情報にある古い secret では、更新用のトークンを回せません |
 | **install の範囲に無いリポジトリの issue** | カンバンに新しいリポジトリの issue が載った日、そこへの投稿だけが落ちます。**トークンは取れるのに投稿が落ちる形です** |
-| **更新用のトークンの期限が切れた** | 認可から約6か月です。`continuo doctor` が30日前から `!` で警告し、continuo のログにも1日1回 WARN が出ます |
+| **更新用のトークンの期限が切れた** | **最後に回してから約6か月です。**continuo が投稿のたびに回して期限を書き直すので、使い続けているあいだは切れません。止めていたあいだに切れます。`continuo doctor` が30日前から `!` で警告し、continuo のログにも1日1回 WARN が出ます |
 | **回転の書き戻しの直前で continuo が落ちた** | 更新用のトークンは1回使うと無効になるので、書き戻せなかった資格情報では回せません |
 
 **理由は continuo のログに WARN で1行出ます。**断りの1行には理由を入れません（手元のパスが公開の issue へ出ないようにするためです）。
@@ -1662,7 +1664,7 @@ cd ~/continuo-work && continuo prompt --show
 **`{{index .issue "title"}}` の形は使えません。**`{{.issue.title}}` と書いてください。
 **この形を許すと、綴りを間違えた名前が誤りにならずに素通りします。**
 
-**検査は完全ではありません。**continuo は作り物の issue で2回試すだけなので、
+**検査は完全ではありません。**continuo は作り物の issue で4回試すだけなので、
 `{{if eq .issue.state "Done"}}` のように**値そのもので分かれる枝の中**までは届きません。
 
 ### continuo doctor の GitHub App が赤いとき
@@ -1682,7 +1684,7 @@ cd ~/continuo-work && continuo prompt --show
 | **権限が `0600` でない** | ファイルの権限が変わっている | `chmod 600 ~/.continuo/github-app-credentials.json` |
 | **`client_id` と `client_secret` が無い** | 「作る」の段を通していない | `http://127.0.0.1:<port>/github-app` から作る |
 | **更新用のトークンが無い** | 作ったあと、install か認可を押さずに離脱した | `http://127.0.0.1:<port>/github-app` を開く。**画面が資格情報を読んで、続きの段から出します** |
-| **更新用のトークンの期限が切れている** | 認可から約6か月が過ぎた | `http://127.0.0.1:<port>/github-app/authorize` で認可をやり直す |
+| **更新用のトークンの期限が切れている** | 最後に回してから約6か月が過ぎた（止めていたあいだに切れる） | `http://127.0.0.1:<port>/github-app/authorize` で認可をやり直す |
 | **認可したアカウント名が無い** | 認可を通したときに書かれるものが無い | 認可をやり直す（同上） |
 | **`!` 更新用のトークンの残りが30日を切っている** | 期限が近い | **切れる前に認可をやり直す。**放っておくと、切れた日から continuo が起動しなくなります。走っている continuo は止まりませんが、その日から投稿に断りの1行が付きます |
 | **認可した人が `gh` の持ち主と違う** | `gh api user` は A、GitHub App を認可したのは B | **`gh auth switch` で `gh` を B に替えるか、`http://127.0.0.1:<port>/github-app/authorize` で B ではなく A として認可し直す** |

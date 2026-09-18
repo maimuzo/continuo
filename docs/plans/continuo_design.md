@@ -10517,7 +10517,7 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 利用者が置き換えられるのは真ん中の1つだけである。
 **組み込みを言語ごとに持つかは、人間が決めている**（5-3e）。
 
-**変数の検査。**起動のたびに、**作り物の issue で2回変数展開する**（1回目は `.attempt` を空、
+**変数の検査。**起動のたびに、**作り物の issue で4回変数展開する**（`.attempt` の2通り（空と 2）と `.github_app_attribution` の2通り（偽と真）の組み合わせ。1回目は `.attempt` を空、
 2回目は 2）。`{{if .attempt}}` の中は、空のときには一度も解釈されないためである。
 **テンプレートを作る口は [internal/prompt/prompt.go](../../internal/prompt/prompt.go) の
 `newTemplate` だけにし、そこで `missingkey=error` と `index` の封じ込めを掛ける**
@@ -10548,7 +10548,7 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **`continuo init` は front matter へ `language: auto` を書き、`auto` は環境変数から決まる**ので、
 書き出した時点では両者は同じ値になる。
 **`applyWriteLanguage` は front matter を読まない。**front matter の `language` を読むのは
-`useLanguageFromConfig`（[internal/cli/cli.go:868](../../internal/cli/cli.go#L868)）で、
+`useLanguageFromConfig`（[internal/cli/cli.go:954](../../internal/cli/cli.go#L954)）で、
 **そちらは画面に出す文言の言語を決める**（3-35。設定が主・環境変数 `LANG` が従）。
 **`continuo init` はその経路を通らない**ので、雛形へ差し込む1行は環境変数から決まる。
 **continuo は OSS として配る。**日本語を読み書きしない人も `continuo init` を叩く。
@@ -10744,7 +10744,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 全件が Status 未設定に見える。****その唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
 
 **`--url` を付けないときは、いままでどおり変数を展開しない。**
-**起動時の検査（`Validate`）は、作り物の issue で2回変数展開して「一覧に無い変数を使っていないか」を見る。**
+**起動時の検査（`Validate`）は、作り物の issue で4回変数展開して「一覧に無い変数を使っていないか」を見る。**
 **それは「実在の issue でどう見えるか」を答えない。**だから `--url` を足した（issue #183）。
 
 ### 5-3g. `continuo init` が置く設定は1枚
@@ -11146,7 +11146,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:219-252](../../internal/prompt/builtin.md#L219-L252) の
+**採る形。**[internal/prompt/builtin.md:246-284](../../internal/prompt/builtin.md#L246-L284) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。

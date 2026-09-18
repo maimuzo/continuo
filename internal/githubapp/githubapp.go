@@ -19,6 +19,7 @@
 package githubapp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -296,16 +297,18 @@ func (s Store) Write(c Credentials) error {
 //
 // **`~/.continuo/` が無ければ 0700 で作る。**ロックファイルは親ディレクトリが無いと開けない。
 //
+// ctx: 待ちを打ち切るコンテキスト。**期限を持つものを渡すこと。**待っている最中に
+// ctx が終わったら、上限を待たずにその理由を返す（起動時の検査は全体で60秒しか持たない）。
 // timeout: 待つ上限。0 以下なら DefaultLockTimeout。
 // 戻り値: 取れたロック（呼ぶ側が Release する）。上限まで待っても取れなければエラー。
-func (s Store) Lock(timeout time.Duration) (*lock.Lock, error) {
+func (s Store) Lock(ctx context.Context, timeout time.Duration) (*lock.Lock, error) {
 	if timeout <= 0 {
 		timeout = DefaultLockTimeout
 	}
 	if err := os.MkdirAll(s.dir, dirPerm); err != nil {
 		return nil, i18n.Errorf(i18n.KeyGitHubAppCredentialsDirCreateFailed, s.dir, err)
 	}
-	l, err := lock.AcquireWait(s.LockPath(), timeout)
+	l, err := lock.AcquireWait(ctx, s.LockPath(), timeout)
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyGitHubAppLockFailed, s.LockPath(), err)
 	}

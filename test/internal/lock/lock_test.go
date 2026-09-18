@@ -2,6 +2,7 @@
 package lock_test
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -100,7 +101,7 @@ func TestAcquire_二重起動のエラーはErrAlreadyRunningである(t *testin
 func TestAcquireWait_空いていれば待たずに取れる(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "github-app-credentials.lock")
 	start := time.Now()
-	l, err := lock.AcquireWait(path, 2*time.Second)
+	l, err := lock.AcquireWait(context.Background(), path, 2*time.Second)
 	if err != nil {
 		t.Fatalf("AcquireWait に失敗した: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestAcquireWait_放されるまで待って取る(t *testing.T) {
 		close(released)
 	}()
 
-	second, err := lock.AcquireWait(path, 5*time.Second)
+	second, err := lock.AcquireWait(context.Background(), path, 5*time.Second)
 	if err != nil {
 		t.Fatalf("放されたあとも取れなかった: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestAcquireWait_上限まで待っても取れなければ番兵を包ん�
 	defer first.Release()
 
 	start := time.Now()
-	_, err = lock.AcquireWait(path, 300*time.Millisecond)
+	_, err = lock.AcquireWait(context.Background(), path, 300*time.Millisecond)
 	if err == nil {
 		t.Fatal("掴んだままなのに2回目が取れてしまった")
 	}
@@ -177,7 +178,7 @@ func TestAcquireWait_上限まで待っても取れなければ番兵を包ん�
 func TestAcquireWait_親ディレクトリが無ければ待たずに落ちる(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "no-such-dir", "github-app-credentials.lock")
 	start := time.Now()
-	_, err := lock.AcquireWait(path, 5*time.Second)
+	_, err := lock.AcquireWait(context.Background(), path, 5*time.Second)
 	if err == nil {
 		t.Fatal("親ディレクトリが無いのに取れてしまった")
 	}
@@ -186,5 +187,33 @@ func TestAcquireWait_親ディレクトリが無ければ待たずに落ちる(t
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("開けないのに %v 待った", elapsed)
+	}
+}
+
+// 目的: 上限より先に ctx が終わったら、AcquireWait がそこで待つのをやめることを確認する
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d。起動時の検査は全体で60秒しか
+// 持たないので、ロックの待ちがそれを超えると、本当の理由が文面に出ないまま落ちる）。
+// 与える情報: 掴んだままのロックと、200ms で終わる ctx、5秒の上限。
+// 成功条件: 1秒以内にエラーが返り、それが context.DeadlineExceeded を包んでいること。
+func TestAcquireWait_上限より先にctxが終わったら待つのをやめる(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "github-app-credentials.lock")
+	first, err := lock.Acquire(path)
+	if err != nil {
+		t.Fatalf("1回目の Acquire に失敗した: %v", err)
+	}
+	defer first.Release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = lock.AcquireWait(ctx, path, 5*time.Second)
+	if err == nil {
+		t.Fatal("掴んだままなのに2回目が取れてしまった")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("打ち切りのエラーが context.DeadlineExceeded を包んでいない: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("ctx が 200ms で終わったのに %v 待った", elapsed)
 	}
 }

@@ -6,6 +6,7 @@
 package lock
 
 import (
+	"context"
 	"errors"
 	"os"
 	"syscall"
@@ -109,13 +110,22 @@ const acquireWaitInterval = 100 * time.Millisecond
 // **hook の挙動は変えない。**足したのは新しい関数で、Acquire の取り方は1バイトも変えていない
 // （CLAUDE.md の「hook の挙動が変化する変更」の門には当たらない）。
 //
+// **待っている最中も ctx を見る。**見ないと、呼び出し側が期限を切っていても待ち切ってしまう。
+// 起動時の検査は全体で60秒しか持たないので、そこでロックを待ち切ると、
+// **期限切れのあとに「ロックを取れません」の文言で落ちる**（本当の理由が文面に出ない）。
+// 終了の後始末で走る投稿も、同じだけ止まる。
+//
+// ctx: 待ちを打ち切るコンテキスト。**期限を持つものを渡すこと。**
 // path: ロックファイルの絶対パス。親ディレクトリは呼び出し側が事前に作成しておくこと。
 // timeout: 待つ上限。0 以下なら1回だけ試す（Acquire と同じ）。
 // 戻り値: ロックを獲得できれば *Lock を返す。上限まで待っても別のプロセスが放さなければ
-// ErrAlreadyRunning を包んだエラーを返す。ファイルを開けない場合は待たずにそのエラーを返す
-// （Acquire と同じく ErrAlreadyRunning を包まない）。
-func AcquireWait(path string, timeout time.Duration) (*Lock, error) {
+// ErrAlreadyRunning を包んだエラーを返す。**ctx が先に終わったら、その理由
+// （`context.DeadlineExceeded` など）を包んで返す**（`errors.Is` で切り分けられる）。
+// ファイルを開けない場合は待たずにそのエラーを返す（Acquire と同じく ErrAlreadyRunning を包まない）。
+func AcquireWait(ctx context.Context, path string, timeout time.Duration) (*Lock, error) {
 	deadline := time.Now().Add(timeout)
+	timer := time.NewTimer(acquireWaitInterval)
+	defer timer.Stop()
 	for {
 		l, err := Acquire(path)
 		if err == nil {
@@ -124,9 +134,17 @@ func AcquireWait(path string, timeout time.Duration) (*Lock, error) {
 		if !errors.Is(err, ErrAlreadyRunning) {
 			return nil, err
 		}
+		if ctx.Err() != nil {
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitCanceled, path, ctx.Err())
+		}
 		if !time.Now().Before(deadline) {
 			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitTimeout, ErrAlreadyRunning, path, timeout)
 		}
-		time.Sleep(acquireWaitInterval)
+		timer.Reset(acquireWaitInterval)
+		select {
+		case <-ctx.Done():
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitCanceled, path, ctx.Err())
+		case <-timer.C:
+		}
 	}
 }

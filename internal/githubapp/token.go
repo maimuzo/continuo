@@ -39,7 +39,7 @@ func AcquireToken(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	l, err := store.Lock(lockTimeout)
+	l, err := store.Lock(ctx, lockTimeout)
 	if err != nil {
 		return "", err
 	}
