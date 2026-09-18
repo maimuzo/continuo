@@ -26,8 +26,8 @@ const planReviewHeading = "## 3-2. 計画を書き、レビューを受ける"
 // 次の巡回までの待ちがかかる。**文章だけのコメントを受け取った人間は、
 // 構造を頭の中で組み立て直すか、「詳しく説明して」で1往復を使うことになる。**
 //
-// **貼る先は計画のコメントである。**判断票ではない。
-// 「実装しようとしている内容」を書くのは計画のほうで、判断票はレビューの結果だからである。
+// **必ず貼る先は計画のコメントである。**「実装しようとしている内容」を書くのは計画のほうだからである。
+// 判断票と成果の報告にも、5-5 に従って図を多用する（設計 5-3r）。
 //
 // 与える情報: prompt.Builtin() の全文。
 // 成功条件: 3-2 の節が、計画へ図を書かせる指示・書式（mermaid）・図の種類の3つを教えていること。
@@ -97,8 +97,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 
 	// **sectionOf は使えない。**あれは次の `## ` までを切るが、
 	// **5-5 の次の見出しは `# 6. セキュリティ` で、井桁が1つである。**
-	// そのまま使うと、次の `## 6-1.` までが入る。**いま余分に入るのは空行と `# 6.` の2行だけだが**
-	// （実測。`## ` で切ると77行、`# ` でも切ると75行）、**6章の頭に節が増えれば、そのぶん全部入る。**
+	// そのまま使うと、次の `## 6-1.` までが入る。**6章の頭に節が増えれば、そのぶん全部入る。**
 	// 入った語で通ってしまうと、5-5 から中身が消えても素通りする。
 	section := sectionUntilNextChapter(t, body, commentFormatHeading)
 
@@ -134,9 +133,18 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 			"読む人は決めるための材料を持てません"},
 		{"### 詳細", "根拠が無いと、結論だけを信じるかどうかの判断になります"},
 	} {
-		// **見出しの後ろが続いていないものだけを数える。**表では backtick、骨組みでは改行が続く。
+		// **数えるのは、表の行と骨組みの行だけである。**表の行は `| ` で始まり、見出しを backtick で囲む。
+		// 骨組みの行は、前後の空白を落とすと見出しだけになる。
 		// 部分一致で数えると、`### 前提` が旧い見出し `### 前提条件` にも当たり、4つの形へ戻っても通る。
-		if n := strings.Count(section, want.needle+"`") + strings.Count(section, want.needle+"\n"); n < 2 {
+		// 地の文の中の見出し（「表を `### 詳細` の中に置きます」など）も数えない。数えると、表の行が消えても通る。
+		n := 0
+		for _, line := range strings.Split(section, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == want.needle || (strings.HasPrefix(trimmed, "| ") && strings.Contains(trimmed, "`"+want.needle+"`")) {
+				n++
+			}
+		}
+		if n < 2 {
 			t.Errorf("%q の節に %q が %d 箇所しかありません（表と骨組みの2箇所に要ります）。%s",
 				commentFormatHeading, want.needle, n, want.why)
 		}
@@ -282,4 +290,116 @@ func TestTemplate_コメントの形を決める節は本文より後ろにあ�
 			"この節は 4-4 の決まりにも従えと書いているので、先に読ませると指す先がありません",
 			commentFormatHeading)
 	}
+}
+
+// planTicketHeading と changeTicketHeading は、判断票の見本の題名の行である（前後の空白を落とした形）。
+const (
+	planTicketHeading   = "# レビューの判断票（計画）"
+	changeTicketHeading = "# レビューの判断票（実装）"
+)
+
+// 目的: 判断票と成果の報告の見本が、5-5 の7つの見出しの形であることを固定する（設計 5-3r）。
+//
+// **なぜ要るか。**5-5 は判断票と成果の報告も7つで書かせる。**見本が表だけの形のままだと、
+// エージェントは2通りの形を受け取り、見本のとおりに表だけを投稿する。**
+// `## レビューの判断票` の直下に `## <節の題名>` を並べると、題名と節が同じ深さになる。
+//
+// **行ごとに前後の空白を落として比べる。**見本の字下げの有無では結果が変わらない。
+// 見本を囲みの中に行頭から書くときは、節を切る補助（sectionOf）も囲みの中の `## ` で切らない形にすること。
+// 部分一致では `# レビューの判断票` が `## レビューの判断票` にも当たるので使わない。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 3-2 の判断票の見本が、題名 → 節 → 引用 → 6つの見出し → 表 の順に並ぶ。
+// 3-6 の見本の題名が `# ` で、3-7 の見本が 5-5 へ案内している。
+// どこにも `## レビューの判断票` の行が無い。
+func TestTemplate_判断票と成果の報告の見本は7つの見出しの形である(t *testing.T) {
+	body := prompt.Builtin()
+
+	// 3-2 の判断票: 題名から表の見出しまでが、この順に並ぶ。
+	plan := sectionOf(t, body, planReviewHeading)
+	steps := []struct {
+		name  string
+		match func(string) bool
+	}{
+		{"題名", func(l string) bool { return l == planTicketHeading }},
+		{"節の見出し", func(l string) bool { return strings.HasPrefix(l, "## ") }},
+		{"引用", func(l string) bool { return strings.HasPrefix(l, "> ") }},
+		{"### 三行まとめ", func(l string) bool { return l == "### 三行まとめ" }},
+		{"### 前提", func(l string) bool { return l == "### 前提" }},
+		{"### 単語の説明", func(l string) bool { return l == "### 単語の説明" }},
+		{"### 既存の構造がどうなっているか", func(l string) bool { return l == "### 既存の構造がどうなっているか" }},
+		{"### 何が問題なのか", func(l string) bool { return l == "### 何が問題なのか" }},
+		{"### 詳細", func(l string) bool { return l == "### 詳細" }},
+		{"表の見出し", func(l string) bool { return strings.HasPrefix(l, "| 指摘 |") }},
+	}
+	next := 0
+	for _, line := range strings.Split(plan, "\n") {
+		if next < len(steps) && steps[next].match(strings.TrimSpace(line)) {
+			next++
+		}
+	}
+	if next < len(steps) {
+		t.Errorf("%q の判断票の見本に、%q が順に並んでいません（%d 個目で止まりました）。"+
+			"5-5 の7つの見出しと、`### 詳細` の中の表の順で書かせてください",
+			planReviewHeading, steps[next].name, next+1)
+	}
+
+	// 3-6 の判断票: 題名が `# ` で、中身を 3-2 と同じ形へ案内している。
+	change := sectionOf(t, body, "## 3-6. pull request のレビューを受ける")
+	if !hasTrimmedLine(change, changeTicketHeading) {
+		t.Errorf("3-6 の判断票の見本に、%q の行がありません", changeTicketHeading)
+	}
+	if !strings.Contains(change, "5-5 の7つの見出し。表は ### 詳細 の中") {
+		t.Error("3-6 の判断票の見本が、3-2 と同じ7つの形へ案内していません")
+	}
+
+	// 3-7 の成果の報告: 5-5 へ案内し、印を写させない。
+	finished := sectionOf(t, body, finishedHeading)
+	if !hasTrimmedLine(finished, "ここに 5-5 の7つの見出しで、何をしたかを書く（印は上の1行だけ）") {
+		t.Error("3-7 の成果の報告の見本が、5-5 の7つの見出しへ案内していません。" +
+			"案内が無いと、前提も単語の説明も無い報告が届きます")
+	}
+
+	// 旧い深さの題名が、どこにも残っていない。
+	for _, old := range []string{"## レビューの判断票（計画）", "## レビューの判断票（実装）"} {
+		if hasTrimmedLine(body, old) {
+			t.Errorf("組み込みに %q の行が残っています。節の見出しと同じ深さになります", old)
+		}
+	}
+}
+
+// 目的: 5-5 が、人間に訊くときの形（1問1節、表で訊かない、案の書き方）を決めていることを固定する。
+//
+// **なぜ要るか。**continuo が起動したエージェントが、質問を表で並べて人間に訊いたことがある
+// （issue #259 のコメント 5681164864）。人間は「表で質問することを禁止する」と指示した（同 5708020098）。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 5-5 の節に、1問1節・表で訊かない・選ばないと何が続くか・貼れるコマンド の4つがある。
+func TestTemplate_コメントの形は質問を1問1節で訊かせる(t *testing.T) {
+	section := sectionUntilNextChapter(t, prompt.Builtin(), commentFormatHeading)
+	for _, want := range []string{
+		"質問1つにつき1つの節",
+		"表で訊かないでください",
+		"選ばないと何が続くか",
+		"そのまま貼れるコマンド",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("%q の節に %q がありません。人間に訊くときの形が決まらず、表で並べた質問が届きます",
+				commentFormatHeading, want)
+		}
+	}
+}
+
+// hasTrimmedLine は、前後の空白を落とすと want と一致する行があるかを返す。
+//
+// s: 探す元の文面。
+// want: 一致させる行。
+// 戻り値: あれば true。
+func hasTrimmedLine(s, want string) bool {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }

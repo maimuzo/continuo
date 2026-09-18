@@ -66,7 +66,7 @@ git fetch origin -q   # 検査の前に必ず打つ
 ```bash
 git fetch origin -q   # 上の絶対条件。これを先に打つ
 
-# 未コミットの変更（untracked も数える）
+# commit していない変更（untracked も数える）
 git -C <パス> status --porcelain --untracked-files=all
 
 # 未マージの commit。0件でなければ、その commit が origin にあるか確かめる
