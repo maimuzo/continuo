@@ -4,7 +4,7 @@ Claude側を正本として維持し、Codexには公式の互換機能とsymlin
 推奨は「公式連携プラグイン＋CLAUDE.mdのfallback読み込み＋既存marketplaceの再利用」。
 高度なhooks制御と、このリポジトリ固有の移植設計は対象外とする。
 
-調査基準日: 2026-09-12。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節に示す。
+調査基準日: 2026-09-18。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節、未対応範囲の比較調査と選定は18〜20節に示す。
 
 ## 1. 採用する構成
 
@@ -379,3 +379,74 @@ Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`�
 | 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。hooks変更は今回の範囲外で、既存設定を変更していない |
 
 Claudeのレートリミットを意図的に発生させる試験はしていない。代わりの合格条件である「移送済みの会話をClaudeに依存せずCodexで継続できること」は16節の試験で満たした。次に残る確認を行う場合も、lunaを明示し、300秒上限を付けてから開始する。
+
+## 18. 未対応範囲の比較調査
+
+本文・配布・実行意味を分けると、既存資産を壊さずに対応できる範囲が明確になる。
+結論は「標準のSKILL.mdはsymlink、Claude拡張は必要箇所だけCodex側の薄い投影、hooksは別実装」である。
+
+### 18.1 公式仕様で確認した境界
+
+Claude CodeはAgent Skills標準を採用しているが、`user-invocable`、`context: fork`、`agent`、動的注入などを拡張している。[Claude Skills](https://code.claude.com/docs/en/skills) は、Claude外では標準の `name` / `description` / `license` / `compatibility` / `metadata` / `allowed-tools` だけを使うよう明記している。
+
+OpenAIのClaude plugin移植仕様は、SKILL.md・scripts・references・resourcesを保持しつつ、Claude固有パラメータを除去・適応し、`userConfig`を自動実行しない。Codexのskillは `.agents/skills` のsymlinkを読める。[plugin移植](https://developers.openai.com/fr-FR/plugins/guides/submit-claude-plugin)、[skills](https://developers.openai.com/es-419/docs/build-skills)
+
+Codexのcustom subagentは `.codex/agents/*.toml` の独自形式であり、ClaudeのMarkdown agentをそのままsymlinkできない。[subagents](https://developers.openai.com/es-419/docs/agent-configuration/subagents)
+
+Claudeのhooksはprompt/agent hookと終了コード2によるイベント制御を持つ。一方、Codexのhooksは現行仕様ではcommandとmcp_toolが中心で、prompt/agent handlerは互換実行されない。[Claude hooks](https://code.claude.com/docs/en/hooks)、[Codex hooks](https://developers.openai.com/fr-FR/docs/hooks)
+
+### 18.2 候補の比較
+
+| 候補 | 共有できる範囲 | 保守負担 | Claude性能へのリスク | 判断 |
+| --- | --- | --- | --- | --- |
+| Claudeを正本にして標準SKILL.mdをsymlink | 本文・scripts・references・resources | 最小 | 共有対象を選べばなし | **採用** |
+| [Vercel Skills CLI](https://github.com/vercel-labs/skills) | Agent Skills対応のskill配布。symlinkが推奨 | 小 | Claude plugin/rules/agents/hooksは対象外 | 補助採用候補 |
+| [sync-claude-skills-to-codex](https://github.com/ariccb/sync-claude-skills-to-codex) | Claude plugin cacheと個人skillをCodexへsymlink | 小 | plugin更新でリンク再作成が必要。frontmatter意味は未変換 | 参考採用。全面導入しない |
+| [Rulesync](https://github.com/dyoshikawa/rulesync) | rules・commands・subagents・skills・hooksをimport/生成/convert | 中〜大 | 生成物と変換差分がClaude側へ影響し得る | 次点。厳密rulesが必要になったら限定導入 |
+| [Ruler](https://github.com/intellectronica/ruler) | `.ruler`から各agentの設定を生成 | 中 | CLAUDE.mdを生成物にするため正本変更が大きい | 不採用 |
+| [agentsync](https://github.com/spxrogers/agentsync) / [aitoolsync](https://github.com/EvanL1/aitoolsync) | 多agentへの投影と差分報告 | 中〜大 | subagent・command・hooksがlossy | 不採用。将来の比較対象 |
+| 自作の全面変換器 | 全拡張を個別変換 | 最大 | Claude仕様を変換都合に合わせる危険 | 不採用 |
+| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | Claude内のCodex review・rescue・transfer | 小 | 既存Claude資産を変更しない | **採用済み** |
+
+Vercel CLIは「canonical copyから各agentへsymlinkする」設計で、単体の共通skillには適するが、Claude pluginのnamespaceやagent/hookを再現しない。RulesyncはCodexとClaudeの双方でhooksまで表に載せるが、共通の `.rulesync` を生成元にするか、変換出力を更新する運用が必要であり、今回の「Claudeを正本にしてClaude性能を落とさない」条件と反する。複数の個人製ツールは有効な実装例だが、plugin cache更新・lossy投影・新規canonical storeへの移行を伴うため、公式経路を置き換える根拠にはならない。
+
+## 19. 未対応項目への選定結果
+
+全資産を同じ意味で共有することはできない。対応可能なものだけを機械的に共有し、非互換部分はClaude側を変更せずCodex側へ隔離する。
+
+### 19.1 採用する段階的アプローチ
+
+1. `name`・`description`を中心とする標準SKILL.mdと、skillディレクトリ内の相対scripts/references/resourcesだけをsymlinkする。
+2. Claude拡張frontmatterを含むskillは、まずCodexの発見・本文読取だけを検査する。`user-invocable`、`argument-hint`、`context: fork`、`agent`、`background`、動的注入、Claude専用tool名に依存するものは自動共有対象から外す。
+3. Codexで同じ役割が必要なagentだけ、`.codex/agents/*.toml` の薄いsidecarを追加する。本文の正本はskillまたはCLAUDE.mdに置き、sidecarにはCodex固有の `developer_instructions` とsandbox/modelだけを書く。
+4. 同じmarketplaceをCodexへ登録し、必要pluginだけを有効化する。Claude cacheを直接symlinkせず、更新は両CLIのnative機能で行う。
+5. hooks、Claudeの権限・Workflow・agent teamは今回共有しない。将来必要ならClaude設定を残したまま、Codexのcommand/mcp_tool hookを別ファイルで追加し、イベントごとに失敗時挙動を試験する。
+
+この方法なら、Claudeの既存frontmatter・plugin・hooksを変更せず、Codexの不足だけを狭いsidecarで補える。完全なゼロ差分は達成できないが、二重保守の対象を「非互換な実行メタデータ」に限定できる。
+
+### 19.2 残件ごとの実現性
+
+| 残件 | 実現性 | 今回の扱い |
+| --- | --- | --- |
+| 標準skill本文・付属資料 | 高い | symlinkを継続 |
+| Claude pluginのCodex導入 | 高い | 既存marketplaceをnative導入 |
+| Claudeの基本指示・個人指示 | 高い | fallbackとAGENTS.md symlink |
+| 条件付きrulesの自動適用 | 部分的 | CLAUDE.mdのCodex読取手順。厳密化はRulesyncを再評価 |
+| Claude agentの同一実行 | 部分的 | 必要なものだけCodex TOML sidecar |
+| frontmatterの実行意味 | 部分的 | standardと拡張を分類し、無理に共用しない |
+| Claude hooksの同一挙動 | 低い | 今回は対象外。別経路で再設計 |
+| Claude内からのCodex委任・会話移送 | 高い | 公式pluginを採用済み |
+
+「未対応」は一括移植を意味しない。上表の高い・部分的な項目を追加検証すれば対応できるが、hooksの同一挙動は現行仕様の差から別設計が必要である。
+
+## 20. 次に実施する検証
+
+追加検証はClaude側を先に壊さない順序で行い、各項目を独立に戻せるようにする。
+
+1. 共有候補skillを標準frontmatter、Claude拡張frontmatter、外部tool依存の3群へ再分類する。
+2. 拡張frontmatterを持つ代表3件について、Codexの明示呼出し・暗黙選択・引数処理・付属資料参照をread-onlyで試す。
+3. Codex TOML sidecarを1件だけ作り、Claude側のagentと同じ目的・入力・完了条件をread-onlyで比較する。合格しなければsidecarを削除し、Claude側は変更しない。
+4. 条件付きrulesが実際に漏れる事例が出た場合だけ、Rulesyncの`import`/`convert`をfixtureで比較し、生成物の所有者・更新タイミング・削除挙動を確認する。
+5. hooksは別課題として、Claudeの既存hooksをsymlinkしない。Codexのcommand/mcp_toolに同じ安全条件を再定義する設計レビューから始める。
+
+各検証は外部issue・PR・本番データを変更しないfixtureで行う。Claudeの応答や既存pluginのfrontmatterを変える実装は、別の設計レビューと人間の確認を経るまで着手しない。
