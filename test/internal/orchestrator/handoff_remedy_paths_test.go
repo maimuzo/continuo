@@ -1,6 +1,6 @@
 // 引き渡しの通知を投稿する経路が、それぞれ正しい【対処】を持つことの検査である（設計 3-11。issue #259）。
 //
-//	経路2  復元した run が blocked だった    … 公開かどうかで【対処】を変える
+//	経路2  復元した run が blocked だった    … 【対処】をそのまま載せる
 //	経路3  起動直後の確認で blocked が返った  … コメントに書く許可の文を持たない
 //
 // **経路1（turn の終わりに blocked）は `TestTurn_blockedで引き渡すときサブエージェントの記録も案内する` が見ている。**
@@ -8,8 +8,8 @@
 // **この package は `lang_test.go` の `TestMain`（`testlang.Run`）で日本語に固定されている。**
 // だから日本語の文字列で見る。
 //
-// **経路2 は非公開の場合を必ず試す。**`sampleIssue` は `RepoIsPrivate` を立てないので、nil しか試さないと
-// 「正しく渡している」と「渡し忘れて nil になっている」が同じ文面になり、区別できない。
+// **公開・非公開で文面は変わらない。**それでも3通りを回すのは、**値が入っていると別の文面になる、
+// という分岐が戻っていないこと**を見るためである。
 package orchestrator_test
 
 import (
@@ -18,33 +18,37 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// handoffPublicRefusal は、公開リポジトリ（と、公開かどうかを取れなかったとき）の【対処】にだけ出る断りである。
-const handoffPublicRefusal = "このリポジトリは公開なので、issue のコメントで許可を出す方法は案内しません"
-
-// handoffGrantSentence は、コメントに書く許可の文である。起動直後の文言には入ってはならない。
+// handoffGrantSentence は、コメントに書く許可の文である。どの引き渡しにも入ってはならない。
 const handoffGrantSentence = "その操作を許可します"
 
-// remedyCase は、公開・非公開のどちらとして issue を置くかと、非公開の案内を期待するかである。
+// remedyCase は、公開・非公開のどちらとして issue を置くかである。
 type remedyCase struct {
 	name          string
 	repoIsPrivate *bool
-	wantPrivate   bool
 }
 
 // remedyCases は、試す公開・非公開の組み合わせを返す。
 //
-// **明示的な公開（false）を必ず入れる。**nil だけだと、「値が入っていれば非公開と扱う」誤りを検出できない。
+// **文面は3通りとも同じになる。**分けていたのは「公開の場所へ『ここへ許可を書けば通る』と
+// 書くと第三者が同じ文を書ける」ためだったが、**そもそも誰が書いても判定役へ届かない**
+// （公式の permission modes のページ。2026-09-18 に取得）。
 //
-// 戻り値: 非公開（true）、公開（false）、取れなかった（nil。公開として扱う）の3通り。
+// **それでも3通りを回す。**`RepoIsPrivate` は `tool_gate` の判定が使い続けており
+// （internal/orchestrator/settings.go の `toolGateHookMatchers`）、**値が入っていると
+// 別の文面になる、という分岐が戻っていないことを見るためである。**
+//
+// 戻り値: 非公開（true）、公開（false）、取れなかった（nil）の3通り。
 func remedyCases() []remedyCase {
 	private, public := true, false
 	return []remedyCase{
-		{name: "非公開", repoIsPrivate: &private, wantPrivate: true},
-		{name: "公開", repoIsPrivate: &public, wantPrivate: false},
-		{name: "取れなかった", repoIsPrivate: nil, wantPrivate: false},
+		{name: "非公開", repoIsPrivate: &private},
+		{name: "公開", repoIsPrivate: &public},
+		{name: "取れなかった", repoIsPrivate: nil},
 	}
 }
 
@@ -62,13 +66,18 @@ func handoffBodyOf(fx *fixture, nodeID string) string {
 	return ""
 }
 
-// 目的: 経路2（復元した run が blocked）が、issue の `RepoIsPrivate` を【対処】まで渡していることを固定する。
+// 目的: 経路2（復元した run が blocked）が、【対処】を本文に載せることを固定する。
 //
-// **渡し損ねると、非公開リポジトリの利用者に対処が届かないか、公開リポジトリへ許可の出し方が載る。**
+// **載せ損ねると、止まった issue を受け取った人に、何をすればよいかが1行も届かない。**
+// **公開・非公開の3通りとも、同じ【対処】が載る。**
 //
-// 与える情報: `In Progress` の issue（非公開 / 取れなかった）と、agent_status が blocked の pane。
-// 成功条件: 非公開なら許可の出し方の案内が入り公開の断りが入らない。取れなかったならその逆。
-func TestHandoff_復元したrunがblockedなら公開かどうかで対処を変える(t *testing.T) {
+// **`permissionRemedyText` の中身とまるごと突き合わせる。**
+// `internal/orchestrator/restore.go` の呼び出しが消えたら、この検査が落ちる。
+// **一部だけを `Contains` で見ると、呼び出しが消えても別の行に同じ語があれば通ってしまう。**
+//
+// 与える情報: `In Progress` の issue（非公開 / 公開 / 取れなかった）と、agent_status が blocked の pane。
+// 成功条件: 3通りとも、`permissionRemedyText` の文面をそのまま含むこと。
+func TestHandoff_復元したrunがblockedなら対処を載せる(t *testing.T) {
 	for _, tc := range remedyCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newFixture(t, fixtureOptions{})
@@ -89,15 +98,13 @@ func TestHandoff_復元したrunがblockedなら公開かどうかで対処を�
 				return handoffBodyOf(fx, "I_node188") != ""
 			})
 			body := handoffBodyOf(fx, "I_node188")
-			hasGuidance := strings.Contains(body, commentGrantGuidance)
-			hasRefusal := strings.Contains(body, handoffPublicRefusal)
-			if tc.wantPrivate && (!hasGuidance || hasRefusal) {
-				t.Errorf("非公開なのに、非公開の【対処】になっていない"+
-					"（RepoIsPrivate を渡し損ねている疑い。案内=%v 断り=%v）:\n%s", hasGuidance, hasRefusal, body)
+			want := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto)
+			if !strings.Contains(body, want) {
+				t.Errorf("引き渡しの本文が【対処】をそのまま含んでいない"+
+					"（restore.go が permissionRemedyText を呼んでいない疑い）。\n期待:\n%s\n本文:\n%s", want, body)
 			}
-			if !tc.wantPrivate && (hasGuidance || !hasRefusal) {
-				t.Errorf("公開として扱うべきなのに、公開の【対処】になっていない（案内=%v 断り=%v）:\n%s",
-					hasGuidance, hasRefusal, body)
+			if strings.Contains(body, commentGrantGuidance) {
+				t.Errorf("コメントで許可を出す案内が入っている。判定役はそれを読まない:\n%s", body)
 			}
 		})
 	}
