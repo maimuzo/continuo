@@ -101,7 +101,7 @@
 | 信頼登録する / 信頼済み / 未承認 | trust / trusted / not trusted | README の "trust those repositories"。**「未承認」は `not trusted`。**`unapproved` は使わない |
 | 資格情報 | credentials | README が doctor の検査をこの語で並べている |
 | 枠 / 枠の判定 | usage window | README の "used to read your plan's usage window"。`quota` `rate limit budget` を混ぜない |
-| 検査 / 前提が揃っている | check / everything is in place | README の "runs eighteen checks" と "# check that everything is in place" |
+| 検査 / 前提が揃っている | check / everything is in place | README の "runs nineteen checks" と "# check that everything is in place" |
 | 表明（`CONTINUO-STATUS:` の行） | the `CONTINUO-STATUS:` line | README が行そのものを名指ししている。抽象名詞に訳さない |
 | 機械 | machine | README の "a machine or container you can discard" |
 | 実行ファイル / 版 | binary / version | README の Install が "the binary" と書く |
@@ -217,12 +217,12 @@
 **言いたいこと。**[internal/doctor/report.go](../../internal/doctor/report.go) の `labelColumn` が 16 である。
 **16桁に満たない語を並べて桁を揃えている。**15桁を超えるラベルを1つ置くと、全部の行の桁が崩れる。
 
-**使ってよいラベルは、この18語だけである。**
+**使ってよいラベルは、この19語だけである。**
 
 `config` / `cleanup states` / `missing keys` / `prompt vars` /
 `claude` / `agent teams` / `hook socket` / `Claude settings` / `worktree root` / `herdr` /
 `gh auth` / `kanban board` / `Status names` / `rewrite keys` / `automations` / `clones` /
-`trust` / `credentials`
+`trust` / `credentials` / `GitHub App`
 
 **`prompt vars` を `prompt variables` と書かないこと。**16桁になり、全部の行の桁が崩れる。
 

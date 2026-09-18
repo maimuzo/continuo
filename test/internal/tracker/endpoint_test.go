@@ -35,7 +35,7 @@ func TestNewAdapter_httpsでない接続先を拒否する(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := tracker.NewAdapter(testTrackerConfig(), tc.endpoint, "test-token", nil, nil, nil)
+			_, err := tracker.NewAdapter(testTrackerConfig(), tc.endpoint, "test-token", nil, nil, nil, nil)
 			if err == nil {
 				t.Fatalf("接続先 %q を受け付けてしまった（トークンが平文で流れる）", tc.endpoint)
 			}
@@ -59,7 +59,7 @@ func TestNewAdapter_loopbackのhttpは受け付ける(t *testing.T) {
 		"http://[::1]:8080/graphql",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
-			if _, err := tracker.NewAdapter(testTrackerConfig(), endpoint, "test-token", nil, nil, nil); err != nil {
+			if _, err := tracker.NewAdapter(testTrackerConfig(), endpoint, "test-token", nil, nil, nil, nil); err != nil {
 				t.Fatalf("loopback の http を拒否した（テストの偽サーバが使えなくなる）: %v", err)
 			}
 		})
@@ -70,7 +70,7 @@ func TestNewAdapter_loopbackのhttpは受け付ける(t *testing.T) {
 // 与える情報: 空文字の endpoint。
 // 成功条件: NewAdapter が成功すること（既定値そのものが検査を通ること）。
 func TestNewAdapter_endpointが空なら既定のhttpsを使う(t *testing.T) {
-	if _, err := tracker.NewAdapter(testTrackerConfig(), "", "test-token", nil, nil, nil); err != nil {
+	if _, err := tracker.NewAdapter(testTrackerConfig(), "", "test-token", nil, nil, nil, nil); err != nil {
 		t.Fatalf("既定の接続先が検査を通らない: %v", err)
 	}
 }
@@ -96,7 +96,7 @@ func TestNewAdapter_httpClientがnilでもDefaultClientを使わない(t *testin
 		return dataResponse(candidateItemsPayload(nil, false, ""))
 	})
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestFetchIssuesByStates_エラー本文の切り詰めで日本語が壊れ
 	}))
 	defer srv.Close()
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), srv.URL, "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), srv.URL, "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

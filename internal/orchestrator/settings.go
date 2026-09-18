@@ -12,6 +12,7 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/shellquote"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -353,10 +354,12 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
 	}
 
 	// **shell の引用を通す。**この文字列は Claude Code が shell で実行する。
+	// **包み方は internal/shellquote にある**（送る文面へ `continuo github-app token` を
+	// 埋める側と同じ包み方を使う。設計 3-82e）。移す前と1バイトも変えていない。
 	// 引用せずに繋ぐと、パスに空白が1つ入るだけでコマンド行が別の引数へ割れ、
 	// **7種の hook が1つも届かなくなる**（turn の終わりを永久に検知できない）。
 	command := fmt.Sprintf("%s hook --socket %s --pending-dir %s",
-		shellQuote(o.continuoPath), shellQuote(o.socketPath), shellQuote(pending))
+		shellquote.Quote(o.continuoPath), shellquote.Quote(o.socketPath), shellquote.Quote(pending))
 	hooks := make(map[string][]hookMatcher, len(hookEventNames))
 	for _, ev := range hookEventNames {
 		hooks[ev.Name] = []hookMatcher{{
@@ -432,16 +435,4 @@ func (o *Orchestrator) claudeStartArgs(settingsPath, sessionUUID, resumeUUID str
 		args = append(args, "--permission-mode", mode)
 	}
 	return args
-}
-
-// shellQuote は shell のコマンド行へ埋め込む1語を単一引用符で包む。
-//
-// **単一引用符の中では展開が一切起きない**ので、空白・`$`・バッククォート・`;` を
-// そのまま渡せる。語の中に単一引用符があれば、「引用を閉じる・逃がした単一引用符を置く・
-// 引用を開き直す」の3つを並べた形へ置き換える。
-//
-// s: 埋め込む1語。
-// 戻り値: 引用した文字列。
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

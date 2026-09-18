@@ -18,7 +18,7 @@ func TestGraphQL_403とX_RateLimit_Remaining0でレートリミットに分類�
 		Body:   map[string]any{"message": "API rate limit exceeded"},
 	}))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestGraphQL_errors配列のRATE_LIMITEDでレートリミットに分類さ
 		},
 	}))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestGraphQL_errors配列のRATE_LIMITEDでレートリミットに分類さ
 // 与える情報: 実在しないポートへの URL。
 // 成功条件: Bootstrap がエラーを返し、カテゴリが CategoryRequest であること。
 func TestGraphQL_接続できないとCategoryRequestに分類される(t *testing.T) {
-	a, err := tracker.NewAdapter(testTrackerConfig(), "http://127.0.0.1:1", "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), "http://127.0.0.1:1", "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestGraphQL_壊れた応答はCategoryResponseに分類される(t *testing
 	// gqlEnvelope（{"data":...,"errors":...}）としては解析できない中身になる。
 	// json.Unmarshal はオブジェクト以外を struct へ流し込もうとしてエラーになるはずである。
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

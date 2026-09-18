@@ -16,14 +16,14 @@
 **Claude Code がイベントのたびに `continuo hook` を exec する。**
 
 **turn ごとではない。**continuo が issue ごとの設定ファイルへ登録する hook は7種類あり
-（[internal/orchestrator/settings.go:97-104](../../internal/orchestrator/settings.go#L97-L104)）、
+（[internal/orchestrator/settings.go:98-105](../../internal/orchestrator/settings.go#L98-L105)）、
 **そのうち `PreToolUse` と `PostToolUse` は matcher が `*` である。**
 **つまり、エージェントが道具を1つ叩くたびに2回起動する。**
 
     Stop / UserPromptSubmit / SubagentStop / Notification / SessionStart   … 節目ごとに1回
     PreToolUse / PostToolUse（matcher は `*`）                              … 道具を叩くたびに1回ずつ
 
-そのコマンド行は [internal/orchestrator/settings.go:352-353](../../internal/orchestrator/settings.go#L352-L353) が組み立てて、
+そのコマンド行は [internal/orchestrator/settings.go:361-362](../../internal/orchestrator/settings.go#L361-L362) が組み立てて、
 issue ごとの設定ファイルへ書く。
 
 ```
@@ -167,4 +167,4 @@ sequenceDiagram
 | **「巡回は後片付けができない」** | **終端のときは既にやっている。**引き渡しのときだけやらない |
 | **「巡回に寄せるとループが止まる」** | **止まらない。**`go func()` で逃がしている |
 | **「状態はファイルに書いてある」** | **`runState` は書いていない。**プロセスが落ちると消える。**ただし worktree の身元は `<worktree>/.continuo.json` に書いてあり、巡回のたびに読み直している** |
-| **「hook は turn ごとに1回だけ起動する」** | **道具を1つ叩くたびに `PreToolUse` と `PostToolUse` で2回起動する。**matcher が `*` である（[internal/orchestrator/settings.go:103-104](../../internal/orchestrator/settings.go#L103-L104)） |
+| **「hook は turn ごとに1回だけ起動する」** | **道具を1つ叩くたびに `PreToolUse` と `PostToolUse` で2回起動する。**matcher が `*` である（[internal/orchestrator/settings.go:104-105](../../internal/orchestrator/settings.go#L104-L105)） |

@@ -81,7 +81,7 @@ func fetchIssueForPrompt(
 	// **姉妹コマンドは2つとも捨てている**（`internal/abandon` と `internal/doctor`）。
 	adapter, err := tracker.NewAdapter(
 		cfg, endpoint, token, &http.Client{Timeout: daemon.DefaultTrackerTimeout},
-		slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+		slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
 	if err != nil {
 		return tracker.Issue{}, false, err
 	}

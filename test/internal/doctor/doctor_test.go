@@ -45,6 +45,7 @@ var wantLabels = []i18n.Key{
 	doctor.LabelClone,
 	doctor.LabelTrust,
 	doctor.LabelCredentials,
+	doctor.LabelGitHubApp,
 }
 
 // {"RUCM-PATH": "P001"}
