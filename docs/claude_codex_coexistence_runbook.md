@@ -172,41 +172,22 @@ Claude側では `/skills` と `/codex:setup` を確認し、代表skillを明示
 
 ## 12. hooks・permissionsを追加する場合
 
-Codexの設定JSONとClaudeの設定JSONはsymlinkしない。Codex native hookの薄い宣言から、正本のscriptをgit root基準で直接呼ぶ。
+Claudeの設定JSONをCodexへsymlinkせず、OpenAI公式の`migrate-to-codex`でcommand hookの宣言だけを生成する。これはscript本文を変換せず、`.codex/hooks.json`を作る一回の機械変換である。Claude設定を変更した場合は再生成・再検証する。
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/block-merge-without-review.py\"",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/check-reply-clarity.py\"",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
+```sh
+# 公式 migrate-to-codex skillを用意した環境で、まず計画と警告を確認する
+MIGRATE_TO_CODEX='python3 .codex/skills/migrate-to-codex/scripts/migrate-to-codex.py'
+$MIGRATE_TO_CODEX --source ./.claude/ --target ./.codex/ --plan
+$MIGRATE_TO_CODEX --source ./.claude/ --target ./.codex/ --dry-run
+$MIGRATE_TO_CODEX --source ./.claude/ --target ./.codex/
+$MIGRATE_TO_CODEX --validate-target ./.codex/
 ```
 
-この例は候補であり、`~/.codex/config.toml` と `.codex/hooks.json` の両方へ同じhookを登録しない。Codexのhooks trustを確認し、`PreToolUse`のdeny、`Stop`の`decision:block`、timeout/fail-openをread-only fixtureで確認してから有効化する。Codexは`CLAUDE_PLUGIN_ROOT`をplugin hookへ設定するが、project hookでは`CLAUDE_PROJECT_DIR`が保証されないため、git rootを使う。
+公式変換器はcommand・timeout・statusMessageを写すが、未対応event、matcher、async、prompt/agent handlerを完全再現しない。生成レポートのmanual-reviewを確認する。現在のClaude設定は`$CLAUDE_PROJECT_DIR`を使うため、変換前にClaude側のcommandを`python3 "$(git rev-parse --show-toplevel)/.claude/hooks/..."`のような両製品共通表現へ変更する。これによりClaude側も同じscript実体を使い続けられる。
 
-`check-verified-commands.py`のようにClaude transcriptの内部形状を読むhookは、このまま有効化しない。Codexのtranscriptは安定したhook APIではないため、必要なら`PostToolUse`で署名journalを作り、`Stop`で同じ判定coreを呼ぶ別設計をfixtureで検証する。Claude側の既存設定・script・テストは変更しない。
+生成後は、`~/.codex/config.toml`と`.codex/hooks.json`へ同じhookを二重登録しない。Codexのcanonical設定は`[features].hooks = true`とし、hooksのtrustを確認する。`PreToolUse`のdeny、`Stop`の`decision:block`、timeout/fail-openをread-only fixtureで確認してから有効化する。Codexはplugin hookへ`CLAUDE_PLUGIN_ROOT`を設定するが、project hookでは`CLAUDE_PROJECT_DIR`を前提にしない。
+
+`check-verified-commands.py`のようにtranscript内部形状を読むhookは、そのまま移行しない。Claude側もtranscriptを読まない共通実装へ変更する場合だけ、両製品の`PreToolUse`/`PostToolUse`で同じjournal writerを呼び、`Stop`で同じ判定coreを使う。共通化できない場合は、そのhookだけCodexで有効化しない。
 
 Claudeの`permissions.allow/deny`はCodexの`approval_policy`・`sandbox_mode`へ変換しない。通常の確認はCodex native設定を使い、危険操作を追加で止める必要がある場合だけ`PreToolUse`または`PermissionRequest`でdenyする。allowが広すぎる・workspace-writeで実行できる操作をdenyできない場合は、Claude側の性能を守るためCodex hookを有効化しない。
 
