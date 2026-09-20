@@ -99,8 +99,6 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 **`/code-review` は自由なプロンプトを足せない。**受け取るのは PR 番号・branch・path・effort level と、
 `--comment` / `--fix` / `--post` / `--no-post` のようなフラグである
 （確かめ方: `/code-review` を引数なしで叩くと、受け取る形が出る）。
-**`/code-review` と並列に、関連処理まで見る役を `general-purpose` で1つ立てる**（組み込みの 5-6 と同じ形）。
-
 **そのため [.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-7（1回で全部挙げる）と
 2-8（合理的根拠を書く）を、レビュワーへ直接は渡せない。**
 
@@ -120,6 +118,10 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 
 **「検査で落とすもの」を機械的に当ててよいのは、2-7 と 2-8 を渡した worker のレビューだけである**
 （Agent でレビュワーを立てて worker-briefing を Read させた場合）。
+
+**`/code-review` と並列に、関連処理まで見る役を `general-purpose` で1つ立てる**（組み込みの 5-6 と同じ形）。
+**`/code-review` はどの周でも差分しか見ない。**周辺のコードと対応する文書は、この役だけが見る。
+**この役には worker-briefing を Read させる。**したがって、その指摘には「検査で落とすもの」を当ててよい。
 
 **`code-review` は Claude Code に同梱されている skill である。このリポジトリの中には無い。**
 （確かめ方: `git ls-tree -r --name-only HEAD -- .claude/commands .claude/skills/code-review` が1件も返さない）
