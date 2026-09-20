@@ -299,7 +299,7 @@ func Test組み込みのプロンプトがレビューの回し方を持つ(t *t
 		{"削除が起きた周だけ、設計から見直してください", "削除が無い周まで設計へ戻すと、" +
 			"1周の費用がいちばん増えます"},
 		{"連続10回で収まらなかったら", "止まる線が無いと、際限なく回ります"},
-		{"CONTINUO-STATUS: <issue番号> blocked", "表明を書かずに黙ると、" +
+		{"CONTINUO-STATUS: blocked", "表明を書かずに黙ると、" +
 			"continuo からは「まだ喋っている最中」と区別が付きません"},
 	} {
 		if !strings.Contains(section, want.needle) {
