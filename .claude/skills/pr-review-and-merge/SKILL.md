@@ -99,7 +99,7 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 **`/code-review` は自由なプロンプトを足せない。**受け取るのは PR 番号・branch・path・effort level と、
 `--comment` / `--fix` / `--post` / `--no-post` のようなフラグである
 （確かめ方: `/code-review` を引数なしで叩くと、受け取る形が出る）。
-**そのため [.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-6（1回で全部挙げる）と
+**そのため [.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-7（1回で全部挙げる）と
 2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。**
 
 **それでも `/code-review` を使う。**[CLAUDE.md](../../../CLAUDE.md) の「PR を出すときの絶対条件」が
