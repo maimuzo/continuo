@@ -82,7 +82,13 @@
 
 ## 誰にレビューさせるか
 
-**`maimuzo-from-ecc:architect` に渡す。**
+**毎周2つを並列に走らせる。**片方だけでは足りない
+（利用者へ配る形と同じである。正は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 5-6）。
+
+| 何を見る役 | 誰に渡すか |
+| --- | --- |
+| **設計そのものを読む役** | `maimuzo-from-ecc:architect` |
+| **関連処理まで見る役** | **Bash を持つエージェント**（`general-purpose` など）。設計が触る箇所と、同じ前提に立つ他の箇所を `git grep` で探させる |
 
 ### 設計はファイルに落として渡す
 
