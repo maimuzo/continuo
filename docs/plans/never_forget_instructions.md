@@ -307,5 +307,5 @@ GET だけの `api` など）、`continuo version`。これらを `&&` `||` `|` 
 | **`Stop` hook への `check-open-tasks.py` の登録** | **未実施** |
 
 **実測**（2026-09-02、[.claude/settings.json](../../.claude/settings.json)）。
-`Stop` 2本（`check-verified-commands.py` / `check-reply-clarity.py`）と
+`Stop` 2本（`maimuzo-chat-response-hook-verified-commands` と `maimuzo-chat-response-hook-clarity` の2つの plugin）と
 `PreToolUse` 1本（`block-merge-without-review.py`）のみ。

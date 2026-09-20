@@ -144,16 +144,13 @@
 **下の「絶対条件：話題ごとに節を立て、節の中を7つの順で書く」と「絶対条件：引用は80文字以上」が、そのまま効き続ける。**
 
 **なぜ念を押すか。****短くしすぎると、検査そのものが働かなくなるためである。**
-[.claude/hooks/check-reply-clarity.py:90](../hooks/check-reply-clarity.py#L90) が
-`MIN_LEN_FOR_CHECK = 200` を置き、
-[.claude/hooks/check-reply-clarity.py:1000](../hooks/check-reply-clarity.py#L1000) が
+検査する hook は `MIN_LEN_FOR_CHECK = 200` を置き、
 **コードフェンスを除いた散文が200文字に満たない返答を、1つも検査せずに通す。**
 **引用が0文字でも、名札が裸でも、止まらない。**
 
 **つまり「短くする」は、放っておくといちばん安い逃げ道になる。**
 同じ hook は、引用が0文字の返答も止めている。止めないと、引用の閾値を上げたときに
-「40文字だけ正直に引く」は止まり「1文字も引かない」は通る状態になる
-（[.claude/hooks/check-reply-clarity.py:1005-1009](../hooks/check-reply-clarity.py#L1005-L1009)）。
+「40文字だけ正直に引く」は止まり「1文字も引かない」は通る状態になる。
 **罰する範囲だけを広げて、逃げ道を残してはならない。**
 
 ---
@@ -298,7 +295,7 @@ sequenceDiagram
 | どの hook | 何を見ているか |
 | --- | --- |
 | `maimuzo-chat-response` plugin の `check-reply-structure.py` | **`三行まとめ` より前に行頭 `> ` の引用があり、そのあとに** `三行まとめ` `何が言いたいのか` `結果` `詳細` の**4つが、この順で並んでいるか。**見出しの深さ（`##` か `###` か）は問わない。**各見出しの下に、空白を除いて4文字以上の中身が要る**（`MIN_SECTION_BODY = 4`） |
-| [.claude/hooks/check-reply-clarity.py:139-143](../hooks/check-reply-clarity.py#L139-L143) の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
+| `maimuzo-chat-response-hook-clarity` plugin の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
 
 **7つの形を chat で使うと、`### 詳細` が節1の末尾に来る。**
 **そこへ `## 結果` を後ろから足すと、plugin は「結果 の後に 詳細」として止める。**
@@ -335,7 +332,7 @@ sequenceDiagram
 
 **目安。**
 
-- **引用の合計は80文字以上**（機械で検査している。`.claude/hooks/check-reply-clarity.py`）
+- **引用の合計は80文字以上**（`maimuzo-chat-response-hook-clarity` plugin の Stop hook が機械で検査している）
 - **箇条書きで指示が来たら、判断に効いた項目をそのまま引く。**結びだけを引かない
 - **長すぎるときは、途中を `…` で飛ばしてよい。**ただし判断に効いた行は残す
 
@@ -541,15 +538,13 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 **そのうえで、添える文字列は1文字も変えない。**
 **同じ番号に違う説明を2つ付けると、読む側は別物だと思う。**
 
-**この線は機械が数えている**（[.claude/hooks/check-reply-clarity.py:373](../hooks/check-reply-clarity.py#L373) の
-`bare_issue_refs`）。**見出しに当たると初出扱いへ戻り、その節でまだ内容を添えていない番号だけを数える。**
+**この線は機械が数えている**（`maimuzo-chat-response-hook-clarity` plugin の `bare_issue_refs`）。**見出しに当たると初出扱いへ戻り、その節でまだ内容を添えていない番号だけを数える。**
 
 **毎回添えさせる形は採らない。**表の同じ列に同じ説明が何度も並び、かえって読みにくくなる。
 **日本語として自然なのは「初出で正式名、以後は短縮形」である。**
 
 **止められたときは、指示文にその番号の題名が並ぶ。**
-そのまま添えれば足りる（[.claude/hooks/check-reply-clarity.py:631](../hooks/check-reply-clarity.py#L631) の
-`lookup_ref_titles` が引いてくる）。**引けなかったときは何も並ばないので、自分で `gh issue view` を叩く。**
+そのまま添えれば足りる（同じ plugin の `lookup_ref_titles` が引いてくる）。**引けなかったときは何も並ばないので、自分で `gh issue view` を叩く。**
 **題名を書き換えたのに古いものが並ぶときは、キャッシュを消す。**
 置き場所は、共有の `.git` の中の `reply-hook-ref-titles.json` である。
 
