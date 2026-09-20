@@ -118,13 +118,16 @@ jobs:
         # 外部からの PR では持っていない）。手元では `--strict` を付けて必ず回す。
         run: sh scripts/check-rucm.sh
 
-      - name: 返答の検査 hook が壊れていないか
-        # **この hook は全部の turn で走る。**
-        # 壊れると、誤検知で作業が止まるか、検知漏れで規則が効かなくなる。
-        # **どちらも、走らせてみるまで分からない。**
-        run: |
-          python3 .claude/hooks/tests/test_check_reply_clarity.py
-          python3 .claude/hooks/tests/test_block_merge_without_review.py
+      - name: マージを止める hook が壊れていないか
+        # **この hook は `gh pr merge` と `gh pr ready` の直前に走る。**
+        # 壊れると、レビューを通していないものが素通りするか、
+        # 通したものまで止まる。**どちらも、走らせてみるまで分からない。**
+        #
+        # **返答を検査する hook のテストは、ここには無い。**
+        # 2本とも maimuzo-chat-response-hook-clarity と
+        # maimuzo-chat-response-hook-verified-commands のプラグインへ移し、
+        # テストもそちらの CI が回している。
+        run: python3 .claude/hooks/tests/test_block_merge_without_review.py
 
       - name: レビュー結果の目印を数える条件が3箇所で揃っているか
         # **3箇所が「同じ条件である」と互いのコメントで名乗っていたのに、同じでなかった。**

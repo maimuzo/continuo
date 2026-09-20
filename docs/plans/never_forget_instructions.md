@@ -306,6 +306,7 @@ GET だけの `api` など）、`continuo version`。これらを `&&` `||` `|` 
 | **`UserPromptSubmit` hook の登録**（`type: "agent"` か `"prompt"`） | **未実施** |
 | **`Stop` hook への `check-open-tasks.py` の登録** | **未実施** |
 
-**実測**（2026-09-02、[.claude/settings.json](../../.claude/settings.json)）。
-`Stop` 2本（`maimuzo-chat-response-hook-verified-commands` と `maimuzo-chat-response-hook-clarity` の2つの plugin）と
-`PreToolUse` 1本（`block-merge-without-review.py`）のみ。
+**実測**（2026-09-21、[.claude/settings.json](../../.claude/settings.json)）。
+**このファイルが持つのは `PreToolUse` 1本（`block-merge-without-review.py`）だけである。**
+`Stop` の2本は `maimuzo-chat-response-hook-verified-commands` と
+`maimuzo-chat-response-hook-clarity` のプラグインが張るので、このファイルには書かれていない。

@@ -68,7 +68,9 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 利用者の `~/.claude/settings.json` と worktree の `.claude/settings.json` に書かれた `Stop` hook は、
 **continuo が張った `Stop` hook と並行して走る。**
 
-**このリポジトリには差し戻す `Stop` hook が2本ある。**
+**差し戻す `Stop` hook は2本ある。**どちらもプラグインが張るもので、
+このリポジトリの [.claude/settings.json](../../../.claude/settings.json) には書かれていない。
+**利用者の `~/.claude/settings.local.json` でそのプラグインを有効にしたときだけ走る。**
 
 | hook | いつ差し戻すか |
 | --- | --- |
