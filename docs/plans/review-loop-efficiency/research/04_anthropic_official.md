@@ -655,7 +655,7 @@ Academy は "A long session carries everything it has read and decided. … it's
 | --- | --- | --- |
 | [CLAUDE.md](../../../../CLAUDE.md) | 774 | 350 |
 | [.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) | 248 | 125 |
-| [.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) | 519 | 247 |
+| [.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) | 490 | 247 |
 | [.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) | 310 | 112 |
 
 **これらの数値は多いか少ないかの線と一緒には出せない。公式に行数の線は無い**（Skill authoring best practices の "Keep SKILL.md body under 500 lines" は skill の本文の目安）。
