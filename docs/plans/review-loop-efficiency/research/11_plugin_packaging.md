@@ -364,7 +364,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 観点 | 当てた結果 |
 | --- | --- |
 | **誰に効く必要があるか** | **外部の貢献者にプラグインは効かない。**下の引用のとおり、project scope で commit しても install するまで読み込まれない。しかも [~/Sources/github/continuo/CLAUDE.md:107](../../../../CLAUDE.md#L107) が、プラグインの有効化とマーケットプレイスの登録を「絶対にコミットしないもの」として `.claude/settings.local.json`（`.gitignore` 済み）へ置けと定めている |
-| **機械が見ているか** | **目印の決まりはリポジトリ固有である。**`code-review-result` は規則の側に15件あり、CI と hook とリリース前の検査の3箇所が同じ正規表現を持つ |
+| **機械が見ているか** | **目印の決まりはリポジトリ固有である。**`code-review-result` は規則の側に15件あり、CI と hook とリリース前の検査の3箇所が同じ正規表現を持つ（**hook は 2026-09-21 に廃止。いまは2箇所**） |
 | **`/code-review` に届くか** | **rules は届き、skill の本文は届かない**（3章） |
 | **利用者向けか** | [~/Sources/github/continuo/internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) は製品の一部である。`git grep -n -E '\.claude/(rules\|skills)\|worker-briefing\|maimuzo' -- internal/` は、Go の import 以外に1件も返さなかった。**境界は既に切れている** |
 
@@ -393,7 +393,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何（行数） | なぜ残すか |
 | --- | --- |
-| **[~/Sources/github/continuo/CLAUDE.md:394-560](../../../../CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
+| **[~/Sources/github/continuo/CLAUDE.md:394-560](../../../../CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械（**2026-09-21 以降は2箇所**）・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:1-56](../../../../.claude/rules/design-review.md#L1-L56)**（56行） | **`<!-- continuo:agent -->` を先頭にする順序**（2件）**と、CI の `design-review-result` の条件がある。**continuo が起動したエージェントの挙動に直結する |
 | **[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)**（310行） | `block-merge-without-review.py`（**2026-09-21 に廃止**）と `review-gate.yml` と目印を名指しする。**`code-review-result` を含む行が多く、目印を引数にしない限り持ち出せない** |
 | **[~/Sources/github/continuo/CONTRIBUTING.md:133-241](../../../../CONTRIBUTING.md#L133-L241)**（109行） | **外部の貢献者だけが読む。**プラグインは効かない（5-0） |

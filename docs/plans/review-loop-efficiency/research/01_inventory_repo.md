@@ -125,6 +125,7 @@
 ### 2-5. 記録と機械の関門
 
 **言いたいこと。**機械は3箇所（hook・CI・リリース前の検査）で、どれも「先頭の目印」と「投稿者」の2条件だけを数える。
+**この hook は 2026-09-21 に廃止したので、いまは2箇所である**（CI とリリース前の検査）。
 **周回数・重大度・対応表の中身は、どの機械も見ていない。**
 
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
@@ -226,7 +227,7 @@
 | **3・6・9回目で6段、10回で止まる** | [CLAUDE.md](../../../../CLAUDE.md) | [CLAUDE.md:315](../../../../CLAUDE.md#L315)、[CLAUDE.md:507](../../../../CLAUDE.md#L507)、[.claude/rules/design-review.md:155-192](../../../../.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](../../../../.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)、[.claude/skills/pr-review-and-merge/SKILL.md:185-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L185-L188) |
 | **3回で収まらないときの考え方** | [CLAUDE.md](../../../../CLAUDE.md) | [.claude/rules/design-review.md:206-218](../../../../.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L116) |
 | **前の周の対応表を渡す** | [.claude/rules/design-review.md:143-149](../../../../.claude/rules/design-review.md#L143-L149) | [.claude/skills/worker-briefing/SKILL.md:349](../../../../.claude/skills/worker-briefing/SKILL.md#L349) |
-| **数える条件（先頭の目印と投稿者）** | 3箇所の実装 | [CLAUDE.md:433-436](../../../../CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](../../../../docs/releasing.md#L233-L237) |
+| **数える条件（先頭の目印と投稿者）** | 3箇所の実装（**2026-09-21 以降は2箇所**） | [CLAUDE.md:433-436](../../../../CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](../../../../docs/releasing.md#L233-L237) |
 
 **「写さない」と書いた直後に写している箇所**（検索パターン `ここには写さない|写すと食い違う|この規則へ写さない` と `要点だけ`、対象 CLAUDE.md と .claude/、コミット `df36f9d7`）。
 

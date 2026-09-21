@@ -141,17 +141,18 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 
 **必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
 **この job は `code-review-result` へ改名した。**
-**必須の検査を入れ替えるまで、登録されているのは古い名前のままである。**
+**入れ替えは済んでいる**（2026-09-21 に確認。いまは `code-review-result` と `design-review-result` を含む8本）。
 
 ```
 $ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
+（2026-09-02 の時点）
 test (ubuntu-latest)
 test (macos-latest)
 build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-review-result          ← 改名前の名前。入れ替えるまでこのままである
+review-result          ← 改名前の名前。このあと入れ替えた
 ```
 
 **入れ直す手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**

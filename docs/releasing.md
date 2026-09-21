@@ -239,14 +239,10 @@ PR #69  レビュー結果=有り（1件）
 **同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
 `pull_request` のたびに走り、**貼られていなければ `code-review-result` の検査が赤になる。**
 
-**必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
-**赤いあいだはマージできない。**
+**必須の検査に入っている**（2026-09-21 に確認）。**赤いあいだはマージできない。**
 
-> **この job は `review-result` から `code-review-result` へ改名した。**
-> **改名した時点で、`review-result` の登録は宙に浮く。**
-> **必須の検査を入れ替えるまで、GitHub は「必須の検査がまだ報告されていない」と見てマージを塞ぐ。**
-> **危険側ではなく安全側に倒れるが、入れ替えるまで1本もマージできない。**
-> 手順は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
+> **この job は `review-result` から `code-review-result` へ改名し、必須の検査の入れ替えも済んでいる。**
+> **fork して新しく設定する人は、[CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」を通ること。**
 
 ```
 $ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
@@ -256,8 +252,11 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-review-result          ← 改名前の名前。入れ替えるまでこのままである
+code-review-result
+design-review-result
 ```
+
+**8本である。**上の 段1 の表が数えている本数と同じである。
 
 **それでも、ここでもう一度数える。**必須の検査は**その PR がマージされる前**しか見ない。
 **タグを打つ時点で見ているのは、既に main へ入ったあとの PR である。**
