@@ -79,7 +79,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
-| [internal/prompt/builtin.md:104-214](../../internal/prompt/builtin.md#L104-L214) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
+| [internal/prompt/builtin.md:104-254](../../internal/prompt/builtin.md#L104-L254) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
 | [.claude/settings.json](../../.claude/settings.json) の hooks | 返答の形を検査する Stop hook 2本（`.claude/hooks/check-reply-clarity.py` と `check-verified-commands.py`）。**プラグインではない** |
@@ -318,7 +318,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書**（[internal/prompt/builtin.md:490-495](../../internal/prompt/builtin.md#L490-L495) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
+**利用者向けの指示書**（[internal/prompt/builtin.md:496-501](../../internal/prompt/builtin.md#L496-L501) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
 
 
 ## 8. 決まったこと: 3つの行き先へ振り分ける
@@ -337,7 +337,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:479-481](../../internal/prompt/builtin.md#L479-L481) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:485-487](../../internal/prompt/builtin.md#L485-L487) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
