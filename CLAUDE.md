@@ -458,7 +458,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 **急いでいても、通す手は無い。**レビューを回して結果を貼ること。
 **`enforce_admins` を外せば通るが、それは必須の検査8本すべての強制を外す操作である**
-（`code-review-result` だけでなく `test` 2本と `build` 4本も外れる）。
+（`code-review-result` と `design-review-result` だけでなく、`test` 2本と `build` 4本も外れる）。
 **しかも外したことは追跡ファイルに1文字も残らないので、次に開いた人には見分けが付かない。**
 **AI がこの設定を外してはならない。**外れていないことは、タグを打つ前に
 [scripts/check-release-ready.sh](scripts/check-release-ready.sh) が確かめる。
@@ -493,7 +493,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 | 何を確かめるか | どう確かめるか |
 | --- | --- |
 | **レビュー結果が貼ってあるか** | **GitHub Actions の `code-review-result`**（`main` の必須の検査） |
-| ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
+| ビルドとテスト | `build` 4本と `test` 2本（必須の検査） |
 | 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
 
 **必須の検査は `gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks` で見られる。**

@@ -8,6 +8,9 @@
 #                  （CLAUDE.md「PR を出すときの絶対条件」。貼ってあることが実施の唯一の証拠）
 #   対の issue   … PR が閉じた issue に、閉じたあとの説明のコメントがあるか
 #                  （自動で閉じた issue にはリンクしか残らず、報告した人に伝わらない）
+#   保護設定     … 管理者にも必須の検査を課す設定 (enforce_admins) が有効か
+#                  （外れていると、レビュー結果を貼ってあってもマージを止められない）
+#                  **区間に PR が1本も無くても、これだけは必ず見る。**
 #
 # 使い方:
 #   sh scripts/check-release-ready.sh                  … 直近のタグ → origin/main
@@ -74,12 +77,40 @@ echo ""
 # 拾い方を `gh pr list --state merged` から引く形に変えること。**
 prs="$(range_log | grep -oE 'Merge pull request #[0-9]+' | grep -oE '[0-9]+' | sort -un || true)"
 
+ng=0
+
+# **管理者にも検査が課されているか。**
+# **ここが false だと、上で数えたレビュー結果は、あってもなくてもマージを止められない。**
+# 管理者が「検査を待たずにマージする」を選べてしまうためである。
+# **外したことはリポジトリのファイルに1文字も残らないので、ここで見るしかない。**
+# 設定の手順は CONTRIBUTING.md の「管理者にも検査を課す」にある。
+echo ""
+enforce="$(gh api "repos/{owner}/{repo}/branches/main/protection" --jq '.enforce_admins.enabled' 2>/dev/null || echo "読めない")"
+case "${enforce}" in
+	true)  echo "管理者にも検査を課す設定 (enforce_admins) = 有効" ;;
+	false)
+		echo "管理者にも検査を課す設定 (enforce_admins) = **無効**"
+		echo "  → 管理者が赤いままマージできます。CONTRIBUTING.md の「管理者にも検査を課す」を実施してください"
+		ng=$((ng + 1))
+		;;
+	*)
+		echo "管理者にも検査を課す設定 (enforce_admins) = 読めませんでした"
+		echo "  → 管理権限が要ります。branch protection そのものが無いときも読めません"
+		echo "     読めないまま通すと、外れていても気づけません"
+		ng=$((ng + 1))
+		;;
+esac
+
 if [ -z "${prs}" ]; then
 	echo "この区間に、見る対象の PR はありません。"
+	if [ "${ng}" -gt 0 ]; then
+		echo ""
+		echo "直すもの ${ng}件"
+		echo "**直すものが残っている間は、タグを打たないこと。**"
+		exit 1
+	fi
 	exit 0
 fi
-
-ng=0
 
 # レビュー結果が貼ってあるかを見る。
 #
@@ -164,27 +195,6 @@ for p in ${prs}; do
 		echo "          対の issue=無し（issue から生まれた PR ではない）"
 	fi
 done
-
-# **管理者にも検査が課されているか。**
-# **ここが false だと、上で数えたレビュー結果は、あってもなくてもマージを止められない。**
-# 管理者が「検査を待たずにマージする」を選べてしまうためである。
-# **外したことはリポジトリのファイルに1文字も残らないので、ここで見るしかない。**
-# 設定の手順は CONTRIBUTING.md の「管理者にも検査を課す」にある。
-echo ""
-enforce="$(gh api "repos/{owner}/{repo}/branches/main/protection" --jq '.enforce_admins.enabled' 2>/dev/null || echo "読めない")"
-case "${enforce}" in
-	true)  echo "管理者にも検査を課す設定 (enforce_admins) = 有効" ;;
-	false)
-		echo "管理者にも検査を課す設定 (enforce_admins) = **無効**"
-		echo "  → 管理者が赤いままマージできます。CONTRIBUTING.md の「管理者にも検査を課す」を実施してください"
-		ng=$((ng + 1))
-		;;
-	*)
-		echo "管理者にも検査を課す設定 (enforce_admins) = 読めませんでした"
-		echo "  → 管理権限が要ります。読めないまま通すと、外れていても気づけません"
-		ng=$((ng + 1))
-		;;
-esac
 
 echo ""
 if [ "${ng}" -gt 0 ]; then

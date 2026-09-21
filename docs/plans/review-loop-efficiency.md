@@ -73,8 +73,8 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 | 場所（continuo リポジトリの根からの相対パス） | 何を定義しているか |
 | --- | --- |
-| [CLAUDE.md:394-542](../../CLAUDE.md#L394-L542) | `/code-review` を必ず通す。結果の目印を CI・hook・リリース前の検査が数える |
-| [CLAUDE.md:543-770](../../CLAUDE.md#L543-L770) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
+| [CLAUDE.md:394-542](../../CLAUDE.md#L394-L578) | `/code-review` を必ず通す。結果の目印を CI・hook・リリース前の検査が数える |
+| [CLAUDE.md:543-770](../../CLAUDE.md#L561-L733) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
 | [.claude/rules/design-review.md:1-248](../../.claude/rules/design-review.md#L1-L248) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-311](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L311) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
@@ -136,7 +136,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 > なので、既存なのかPRで修正したのかは関係ない。
 
 **だから「この PR が持ち込んでいない既存の欠陥は直さない」という線引きは置かない。**
-前の版に書いていたその線引きは取り下げた（11節）。[CLAUDE.md:533](../../CLAUDE.md#L533)（範囲外は Critical と High を直さない理由にならない）は、いまのまま残る。
+前の版に書いていたその線引きは取り下げた（11節）。[CLAUDE.md:533](../../CLAUDE.md#L569)（範囲外は Critical と High を直さない理由にならない）は、いまのまま残る。
 
 **決まったこと。**
 
@@ -251,7 +251,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 7. 決まったこと: issue に無い機能を削る判定と削除を、毎回、書く側が主語で行う
 
-**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:622-643](../../CLAUDE.md#L622-L643) の6段と、[CLAUDE.md:738-744](../../CLAUDE.md#L738-L744) の4段）。
+**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:622-643](../../CLAUDE.md#L658-L679) の6段と、[CLAUDE.md:738-744](../../CLAUDE.md) の4段）。
 **その4段の段1は、目的を取り出す subagent を立て、diff を見せない形になっている。**理由は「diff を見せると、出来上がったものに引きずられる」である。
 
 **人間の決定（原文）。**
@@ -368,8 +368,8 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/rules/release.md](../../.claude/rules/release.md) | **このリポジトリの skill として作り直す**（`release`） |
 | 設計レビューと実装レビューの回し方 | **builtin.md。**`maimuzo-dev-core` への review-loop スキルの新設は取りやめ（人間の決定） |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） | **削除。**必ずレビューを通すことは CI で担保する |
-| [.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) | **maimuzo-chat-response-hook-clarity プラグインを新設** |
-| [.claude/hooks/check-verified-commands.py](../../.claude/hooks/check-verified-commands.py) | **maimuzo-chat-response-hook-verified-commands プラグインを新設** |
+| `.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み。**リンクを外した） | **maimuzo-chat-response-hook-clarity プラグインを新設** |
+| `.claude/hooks/check-verified-commands.py`（**2026-09-20 に移設済み。**リンクを外した） | **maimuzo-chat-response-hook-verified-commands プラグインを新設** |
 | メモリ（`~/.claude/projects/（このリポジトリ）/memory/`） | **上のどれかへ移したうえで、全部消す** |
 
 **hook は1本につきプラグイン1つにする。**副作用が強いので、要らなくなったらプラグインごと外せる形にする。
@@ -386,7 +386,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 clone した人が従うものではない。**外部の貢献者が読むのは [CONTRIBUTING.md](../../CONTRIBUTING.md) である。
 
 **既存の `maimuzo-chat-response` が持っている Stop hook（`hooks/check-reply-structure.py`。5段構成の検査）は廃止する。**
-[.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**
+`.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み**）が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**
 
 ### 8-3. worker-briefing は、書き直してから移す
 

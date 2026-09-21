@@ -37,7 +37,7 @@
 
 - 検索: WebSearch（検索語は5節に列挙）
 - 論文: arXiv の abs ページ、arXiv の HTML 版、ar5iv を WebFetch で開いた。WebFetch で文字化けした PDF は、WebFetch が保存した PDF を Python の pypdf で標準出力へ起こして読んだ（ファイルは書いていない）
-- リポジトリで読んだもの: [CLAUDE.md:486](../../../../CLAUDE.md#L486) の「コードレビュー記録フロー」から「敵対的レビューが判定したあと」まで、[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) 全体、[.claude/skills/pr-review-and-merge/SKILL.md:93-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L190) の段2〜段4、[.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) 全体
+- リポジトリで読んだもの: [CLAUDE.md:486](../../../../CLAUDE.md#L522) の「コードレビュー記録フロー」から「敵対的レビューが判定したあと」まで、[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) 全体、[.claude/skills/pr-review-and-merge/SKILL.md:93-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L190) の段2〜段4、[.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) 全体
 - 読めなかったもの: ACM DL・IEEE・Springer・ResearchGate・Wiley の論文ページ（403 か認証への転送）、Semantic Scholar の API（429）。一覧は6節
 
 ---
@@ -133,12 +133,12 @@
 | 実証が効くと示した手段 | 当てはめうる場所 | 主な出典 |
 | --- | --- | --- |
 | 同じ周の中で独立したレビューを複数並列に回し、和集合を取って重複を除く | [worker-briefing 2-6](../../../../.claude/skills/worker-briefing/SKILL.md#L256)（1人に全部を求める形の補い）、[pr-review-and-merge 段2](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93)（`/code-review` を1本ずつ直列に回す形） | SWR-Bench、Lu ほか、Snyk、Basili ほか |
-| Critical と High を、指摘を出していない別の文脈で検証してから数える | [CLAUDE.md:548](../../../../CLAUDE.md#L548) の「収まっている」とは何か | BitsAI-CR、Lu ほか、Refute-or-Promote、CoVe |
+| Critical と High を、指摘を出していない別の文脈で検証してから数える | [CLAUDE.md:548](../../../../CLAUDE.md#L584) の「収まっている」とは何か | BitsAI-CR、Lu ほか、Refute-or-Promote、CoVe |
 | 指摘に位置・再現手順・失敗するテストを持たせる | [worker-briefing 2-7](../../../../.claude/skills/worker-briefing/SKILL.md#L277) | Tyen ほか、Olausson ほか、Stechly ほか |
 | 実装者の反論をレビュワー本人と往復させず、別の文脈で判定する | [.claude/rules/design-review.md:124](../../../../.claude/rules/design-review.md#L124) | FlipFlop、Who Flips、Choi ほか |
-| 独立したレビュー同士の重なりで残りを見積もり、次の周の要否を決める | [CLAUDE.md:543](../../../../CLAUDE.md#L543) の「回数を数える」 | Petersson ほか、Briand ほか |
-| 再レビューで、直しが持ち込んだ退行を明示的に探させる | [CLAUDE.md:516](../../../../CLAUDE.md#L516) の対応表の「分類」列 | Shukla ほか、Cihan ほか 2025、Zhong ほか |
-| 利得が1〜2周で頭打ちになる前提で周回の設計を見直す | [CLAUDE.md:645](../../../../CLAUDE.md#L645) の連続10回 | Arimbur、Self-Refine、CRITIC、Yang ほか |
+| 独立したレビュー同士の重なりで残りを見積もり、次の周の要否を決める | [CLAUDE.md:543](../../../../CLAUDE.md#L579) の「回数を数える」 | Petersson ほか、Briand ほか |
+| 再レビューで、直しが持ち込んだ退行を明示的に探させる | [CLAUDE.md:516](../../../../CLAUDE.md#L552) の対応表の「分類」列 | Shukla ほか、Cihan ほか 2025、Zhong ほか |
+| 利得が1〜2周で頭打ちになる前提で周回の設計を見直す | [CLAUDE.md:645](../../../../CLAUDE.md#L681) の連続10回 | Arimbur、Self-Refine、CRITIC、Yang ほか |
 | 実装の前に受け入れ条件と例（テスト）を固める | [.claude/rules/design-review.md:3](../../../../.claude/rules/design-review.md#L3) の段1〜4 | TiCoder、ClarifyGPT、NaPiRE |
 | 指摘は短く、コード片つきにし、件数を絞る | 対応表とレビュー出力の形 | Sun ほか 2025、Cynthia ほか、BitsAI-CR |
 
@@ -229,7 +229,7 @@
 - **主張と実測**: GPT-4o（温度0.7）。基準のコード10本 × 指示4種 × 10周 = 400サンプル。静的解析（Clang Static Analyzer・CodeQL・SpotBugs）と手動のセキュリティレビューで数えた。サンプルあたりの脆弱性は1〜3周で平均2.1、4〜7周で4.7、8〜10周で6.2。指示別の総数は、性能重視124・機能追加158・セキュリティ重視38・曖昧な「改善して」67。複雑さの増加と r=0.64。abstract は「5周で重大な脆弱性が37.6%増えた」と書く
 - **答える問い**: 問い2（周回で新しい欠陥が増える）
 - **持ち込める限界**: 周回ごとに人間もツールも挟まない設計で、指示は具体的な指摘ではなく「改善して」。著者自身が「人間の入力が挟まる実務より脆弱性の混入に寄った設定」と限界に書いている（要約経由）。基準のコードは10本と少ない
-- **当てはめうる場所（案）**: 再レビューで「直しが持ち込んだもの」を明示的に探させる（[CLAUDE.md:516](../../../../CLAUDE.md#L516) の分類の列を、事後の分類でなく探す観点にする）
+- **当てはめうる場所（案）**: 再レビューで「直しが持ち込んだもの」を明示的に探させる（[CLAUDE.md:516](../../../../CLAUDE.md#L552) の分類の列を、事後の分類でなく探す観点にする）
 
 #### 反復の自己修復は何回で効くか
 
@@ -321,7 +321,7 @@
 - **原文（訳、要約経由）**: 「Majority Voting alone accounts for most of the performance gains typically attributed to MAD」（討論の利得とされるものの大半は、多数決だけで説明がつく）
 - **答える問い**: 問い1、問い4
 - **持ち込める限界**: 小さいオープンモデル、正解が1つの課題
-- **当てはめうる場所（案）**: 3・6・9回目の「敵対的レビュワーを説得する」段（[CLAUDE.md:731](../../../../CLAUDE.md#L731)）で、往復の討論に頼らず独立の判定を並べる
+- **当てはめうる場所（案）**: 3・6・9回目の「敵対的レビュワーを説得する」段（[CLAUDE.md:731](../../../../CLAUDE.md)）で、往復の討論に頼らず独立の判定を並べる
 
 #### 繰り返しのサンプリングで被覆が伸びる
 
@@ -369,7 +369,7 @@
 - **原文（訳、要約経由）**: 「One test killed what 80+ agents' reasoning could not」（80以上のエージェントの推論が落とせなかったものを、テスト1本が落とした）
 - **答える問い**: 問い4（全員一致は正しさの保証にならない。実行による検証と別系統の批評役）
 - **持ち込める限界**: 証拠が弱い（事例研究）。脆弱性の発見でコードレビューではない
-- **当てはめうる場所（案）**: 「敵対的レビュワー」（[CLAUDE.md:731](../../../../CLAUDE.md#L731)）の判定を、推論の合意でなく、再現・テストで裏を取れる形に寄せる
+- **当てはめうる場所（案）**: 「敵対的レビュワー」（[CLAUDE.md:731](../../../../CLAUDE.md)）の判定を、推論の合意でなく、再現・テストで裏を取れる形に寄せる
 
 #### 静的解析の偽陽性を LLM で落とす
 
@@ -437,7 +437,7 @@
 - **原文（訳）**: 「The method uses the overlap between the sets of faults found by different reviewers to estimate the fault content. It is assumed that the reviewers work independently of each other and therefore the fault searching has to be performed before, and not during, an inspection meeting.」（異なるレビュワーが見つけた欠陥の集合の重なりから、欠陥の総数を見積もる。レビュワーは互いに独立して作業すると仮定するので、欠陥探しはインスペクション会議の前に行い、会議中には行わない）。推定量の1つ（Mh-JK）は「accurate when the number of reviewers is 4 or more」（レビュワーが4人以上なら正確）で、2人では過小に見積もる
 - **答える問い**: 問い1（「もう1周要るか」を、独立したレビューの重なりで決める考え方）
 - **持ち込める限界**: 独立性の仮定。同じモデルの複数回は前提（学習データ）を共有するので独立ではない（Refute-or-Promote の全員一致の誤りがその例）。LLM のレビューに当てはめた研究は見つからなかった
-- **当てはめうる場所（案）**: [CLAUDE.md:543](../../../../CLAUDE.md#L543) の「回数を数える」に、「同じ周の独立レビューの重なりが大きければ次の周を回さない」という止め方の候補として
+- **当てはめうる場所（案）**: [CLAUDE.md:543](../../../../CLAUDE.md#L579) の「回数を数える」に、「同じ周の独立レビューの重なりが大きければ次の周を回さない」という止め方の候補として
 
 #### インスペクション会議は要るか
 
