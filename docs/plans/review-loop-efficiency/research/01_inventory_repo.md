@@ -35,11 +35,11 @@
 
 | 発見 | 根拠の在りか |
 | --- | --- |
-| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は Critical と High が0件のこと（[CLAUDE.md:550](../../../../CLAUDE.md#L550)）だが、何を Critical / High にするかの基準はどこにも無い。付けるのはレビュワーである | 3-2 |
+| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は Critical と High が0件のこと（[CLAUDE.md:568](../../../../CLAUDE.md#L568)）だが、何を Critical / High にするかの基準はどこにも無い。付けるのはレビュワーである | 3-2 |
 | **書く側が最初のレビューへ出す前の自己点検の段が無い。**「同じものを数える」（worker-briefing 2-5）は、指摘を受けてから・指摘する前に効くもので、指摘が無ければ発火しない | 3-1 |
 | **必須の道具 `/code-review` に、徹底度の指示も前の周の対応表も effort level も渡っていない。**規則自身が「渡さないと同じものが必ずまた挙がり、周だけが増える」と書いている | [.claude/rules/design-review.md:143-146](../../../../.claude/rules/design-review.md#L143-L146)、[.claude/skills/pr-review-and-merge/SKILL.md:99-103](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99-L103)、3-3 |
 | **機械の関門は、目印が先頭にあるかと投稿者しか見ない。**周回数・重大度の件数・「数えた件数」の行は、どの機械も検査しない | 2-5 の表と、その下の grep |
-| **コードレビュー記録フロー（[CLAUDE.md:486-769](../../../../CLAUDE.md#L486-L769)）の中に、1回目のレビューの前に効く段は無い。**6段・4段・判定後の表・10回停止は、全部「収まらなかったあと」の手順である。設計側だけは、書く前の2節（[.claude/rules/design-review.md:57-79](../../../../.claude/rules/design-review.md#L57-L79)）を持つ | 2-4 |
+| **コードレビュー記録フロー（[CLAUDE.md](../../../../CLAUDE.md)）の中に、1回目のレビューの前に効く段は無い。**6段・4段・判定後の表・10回停止は、全部「収まらなかったあと」の手順である。設計側だけは、書く前の2節（[.claude/rules/design-review.md:57-79](../../../../.claude/rules/design-review.md#L57-L79)）を持つ | 2-4 |
 
 ---
 
@@ -53,7 +53,7 @@
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
 | [CLAUDE.md:394-419](../../../../CLAUDE.md#L394-L419) | 実装レビューの起動。draft で作り、`/code-review` を通し、結果を貼り、収まるまで段2〜4を繰り返す | 「PR を出すときは、必ず `/code-review` でレビューする。」 | 開発者向け |
-| [CLAUDE.md:491](../../../../CLAUDE.md#L491) | 受け取った道具が何でも、記録フローは同じ | 「`/code-review` / `code-reviewer` / `security-reviewer` のどれで受けたときも同じである。」 | 開発者向け |
+| [CLAUDE.md:509](../../../../CLAUDE.md#L509) | 受け取った道具が何でも、記録フローは同じ | 「`/code-review` / `code-reviewer` / `security-reviewer` のどれで受けたときも同じである。」 | 開発者向け |
 | [.claude/rules/design-review.md:5-20](../../../../.claude/rules/design-review.md#L5-L20) | issue の作業の9段。段3で設計レビュー、段7で `/code-review` | 「設計をサブエージェントにレビューさせる」 | 開発者向け |
 | [.claude/rules/design-review.md:83-99](../../../../.claude/rules/design-review.md#L83-L99) | 設計レビューの担当と渡し方（ファイルに落とす） | 「`maimuzo-from-ecc:architect` に渡す。」 | 開発者向け。**maimuzo の環境のプラグインを名指ししている** |
 | [.claude/rules/design-review.md:115-120](../../../../.claude/rules/design-review.md#L115-L120) | 実装レビューは architect ではなく、Bash を持つエージェントに頼む | 「Bash を持つエージェント（`general-purpose` など）を立てること。」 | 開発者向け |
@@ -88,13 +88,13 @@
 
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
-| [CLAUDE.md:502-514](../../../../CLAUDE.md#L502-L514) | 手順5段。表を書く前に数える、件数を添える、数えた全部を直す、人間へ報告 | 「段1で数えた件数の全部を直す（1箇所だけ直さない）」 | 開発者向け |
-| [CLAUDE.md:516-525](../../../../CLAUDE.md#L516-L525) | 対応表の6列（短縮名・レベル・指摘内容・直す/直さない・合理的理由・分類） | 「Critical / High / Medium / Low / Info」 | 開発者向け |
-| [CLAUDE.md:527-533](../../../../CLAUDE.md#L527-L533) | Critical と High は直す。それ以下は簡単なら直し、設計に触るなら follow-up の issue | 「「この pull request の範囲外である」は否定ではない。」 | 開発者向け |
+| [CLAUDE.md:520-532](../../../../CLAUDE.md#L520-L532) | 手順5段。表を書く前に数える、件数を添える、数えた全部を直す、人間へ報告 | 「段1で数えた件数の全部を直す（1箇所だけ直さない）」 | 開発者向け |
+| [CLAUDE.md:534-543](../../../../CLAUDE.md#L534-L543) | 対応表の6列（短縮名・レベル・指摘内容・直す/直さない・合理的理由・分類） | 「Critical / High / Medium / Low / Info」 | 開発者向け |
+| [CLAUDE.md:545-551](../../../../CLAUDE.md#L545-L551) | Critical と High は直す。それ以下は簡単なら直し、設計に触るなら follow-up の issue | 「「この pull request の範囲外である」は否定ではない。」 | 開発者向け |
 | [.claude/rules/design-review.md:124-149](../../../../.claude/rules/design-review.md#L124-L149) | 合理的根拠を否定できるなら直さない | 「否定できるなら直さない。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:211-254](../../../../.claude/skills/worker-briefing/SKILL.md#L211-L254) | 直したあとに数えるもの（言い換え・戻り値の説明・移した節を指す文・版・後ろのリンク）。前提を1文にしてから探す | 「数えるのは「前提」である。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:105-121](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L121)（2-1） | 3回で収まらないのは設計があやふやだから。1件ずつ潰すのをやめる | 「指摘を1件ずつ潰すのをやめて、設計を疑う。」 | 開発者向け |
-| [.claude/skills/pr-review-and-merge/SKILL.md:168-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L168-L190)（段4） | CLAUDE.md の記録フローに従う（要点の写しを持つ） | 「ここには写さない。」 | 開発者向け |
+| [.claude/skills/pr-review-and-merge/SKILL.md:168-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L168-L188)（段4） | CLAUDE.md の記録フローに従う（要点の写しを持つ） | 「ここには写さない。」 | 開発者向け |
 | [.claude/rules/plan-file.md:93-137](../../../../.claude/rules/plan-file.md#L93-L137) | 設計文書へ行を足したら、リンクを全部検算する（直しが持ち込む欠陥の予防） | 「8周のレビューのうち3周が、同じ原因である。」 | 開発者向け |
 | [internal/prompt/builtin.md:112](../../../../internal/prompt/builtin.md#L112) | 指摘を全部直そうとせず、1件ずつ判断する | 「1件ずつ「直すのが妥当か」を判断する」 | 利用者向け |
 | [internal/prompt/builtin.md:170-184](../../../../internal/prompt/builtin.md#L170-L184) | Critical と High は原則直す。判断票の5列 | 「Critical と High は原則すべて直します。」 | 利用者向け |
@@ -102,41 +102,42 @@
 
 ### 2-4. 収束の定義・回数・止まる条件
 
-**言いたいこと。**正は [CLAUDE.md:543-729](../../../../CLAUDE.md#L543-L729) で、ほかは写しか要点である。
+**言いたいこと。**正は [CLAUDE.md](../../../../CLAUDE.md) で、ほかは写しか要点である。
 **利用者向けの builtin.md には、回数・収束・停止の定義が1つも無い。**
 
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
-| [CLAUDE.md:548-553](../../../../CLAUDE.md#L548-L553) | 「収まっている」の定義（正） | 「Critical と High が0件であることをいう。」 | 開発者向け |
-| [CLAUDE.md:555-593](../../../../CLAUDE.md#L555-L593) | 収まったあとは最大1周。Medium / Low を直したら最後に1回。最後の周の Medium / Low は直さない | 「そこから先は最大1周である。」 | 開発者向け |
-| [CLAUDE.md:595-621](../../../../CLAUDE.md#L595-L621) | 収まらないときの数え方。最後の1回も10回に数える | 「10回を超えて回してはならない。」 | 開発者向け |
-| [CLAUDE.md:622-643](../../../../CLAUDE.md#L622-L643) | 3・6・9回目の6段（目的の確認役 → 理由をまとめる → 説得 → 削除と記録 → 報告 → 設計レビューへ戻る） | 「実装を止めて設計内容を敵対的レビューし、実装し直してから次のレビューを回す。」 | 開発者向け |
-| [CLAUDE.md:645-729](../../../../CLAUDE.md#L645-L729) | 設計と実装を別に数える。人間の方針変更でリセット。止まったときに人間へ見せる4項目 | 「足して20回まで、という意味ではない。」 | 開発者向け |
-| [CLAUDE.md:731-768](../../../../CLAUDE.md#L731-L768) | 3回で通らなかったときの4段と、判定後の2通り | 「PR の diff を見せない。」 | 開発者向け |
+| [CLAUDE.md:566-571](../../../../CLAUDE.md#L566-L571) | 「収まっている」の定義（正） | 「Critical と High が0件であることをいう。」 | 開発者向け |
+| [CLAUDE.md:573-611](../../../../CLAUDE.md#L573-L611) | 収まったあとは最大1周。Medium / Low を直したら最後に1回。最後の周の Medium / Low は直さない | 「そこから先は最大1周である。」 | 開発者向け |
+| [CLAUDE.md:613-639](../../../../CLAUDE.md#L613-L639) | 収まらないときの数え方。最後の1回も10回に数える | 「10回を超えて回してはならない。」 | 開発者向け |
+| [CLAUDE.md:640-661](../../../../CLAUDE.md#L640-L661) | 3・6・9回目の6段（目的の確認役 → 理由をまとめる → 説得 → 削除と記録 → 報告 → 設計レビューへ戻る） | 「実装を止めて設計内容を敵対的レビューし、実装し直してから次のレビューを回す。」 | 開発者向け |
+| [CLAUDE.md](../../../../CLAUDE.md) | 設計と実装を別に数える。人間の方針変更でリセット。止まったときに人間へ見せる4項目 | 「足して20回まで、という意味ではない。」 | 開発者向け |
+| [CLAUDE.md](../../../../CLAUDE.md) | 3回で通らなかったときの4段と、判定後の2通り | 「PR の diff を見せない。」 | 開発者向け |
 | [CLAUDE.md:412-418](../../../../CLAUDE.md#L412-L418) | PR 手順の段4に、収束と最後の1周の要点 | 「ただし Medium か Low を1件でも直したなら、最後の1回は必ず回す。」 | 開発者向け |
 | [CLAUDE.md:310-317](../../../../CLAUDE.md#L310-L317) | 作業の進め方の要約4点 | 「3回ごとに issue と実装を突き合わせ直す。」 | 開発者向け |
 | [.claude/rules/design-review.md:153-202](../../../../.claude/rules/design-review.md#L153-L202) | 回す回数（要点の写しと、3・6・9 / 10回の絶対条件） | 「2回で止めてよいかを訊かない。」 | 開発者向け |
 | [.claude/rules/design-review.md:206-237](../../../../.claude/rules/design-review.md#L206-L237) | 3回で収まらなかったとき。回数と設計の大きさが比例した実測 | 「効くのは「捨てられるものを挙げろ」と問うことである。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:117-120](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L120) | 3・6・9回目に6段へ入る | 「入るのは3回目だけではない。」 | 開発者向け |
-| [.claude/skills/pr-review-and-merge/SKILL.md:177-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L177-L190) | 最大1周と10回の要点の写し。3・6・9回目のあとの進み方 | 「6段を終えてから段5へ進む。」 | 開発者向け |
+| [.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) | 最大1周と10回の要点の写し。3・6・9回目のあとの進み方 | 「6段を終えてから段5へ進む。」 | 開発者向け |
 
 **builtin.md に回数の定義が無い根拠。**パターン `収まっ|周目|何周|10回|3回|回数|最後の1回|止まる`、対象 [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md)、コミット `df36f9d7` で **0行**だった。
 
 ### 2-5. 記録と機械の関門
 
 **言いたいこと。**機械は3箇所（hook・CI・リリース前の検査）で、どれも「先頭の目印」と「投稿者」の2条件だけを数える。
+**この hook は 2026-09-21 に廃止したので、いまは2箇所である**（CI とリリース前の検査）。
 **周回数・重大度・対応表の中身は、どの機械も見ていない。**
 
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
-| [CLAUDE.md:421-454](../../../../CLAUDE.md#L421-L454) | 貼ったことが唯一の証拠。3箇所で止める。数える条件2つ。逃がし口の環境変数 | 「3 を飛ばしたものは、レビューを実施していないものとして扱う。」 | 開発者向け |
-| [CLAUDE.md:535-545](../../../../CLAUDE.md#L535-L545) と [CLAUDE.md:727-729](../../../../CLAUDE.md#L727-L729) | 対応表を PR のコメントへ残す理由。何周目かを書く。設計レビューの回数を PR 本文へ写す | 「回数はレビュー結果のコメントへ書く。」 | 開発者向け |
-| [.claude/hooks/block-merge-without-review.py:212-223](../../../../.claude/hooks/block-merge-without-review.py#L212-L223) | `gh pr merge/ready <番号>` の前に、先頭の目印と投稿者を見る | `if not isinstance(body, str) or not MARKER_RE.match(body):` | 開発者向け |
-| [.claude/settings.json:86-95](../../../../.claude/settings.json#L86-L95) | 上の hook を `PreToolUse` の Bash に張る | `"matcher": "Bash"` | 開発者向け |
-| [.github/workflows/review-gate.yml:64-229](../../../../.github/workflows/review-gate.yml#L64-L229) | `design-review-result`。断りの目印か、紐づく issue のどれか1件に目印 | `(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->` | 開発者向け |
-| [.github/workflows/review-gate.yml:234-314](../../../../.github/workflows/review-gate.yml#L234-L314) | `code-review-result`。PR のコメントに先頭の目印 | `test("^[ \\t\\r\\n]*<!-- code-review-result -->")` | 開発者向け |
-| [scripts/check-release-ready.sh:84-111](../../../../scripts/check-release-ready.sh#L84-L111) | タグの前に、区間の PR に目印があるか | 同じ正規表現 | 開発者向け |
-| [docs/releasing.md:52](../../../../docs/releasing.md#L52) と [docs/releasing.md:211-241](../../../../docs/releasing.md#L211-L241) | リリース手順の中の検査 | 「`/code-review` を回し直し、結果をその PR のコメントへ貼る。」 | 開発者向け |
+| [CLAUDE.md:421-472](../../../../CLAUDE.md#L421-L472) | 貼ったことが唯一の証拠。3箇所で止める。数える条件2つ。逃がし口の環境変数（**いずれも 2026-09-21 に2箇所へ減り、逃がし口は無くなった**） | 「3 を飛ばしたものは、レビューを実施していないものとして扱う。」 | 開発者向け |
+| [CLAUDE.md:553-563](../../../../CLAUDE.md#L553-L563) と [CLAUDE.md](../../../../CLAUDE.md) | 対応表を PR のコメントへ残す理由。何周目かを書く。設計レビューの回数を PR 本文へ写す | 「回数はレビュー結果のコメントへ書く。」 | 開発者向け |
+| `.claude/hooks/block-merge-without-review.py:212-223`（**2026-09-21 に廃止。**リンクを外した） | `gh pr merge/ready <番号>` の前に、先頭の目印と投稿者を見る | `if not isinstance(body, str) or not MARKER_RE.match(body):` | 開発者向け |
+| `.claude/settings.json:86-95`（**2026-09-21 に hooks ごと廃止。**リンクを外した） | 上の hook を `PreToolUse` の Bash に張る | `"matcher": "Bash"` | 開発者向け |
+| [.github/workflows/review-gate.yml:66-231](../../../../.github/workflows/review-gate.yml#L66-L231) | `design-review-result`。断りの目印か、紐づく issue のどれか1件に目印 | `(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->` | 開発者向け |
+| [.github/workflows/review-gate.yml:236-316](../../../../.github/workflows/review-gate.yml#L236-L316) | `code-review-result`。PR のコメントに先頭の目印 | `test("^[ \\t\\r\\n]*<!-- code-review-result -->")` | 開発者向け |
+| [scripts/check-release-ready.sh:115-142](../../../../scripts/check-release-ready.sh#L115-L142) | タグの前に、区間の PR に目印があるか | 同じ正規表現 | 開発者向け |
+| [docs/releasing.md:52](../../../../docs/releasing.md#L52) と [docs/releasing.md:212-246](../../../../docs/releasing.md#L212-L246) | リリース手順の中の検査 | 「`/code-review` を回し直し、結果をその PR のコメントへ貼る。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:133-166](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L133-L166)（段3） | 貼るコメントの形（目印・題名・周目・対応表）。`--body-file` で貼る | 「何周目かと対応表を同じコメントに入れる」 | 開発者向け |
 | [CONTRIBUTING.md:133-150](CONTRIBUTING.md#L133-L150) | 外部の貢献者向けの2つの検査と数える条件 | 「レビュー結果が貼られていない PR は、CI が落とします。」 | 開発者向け（外部の貢献者） |
 | [internal/scaffold/ci_template.go:83](../../../../internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](../../../../internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](../../../../.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
@@ -176,17 +177,17 @@
 ### 3-2. 重大度の判定基準
 
 **言いたいこと。**無い。Critical / High / Medium / Low / Info の名前だけがあり、何をどれにするかは誰も決めていない。
-**それでも「収まっている」は Critical と High の件数だけで決まり、設計レビューにも同じ判定が効く**（[CLAUDE.md:647](../../../../CLAUDE.md#L647)）。
+**それでも「収まっている」は Critical と High の件数だけで決まり、設計レビューにも同じ判定が効く**（[CLAUDE.md:665](../../../../CLAUDE.md#L665)）。
 
 | 検索パターン | 対象パス | 出たもの |
 | --- | --- | --- |
 | `Critical とは\|High とは\|重大度\|深刻さ\|severity\|Severity` | CLAUDE.md・.claude/・builtin.md・scaffold/template.go・docs/FAQ.md・CONTRIBUTING.md | [internal/prompt/builtin.md:179](../../../../internal/prompt/builtin.md#L179) の表の見出し「深刻さ」1件だけ |
-| `Critical(:\| =\|とする\|に当たる\|の基準)\|レベルの(決め方\|基準\|定義)\|レベルを決め\|重さの(基準\|定義)\|Info` | CLAUDE.md・.claude/・builtin.md | [CLAUDE.md:521](../../../../CLAUDE.md#L521) の対応表の列の定義1件だけ |
+| `Critical(:\| =\|とする\|に当たる\|の基準)\|レベルの(決め方\|基準\|定義)\|レベルを決め\|重さの(基準\|定義)\|Info` | CLAUDE.md・.claude/・builtin.md | [CLAUDE.md:539](../../../../CLAUDE.md#L539) の対応表の列の定義1件だけ |
 
 対象コミットはどちらも `df36f9d7`。
 
 - **レビュワーへレベルを付けさせる指示も無い。**設計レビューの4観点（[.claude/rules/design-review.md:101-106](../../../../.claude/rules/design-review.md#L101-L106)）にも、builtin.md の計画レビューの文面（[internal/prompt/builtin.md:160-166](../../../../internal/prompt/builtin.md#L160-L166)）にも、レベルの語が入っていない
-- **[CLAUDE.md:521](../../../../CLAUDE.md#L521) は Info も挙げるが、収まったあとの表（[CLAUDE.md:559-565](../../../../CLAUDE.md#L559-L565)）は Info の扱いを書いていない**
+- **[CLAUDE.md:539](../../../../CLAUDE.md#L539) は Info も挙げるが、収まったあとの表（[CLAUDE.md:577-583](../../../../CLAUDE.md#L577-L583)）は Info の扱いを書いていない**
 - worker-briefing 2-5 の段4（[.claude/skills/worker-briefing/SKILL.md:199](../../../../.claude/skills/worker-briefing/SKILL.md#L199)）の「いちばん重いレベル」も、定義を指していない
 - **`/code-review` の出力にどのレベル名が出るかは、測っていない**（実行していない）。pr-review-and-merge/SKILL.md に、出力のレベルを読み替える記述は無い（93-131行を読んだ）
 
@@ -222,11 +223,11 @@
 
 | 定義 | 正 | 写し |
 | --- | --- | --- |
-| **最大1周・最後の1回・10回目の例外** | [CLAUDE.md:555-617](../../../../CLAUDE.md#L555-L617) | [CLAUDE.md:412-418](../../../../CLAUDE.md#L412-L418)、[.claude/rules/design-review.md:160-165](../../../../.claude/rules/design-review.md#L160-L165)、[.claude/skills/pr-review-and-merge/SKILL.md:177-184](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L177-L184) |
-| **3・6・9回目で6段、10回で止まる** | [CLAUDE.md:595-729](../../../../CLAUDE.md#L595-L729) | [CLAUDE.md:315](../../../../CLAUDE.md#L315)、[CLAUDE.md:489](../../../../CLAUDE.md#L489)、[.claude/rules/design-review.md:155-192](../../../../.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](../../../../.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md:174-175](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L174-L175)、[.claude/skills/pr-review-and-merge/SKILL.md:187-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L187-L190) |
-| **3回で収まらないときの考え方** | [CLAUDE.md:731-768](../../../../CLAUDE.md#L731-L768) | [.claude/rules/design-review.md:206-218](../../../../.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L116) |
+| **最大1周・最後の1回・10回目の例外** | [CLAUDE.md:573-635](../../../../CLAUDE.md#L573-L635) | [CLAUDE.md:412-418](../../../../CLAUDE.md#L412-L418)、[.claude/rules/design-review.md:160-165](../../../../.claude/rules/design-review.md#L160-L165)、[.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) |
+| **3・6・9回目で6段、10回で止まる** | [CLAUDE.md](../../../../CLAUDE.md) | [CLAUDE.md:315](../../../../CLAUDE.md#L315)、[CLAUDE.md:507](../../../../CLAUDE.md#L507)、[.claude/rules/design-review.md:155-192](../../../../.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](../../../../.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)、[.claude/skills/pr-review-and-merge/SKILL.md:185-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L185-L188) |
+| **3回で収まらないときの考え方** | [CLAUDE.md](../../../../CLAUDE.md) | [.claude/rules/design-review.md:206-218](../../../../.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L116) |
 | **前の周の対応表を渡す** | [.claude/rules/design-review.md:143-149](../../../../.claude/rules/design-review.md#L143-L149) | [.claude/skills/worker-briefing/SKILL.md:349](../../../../.claude/skills/worker-briefing/SKILL.md#L349) |
-| **数える条件（先頭の目印と投稿者）** | 3箇所の実装 | [CLAUDE.md:434-437](../../../../CLAUDE.md#L434-L437)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](CONTRIBUTING.md#L145-L150)、[docs/releasing.md:228-232](../../../../docs/releasing.md#L228-L232) |
+| **数える条件（先頭の目印と投稿者）** | 3箇所の実装（**2026-09-21 以降は2箇所**） | [CLAUDE.md:433-436](../../../../CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](../../../../docs/releasing.md#L233-L237) |
 
 **「写さない」と書いた直後に写している箇所**（検索パターン `ここには写さない|写すと食い違う|この規則へ写さない` と `要点だけ`、対象 CLAUDE.md と .claude/、コミット `df36f9d7`）。
 
@@ -235,7 +236,7 @@
 | [.claude/rules/design-review.md:157-158](../../../../.claude/rules/design-review.md#L157-L158) | [.claude/rules/design-review.md:160-165](../../../../.claude/rules/design-review.md#L160-L165)（6行） |
 | [.claude/rules/design-review.md:176-178](../../../../.claude/rules/design-review.md#L176-L178) | [.claude/rules/design-review.md:180-182](../../../../.claude/rules/design-review.md#L180-L182)（3行） |
 | [.claude/rules/design-review.md:209](../../../../.claude/rules/design-review.md#L209) | [.claude/rules/design-review.md:211-213](../../../../.claude/rules/design-review.md#L211-L213)（3行） |
-| [.claude/skills/pr-review-and-merge/SKILL.md:170-171](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L170-L171) | [.claude/skills/pr-review-and-merge/SKILL.md:177-184](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L177-L184)（8行） |
+| [.claude/skills/pr-review-and-merge/SKILL.md:170-171](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L170-L171) | [.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)（8行） |
 
 **書式の崩れの複製。**`git grep -n -F '****そのとき'` で、規則側に3件、同じ文面で出る。
 
@@ -255,15 +256,15 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 
 | 何が食い違うか | 片方の原文 | もう片方の原文 |
 | --- | --- | --- |
-| **3・6・9回目のあと、次に何をするか**（読み方が2通りに割れる） | [.claude/skills/pr-review-and-merge/SKILL.md:187-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L187-L188)「3・6・9回目で収まらないときは、CLAUDE.md の「回数を数える」にある6段を終えてから段5へ進む。」（このスキルの段5は検査の回し直し、段6はマージ） | [CLAUDE.md:631](../../../../CLAUDE.md#L631)「実装し直してから次のレビューを回す。」と [CLAUDE.md:412](../../../../CLAUDE.md#L412)「収まるまで 2〜4 を繰り返す。」。**スキルを字面どおりに読むと、収まっていないまま検査とマージの段へ進む** |
-| **「段5」が2つある** | [CLAUDE.md:418-419](../../../../CLAUDE.md#L418-L419)「段5 へ進まずに止まる」「5. `gh pr ready` で draft を外す」 | [.claude/skills/pr-review-and-merge/SKILL.md:192](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L192)「段5. 検査を回し直す」 |
-| **存在しない見出しを指している** | [.claude/skills/pr-review-and-merge/SKILL.md:190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L190)「「絶対条件：連続10回で止まる」」 | 実在する見出しは [CLAUDE.md:645](../../../../CLAUDE.md#L645)「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」。`git grep -F '絶対条件：連続10回で止まる'` は SKILL.md:190 の1件だけ |
-| **同じ段の名前が2つ** | [CLAUDE.md:731](../../../../CLAUDE.md#L731)「3回で通らなかったとき」 | [.claude/rules/design-review.md:206](../../../../.claude/rules/design-review.md#L206)「3回で収まらなかったとき」 |
-| **要点は1行まで、と写しの長さ** | [CLAUDE.md:553](../../../../CLAUDE.md#L553)「要点を1行で添えるのはよい」 | 4章の写しは3〜8行 |
+| **3・6・9回目のあと、次に何をするか**（読み方が2通りに割れる） | [.claude/skills/pr-review-and-merge/SKILL.md:185-186](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L185-L186)「3・6・9回目で収まらないときは、CLAUDE.md の「回数を数える」にある6段を終えてから段5へ進む。」（このスキルの段5は検査の回し直し、段6はマージ） | [CLAUDE.md:649](../../../../CLAUDE.md#L649)「実装し直してから次のレビューを回す。」と [CLAUDE.md:412](../../../../CLAUDE.md#L412)「収まるまで 2〜4 を繰り返す。」。**スキルを字面どおりに読むと、収まっていないまま検査とマージの段へ進む** |
+| **「段5」が2つある** | [CLAUDE.md:418-419](../../../../CLAUDE.md#L418-L419)「段5 へ進まずに止まる」「5. `gh pr ready` で draft を外す」 | [.claude/skills/pr-review-and-merge/SKILL.md:190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L190)「段5. 検査を回し直す」 |
+| **存在しない見出しを指している** | [.claude/skills/pr-review-and-merge/SKILL.md:188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L188)「「絶対条件：連続10回で止まる」」 | 実在する見出しは [CLAUDE.md:663](../../../../CLAUDE.md#L663)「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」。`git grep -F '絶対条件：連続10回で止まる'` は SKILL.md:190 の1件だけ |
+| **同じ段の名前が2つ** | [CLAUDE.md](../../../../CLAUDE.md)「3回で通らなかったとき」 | [.claude/rules/design-review.md:206](../../../../.claude/rules/design-review.md#L206)「3回で収まらなかったとき」 |
+| **要点は1行まで、と写しの長さ** | [CLAUDE.md:571](../../../../CLAUDE.md#L571)「要点を1行で添えるのはよい」 | 4章の写しは3〜8行 |
 | **実装レビューの道具が2通り** | [CLAUDE.md:396](../../../../CLAUDE.md#L396)「必ず `/code-review` でレビューする。」と [.claude/rules/design-review.md:15](../../../../.claude/rules/design-review.md#L15) の段7 | [.claude/rules/design-review.md:115-118](../../../../.claude/rules/design-review.md#L115-L118)「実装レビューでは `maimuzo-from-ecc:architect` を使わない。…Bash を持つエージェント（`general-purpose` など）を立てること。」。**どちらを毎周使うかを決めた箇所は無い**（[.claude/skills/pr-review-and-merge/SKILL.md:119-120](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L119-L120) は両方の場合を書き分けるだけ） |
 | **前の周の対応表を渡す、と渡せない** | [.claude/rules/design-review.md:143-144](../../../../.claude/rules/design-review.md#L143-L144)「渡さないと同じものが必ずまた挙がり、周だけが増える。」 | [.claude/rules/design-review.md:146](../../../../.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」。**必須の道具のほうで、規則自身が挙げた「周だけが増える」条件が毎周成り立つ** |
 | **1回で全部挙げさせる、と渡せない** | [.claude/skills/worker-briefing/SKILL.md:260](../../../../.claude/skills/worker-briefing/SKILL.md#L260)「まったく同じ結果になるくらい徹底的に洗い出すこと。」 | [.claude/skills/pr-review-and-merge/SKILL.md:102-103](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L102-L103)「2-6（1回で全部挙げる）と 2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。」 |
-| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:182](../../../../internal/prompt/builtin.md#L182) の見本「直さない \| この issue の範囲外」（Low） | [CLAUDE.md:527-528](../../../../CLAUDE.md#L527-L528)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
+| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:182](../../../../internal/prompt/builtin.md#L182) の見本「直さない \| この issue の範囲外」（Low） | [CLAUDE.md:545-546](../../../../CLAUDE.md#L545-L546)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
 
 ---
 
@@ -274,10 +275,10 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 
 | 範囲 | 行数 | バイト数 |
 | --- | --- | --- |
-| [CLAUDE.md:394-769](../../../../CLAUDE.md#L394-L769) | 376 | 28,322 |
+| [CLAUDE.md](../../../../CLAUDE.md) | 376 | 28,322 |
 | [.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) 全体 | 248 | 14,561 |
 | [.claude/skills/worker-briefing/SKILL.md:105-121](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L121) と [.claude/skills/worker-briefing/SKILL.md:183-298](../../../../.claude/skills/worker-briefing/SKILL.md#L183-L298) | 17 + 116 = 133 | 10,910 |
-| [.claude/skills/pr-review-and-merge/SKILL.md:93-190](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L190) | 98 | 6,450 |
+| [.claude/skills/pr-review-and-merge/SKILL.md:93-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L188) | 98 | 6,450 |
 | [.claude/rules/reporting.md:564-591](../../../../.claude/rules/reporting.md#L564-L591) | 28 | 測っていない |
 | **計** | **883** | **60,243**（reporting.md を除く） |
 

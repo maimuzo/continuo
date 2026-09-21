@@ -2,6 +2,10 @@
 
 **この文書は比較資料である。決めるのは人間で、ここでは推奨までしか書かない。**
 
+**この文書が名指しする3本の hook は、いずれもリポジトリから消えている。**
+`check-reply-clarity.py` と `check-verified-commands.py` は 2026-09-20 にプラグインへ移し、
+`block-merge-without-review.py` は 2026-09-21 に廃止した。**リンクは外した。**
+
 調査日: 2026-09-16。対象 commit: `df36f9d7`（worktree `~/Sources/github/continuo/.claude/worktrees/review-loop-efficiency`、branch `docs/review-loop-efficiency`）。
 
 ---
@@ -83,8 +87,8 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 | 何 | どこに書いてあるか |
 | --- | --- |
 | **返答の5段構成を検査する**（プラグイン） | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/maimuzo-chat-response/hooks/hooks.json` |
-| **引用80文字・名札・カテゴリの名乗りを検査する**（リポジトリ） | [.claude/settings.json:66-77](../../../../.claude/settings.json#L66-L77) が [.claude/hooks/check-reply-clarity.py](../../../../.claude/hooks/check-reply-clarity.py) を張る |
-| **検証していないコマンドの報告を検査する**（リポジトリ） | 同じ [.claude/settings.json:66-77](../../../../.claude/settings.json#L66-L77) が [.claude/hooks/check-verified-commands.py](../../../../.claude/hooks/check-verified-commands.py) を張る |
+| **引用80文字・名札・カテゴリの名乗りを検査する**（リポジトリ） | [.claude/settings.json](../../../../.claude/settings.json) が `.claude/hooks/check-reply-clarity.py` を張る |
+| **検証していないコマンドの報告を検査する**（リポジトリ） | 同じ [.claude/settings.json](../../../../.claude/settings.json) が `.claude/hooks/check-verified-commands.py` を張る |
 
 **プラグインの hook 定義の原文**（`hooks.json` の全文）。
 
@@ -113,9 +117,9 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 
 **数えた件数・検索パターン・範囲。**
 `git grep -n '"Stop"' -- '.claude/'` を `~/Sources/github/continuo/.claude/worktrees/review-loop-efficiency` で叩き、**3件**。
-うち2件（[.claude/hooks/check-reply-clarity.py:37](../../../../.claude/hooks/check-reply-clarity.py#L37) と
-[.claude/hooks/check-verified-commands.py:25](../../../../.claude/hooks/check-verified-commands.py#L25)）は
-**docstring の中の設置例**であって、実際に張っているのは [.claude/settings.json:66](../../../../.claude/settings.json#L66) の1件だけである。
+うち2件（`.claude/hooks/check-reply-clarity.py:37` と
+`.claude/hooks/check-verified-commands.py:25`）は
+**docstring の中の設置例**であって、実際に張っているのは [.claude/settings.json](../../../../.claude/settings.json) の1件だけである。
 
 ### 3-2. 3本とも、無人かどうかを判定する材料を1つも読んでいない
 
@@ -123,20 +127,20 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 
 | スクリプト | 読んでいる環境変数 | 何のためか |
 | --- | --- | --- |
-| [.claude/hooks/check-reply-clarity.py:159](../../../../.claude/hooks/check-reply-clarity.py#L159) | `REPLY_CLARITY_HOOK_DEBUG` | stderr へ traceback を出す |
-| [.claude/hooks/check-verified-commands.py:114](../../../../.claude/hooks/check-verified-commands.py#L114) | `CLAUDE_HOOK_DEBUG` | 同上 |
+| `.claude/hooks/check-reply-clarity.py:159` | `REPLY_CLARITY_HOOK_DEBUG` | stderr へ traceback を出す |
+| `.claude/hooks/check-verified-commands.py:114` | `CLAUDE_HOOK_DEBUG` | 同上 |
 | `check-reply-structure.py:98`（プラグイン） | `CHAT_RESPONSE_HOOK_DEBUG` | 同上 |
 
 **`CLAUDE_PROJECT_DIR` を読んでいる箇所が1つある**
-（[.claude/hooks/check-reply-clarity.py:466](../../../../.claude/hooks/check-reply-clarity.py#L466)）が、
+（`.claude/hooks/check-reply-clarity.py:466`）が、
 これは issue の題名を引くための `.git` の在りかを求めるもので、無人かどうかの判定ではない。
 
 **3本に共通する早期の抜け道は2つだけである。**
 
 | 条件 | 何が起きるか |
 | --- | --- |
-| `stop_hook_active` が真 | **何もせず 0 で抜ける**（差し戻しの無限ループの防止）。[check-reply-clarity.py:984](../../../../.claude/hooks/check-reply-clarity.py#L984)、[check-verified-commands.py:302](../../../../.claude/hooks/check-verified-commands.py#L302)、`check-reply-structure.py:291` |
-| コードフェンスを除いた散文が200文字未満 | **検査せず 0 で抜ける。**[check-reply-clarity.py:90](../../../../.claude/hooks/check-reply-clarity.py#L90) の `MIN_LEN_FOR_CHECK = 200`、`check-reply-structure.py:35` の `MIN_LEN_FOR_STRUCTURE = 200` |
+| `stop_hook_active` が真 | **何もせず 0 で抜ける**（差し戻しの無限ループの防止）。`check-reply-clarity.py:984`、`check-verified-commands.py:302`、`check-reply-structure.py:291` |
+| コードフェンスを除いた散文が200文字未満 | **検査せず 0 で抜ける。**`check-reply-clarity.py:90` の `MIN_LEN_FOR_CHECK = 200`、`check-reply-structure.py:35` の `MIN_LEN_FOR_STRUCTURE = 200` |
 
 **つまり、いま無人のセッションを見分ける材料は1バイトも入っていない。**
 **検索パターン**: `environ|getenv|CLAUDE_|CONTINUO`。**対象パス**: 上の3本。**対象コミット**: `df36f9d7`。

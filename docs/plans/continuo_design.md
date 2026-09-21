@@ -10913,7 +10913,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 | `design-review-result` | `<!-- design-review-result -->` | **紐づく issue のコメント** |
 | `code-review-result` | `<!-- code-review-result -->` | **その pull request のコメント** |
 
-**数える条件は、既存の3箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
+**数える条件は、既存の2箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
 **揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。**
 
 **4通りの組み合わせと終了コード。**
@@ -10970,11 +10970,11 @@ pull request の画面では「まだ走っていない」と見分けが付か�
 | **逃がし口の形** | 目印の行と、その次の行に理由 | 目印の中へ書かせると、閉じの `--` を理由と読んで `<!-- design-review-skipped: -->` が通る |
 | **エージェントに断りを書かせない** | 組み込みの 3-5 に明記する | 止めたい相手が自分で逃がし口を書けては、検査の意味が無い |
 
-**hook とリリース前の検査には足さない。**
-[.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) と
+**リリース前の検査には足さない。**
 [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) は、実装のレビューだけを見る。
-**CI を必須の検査に入れれば、そこが最後の門になる。**hook は AI の手元の先回りで、
-リリース前の検査は既にマージされたものを数えるものである。**どちらも門ではない。**
+**CI を必須の検査に入れれば、そこが最後の門になる。**
+リリース前の検査は既にマージされたものを数えるものである。**門ではない。**
+（AI の手元で先回りする hook も在ったが、2026-09-21 に廃止した。）
 
 **目印を設定から変えられる形にしない。**目印は、組み込みの指示書がエージェントに書かせる
 文字列と対でしか意味を持たない。**組み込みは実行ファイルの中にあり、利用者は変えられない**（5-3c）。

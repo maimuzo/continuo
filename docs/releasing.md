@@ -39,7 +39,7 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 
 ## 1. 打つ前に確かめる
 
-**この8つを通してから打つ。**どれか1つでも落ちていたら、タグを打ってはならない。
+**この9つを通してから打つ。**どれか1つでも落ちていたら、タグを打ってはならない。
 
 | 何を | どう確かめるか |
 | --- | --- |
@@ -51,6 +51,7 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 | **`docs/FAQ.md` に新しい設定と見出し語がある** | 上の「絶対条件」の数え方 |
 | **PR にレビュー結果が貼ってある** | `sh scripts/check-release-ready.sh` |
 | **対の issue に説明が書いてある** | 同上 |
+| **管理者にも検査を課す設定が有効である** | 同上。**外れていると、レビュー結果を貼ってあってもマージを止められない** |
 
 **実機で issue を1件通すのがいちばん重い。**mock だけで通しても、実機で初めて出る欠陥がある。
 実際、`interactive_ready` を見ていなかった欠陥は、テストが全部通っている状態で残っていた。
@@ -210,6 +211,7 @@ git -C <リポジトリ> branch -D <残っている branch>
 起点: v0.1.8 → origin/main
 レビューの規則が入った c9f4a50 以降の PR だけを見る
 
+管理者にも検査を課す設定 (enforce_admins) = 有効
 PR #71  レビュー結果=有り（1件）
           issue #65 CLOSED 説明=有り
 PR #69  レビュー結果=有り（1件）
@@ -224,6 +226,8 @@ PR #69  レビュー結果=有り（1件）
 | **`説明=無し`** / `説明=無し（閉じる前のコメントだけ）` | **その issue へ説明を書く**（下の表のとおり） |
 | **`説明=閉じていない`** | 直したのに開いたままなら閉じる。**まだ直っていないなら、リリースノートに書かない** |
 | **`対の issue=無し`** | **異常ではない。**issue から生まれない PR はある |
+| **`enforce_admins) = **無効**`** | **[CONTRIBUTING.md](../CONTRIBUTING.md) の「管理者にも検査を課す」を実施する。**外れている間は、管理者が赤いままマージできる |
+| **`enforce_admins) = 読めませんでした`** | **管理権限が要る。**branch protection そのものが無いときも読めない。**読めないまま通すと、外れていても気づけない** |
 
 **レビュー結果の目印は `<!-- code-review-result -->` である。数える条件は2つある。**
 
@@ -235,14 +239,10 @@ PR #69  レビュー結果=有り（1件）
 **同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
 `pull_request` のたびに走り、**貼られていなければ `code-review-result` の検査が赤になる。**
 
-**必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
-**赤いあいだはマージできない。**
+**必須の検査に入っている**（2026-09-21 に確認）。**赤いあいだはマージできない。**
 
-> **この job は `review-result` から `code-review-result` へ改名した。**
-> **改名した時点で、`review-result` の登録は宙に浮く。**
-> **必須の検査を入れ替えるまで、GitHub は「必須の検査がまだ報告されていない」と見てマージを塞ぐ。**
-> **危険側ではなく安全側に倒れるが、入れ替えるまで1本もマージできない。**
-> 手順は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
+> **この job は `review-result` から `code-review-result` へ改名し、必須の検査の入れ替えも済んでいる。**
+> **fork して新しく設定する人は、[CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」を通ること。**
 
 ```
 $ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
@@ -252,8 +252,11 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-review-result          ← 改名前の名前。入れ替えるまでこのままである
+code-review-result
+design-review-result
 ```
+
+**8本である。**`gh api` の出力がそのまま必須の検査の全部で、他に隠れているものは無い。
 
 **それでも、ここでもう一度数える。**必須の検査は**その PR がマージされる前**しか見ない。
 **タグを打つ時点で見ているのは、既に main へ入ったあとの PR である。**
@@ -261,20 +264,22 @@ review-result          ← 改名前の名前。入れ替えるまでこのま�
 （**入れ直す手順**は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
 `checks` は全件置き換えなので、いまの分を読んでから足すこと。）
 
-**条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+**条件は2箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
 
 | どこ | 何を止めるか |
 | --- | --- |
-| [.claude/hooks/block-merge-without-review.py](../.claude/hooks/block-merge-without-review.py) | AI の手元の `gh pr merge` / `gh pr ready` |
 | [.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) | PR のマージ |
 | [scripts/check-release-ready.sh](../scripts/check-release-ready.sh) | タグを打つこと |
 
-**「前の空白文字」に何を含めるかも、3箇所で同じにしてある。**
+**AI の手元で `gh pr merge` / `gh pr ready` を止める hook も在ったが、2026-09-21 に廃止した。**
+**branch の保護設定で `enforce_admins` を有効にし、admin も `code-review-result` を素通りできなくしたためである。**
+
+**「前の空白文字」に何を含めるかも、2箇所で同じにしてある。**
 **半角空白・タブ・CR・LF の4つだけである**（`[ \t\r\n]*`）。全角空白 U+3000 や NBSP U+00A0 は含めない。
-`\s` は使わない。**Python の `re` と jq（Oniguruma）で当たる範囲が違う**ので、
-どちらに寄せてももう一方とずれる（実測: 2026-09-02。全角空白を前に置いたコメントを、
-jq は数え、Python は数えなかった）。
-**3箇所が同じであることは
+`\s` は使わない。**engine によって当たる範囲が違う**ので、どちらに寄せてももう一方とずれる
+（実測: 2026-09-02。全角空白を前に置いたコメントを、jq は数え、当時あった Python の実装は数えなかった。
+**その Python の実装は 2026-09-21 に廃止したので、いまはどちらも jq である**）。
+**2箇所が同じであることは
 [.claude/hooks/tests/test_marker_pattern_parity.py](../.claude/hooks/tests/test_marker_pattern_parity.py)
 が CI で押さえる。**
 
