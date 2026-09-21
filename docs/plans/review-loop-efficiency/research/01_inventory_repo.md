@@ -291,7 +291,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 測ったコマンドは `sed -n '<開始>,<終了>p' <ファイル> | wc -l` と `| wc -c`、全体は `wc -l` / `wc -c`。
 
 - **レビューを頼まれた worker は、worker-briefing/SKILL.md を全部（490行）読む前提である**（[.claude/skills/worker-briefing/SKILL.md:26](../../../../.claude/skills/worker-briefing/SKILL.md#L26) が「書いてあることを全部守れ」と書かせる）
-- **利用者向け**は [internal/prompt/builtin.md:104-258](../../../../internal/prompt/builtin.md#L104-L258)（155行。3-2 の全体）、[internal/prompt/builtin.md:329-413](../../../../internal/prompt/builtin.md#L329-L413)（85行。3-6 の全体）、[internal/prompt/builtin.md:710-906](../../../../internal/prompt/builtin.md#L710-L906)（197行。5-6）、[internal/prompt/builtin.md:908-1003](../../../../internal/prompt/builtin.md#L908-L1003)（96行。5-7）、[internal/prompt/builtin.md:506-512](../../../../internal/prompt/builtin.md#L506-L512)（7行）
+- **利用者向け**は [internal/prompt/builtin.md:104-258](../../../../internal/prompt/builtin.md#L104-L258)（155行。3-2 の全体）、[internal/prompt/builtin.md:329-413](../../../../internal/prompt/builtin.md#L329-L413)（85行。3-6 の全体）、[internal/prompt/builtin.md:710-906](../../../../internal/prompt/builtin.md#L710-L906)（197行。5-6）、[internal/prompt/builtin.md:908-1003](../../../../internal/prompt/builtin.md#L908-L1003)（96行。5-7）、[internal/prompt/builtin.md:506-512](../../../../internal/prompt/builtin.md#L506-L512)（7行）。**この5つの行数だけは、2026-09-22 に数え直した値である**（`df36f9d7` では 3-2 が 104-194 の91行だった）
 - **PR #267（人間が pane で直接続けるあいだ continuo が手を出さない Status を足す）がマージされると増える行**（`gh pr diff 267` の hunk の見出しから）: design-review.md が +53（`@@ -80,6 +80,59 @@`）、worker-briefing/SKILL.md が +3・+83・+1（`@@ -195,8 +195,11 @@` / `@@ -253,6 +256,89 @@` / `@@ -345,6 +431,7 @@`）、builtin.md が +14・+11、CLAUDE.md が +1
 
 ---

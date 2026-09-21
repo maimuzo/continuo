@@ -8,8 +8,11 @@
 **行番号・件数・「いまはこうなっている」の記述は、決めた時点のものである。**
 **その後、この計画自身の実装でファイルが書き換わっているので、いまの実物とは合わない。**
 **いまどうなっているかは、実物を開いて確かめること。**この文書は、そのとき何を見て何を決めたかを残すためにある。
-**ただし行番号のリンクだけは、いまの実物へ当て直している。**開けなくなると、記録として読めないためである。
+**ただし、この pull request が変えた2ファイル**（[internal/prompt/builtin.md](../../internal/prompt/builtin.md) と [docs/plans/continuo_design.md](continuo_design.md)）
+**を指す行番号のリンクだけは、いまの実物へ当て直している。**開けなくなると、記録として読めないためである。
+**それ以外を指すリンク**（`CLAUDE.md` / `.claude/` / `docs/releasing.md`）**は、`df36f9d7` の位置のままである。**
 **数値は決めた時点のもので、commit は `df36f9d7`（2026-09-16）である。**`docs/plans/review-loop-efficiency/research/` の下も同じ時点である。
+**ただし、`research/` の下で「2026-09-22 に数え直した」と書いてある行だけは、いまの値である。**
 **ファイルの場所は、どの階層のものかが分かる形で書く**（`.claude/rules/` なのか `.claude/skills/` なのか `docs/plans/` なのか）。この文書の中の相対パスは、すべて continuo リポジトリの根（`~/Sources/github/continuo/`）からのものである。
 
 | 元資料（`docs/plans/review-loop-efficiency/research/` の下） | 中身 |
@@ -417,7 +420,7 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 
 ### 8-3. worker-briefing は、書き直してから移す
 
-**人間の指摘。**いまの [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（519行）は書いてあることが整理されていない。
+**人間の指摘。**[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（`df36f9d7` の時点で490行）は書いてあることが整理されていない。
 **builtin.md へまとめるときは、次の3つだけを、初見で1通りにしか読めない短さで書く。**
 
 | 何を | 中身 |
