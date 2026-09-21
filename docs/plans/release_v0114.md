@@ -99,6 +99,6 @@
 
 - **実機で issue を1件通す**（[docs/releasing.md:82-204](../releasing.md#L82-L204)）。検証用のカンバンを使う。**本番のカンバン（project #3）には触れない**
 - **[docs/FAQ.md](../FAQ.md) と [docs/upgrading.md](../upgrading.md) の両方に、この版の内容が入っていること**
-- **破壊的変更を `<!-- breaking:start -->` と `<!-- breaking:end -->` で囲む**（[docs/releasing.md:361-402](../releasing.md#L361-L402)）。
+- **破壊的変更を `<!-- breaking:start -->` と `<!-- breaking:end -->` で囲む**（[docs/releasing.md:360-401](../releasing.md#L360-L401)）。
   **囲まないと、インストーラーは1件も警告しない。**この版は破壊的変更が4つあるので、いちばん効く
-- **`--generate-notes` のまま放置しない**（[docs/releasing.md:456-478](../releasing.md#L456-L478)）。commit の一覧は利用者に読めない
+- **`--generate-notes` のまま放置しない**（[docs/releasing.md:455-477](../releasing.md#L455-L477)）。commit の一覧は利用者に読めない
