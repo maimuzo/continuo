@@ -8,11 +8,10 @@
 **行番号・件数・「いまはこうなっている」の記述は、決めた時点のものである。**
 **その後、この計画自身の実装でファイルが書き換わっているので、いまの実物とは合わない。**
 **いまどうなっているかは、実物を開いて確かめること。**この文書は、そのとき何を見て何を決めたかを残すためにある。
-**ただし、この pull request が変えた2ファイル**（[internal/prompt/builtin.md](../../internal/prompt/builtin.md) と [docs/plans/continuo_design.md](continuo_design.md)）
-**を指す行番号のリンクだけは、いまの実物へ当て直している。**開けなくなると、記録として読めないためである。
-**それ以外を指すリンク**（`CLAUDE.md` / `.claude/` / `docs/releasing.md`）**は、`df36f9d7` の位置のままである。**
-**数値は決めた時点のもので、commit は `df36f9d7`（2026-09-16）である。**`docs/plans/review-loop-efficiency/research/` の下も同じ時点である。
-**ただし、`research/` の下で「2026-09-22 に数え直した」と書いてある行だけは、いまの値である。**
+**行番号と数値がいつの時点のものかは、そのそばに書いてある。**
+**`df36f9d7` か日付が添えてあれば、その時点の値である。**
+**何も添えていないものは、どちらとも決まっていない。**開く前に自分で確かめること。
+**この文書の中で範囲を狭めて言い切るのはやめた。**8周目・9周目・10周目と3周続けて、**言い切りを足すたびに、それが次の周の指摘になったためである。**
 **ファイルの場所は、どの階層のものかが分かる形で書く**（`.claude/rules/` なのか `.claude/skills/` なのか `docs/plans/` なのか）。この文書の中の相対パスは、すべて continuo リポジトリの根（`~/Sources/github/continuo/`）からのものである。
 
 | 元資料（`docs/plans/review-loop-efficiency/research/` の下） | 中身 |
@@ -104,7 +103,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 直しが生んだ 49件 | 直し方を指摘の文面から採る。前の周の判断と逆を求められても両方の根拠を並べない。守りを足す直しをその場で入れる | 6節 |
 | 「直さない」が残り続けた 35件 | `/code-review` には前の周の対応表を渡せない（[.claude/rules/design-review.md:143-146](../../.claude/rules/design-review.md#L143-L146) が自分でそう書いている） | 6節（受けた側で突き合わせる） |
 | 前から在った見落とし 17件 | 1周目に読む reviewer が `/code-review` の1つだけ | 5節 |
-| 重さの基準が、開発者向けの側に無い | **利用者向けの指示書には4段の定義が在る**（[internal/prompt/builtin.md:717-722](../../internal/prompt/builtin.md#L717-L722)）。**`.claude/` と `CLAUDE.md` には無く、**対応表を書く本人が付けている | 4節 |
+| 重さの基準が、開発者向けの側に無い | **利用者向けの指示書には4段の定義が在る**（[internal/prompt/builtin.md:718-723](../../internal/prompt/builtin.md#L718-L723)）。**`.claude/` と `CLAUDE.md` には無く、**対応表を書く本人が付けている | 4節 |
 | 余計な機能を削る判定が3回に1度 | 4・5回目と7・8回目は、issue に無い機能が入っていても判定しない。判定の主語も、メインエージェントではなく subagent になっている | 7節 |
 
 **「同じ前提が語を変えて残る」とは何か。**実測の例を1つ挙げる。
@@ -118,7 +117,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 4. 決まったこと: 重さの4つの定義は、組み込みの指示書に在るものを正とする
 
-**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:717-722](../../internal/prompt/builtin.md#L717-L722) の表。この pull request の前から `origin/main` に在る）。
+**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:718-723](../../internal/prompt/builtin.md#L718-L723) の表。この pull request の前から `origin/main` に在る）。
 **無いのは開発者向けの側である。**`Critical とは|重大度|深刻さ|severity` で `.claude/` と `CLAUDE.md` を検索しても0件で、開発者はどの重さを付けるかを自分で決めている。
 **決めたこと。**`.claude/` に2枚目の定義を置かない。**正は組み込みの指示書の1箇所だけにする**（8-2 の表が「`maimuzo-dev-core` への review-loop スキルの新設は取りやめ」を人間の決定として記録している）。
 **経緯。**「収まっている」は Critical と High が0件と決まっているのに、その2つを何で決めるかが無いので、判定が定義の無いラベルに乗っている。人間からこの指摘を受けて、定義が出された。
@@ -328,7 +327,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:888-890](../../internal/prompt/builtin.md#L888-L890) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
+**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:891-893](../../internal/prompt/builtin.md#L891-L893) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
 **回数の決まりを直すときは、[internal/prompt/builtin.md](../../internal/prompt/builtin.md) も開くこと。**開かないと、利用者向けと開発者向けで回数の決まりが食い違ったまま残る。
 **「削除が起きた周だけ設計へ戻る」も、利用者向けの指示書に既に在る**（`origin/main` の時点から。`削除が起きた周` で1件）。**足す必要は無い。**
 
@@ -349,7 +348,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:495-497](../../internal/prompt/builtin.md#L495-L497) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:496-498](../../internal/prompt/builtin.md#L496-L498) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
