@@ -167,7 +167,7 @@ https://code.claude.com/docs/en/skills が2箇所で書いている。
 > そこでは Claude Code が平文の標準出力を、Claude が見て動ける文脈として足す。**）
 
 **プラグインが hook を配れることは、手元で動いている実物で確かめられる。**
-[~/Sources/github/maimuzo-claude-plugins/plugins/maimuzo-chat-response/hooks/hooks.json](../../../../../../maimuzo-claude-plugins/plugins/maimuzo-chat-response/hooks/hooks.json) が
+~/Sources/github/maimuzo-claude-plugins/plugins/maimuzo-chat-response/hooks/hooks.json が
 `"command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/check-reply-structure.py\""` を `Stop` に張っている。
 
 ---
@@ -329,7 +329,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 **言いたいこと。**編集用 clone で PR → main へマージ → 各プロジェクトが `/plugin marketplace update` で取り込む。
 この流れはリポジトリの README に書いてある。
 
-[~/Sources/github/maimuzo-claude-plugins/README.md:5](../../../../../../maimuzo-claude-plugins/README.md#L5) の原文。
+~/Sources/github/maimuzo-claude-plugins/README.md:5 の原文。
 
 > **プロジェクトに submodule として取り込む運用は廃止した。** プラグインの実体は Claude Code が `~/.claude/plugins/` 配下へ取得する。編集はこのリポジトリの専用 clone（例: `~/Sources/github/maimuzo-claude-plugins`）で行い、PR 経由でマージする。各プロジェクトへは `/plugin marketplace update maimuzo-marketplace` で反映される（通常は自動）。
 
