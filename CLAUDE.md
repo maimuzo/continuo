@@ -222,7 +222,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 
 **`main` ではなく `origin/main` を見る。**手元の `main` は取り込んでいないことがあり、
 **そもそも手元に `main` が無い checkout では `fatal: ambiguous argument` になって、grep には何も渡らない。**
-これも「触っていない」と見分けが付かない（[docs/releasing.md:345](docs/releasing.md#L345) と同じ理由である）。
+これも「触っていない」と見分けが付かない（[docs/releasing.md:352](docs/releasing.md#L352) と同じ理由である）。
 
 **1行でも返ったら、上の4つに当てて判定する。当たれば止まる。**
 それぞれ、どの定義に当たりうるかは次のとおり。

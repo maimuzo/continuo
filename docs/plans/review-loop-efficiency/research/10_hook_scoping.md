@@ -87,8 +87,8 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 | 何 | どこに書いてあるか |
 | --- | --- |
 | **返答の5段構成を検査する**（プラグイン） | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/maimuzo-chat-response/hooks/hooks.json` |
-| **引用80文字・名札・カテゴリの名乗りを検査する**（リポジトリ） | [.claude/settings.json:66-77](../../../../.claude/settings.json#L66-L77) が `.claude/hooks/check-reply-clarity.py` を張る |
-| **検証していないコマンドの報告を検査する**（リポジトリ） | 同じ [.claude/settings.json:66-77](../../../../.claude/settings.json#L66-L77) が `.claude/hooks/check-verified-commands.py` を張る |
+| **引用80文字・名札・カテゴリの名乗りを検査する**（リポジトリ） | [.claude/settings.json](../../../../.claude/settings.json) が `.claude/hooks/check-reply-clarity.py` を張る |
+| **検証していないコマンドの報告を検査する**（リポジトリ） | 同じ [.claude/settings.json](../../../../.claude/settings.json) が `.claude/hooks/check-verified-commands.py` を張る |
 
 **プラグインの hook 定義の原文**（`hooks.json` の全文）。
 
@@ -119,7 +119,7 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 `git grep -n '"Stop"' -- '.claude/'` を `~/Sources/github/continuo/.claude/worktrees/review-loop-efficiency` で叩き、**3件**。
 うち2件（`.claude/hooks/check-reply-clarity.py:37` と
 `.claude/hooks/check-verified-commands.py:25`）は
-**docstring の中の設置例**であって、実際に張っているのは [.claude/settings.json:66](../../../../.claude/settings.json#L66) の1件だけである。
+**docstring の中の設置例**であって、実際に張っているのは [.claude/settings.json](../../../../.claude/settings.json) の1件だけである。
 
 ### 3-2. 3本とも、無人かどうかを判定する材料を1つも読んでいない
 

@@ -385,7 +385,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 何（行数） | なぜ移すか |
 | --- | --- |
 | **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の全部**（490行・35,210バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
-| **[~/Sources/github/continuo/CLAUDE.md:543-770](../../../../CLAUDE.md#L561-L733)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
+| **[~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:57-82](../../../../.claude/rules/design-review.md#L57-L82) と [同:124-240](../../../../.claude/rules/design-review.md#L124-L240)**（143行） | 設計を疑う段・根拠を否定できるなら直さない・回す回数・3回で収まらなかったとき。**同じく汎用である** |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:83-123](../../../../.claude/rules/design-review.md#L83-L123)**（41行。誰にレビューさせるか） | **`maimuzo-from-ecc:architect` を名指ししている**（85行と115行）。**OSS のリポジトリに個人のプラグイン名が書いてある状態そのものなので、プラグイン側へ引き取るのが正しい置き場所である** |
 
@@ -393,7 +393,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何（行数） | なぜ残すか |
 | --- | --- |
-| **[~/Sources/github/continuo/CLAUDE.md:394-542](../../../../CLAUDE.md#L394-L578)**（149行。PR の手順・3箇所の機械・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
+| **[~/Sources/github/continuo/CLAUDE.md:394-560](../../../../CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:1-56](../../../../.claude/rules/design-review.md#L1-L56)**（56行） | **`<!-- continuo:agent -->` を先頭にする順序**（2件）**と、CI の `design-review-result` の条件がある。**continuo が起動したエージェントの挙動に直結する |
 | **[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)**（310行） | `block-merge-without-review.py`（**2026-09-21 に廃止**）と `review-gate.yml` と目印を名指しする。**`code-review-result` を含む行が多く、目印を引数にしない限り持ち出せない** |
 | **[~/Sources/github/continuo/CONTRIBUTING.md:133-241](../../../../CONTRIBUTING.md#L133-L241)**（109行） | **外部の貢献者だけが読む。**プラグインは効かない（5-0） |
@@ -448,7 +448,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 何 | 行数 | バイト数 |
 | --- | --- | --- |
 | [~/Sources/github/continuo/CLAUDE.md:310-318](../../../../CLAUDE.md#L310-L318)（設計のレビューの要約） | 9 | 1,104 |
-| [~/Sources/github/continuo/CLAUDE.md:394-770](../../../../CLAUDE.md#L394-L733) | 377 | 28,326 |
+| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 377 | 28,326 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の全部 | 248 | 14,561 |
 | [~/Sources/github/continuo/.claude/rules/reporting.md:554-592](../../../../.claude/rules/reporting.md#L554-L592) | 39 | 3,035 |
 | **合計** | **673** | **47,026** |
@@ -494,7 +494,7 @@ CLAUDE.md 単体は774行から546行になる。**それでも200行の目安�
 
 | 何を移すか | 減る行数 |
 | --- | --- |
-| [~/Sources/github/continuo/CLAUDE.md:543-770](../../../../CLAUDE.md#L561-L733) | 228 |
+| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 228 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md:57-123](../../../../.claude/rules/design-review.md#L57-L123) | 67 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md:124-240](../../../../.claude/rules/design-review.md#L124-L240) | 117 |
 | **合計** | **412** |

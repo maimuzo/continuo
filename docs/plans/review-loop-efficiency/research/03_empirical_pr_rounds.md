@@ -44,7 +44,7 @@
 | 何を | どうやって |
 | --- | --- |
 | 前置きと規則 | worker-briefing の SKILL.md を Read で開いた。CLAUDE.md と .claude/rules/ は注入された worktree の写しを読み、指す行は `grep -n` で確かめた |
-| CI の数え方 | [.github/workflows/review-gate.yml:269-273](../../../../.github/workflows/review-gate.yml#L269-L273)（実装）と [.github/workflows/review-gate.yml:159-163](../../../../.github/workflows/review-gate.yml#L159-L163)（設計）を Read で読んだ |
+| CI の数え方 | [.github/workflows/review-gate.yml:271-275](../../../../.github/workflows/review-gate.yml#L271-L275)（実装）と [.github/workflows/review-gate.yml:161-165](../../../../.github/workflows/review-gate.yml#L161-L165)（設計）を Read で読んだ |
 | コメント | `gh api --paginate "repos/maimuzo/continuo/issues/comments?per_page=100"`（1,595件） |
 | PR | `gh api graphql --paginate` で pullRequests（148本）。ファイルが100を超えた2本は `gh api --paginate repos/maimuzo/continuo/pulls/<番号>/files` で全件取った |
 | 題名 | `gh api repos/maimuzo/continuo/issues/<番号> --jq .title` |
@@ -238,7 +238,7 @@ PR のコメントの中に書かれた設計レビューは、設計の周回�
 
 ### 2-4. 振り子になった例
 
-「6段」は、3・6・9周目で収まらないときに issue と実装を突き合わせて削る手順である（[CLAUDE.md:543](../../../../CLAUDE.md#L579) の「回数を数える」）。
+「6段」は、3・6・9周目で収まらないときに issue と実装を突き合わせて削る手順である（[CLAUDE.md:561](../../../../CLAUDE.md#L561) の「回数を数える」）。
 
 | PR と周 | 何が往復したか | 本文の記述 |
 | --- | --- | --- |
@@ -281,7 +281,7 @@ PR のコメントの中に書かれた設計レビューは、設計の周回�
 - 「turn ループが戻ったまま起き直せない」は、系列3の3・4・5周目で3回「直さない」とし、系列4の1周目に直した
 - 「打ち切りを切っている機械で、健全な run を手放しうる」は、系列3の4・6周目で「直さない」とし、系列4の2周目に直した
 
-**「収まっている」の定義（[CLAUDE.md:548](../../../../CLAUDE.md#L584)）は、Critical と High の件数だけで書かれている。直さないと決めたものを除く書き方は無い。**
+**「収まっている」の定義（[CLAUDE.md:566](../../../../CLAUDE.md#L566)）は、Critical と High の件数だけで書かれている。直さないと決めたものを除く書き方は無い。**
 
 ### 2-7. 規則の文面にあった実例との照合
 
@@ -402,7 +402,7 @@ PR 1本の実装レビューだけで20周を超えたのは、PR #230（枠が�
 - 全111本の、周ごとの Critical / High / Medium / Low（表の書式がばらばらなので、上位5本だけ数えた）
 - Medium と Low の分類
 - diff による分類の確かめ（PR #230 の commit 6つの存在と題名だけは確かめた）
-- 「分類」の列の決まりで読み替えたときの件数。[CLAUDE.md:516](../../../../CLAUDE.md#L552) の「分類」の列は、commit を示せない「直しが持ち込んだ」を「前の周に既に在った」として扱うと決めている。この報告は実装者の分類に従った。「直しが持ち込んだ」21件のうち、どの周のどの直しかを本文で名指ししていないものは7件ある。それを読み替えたときの数は出していない
+- 「分類」の列の決まりで読み替えたときの件数。[CLAUDE.md:534](../../../../CLAUDE.md#L534) の「分類」の列は、commit を示せない「直しが持ち込んだ」を「前の周に既に在った」として扱うと決めている。この報告は実装者の分類に従った。「直しが持ち込んだ」21件のうち、どの周のどの直しかを本文で名指ししていないものは7件ある。それを読み替えたときの数は出していない
 - 表に載っていない C/H（PR #230 の系列4の4・5周目、PR #220 の系列1の3〜6周目と系列2の1〜4周目）
 - 規則が足された日の前後の差（1-4 の理由による）
 - Agent で立てたレビュワーの種類を、セッションのログから数えること

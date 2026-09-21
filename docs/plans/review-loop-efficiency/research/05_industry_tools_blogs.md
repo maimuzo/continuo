@@ -52,7 +52,7 @@
 | `effort` / `ultra` / `--fix` | 2 / 1 / 1 | すべて [pr-review-and-merge/SKILL.md:99-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99-L131) |
 | `最大1周` / `1回で全部挙げる` | 5 / 4 | 2026-09-05 と 2026-09-04 の方向調整が規則に入っていることを確かめた |
 
-**読んだ規則。**[CLAUDE.md](../../../../CLAUDE.md) の「コードレビュー記録フロー」（[L486](../../../../CLAUDE.md#L522)）から「3回で通らなかったとき」（[L731](../../../../CLAUDE.md)）まで。
+**読んだ規則。**[CLAUDE.md](../../../../CLAUDE.md) の「コードレビュー記録フロー」（[L504](../../../../CLAUDE.md#L504)）から「3回で通らなかったとき」（[L731](../../../../CLAUDE.md)）まで。
 [design-review.md](../../../../.claude/rules/design-review.md) 全体。worker-briefing 全体。
 [pr-review-and-merge/SKILL.md:80-159](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L80-L159)。
 
@@ -122,7 +122,7 @@ OpenAI Codex のリポジトリは `gh api` で読み取りだけ行った。**�
 
 **このリポジトリへの当てはめ（案）。**
 - [worker-briefing の 2-6](../../../../.claude/skills/worker-briefing/SKILL.md#L256) に、条件4・6・7・8（持ち込まれたものだけ・推測に頼らない・影響箇所を特定する・意図した変更は出さない）を足す
-- [CLAUDE.md の「収まっている」](../../../../CLAUDE.md#L584) の定義に、「blocking な問題が無い」の判定をレベル名と並べて置く
+- [CLAUDE.md の「収まっている」](../../../../CLAUDE.md#L566) の定義に、「blocking な問題が無い」の判定をレベル名と並べて置く
 - **注意。**条件4の「既存のバグ」は「その commit より前からコードベースに在ったもの」である。2-6 の「前の周に既に在ったもの」（前のレビューの周の時点で在ったもの）とは別物である
 
 ---
@@ -347,8 +347,8 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 **制約に当たるか。**当たらない。規則の文面だけで再現できる。
 
 **このリポジトリへの当てはめ（案）。**
-- [CLAUDE.md の「対応表の列」](../../../../CLAUDE.md#L552) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を Critical や High とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
-- 3・6・9回目の段（[CLAUDE.md:543](../../../../CLAUDE.md#L579) の「回数を数える」）に、issue #1294 の「前の周に無かった新しい Low を抑える」と、Contrast の「blocking の件数が厳密に減っていなければ収まらない兆候とみなす」を並べる
+- [CLAUDE.md の「対応表の列」](../../../../CLAUDE.md#L534) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を Critical や High とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
+- 3・6・9回目の段（[CLAUDE.md:561](../../../../CLAUDE.md#L561) の「回数を数える」）に、issue #1294 の「前の周に無かった新しい Low を抑える」と、Contrast の「blocking の件数が厳密に減っていなければ収まらない兆候とみなす」を並べる
 
 ---
 

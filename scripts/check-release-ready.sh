@@ -84,7 +84,6 @@ ng=0
 # 管理者が「検査を待たずにマージする」を選べてしまうためである。
 # **外したことはリポジトリのファイルに1文字も残らないので、ここで見るしかない。**
 # 設定の手順は CONTRIBUTING.md の「管理者にも検査を課す」にある。
-echo ""
 enforce="$(gh api "repos/{owner}/{repo}/branches/main/protection" --jq '.enforce_admins.enabled' 2>/dev/null || echo "読めない")"
 case "${enforce}" in
 	true)  echo "管理者にも検査を課す設定 (enforce_admins) = 有効" ;;

@@ -211,12 +211,11 @@ git -C <リポジトリ> branch -D <残っている branch>
 起点: v0.1.8 → origin/main
 レビューの規則が入った c9f4a50 以降の PR だけを見る
 
+管理者にも検査を課す設定 (enforce_admins) = 有効
 PR #71  レビュー結果=有り（1件）
           issue #65 CLOSED 説明=有り
 PR #69  レビュー結果=有り（1件）
           対の issue=無し（issue から生まれた PR ではない）
-
-管理者にも検査を課す設定 (enforce_admins) = 有効
 
 直すもの 0件。マージした PR とその issue は揃っています。
 ```

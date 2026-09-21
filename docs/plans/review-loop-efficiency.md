@@ -73,11 +73,11 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 | 場所（continuo リポジトリの根からの相対パス） | 何を定義しているか |
 | --- | --- |
-| [CLAUDE.md:394-542](../../CLAUDE.md#L394-L578) | `/code-review` を必ず通す。結果の目印を CI・hook・リリース前の検査が数える |
-| [CLAUDE.md:543-770](../../CLAUDE.md#L561-L733) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
+| [CLAUDE.md:394-560](../../CLAUDE.md#L394-L560) | `/code-review` を必ず通す。結果の目印を CI・hook・リリース前の検査が数える |
+| [CLAUDE.md](../../CLAUDE.md) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
 | [.claude/rules/design-review.md:1-248](../../.claude/rules/design-review.md#L1-L248) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
-| [.claude/skills/pr-review-and-merge/SKILL.md:1-311](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L311) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
+| [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
 | [internal/prompt/builtin.md:104-194](../../internal/prompt/builtin.md#L104-L194) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
@@ -136,7 +136,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 > なので、既存なのかPRで修正したのかは関係ない。
 
 **だから「この PR が持ち込んでいない既存の欠陥は直さない」という線引きは置かない。**
-前の版に書いていたその線引きは取り下げた（11節）。[CLAUDE.md:533](../../CLAUDE.md#L569)（範囲外は Critical と High を直さない理由にならない）は、いまのまま残る。
+前の版に書いていたその線引きは取り下げた（11節）。[CLAUDE.md:551](../../CLAUDE.md#L551)（範囲外は Critical と High を直さない理由にならない）は、いまのまま残る。
 
 **決まったこと。**
 
@@ -251,7 +251,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 7. 決まったこと: issue に無い機能を削る判定と削除を、毎回、書く側が主語で行う
 
-**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:622-643](../../CLAUDE.md#L658-L679) の6段と、[CLAUDE.md:738-744](../../CLAUDE.md) の4段）。
+**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:640-661](../../CLAUDE.md#L640-L661) の6段と、[CLAUDE.md](../../CLAUDE.md) の4段）。
 **その4段の段1は、目的を取り出す subagent を立て、diff を見せない形になっている。**理由は「diff を見せると、出来上がったものに引きずられる」である。
 
 **人間の決定（原文）。**
@@ -454,7 +454,7 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 > CLAUDE.md の「コードレビュー記録フロー」の6行と、.claude/rules/design-review.md の2行では、どれも「Medium と Low は follow-up の issue へ切り出す」と書いているが、こんな対応は認めていない。この表現のせいで、issue内で修正すべきことを新たなissueを書き出して解決しようとしている。
 
 **置き換える文。**「**Medium と Low は、簡単に直るならその issue の中で直す。それ以外は放置する。新しい issue へ切り出さない。**直さないと決めた理由は、対応表に書く。」
-**人間が挙げた8行のほかに、[.claude/skills/pr-review-and-merge/SKILL.md:184](../../.claude/skills/pr-review-and-merge/SKILL.md#L184) にも同じ文があった**（`git grep 'follow-up'` で数えた。リポジトリ全体では、ほかに [README.md:51](../../README.md#L51) が別の意味で使っているだけである）。
+**人間が挙げた8行のほかに、[.claude/skills/pr-review-and-merge/SKILL.md:182](../../.claude/skills/pr-review-and-merge/SKILL.md#L182) にも同じ文があった**（`git grep 'follow-up'` で数えた。リポジトリ全体では、ほかに [README.md:51](../../README.md#L51) が別の意味で使っているだけである）。
 **2026-09-05 に決めた「最後の1周で出た Medium と Low はもう直さない」は、そのまま残る。**直さないと決めた理由を対応表に書いて終える形に変わるだけである。
 
 **進め方の提案。**

@@ -77,7 +77,7 @@
 | 何を | 中身 |
 | --- | --- |
 | **何が起きているか** | `/code-review` と設計レビューで Critical と High が収まらない。人間の観測では20周ほど回る。直すときに同じ種類の箇所を確かめないので、次の周で修正漏れとして挙がる |
-| **なぜ困るか** | 1周ごとにレートリミットと時間を使う。直しが新しい欠陥を持ち込む機会も増える（[CLAUDE.md:593](../../../../CLAUDE.md#L629) の実例: 8周目の Critical が7周目の直しから生まれた） |
+| **なぜ困るか** | 1周ごとにレートリミットと時間を使う。直しが新しい欠陥を持ち込む機会も増える（[CLAUDE.md:611](../../../../CLAUDE.md#L611) の実例: 8周目の Critical が7周目の直しから生まれた） |
 | **この文書で何を決めるか** | 決めない。公式が紹介している方法を、4つの観点（レビュワー側・書く側・ループの制御・修正漏れ）に分けて並べる |
 
 **読むときの軸。**これまでの規則は「徹底させる」「数える」「上限を置く」という同じ向きの手を積み増してきた。
@@ -168,7 +168,7 @@ Claude Code Security の記事は "Claude re-examines each result, attempting to
 
 **当てはめうる場所（案であって決定ではない）。**
 
-- [CLAUDE.md:502](../../../../CLAUDE.md#L538) の「手順」の段1（対応表を書く前）に段を足す。Critical と High の指摘1件ごとに検証役を立て、指摘の文と PR の意図だけを渡す。返させるのは「再現できる file:line と、壊れる筋書き」である。返せなかった指摘は「直さない」とし、理由欄に「検証役が再現できなかった」と書く。
+- [CLAUDE.md:520](../../../../CLAUDE.md#L520) の「手順」の段1（対応表を書く前）に段を足す。Critical と High の指摘1件ごとに検証役を立て、指摘の文と PR の意図だけを渡す。返させるのは「再現できる file:line と、壊れる筋書き」である。返せなかった指摘は「直さない」とし、理由欄に「検証役が再現できなかった」と書く。
 - [.claude/rules/design-review.md:124](../../../../.claude/rules/design-review.md#L124) の「否定できるなら直さない」を、受け取る側の頭の中ではなく、この検証役にやらせる。
 
 ### 3-2. 見つける段では重大度で絞らず全部挙げさせ、絞り込みは別の段で行う
@@ -286,7 +286,7 @@ security-review.md は「HARD EXCLUSIONS」18項目（番号は17までだが16�
 
 **何をするか。**「直してからマージ」に入る指摘を種類で列挙する。指摘には file:line の引用と、どう壊れるかの筋書きを必須にする。
 **いまの規則と同じ向きか。**証拠の要求は同じ向き（[worker-briefing 2-7](../../../../.claude/skills/worker-briefing/SKILL.md#L277)）。**重大度の中身の定義は、いまの規則に無い。**
-`git grep -n 'Critical' -- CLAUDE.md .claude/rules .claude/skills`（HEAD `df36f9d7`）で23行が返った。定義らしい行は [CLAUDE.md:521](../../../../CLAUDE.md#L557) の「Critical / High / Medium / Low / Info」だけで、各レベルに何が入るかは書かれていない。
+`git grep -n 'Critical' -- CLAUDE.md .claude/rules .claude/skills`（HEAD `df36f9d7`）で23行が返った。定義らしい行は [CLAUDE.md:539](../../../../CLAUDE.md#L539) の「Critical / High / Medium / Low / Info」だけで、各レベルに何が入るかは書かれていない。
 
 | 出典 | 発行元・日付 | 取り方 | 一次 / 二次 |
 | --- | --- | --- | --- |
@@ -312,19 +312,19 @@ evals の記事は "A good task is one where two domain experts would independen
 人間が 2026-09-04 に求めた「同じ内容を別のレビュワーに依頼したらまったく同じ内容になる」は、公式の書き方ではレビュワーの努力ではなく、**判定の基準が曖昧でないこと**で担保されている。
 
 **効果の実測。**示されていない（"cuts false positives" は主張であって数値ではない）。
-**効く観点。**レビュワー側。ループの制御にも効く。[CLAUDE.md:548](../../../../CLAUDE.md#L584) の「収まっている」は Critical と High の件数だけで決まるので、何を High と呼ぶかがぶれると判定もぶれる。
+**効く観点。**レビュワー側。ループの制御にも効く。[CLAUDE.md:566](../../../../CLAUDE.md#L566) の「収まっている」は Critical と High の件数だけで決まるので、何を High と呼ぶかがぶれると判定もぶれる。
 **制約。**REVIEW.md は `/code-review` に届かない（3-4）。Agent のレビュワーには渡せる。
 
 **当てはめうる場所（案）。**
 
-- [CLAUDE.md:516](../../../../CLAUDE.md#L552) の「対応表の列」の「レベル」に、日本語の規則文書と Go のコードそれぞれで Critical と High に入る種類を列挙した定義を足す。
+- [CLAUDE.md:534](../../../../CLAUDE.md#L534) の「対応表の列」の「レベル」に、日本語の規則文書と Go のコードそれぞれで Critical と High に入る種類を列挙した定義を足す。
   文書の例: 「書かれたとおりに従うと、利用者か AI が壊れる操作をする」だけを High 以上にする。この例は worker が作ったもので、公式の記述ではない。
-- 「この PR より前から在る」を別の印にし、[CLAUDE.md:548](../../../../CLAUDE.md#L584) の件数から外すかを検討する（3-7）。
+- 「この PR より前から在る」を別の印にし、[CLAUDE.md:566](../../../../CLAUDE.md#L566) の件数から外すかを検討する（3-7）。
 
 ### 3-6. 2回目以降のレビューでは、新しい軽微な指摘を出させず、件数に上限を置く
 
 **何をするか。**1回目のあとは Important（直してからマージ）だけを出させる。Nit の件数には上限を置く。
-**いまの規則と同じ向きか。**同じ向き。2026-09-05 の人間の指示（[CLAUDE.md:555](../../../../CLAUDE.md#L591)）が、Medium と Low について近いことを決めている。
+**いまの規則と同じ向きか。**同じ向き。2026-09-05 の人間の指示（[CLAUDE.md:573](../../../../CLAUDE.md#L573)）が、Medium と Low について近いことを決めている。
 公式はさらに「最初のレビューのあと」から、軽微な指摘を出すこと自体を止める。
 
 | 出典 | 発行元・日付 | 取り方 | 一次 / 二次 |
@@ -352,7 +352,7 @@ code-review.md:18 は、Claude が既にコメントした PR ならレビュー
 
 **当てはめうる場所（案）。**
 
-- [CLAUDE.md:555](../../../../CLAUDE.md#L591) の節を「2周目からは Critical と High だけを出させる」へ広げる。
+- [CLAUDE.md:573](../../../../CLAUDE.md#L573) の節を「2周目からは Critical と High だけを出させる」へ広げる。
 - `/code-review` の出力に2周目以降も Medium と Low が混ざったら、受け取る側は対応表に載せず、件数だけ書く。
 
 ### 3-7. レビューの範囲を「この変更が持ち込んだもの」に絞り、既存の欠陥は別枠にする
@@ -382,7 +382,7 @@ security-review.md:36 は "focus ONLY on security implications newly added by th
 
 **当てはめうる場所（案）。**
 
-- [CLAUDE.md:548](../../../../CLAUDE.md#L584) の「収まっている」の件数から「この PR より前から在る」指摘を外し、CLAUDE.md が既に決めている follow-up の扱いに回す。
+- [CLAUDE.md:566](../../../../CLAUDE.md#L566) の「収まっている」の件数から「この PR より前から在る」指摘を外し、CLAUDE.md が既に決めている follow-up の扱いに回す。
 - 2周目以降は、前の周の直しの commit 範囲だけを見せる（未検証）。
 
 ### 3-8. 指摘を全部追いかけない。正しさと要件に効くものだけを直し、残りは任意とする
@@ -420,7 +420,7 @@ Prompting Claude Opus 5 は "Claude Opus 5 can also expand the scope of a task, 
 **当てはめうる場所（案）。**
 
 - [.claude/rules/design-review.md:101](../../../../.claude/rules/design-review.md#L101) の4つの観点に「正しさか、issue に書かれた要件に効かない抜けは挙げない」を足す。
-- Academy の「修正が大きな変更に育ったら再レビュー」を、[CLAUDE.md:555](../../../../CLAUDE.md#L591) の周回の判断に取り込めるか検討する。いまは Critical か High を直したら、必ず次の周を回す。
+- Academy の「修正が大きな変更に育ったら再レビュー」を、[CLAUDE.md:573](../../../../CLAUDE.md#L573) の周回の判断に取り込めるか検討する。いまは Critical か High を直したら、必ず次の周を回す。
 
 ### 3-9. 書く前に「完了の条件」と「範囲外」を合意し、レビュワーはそれに照らして判定する
 
@@ -459,7 +459,7 @@ Effective harnesses は "Only mark features as 'passing' after careful testing."
 **当てはめうる場所（案）。**
 
 - [.claude/rules/design-review.md:3](../../../../.claude/rules/design-review.md#L3) の段2で書く設計コメントに、「完了の条件（1行ずつ機械か目で確かめられる形）」と「範囲外」を必須にする。実装レビューのレビュワーにもそれを渡す。
-- 範囲外の指摘は Critical と High に数えない。これは [CLAUDE.md:548](../../../../CLAUDE.md#L584) の定義を変えることになる。
+- 範囲外の指摘は Critical と High に数えない。これは [CLAUDE.md:566](../../../../CLAUDE.md#L566) の定義を変えることになる。
 
 ### 3-10. 書く側に、機械で合否が出る検査を持たせ、レビューに出す前に通す
 
@@ -638,11 +638,11 @@ Academy は "A long session carries everything it has read and decided. … it's
 **効果の実測。**示されていない（"almost always outperforms" は数値ではない）。
 **効く観点。**ループの制御。
 **制約。**無い。
-**当てはめうる場所（案）。**[CLAUDE.md:595](../../../../CLAUDE.md#L631) と [:645](../../../../CLAUDE.md#L681) の「3・6・9回目」の段に、次の条件を足す。
+**当てはめうる場所（案）。**[CLAUDE.md:613](../../../../CLAUDE.md#L613) と [:663](../../../../CLAUDE.md#L663) の「3・6・9回目」の段に、次の条件を足す。
 
 > Critical と High の件数が2周続けて減らなかったら、その時点で修正を止め、対応表から学んだことを入れた設計で、新しい文脈の書き手に書き直させる。
 
-いまの6段（[CLAUDE.md:731](../../../../CLAUDE.md) 以下）には「実装を止める → 設計を敵対的レビューする → 実装し直す」が既にある。**入る時点を早めるだけで足りるかを検討する。**
+いまの6段（[CLAUDE.md](../../../../CLAUDE.md) 以下）には「実装を止める → 設計を敵対的レビューする → 実装し直す」が既にある。**入る時点を早めるだけで足りるかを検討する。**
 
 ### 3-15. 規則を足し続けず、削る。機械で守らせられるものは hook へ移し、強い言い回しを減らす
 
@@ -693,7 +693,7 @@ Code Review 文書は REVIEW.md について "Length has a cost: a long `REVIEW.
 
 **当てはめうる場所（案）。**
 
-- レビューループに関わる規則を「消したら AI が間違えるか」で1行ずつ見直す。対象は [CLAUDE.md:486](../../../../CLAUDE.md#L522) 以下、[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md)、[worker-briefing 2-5〜2-7](../../../../.claude/skills/worker-briefing/SKILL.md#L183)、[pr-review-and-merge 段2〜4](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93)。
+- レビューループに関わる規則を「消したら AI が間違えるか」で1行ずつ見直す。対象は [CLAUDE.md:504](../../../../CLAUDE.md#L504) 以下、[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md)、[worker-briefing 2-5〜2-7](../../../../.claude/skills/worker-briefing/SKILL.md#L183)、[pr-review-and-merge 段2〜4](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93)。
 - 機械で判定できる部分は、既にある hook やスクリプトと重ねない。
 
 ---
