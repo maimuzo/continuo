@@ -70,7 +70,8 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 
 **差し戻す `Stop` hook は2本ある。**どちらもプラグインが張るもので、
 このリポジトリの [.claude/settings.json](../../../.claude/settings.json) には書かれていない。
-**利用者の `~/.claude/settings.local.json` でそのプラグインを有効にしたときだけ走る。**
+**そのプラグインを有効にしたときだけ走る。**有効にする場所は `.claude/settings.local.json`（このリポジトリの中。`.gitignore` 済み）か、
+利用者の `~/.claude/settings.json` の `enabledPlugins` である。
 
 | hook | いつ差し戻すか |
 | --- | --- |
