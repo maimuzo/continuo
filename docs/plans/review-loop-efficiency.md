@@ -79,7 +79,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
-| [internal/prompt/builtin.md:104-254](../../internal/prompt/builtin.md#L104-L254) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
+| [internal/prompt/builtin.md:104-259](../../internal/prompt/builtin.md#L104-L259) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
 | [.claude/settings.json](../../.claude/settings.json) の hooks | 返答の形を検査する Stop hook 2本（`.claude/hooks/check-reply-clarity.py` と `check-verified-commands.py`）。**プラグインではない** |
@@ -318,7 +318,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書**（[internal/prompt/builtin.md:496-501](../../internal/prompt/builtin.md#L496-L501) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
+**利用者向けの指示書**（[internal/prompt/builtin.md:505-510](../../internal/prompt/builtin.md#L505-L510) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
 
 
 ## 8. 決まったこと: 3つの行き先へ振り分ける
@@ -337,7 +337,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:485-487](../../internal/prompt/builtin.md#L485-L487) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:494-496](../../internal/prompt/builtin.md#L494-L496) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
@@ -351,7 +351,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 対応表の列と、貼る先・1行目の目印 | **リリースの手順** |
 | worker へ何を渡すか | **言葉づかいと禁止語** |
 
-### 8-2. ファイルごとの行き先（人間が指定したもの）
+### 8-2. ファイルごとの行き先（断りの無い行は、人間が指定したもの）
 
 | いまの場所 | 行き先 |
 | --- | --- |
@@ -365,7 +365,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/rules/parallel-work.md](../../.claude/rules/parallel-work.md) | **同上** |
 | [.claude/rules/plan-file.md](../../.claude/rules/plan-file.md) | **maimuzo-dev-core の docs-standard スキル** |
 | [.claude/rules/reporting.md](../../.claude/rules/reporting.md) | **maimuzo-chat-response プラグイン。**このプラグインは本文だけを持ち、hook は持たない |
-| [.claude/rules/release.md](../../.claude/rules/release.md) | **削除。**[docs/releasing.md](../releasing.md) を正にし、[CLAUDE.md](../../CLAUDE.md) の参照を張り替える（下の 8-2a） |
+| [.claude/rules/release.md](../../.claude/rules/release.md) | **削除。**[docs/releasing.md](../releasing.md) を正にし、[CLAUDE.md](../../CLAUDE.md) の参照を張り替える（下の 8-2a）。**この1行だけは AI の判定で、人間はまだ見ていない** |
 | 設計レビューと実装レビューの回し方 | **builtin.md。**`maimuzo-dev-core` への review-loop スキルの新設は取りやめ（人間の決定） |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） | **削除。**必ずレビューを通すことは CI で担保する |
 | `.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み。**リンクを外した） | **maimuzo-chat-response-hook-clarity プラグインを新設** |
