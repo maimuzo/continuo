@@ -50,7 +50,7 @@
 
 **言いたいこと。**プラグインは rules を配れず、skill の本文は起動時に読まれない。
 だから「起動時に必ず読ませたい決まり」と「`/code-review` へ届けたい決まり」はリポジトリに残すしかない。
-移せるのは、メインエージェントが手順として辿る部分（412行）と、worker への前置き（490行）である。
+移せるのは、メインエージェントが手順として辿る部分（412行）と、worker への前置き（519行）である。
 
 | いちばん重い発見 | どこに書いたか |
 | --- | --- |
@@ -384,7 +384,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何（行数） | なぜ移すか |
 | --- | --- |
-| **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の全部**（490行・35,210バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
+| **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の全部**（519行・37,806バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
 | **[~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:57-82](../../../../.claude/rules/design-review.md#L57-L82) と [同:124-240](../../../../.claude/rules/design-review.md#L124-L240)**（143行） | 設計を疑う段・根拠を否定できるなら直さない・回す回数・3回で収まらなかったとき。**同じく汎用である** |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:83-123](../../../../.claude/rules/design-review.md#L83-L123)**（41行。誰にレビューさせるか） | **`maimuzo-from-ecc:architect` を名指ししている**（85行と115行）。**OSS のリポジトリに個人のプラグイン名が書いてある状態そのものなので、プラグイン側へ引き取るのが正しい置き場所である** |
@@ -456,10 +456,10 @@ fetch は済んでいて、checkout している branch が古いだけである
 測ったコマンドは `sed -n '<開始>,<終了>p' <ファイル> | wc -l` と `| wc -c`、全体は `wc -l` / `wc -c`。
 
 **skills は、この数に入っていない**（2-3）。
-[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の490行と
+[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の519行と
 [~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) の310行は、
 **呼ばれたときにだけ入る。**ただし worker-briefing は worker ごとに毎回 Read されるので、
-**worker の側では毎回490行が入っている。**
+**worker の側では毎回519行が入っている。**
 
 ### 6-2. 公式文書が言う目安
 

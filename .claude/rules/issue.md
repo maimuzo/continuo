@@ -85,7 +85,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:9117](../../docs/plans/continuo_design.md#L9117)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9148](../../docs/plans/continuo_design.md#L9148)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:9148-9149](../../docs/plans/continuo_design.md#L9148-L9149) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9148](../../docs/plans/continuo_design.md#L9148)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4014-4015](../../docs/plans/continuo_design.md#L4014-L4015) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -214,7 +214,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外にも、エージェントが「何をしたか」を1件書く。**
-組み込みの指示書（[internal/prompt/builtin.md:1083-1105](../../internal/prompt/builtin.md#L1083-L1105) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:1084-1106](../../internal/prompt/builtin.md#L1084-L1106) の 7-2）が、
 `review` か `blocked` を出した代表以外の issue へ、その issue で何をしたかを書かせている。
 **それでも、人間が代表の pull request を見て確かめること。**そのコメントを書くのはエージェント自身で、中身を機械は確かめていない。
 

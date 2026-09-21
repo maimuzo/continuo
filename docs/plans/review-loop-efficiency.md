@@ -75,8 +75,8 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | --- | --- |
 | [CLAUDE.md:394-560](../../CLAUDE.md#L394-L560) | `/code-review` を必ず通す。結果の目印を CI・リリース前の検査が数える |
 | [CLAUDE.md](../../CLAUDE.md) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
-| [.claude/rules/design-review.md:1-248](../../.claude/rules/design-review.md#L1-L248) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
-| [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
+| [.claude/rules/design-review.md:1-246](../../.claude/rules/design-review.md#L1-L246) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
+| [.claude/skills/worker-briefing/SKILL.md:1-519](../../.claude/skills/worker-briefing/SKILL.md#L1-L519) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
 | [internal/prompt/builtin.md:104-258](../../internal/prompt/builtin.md#L104-L258) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
@@ -113,7 +113,9 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 4. 決まったこと: 重さの4つの定義を、リポジトリの rules に置く
 
-**前提。**いまは Critical と High を何で決めるかが、continuo リポジトリのどこにも無い（`Critical とは|重大度|深刻さ|severity` で検索して、出たのは利用者向けの表の見出し1件だけ）。
+**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:717-722](../../internal/prompt/builtin.md#L717-L722) の表。この pull request の前から `origin/main` に在る）。
+**無いのは開発者向けの側である。**`Critical とは|重大度|深刻さ|severity` で `.claude/` と `CLAUDE.md` を検索しても0件で、開発者はどの重さを付けるかを自分で決めている。
+**なおこの節の提案は、8-2 の表が「`maimuzo-dev-core` への review-loop スキルの新設は取りやめ（人間の決定）」で上書きしている。**
 **経緯。**「収まっている」は Critical と High が0件と決まっているのに、その2つを何で決めるかが無いので、判定が定義の無いラベルに乗っている。人間からこの指摘を受けて、定義が出された。
 
 **人間が決めた定義（原文）。**
@@ -318,7 +320,9 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書**（[internal/prompt/builtin.md:506-511](../../internal/prompt/builtin.md#L506-L511) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
+**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:884-886](../../internal/prompt/builtin.md#L884-L886) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
+**回数の決まりを直すときは、[internal/prompt/builtin.md](../../internal/prompt/builtin.md) も開くこと。**開かないと、利用者向けと開発者向けで回数の決まりが食い違ったまま残る。
+**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
 
 
 ## 8. 決まったこと: 3つの行き先へ振り分ける
@@ -408,7 +412,7 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 
 ### 8-3. worker-briefing は、書き直してから移す
 
-**人間の指摘。**いまの [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（490行）は書いてあることが整理されていない。
+**人間の指摘。**いまの [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（519行）は書いてあることが整理されていない。
 **builtin.md へまとめるときは、次の3つだけを、初見で1通りにしか読めない短さで書く。**
 
 | 何を | 中身 |

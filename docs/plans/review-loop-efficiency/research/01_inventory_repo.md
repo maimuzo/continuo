@@ -58,11 +58,11 @@
 | [.claude/rules/design-review.md:5-20](../../../../.claude/rules/design-review.md#L5-L20) | issue の作業の9段。段3で設計レビュー、段7で `/code-review` | 「設計をサブエージェントにレビューさせる」 | 開発者向け |
 | [.claude/rules/design-review.md:83-99](../../../../.claude/rules/design-review.md#L83-L99) | 設計レビューの担当と渡し方（ファイルに落とす） | 「`maimuzo-from-ecc:architect` に渡す。」 | 開発者向け。**maimuzo の環境のプラグインを名指ししている** |
 | [.claude/rules/design-review.md:115-120](../../../../.claude/rules/design-review.md#L115-L120) | 実装レビューは architect ではなく、Bash を持つエージェントに頼む | 「Bash を持つエージェント（`general-purpose` など）を立てること。」 | 開発者向け |
-| [.claude/rules/design-review.md:241-248](../../../../.claude/rules/design-review.md#L241-L248) | 設計レビューを飛ばしてよい場合 | 「迷ったら飛ばさない。」 | 開発者向け |
+| [.claude/rules/design-review.md:239-246](../../../../.claude/rules/design-review.md#L239-L246) | 設計レビューを飛ばしてよい場合 | 「迷ったら飛ばさない。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:93-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L131) | `/code-review <PR 番号>` の叩き方。プロンプトを足せない。`ultra` は人間の指示があるときだけ | 「`/code-review` は自由なプロンプトを足せない。」 | 開発者向け |
 | [internal/prompt/builtin.md:127-134](../../../../internal/prompt/builtin.md#L127-L134) | continuo が起動したエージェントの計画レビュー（3-2） | 「敵対的レビューの subagent に計画をレビューさせる」 | 利用者向け |
 | [internal/prompt/builtin.md:329-341](../../../../internal/prompt/builtin.md#L329-L341) | PR のレビュー（3-6）。**観点は具体的に書かず、エージェントに書き換えさせる** | 「差分に当たる観点へ書き換えて渡してください。」 | 利用者向け |
-| [internal/prompt/builtin.md:199](../../../../internal/prompt/builtin.md#L199) と [internal/prompt/builtin.md:1256](../../../../internal/prompt/builtin.md#L1256) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
+| [internal/prompt/builtin.md:199](../../../../internal/prompt/builtin.md#L199) と [internal/prompt/builtin.md:1257](../../../../internal/prompt/builtin.md#L1257) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
 | [internal/scaffold/template.go:281-287](../../../../internal/scaffold/template.go#L281-L287) | 雛形の `### レビューを頼む subagent`。名前を書かせる案内だけ | 「このリポジトリで使う名前を書いてください。」 | 利用者向け |
 
 ### 2-2. レビュワーへの指示
@@ -98,10 +98,10 @@
 | [.claude/skills/worker-briefing/SKILL.md:211-254](../../../../.claude/skills/worker-briefing/SKILL.md#L211-L254) | 直したあとに数えるもの（言い換え・戻り値の説明・移した節を指す文・版・後ろのリンク）。前提を1文にしてから探す | 「数えるのは「前提」である。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:105-121](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L121)（2-1） | 3回で収まらないのは設計があやふやだから。1件ずつ潰すのをやめる | 「指摘を1件ずつ潰すのをやめて、設計を疑う。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:168-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L168-L188)（段4） | CLAUDE.md の記録フローに従う（要点の写しを持つ） | 「ここには写さない。」 | 開発者向け |
-| [.claude/rules/plan-file.md:93-137](../../../../.claude/rules/plan-file.md#L93-L137) | 設計文書へ行を足したら、リンクを全部検算する（直しが持ち込む欠陥の予防） | 「8周のレビューのうち3周が、同じ原因である。」 | 開発者向け |
+| [.claude/rules/plan-file.md:93-135](../../../../.claude/rules/plan-file.md#L93-L135) | 設計文書へ行を足したら、リンクを全部検算する（直しが持ち込む欠陥の予防） | 「8周のレビューのうち3周が、同じ原因である。」 | 開発者向け |
 | [internal/prompt/builtin.md:131](../../../../internal/prompt/builtin.md#L131) | 指摘を全部直そうとせず、1件ずつ判断する | 「1件ずつ「直すのが妥当か」を判断する」 | 利用者向け |
 | [internal/prompt/builtin.md:203-234](../../../../internal/prompt/builtin.md#L203-L234) | 判断票の5列と、その見本 | 「判断票の形。**1行目と2行目の並びを変えないでください。**」。**その文字列そのものは builtin.md に0件である**（2026-09-22 に `Critical と High` と `原則` で数えて0件。origin/main でも0件）。**ただし同じことを言う文は在る**——「『直さない』と決めてよいのは、レビュワーの根拠を否定できたときだけです。…critical と high では使えません」と、「何周回すか」の表の「critical か high が1件以上 → 直して次の周を回す」の2つである | 利用者向け |
-| [internal/prompt/builtin.md:510-515](../../../../internal/prompt/builtin.md#L510-L515)（5-2） | issue に無い実装は根拠をレビュワーへ。否定されたら実装を変える | 「**レビュワーに否定されたら、実装を変えてください。**判定のしかたは 5-6 にあります。」 | 利用者向け |
+| [internal/prompt/builtin.md:506-512](../../../../internal/prompt/builtin.md#L506-L512)（5-2） | issue に無い実装は根拠をレビュワーへ。否定されたら実装を変える | 「**レビュワーに否定されたら、実装を変えてください。**判定のしかたは 5-6 にあります。」 | 利用者向け |
 
 ### 2-4. 収束の定義・回数・止まる条件
 
@@ -144,11 +144,11 @@
 | [scripts/check-release-ready.sh:115-142](../../../../scripts/check-release-ready.sh#L115-L142) | タグの前に、区間の PR に目印があるか | 同じ正規表現 | 開発者向け |
 | [docs/releasing.md:52](../../../../docs/releasing.md#L52) と [docs/releasing.md:212-246](../../../../docs/releasing.md#L212-L246) | リリース手順の中の検査 | 「`/code-review` を回し直し、結果をその PR のコメントへ貼る。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:133-166](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L133-L166)（段3） | 貼るコメントの形（目印・題名・周目・対応表）。`--body-file` で貼る | 「何周目かと対応表を同じコメントに入れる」 | 開発者向け |
-| [CONTRIBUTING.md:133-150](CONTRIBUTING.md#L133-L150) | 外部の貢献者向けの2つの検査と数える条件 | 「レビュー結果が貼られていない PR は、CI が落とします。」 | 開発者向け（外部の貢献者） |
+| [CONTRIBUTING.md:133-150](../../../../CONTRIBUTING.md#L133-L150) | 外部の貢献者向けの2つの検査と数える条件 | 「レビュー結果が貼られていない PR は、CI が落とします。」 | 開発者向け（外部の貢献者） |
 | [internal/scaffold/ci_template.go:83](../../../../internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](../../../../internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](../../../../.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
-| [internal/prompt/builtin.md:203-223](../../../../internal/prompt/builtin.md#L203-L223) と [internal/prompt/builtin.md:203-223](../../../../internal/prompt/builtin.md#L203-L223) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
+| [internal/prompt/builtin.md:203-223](../../../../internal/prompt/builtin.md#L203-L223) と [internal/prompt/builtin.md:342-359](../../../../internal/prompt/builtin.md#L342-L359) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
 | [docs/FAQ.md:201-250](../../../../docs/FAQ.md#L201-L250) | 利用者が自分の CLAUDE.md に書く決まりの例 | 「この2つの目印を、機械が数えます。」 | 利用者向け |
-| [docs/plans/continuo_design.md:11243-11320](../../../../docs/plans/continuo_design.md#L11243-L11320)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
+| [docs/plans/continuo_design.md:11244-11321](../../../../docs/plans/continuo_design.md#L11244-L11321)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
 | [docs/plans/continuo_design.md:11569-11570](../../../../docs/plans/continuo_design.md#L11569-L11570) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
 
 **機械が周回と重大度を見ていない根拠。**パターン `周目|回目|round|Critical|High|severity|対応表`、
@@ -167,14 +167,14 @@
 
 | 検索パターン | 対象パス | 出たもの |
 | --- | --- | --- |
-| `自己点検\|セルフレビュー\|self-review\|self review\|レビューに出す前\|レビューへ出す前\|レビューの前に\|出す前に` | リポジトリ全体（docs/evidence を除く） | [CONTRIBUTING.md:123](CONTRIBUTING.md#L123) の「出す前に」（gofmt / vet / test）と、builtin.md の「`review` を出す前に push / PR を作る」系だけ。**書いたものの点検は0件** |
+| `自己点検\|セルフレビュー\|self-review\|self review\|レビューに出す前\|レビューへ出す前\|レビューの前に\|出す前に` | リポジトリ全体（docs/evidence を除く） | [CONTRIBUTING.md:123](../../../../CONTRIBUTING.md#L123) の「出す前に」（gofmt / vet / test）と、builtin.md の「`review` を出す前に push / PR を作る」系だけ。**書いたものの点検は0件** |
 | `レビュー(を\|に\|へ)(頼む\|出す\|回す\|依頼する\|渡す)前\|見直(す\|して\|し)\|読み直(す\|して\|し)\|セルフチェック\|self-check\|自分でレビュー\|自己レビュー\|提出前` | CLAUDE.md・.claude/・internal/prompt/builtin.md・internal/scaffold/template.go・CONTRIBUTING.md・docs/releasing.md | 3行。[.claude/rules/reporting.md:707](../../../../.claude/rules/reporting.md#L707)（表の列を読み直す）と、template.go の101行と201行（ポーリング間隔）。**レビューとは関係が無い** |
 
 対象コミットはどちらも `df36f9d7`。
 
 | 近いもの | 何か | なぜ自己点検ではないか |
 | --- | --- | --- |
-| [CONTRIBUTING.md:123-129](CONTRIBUTING.md#L123-L129) | gofmt / go vet / test-like-ci | 機械の検査で、内容の点検ではない |
+| [CONTRIBUTING.md:123-129](../../../../CONTRIBUTING.md#L123-L129) | gofmt / go vet / test-like-ci | 機械の検査で、内容の点検ではない |
 | [.claude/skills/worker-briefing/SKILL.md:183-185](../../../../.claude/skills/worker-briefing/SKILL.md#L183-L185)（2-5） | 「指摘する前・直す前に」同じものを数える | **起点が指摘である。**指摘が来るまで発火しない |
 | [.claude/rules/design-review.md:57-79](../../../../.claude/rules/design-review.md#L57-L79) | 設計を書く前に疑う・既存の決定を探す | 設計の前段。**実装側に同じものは無い** |
 | [.claude/skills/worker-briefing/SKILL.md:161-181](../../../../.claude/skills/worker-briefing/SKILL.md#L161-L181)（2-4） | 着手前に関連ファイルを読む | 下読みであって、書いたものの点検ではない |
@@ -233,7 +233,7 @@
 | **3・6・9回目で6段、10回で止まる** | [CLAUDE.md](../../../../CLAUDE.md) | [CLAUDE.md:315](../../../../CLAUDE.md#L315)、[CLAUDE.md:507](../../../../CLAUDE.md#L507)、[.claude/rules/design-review.md:155-192](../../../../.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](../../../../.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)、[.claude/skills/pr-review-and-merge/SKILL.md:185-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L185-L188) |
 | **3回で収まらないときの考え方** | [CLAUDE.md](../../../../CLAUDE.md) | [.claude/rules/design-review.md:206-218](../../../../.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](../../../../.claude/skills/worker-briefing/SKILL.md#L105-L116) |
 | **前の周の対応表を渡す** | [.claude/rules/design-review.md:143-149](../../../../.claude/rules/design-review.md#L143-L149) | [.claude/skills/worker-briefing/SKILL.md:349](../../../../.claude/skills/worker-briefing/SKILL.md#L349) |
-| **数える条件（先頭の目印と投稿者）** | 3箇所の実装（**2026-09-21 以降は2箇所**） | [CLAUDE.md:433-436](../../../../CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](../../../../docs/releasing.md#L233-L237) |
+| **数える条件（先頭の目印と投稿者）** | 3箇所の実装（**2026-09-21 以降は2箇所**） | [CLAUDE.md:433-436](../../../../CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](../../../../.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](../../../../CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](../../../../docs/releasing.md#L233-L237) |
 
 **「写さない」と書いた直後に写している箇所**（検索パターン `ここには写さない|写すと食い違う|この規則へ写さない` と `要点だけ`、対象 CLAUDE.md と .claude/、コミット `df36f9d7`）。
 
