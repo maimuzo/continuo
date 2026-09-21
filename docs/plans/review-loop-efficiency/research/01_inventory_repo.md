@@ -62,7 +62,7 @@
 | [.claude/skills/pr-review-and-merge/SKILL.md:93-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L131) | `/code-review <PR 番号>` の叩き方。プロンプトを足せない。`ultra` は人間の指示があるときだけ | 「`/code-review` は自由なプロンプトを足せない。」 | 開発者向け |
 | [internal/prompt/builtin.md:127-134](../../../../internal/prompt/builtin.md#L127-L134) | continuo が起動したエージェントの計画レビュー（3-2） | 「敵対的レビューの subagent に計画をレビューさせる」 | 利用者向け |
 | [internal/prompt/builtin.md:329-341](../../../../internal/prompt/builtin.md#L329-L341) | PR のレビュー（3-6）。**観点は具体的に書かず、エージェントに書き換えさせる** | 「差分に当たる観点へ書き換えて渡してください。」 | 利用者向け |
-| [internal/prompt/builtin.md:199](../../../../internal/prompt/builtin.md#L199) と [internal/prompt/builtin.md:1260](../../../../internal/prompt/builtin.md#L1260) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
+| [internal/prompt/builtin.md:199](../../../../internal/prompt/builtin.md#L199) と [internal/prompt/builtin.md:1261](../../../../internal/prompt/builtin.md#L1261) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
 | [internal/scaffold/template.go:281-287](../../../../internal/scaffold/template.go#L281-L287) | 雛形の `### レビューを頼む subagent`。名前を書かせる案内だけ | 「このリポジトリで使う名前を書いてください。」 | 利用者向け |
 
 ### 2-2. レビュワーへの指示
@@ -107,8 +107,8 @@
 
 **言いたいこと。**正は [CLAUDE.md](../../../../CLAUDE.md) で、ほかは写しか要点である。
 **利用者向けの builtin.md にも、回数・収束・停止の定義が在る**（2026-09-22 に数え直した）。
-[internal/prompt/builtin.md:724](../../../../internal/prompt/builtin.md#L724) が収束、[internal/prompt/builtin.md:878-889](../../../../internal/prompt/builtin.md#L878-L889) が何周回すか、
-[internal/prompt/builtin.md:889](../../../../internal/prompt/builtin.md#L889) が連続10回で止まる、である。**下の根拠は、そこに書いてあるコミット（`df36f9d7`）の時点では正しい。**
+[internal/prompt/builtin.md:724](../../../../internal/prompt/builtin.md#L724) が収束、[internal/prompt/builtin.md:879-890](../../../../internal/prompt/builtin.md#L879-L890) が何周回すか、
+[internal/prompt/builtin.md:890](../../../../internal/prompt/builtin.md#L890) が連続10回で止まる、である。**下の根拠は、そこに書いてあるコミット（`df36f9d7`）の時点では正しい。**
 
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
@@ -125,7 +125,7 @@
 | [.claude/skills/worker-briefing/SKILL.md:117-120](../../../../.claude/skills/worker-briefing/SKILL.md#L117-L120) | 3・6・9回目に6段へ入る | 「入るのは3回目だけではない。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) | 最大1周と10回の要点の写し。3・6・9回目のあとの進み方 | 「6段を終えてから段5へ進む。」 | 開発者向け |
 
-**`df36f9d7` の時点では builtin.md に回数の定義が無かった、という根拠。**パターン `収まっ|周目|何周|10回|3回|回数|最後の1回|止まる`、対象 [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md)、コミット `df36f9d7` で **0行**だった。**`origin/main` では13行、いまは24行である**（2026-09-22 に数え直した）。
+**`df36f9d7` の時点では builtin.md に回数の定義が無かった、という根拠。**パターン `収まっ|周目|何周|10回|3回|回数|最後の1回|止まる`、対象 [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md)、コミット `df36f9d7` で **0行**だった。**`origin/main` では13行、いまは25行である**（2026-09-22 に数え直した）。
 
 ### 2-5. 記録と機械の関門
 
@@ -148,8 +148,8 @@
 | [internal/scaffold/ci_template.go:83](../../../../internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](../../../../internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](../../../../.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
 | [internal/prompt/builtin.md:203-223](../../../../internal/prompt/builtin.md#L203-L223) と [internal/prompt/builtin.md:342-359](../../../../internal/prompt/builtin.md#L342-L359) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
 | [docs/FAQ.md:201-250](../../../../docs/FAQ.md#L201-L250) | 利用者が自分の CLAUDE.md に書く決まりの例 | 「この2つの目印を、機械が数えます。」 | 利用者向け |
-| [docs/plans/continuo_design.md:11247-11324](../../../../docs/plans/continuo_design.md#L11247-L11324)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
-| [docs/plans/continuo_design.md:11572-11573](../../../../docs/plans/continuo_design.md#L11572-L11573) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
+| [docs/plans/continuo_design.md:11248-11325](../../../../docs/plans/continuo_design.md#L11248-L11325)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
+| [docs/plans/continuo_design.md:11573-11574](../../../../docs/plans/continuo_design.md#L11573-L11574) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
 
 **機械が周回と重大度を見ていない根拠。**パターン `周目|回目|round|Critical|High|severity|対応表`、
 対象は block-merge-without-review.py・review-gate.yml・check-release-ready.sh・ci_template.go・test_block_merge_without_review.py・test_marker_pattern_parity.py、コミット `df36f9d7` で **0行**だった。
@@ -290,8 +290,8 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 
 測ったコマンドは `sed -n '<開始>,<終了>p' <ファイル> | wc -l` と `| wc -c`、全体は `wc -l` / `wc -c`。
 
-- **レビューを頼まれた worker は、worker-briefing/SKILL.md を全部（519行）読む前提である**（[.claude/skills/worker-briefing/SKILL.md:26](../../../../.claude/skills/worker-briefing/SKILL.md#L26) が「書いてあることを全部守れ」と書かせる）
-- **利用者向け**は [internal/prompt/builtin.md:104-258](../../../../internal/prompt/builtin.md#L104-L258)（155行。3-2 の全体）、[internal/prompt/builtin.md:329-413](../../../../internal/prompt/builtin.md#L329-L413)（85行。3-6 の全体）、[internal/prompt/builtin.md:710-903](../../../../internal/prompt/builtin.md#L710-L903)（194行。5-6）、[internal/prompt/builtin.md:907-1002](../../../../internal/prompt/builtin.md#L907-L1002)（96行。5-7）、[internal/prompt/builtin.md:506-512](../../../../internal/prompt/builtin.md#L506-L512)（7行）
+- **レビューを頼まれた worker は、worker-briefing/SKILL.md を全部（490行）読む前提である**（[.claude/skills/worker-briefing/SKILL.md:26](../../../../.claude/skills/worker-briefing/SKILL.md#L26) が「書いてあることを全部守れ」と書かせる）
+- **利用者向け**は [internal/prompt/builtin.md:104-258](../../../../internal/prompt/builtin.md#L104-L258)（155行。3-2 の全体）、[internal/prompt/builtin.md:329-413](../../../../internal/prompt/builtin.md#L329-L413)（85行。3-6 の全体）、[internal/prompt/builtin.md:710-906](../../../../internal/prompt/builtin.md#L710-L906)（197行。5-6）、[internal/prompt/builtin.md:908-1003](../../../../internal/prompt/builtin.md#L908-L1003)（96行。5-7）、[internal/prompt/builtin.md:506-512](../../../../internal/prompt/builtin.md#L506-L512)（7行）
 - **PR #267（人間が pane で直接続けるあいだ continuo が手を出さない Status を足す）がマージされると増える行**（`gh pr diff 267` の hunk の見出しから）: design-review.md が +53（`@@ -80,6 +80,59 @@`）、worker-briefing/SKILL.md が +3・+83・+1（`@@ -195,8 +195,11 @@` / `@@ -253,6 +256,89 @@` / `@@ -345,6 +431,7 @@`）、builtin.md が +14・+11、CLAUDE.md が +1
 
 ---

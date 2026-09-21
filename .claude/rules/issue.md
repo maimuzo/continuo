@@ -214,7 +214,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外にも、エージェントが「何をしたか」を1件書く。**
-組み込みの指示書（[internal/prompt/builtin.md:1087-1109](../../internal/prompt/builtin.md#L1087-L1109) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:1088-1110](../../internal/prompt/builtin.md#L1088-L1110) の 7-2）が、
 `review` か `blocked` を出した代表以外の issue へ、その issue で何をしたかを書かせている。
 **それでも、人間が代表の pull request を見て確かめること。**そのコメントを書くのはエージェント自身で、中身を機械は確かめていない。
 
