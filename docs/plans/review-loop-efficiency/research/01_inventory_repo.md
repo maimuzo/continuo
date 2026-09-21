@@ -143,8 +143,8 @@
 | [internal/scaffold/ci_template.go:83](../../../../internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](../../../../internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](../../../../.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
 | [internal/prompt/builtin.md:173-192](../../../../internal/prompt/builtin.md#L173-L192) と [internal/prompt/builtin.md:263-279](../../../../internal/prompt/builtin.md#L263-L279) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
 | [docs/FAQ.md:201-250](../../../../docs/FAQ.md#L201-L250) | 利用者が自分の CLAUDE.md に書く決まりの例 | 「この2つの目印を、機械が数えます。」 | 利用者向け |
-| [docs/plans/continuo_design.md:10772-10851](../../../../docs/plans/continuo_design.md#L10772-L10851)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
-| [docs/plans/continuo_design.md:11097-11098](../../../../docs/plans/continuo_design.md#L11097-L11098) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
+| [docs/plans/continuo_design.md:11139-11219](../../../../docs/plans/continuo_design.md#L11139-L11219)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
+| [docs/plans/continuo_design.md:11465-11466](../../../../docs/plans/continuo_design.md#L11465-L11466) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
 
 **機械が周回と重大度を見ていない根拠。**パターン `周目|回目|round|Critical|High|severity|対応表`、
 対象は block-merge-without-review.py・review-gate.yml・check-release-ready.sh・ci_template.go・test_block_merge_without_review.py・test_marker_pattern_parity.py、コミット `df36f9d7` で **0行**だった。
