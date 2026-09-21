@@ -171,13 +171,10 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 gh pr comment <番号> --body-file <ファイル>
 ```
 
-**`--body` に直接書くと、投稿そのものが拒否されることがある。**
-[.claude/hooks/block-merge-without-review.py](../../hooks/block-merge-without-review.py) の `MERGE_RE` は
-**Bash のコマンド文字列のどこにあっても `gh pr merge <数字>` / `gh pr ready <数字>` に当たる。**
-レビュー本文にその形の例を1つ書くと、**`gh pr comment … --body "…"` というコマンド全体が当たって止まる。**
-
-**heredoc でファイルを作る場合も同じである。**heredoc の中身も Bash のコマンド文字列の一部だからである。
-**だから Write ツールで書き出す。**`allowed-tools` に `Write` が入っているのはそのためである。
+**`--body` に直接書くと、本文が長いときに shell の引数の上限へ当たる。**
+**また、レビュー本文には `#` や `` ` `` や `$` が普通に出てくるので、quote の取り違えで中身が変わる。**
+**だから Write ツールでファイルへ書き出し、`--body-file` で渡す。**
+`allowed-tools` に `Write` が入っているのはそのためである。
 
 **数える条件は写さない。**[CLAUDE.md](../../../CLAUDE.md) の「PR を出すときの絶対条件」にある。
 **写すと食い違う。**

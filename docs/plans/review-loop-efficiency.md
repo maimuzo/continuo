@@ -78,7 +78,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/rules/design-review.md:1-248](../../.claude/rules/design-review.md#L1-L248) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-311](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L311) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
-| [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
+| `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
 | [internal/prompt/builtin.md:104-194](../../internal/prompt/builtin.md#L104-L194) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
@@ -367,7 +367,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/rules/reporting.md](../../.claude/rules/reporting.md) | **maimuzo-chat-response プラグイン。**このプラグインは本文だけを持ち、hook は持たない |
 | [.claude/rules/release.md](../../.claude/rules/release.md) | **このリポジトリの skill として作り直す**（`release`） |
 | 設計レビューと実装レビューの回し方 | **builtin.md。**`maimuzo-dev-core` への review-loop スキルの新設は取りやめ（人間の決定） |
-| [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) | **削除。**必ずレビューを通すことは CI で担保する |
+| `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） | **削除。**必ずレビューを通すことは CI で担保する |
 | [.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) | **maimuzo-chat-response-hook-clarity プラグインを新設** |
 | [.claude/hooks/check-verified-commands.py](../../.claude/hooks/check-verified-commands.py) | **maimuzo-chat-response-hook-verified-commands プラグインを新設** |
 | メモリ（`~/.claude/projects/（このリポジトリ）/memory/`） | **上のどれかへ移したうえで、全部消す** |

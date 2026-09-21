@@ -261,15 +261,17 @@ review-result          ← 改名前の名前。入れ替えるまでこのま�
 （**入れ直す手順**は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
 `checks` は全件置き換えなので、いまの分を読んでから足すこと。）
 
-**条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+**条件は2箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
 
 | どこ | 何を止めるか |
 | --- | --- |
-| [.claude/hooks/block-merge-without-review.py](../.claude/hooks/block-merge-without-review.py) | AI の手元の `gh pr merge` / `gh pr ready` |
 | [.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) | PR のマージ |
 | [scripts/check-release-ready.sh](../scripts/check-release-ready.sh) | タグを打つこと |
 
-**「前の空白文字」に何を含めるかも、3箇所で同じにしてある。**
+**AI の手元で `gh pr merge` / `gh pr ready` を止める hook も在ったが、2026-09-21 に廃止した。**
+**branch の保護設定で `enforce_admins` を有効にし、admin も `code-review-result` を素通りできなくしたためである。**
+
+**「前の空白文字」に何を含めるかも、2箇所で同じにしてある。**
 **半角空白・タブ・CR・LF の4つだけである**（`[ \t\r\n]*`）。全角空白 U+3000 や NBSP U+00A0 は含めない。
 `\s` は使わない。**Python の `re` と jq（Oniguruma）で当たる範囲が違う**ので、
 どちらに寄せてももう一方とずれる（実測: 2026-09-02。全角空白を前に置いたコメントを、

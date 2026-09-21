@@ -13,13 +13,15 @@
 # **判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。**
 # 揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。
 #
-# **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、2枚目の仕掛けである。**
-# 1枚目は [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) で、
-# AI の手元で `gh pr merge` / `gh pr ready` を実行の前に止める。
+# **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、1枚目の仕掛けである。**
+# もう1枚は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) で、タグを打つ前に止める。
 #
-# **hook だけでは足りない。**hook に渡ってくるのはコマンドの文字列1本だけで、
-# **そこから PR 番号を当てている。**シェルは同じことを何通りにも書けるので、当て続けることになる。
+# **以前は AI の手元で `gh pr merge` / `gh pr ready` を止める hook も在ったが、2026-09-21 に廃止した。**
+# hook に渡ってくるのはコマンドの文字列1本だけで、**そこから PR 番号を当てていた。**
+# シェルは同じことを何通りにも書けるので、当て続けることになる。
 # **CI の中なら番号は確実に分かる**（`github.event.pull_request.number`）。
+# **branch の保護設定で `enforce_admins` を有効にしたので、admin もこの検査を素通りできない。**
+# それで hook が受け持っていたぶんも、ここで止まるようになった。
 #
 # **`ci.yml` に足してはならない。**理由は2つある。
 #   一、`types` は workflow 単位でしか書けない。`ready_for_review` を足すと
@@ -254,11 +256,11 @@ jobs:
           #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
           #       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
           #
-          # **`\s` を使わない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
-          # 全角空白 U+3000 を前に置いた本文が、ここだけ通って hook で落ちる（2026-09-02 に実測）。
+          # **`\s` を使わない。**engine によって当たる範囲が違い、
+          # 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
           # **当たる文字を並べて書く。**`[ \t\r\n]*` の4文字だけである。
-          # この並びは .claude/hooks/block-merge-without-review.py の MARKER_SPACE_CLASS と
-          # scripts/check-release-ready.sh の同じ並びに、1文字ずつ揃えてある。
+          # この並びは scripts/check-release-ready.sh の同じ並びに、1文字ずつ揃えてある
+          # （**正本はあちらである**）。
           # **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
           #
           # **`--slurp` は `--jq` と併用できない**（gh 2.97 で確認）。

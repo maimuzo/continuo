@@ -424,20 +424,26 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 **既に draft を外してしまったものは、`gh pr ready --undo` で戻してからレビューする。**
 
-**この規則は機械で止める。3箇所で止まる。**
+**この規則は機械で止める。2箇所で止まる。**
 
 | どこ | いつ止まるか |
 | --- | --- |
-| [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
 | [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
-**3つとも数える条件は同じである。**
+**2つとも数える条件は同じである。**
 
 - **目印がコメントの本文の先頭にあること**（前に空白文字があってもよい）。**途中に書いたものは数えない**
 - **投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれかであること**
 
-**CI は hook より確かである。**hook はコマンドの文字列から PR 番号を当てているが、
+**2026-09-21 まで、3枚目として `.claude/hooks/block-merge-without-review.py` が在った。**
+`gh pr merge` と `gh pr ready` を、AI の手元で**実行する前に**止める hook である。**廃止した。**
+
+**廃止できた理由は1つである。**branch の保護設定で **`enforce_admins` を有効にした**（2026-09-21）。
+**repository の管理者も、必須の検査が緑にならないとマージできない。**
+**それまでは管理者だけが赤いままマージできたので、CI は「最後の門」になれていなかった。**
+
+**CI のほうが確かである。**hook はコマンドの文字列から PR 番号を当てていたが、
 **CI は `github.event.pull_request.number` で受け取る。**書き方を変えても外れない。
 
 **結果を貼ったら `gh pr ready <番号>` を打つ。**`ready_for_review` が飛んで CI の検査が回り直し、緑になる。
@@ -446,10 +452,11 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 **draft を ready にしたときにしか起きない**ので、`gh pr ready <番号>` を打っても何も回らない。
 **その場合は `gh run rerun` で回し直す**（手順は [.claude/skills/pr-review-and-merge/SKILL.md](.claude/skills/pr-review-and-merge/SKILL.md) の段5）。
 
-**規則に書くだけでは守られない。**
-**人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
-**AI が自分でその環境変数を置いてはならない。**
-**この逃がし口は hook にしか効かない。**CI は環境変数を見ないので、**貼るまで赤のままである。**
+**逃がし口は無い。**
+**かつては環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` で hook を通せたが、その hook ごと廃止した。**
+**CI は環境変数を見ない。**`enforce_admins` を有効にしたので、**管理者も素通りできない。**
+**急ぎで通したいときは、`enforce_admins` を一時的に戻すしかない。**
+**その操作は人間が行う。AI が自分で戻してはならない。**
 
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
@@ -462,7 +469,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 **なぜか。**メインエージェントが渡す確認コマンドが、目印を**本文のどこかに含むか**で数えると、
 **進捗のコメントの本文中に手順の説明として入った同じ文字列を1件と数え、レビュー未実施のまま通る。**
 
-**数え方を自分で書き直してはならない。**数える条件は上の3箇所の実装が持っている。
+**数え方を自分で書き直してはならない。**数える条件は上の2箇所の実装が持っている。
 **手で書いた jq は、投稿者の絞り込みか、ページ送りか、先頭の空白の扱いのどれかで必ずずれる**
 （実例と、代わりに見るもの（`gh pr view <番号> --json mergeable,mergeStateStatus`）は
 [.claude/skills/pr-review-and-merge/SKILL.md](.claude/skills/pr-review-and-merge/SKILL.md) の

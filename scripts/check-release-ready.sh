@@ -90,15 +90,15 @@ ng=0
 #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
 #       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
 #
-# **この条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
-#   .claude/hooks/block-merge-without-review.py … 手元の gh pr merge / gh pr ready を止める
-#   .github/workflows/review-gate.yml           … PR のマージを止める
-#   ここ                                        … タグを打つのを止める
+# **この条件は2箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+#   .github/workflows/review-gate.yml … PR のマージを止める
+#   ここ                              … タグを打つのを止める
+# **この並びの正本は、ここである。**
+# （2026-09-21 まで .claude/hooks/block-merge-without-review.py が正本だったが、その hook は廃止した）
 #
-# **`\s` を使わない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
-# 全角空白 U+3000 を前に置いた本文が、jq 側だけ通る（2026-09-02 に実測）。
+# **`\s` を使わない。**engine によって当たる範囲が違い、
+# 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
 # **当たる文字を並べて書く。**`[ \t\r\n]*` の4文字だけである。
-# この並びは block-merge-without-review.py の MARKER_SPACE_CLASS と1文字ずつ同じであること。
 # **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
 review_of() {
 	gh pr view "$1" --json comments --jq '

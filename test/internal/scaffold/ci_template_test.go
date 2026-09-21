@@ -92,13 +92,12 @@ func TestCITemplate_目印が組み込みと揃っている(t *testing.T) {
 	}
 }
 
-// 目的: 目印を数える条件が、雛形の中で既存の3箇所と1文字も違わないことを確かめる。
+// 目的: 目印を数える条件が、雛形の中で既存の2箇所と1文字も違わないことを確かめる。
 //
-// **`\s` を使ってはならない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
+// **`\s` を使ってはならない。**engine によって当たる範囲が違い、
 // 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
 // **当たる文字を並べて書く。**この並びは
-// .claude/hooks/block-merge-without-review.py の MARKER_SPACE_CLASS と、
-// .github/workflows/review-gate.yml と、scripts/check-release-ready.sh に揃えてある。
+// scripts/check-release-ready.sh（**正本**）と .github/workflows/review-gate.yml に揃えてある。
 //
 // 与える情報: scaffold.CITemplate() の全文。
 // 成功条件: 目印の判定が「先頭 + 並べた空白文字」の形で書かれ、`\s` が1つも無いこと。

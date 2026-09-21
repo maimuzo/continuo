@@ -307,6 +307,7 @@ GET だけの `api` など）、`continuo version`。これらを `&&` `||` `|` 
 | **`Stop` hook への `check-open-tasks.py` の登録** | **未実施** |
 
 **実測**（2026-09-21、[.claude/settings.json](../../.claude/settings.json)）。
-**このファイルが持つのは `PreToolUse` 1本（`block-merge-without-review.py`）だけである。**
+**このファイルは hook を1本も持たない。**
 `Stop` の2本は `maimuzo-chat-response-hook-verified-commands` と
 `maimuzo-chat-response-hook-clarity` のプラグインが張るので、このファイルには書かれていない。
+`PreToolUse` に在った `block-merge-without-review.py` は、同じ日に廃止した。
