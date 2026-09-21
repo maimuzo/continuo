@@ -79,7 +79,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
-| [internal/prompt/builtin.md:104-213](../../internal/prompt/builtin.md#L104-L213) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
+| [internal/prompt/builtin.md:104-214](../../internal/prompt/builtin.md#L104-L214) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
 | [.claude/settings.json](../../.claude/settings.json) の hooks | 返答の形を検査する Stop hook 2本（`.claude/hooks/check-reply-clarity.py` と `check-verified-commands.py`）。**プラグインではない** |
@@ -318,7 +318,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書**（[internal/prompt/builtin.md:443-448](../../internal/prompt/builtin.md#L443-L448) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
+**利用者向けの指示書**（[internal/prompt/builtin.md:490-495](../../internal/prompt/builtin.md#L490-L495) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
 
 
 ## 8. 決まったこと: 3つの行き先へ振り分ける
@@ -337,7 +337,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:461-463](../../internal/prompt/builtin.md#L461-L463) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:479-481](../../internal/prompt/builtin.md#L479-L481) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
@@ -374,6 +374,20 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **hook は1本につきプラグイン1つにする。**副作用が強いので、要らなくなったらプラグインごと外せる形にする。
 
+**`block-merge-without-review.py` を消す前に、その穴は塞いだ。**
+**2026-09-21 に branch の保護設定で `enforce_admins` を有効にした**（人間の決定）。
+**repository の管理者も、必須の検査8本が緑にならないとマージできない。**
+それまでは管理者だけが赤いままマージできたので、CI は「最後の門」になれていなかった。
+**設定の手順と確認は [CONTRIBUTING.md](../../CONTRIBUTING.md) に、
+外れていないことの検査は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) にある。**
+
+**規則をリポジトリから消すと、clone した人には見えなくなる。それでよい**（人間の決定、2026-09-21）。
+**このリポジトリは OSS だが、`.claude/` の規則は maimuzo の開発環境向けであって、
+clone した人が従うものではない。**外部の貢献者が読むのは [CONTRIBUTING.md](../../CONTRIBUTING.md) である。
+
+**既存の `maimuzo-chat-response` が持っている Stop hook（`hooks/check-reply-structure.py`。5段構成の検査）は廃止する。**
+`.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み**）が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**
+
 ### 8-2a. `.claude/rules/release.md` は skill にせず、消す
 
 **言いたいこと。**この1本だけは、行き先を skill から削除へ変えた。
@@ -391,20 +405,6 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | **正を2つにしない** | 規則自身が「**手順の正はあちらであり、この規則は手順を持たない。同じ工程を2つの文書が持つと、緩いほうへ流れる**」と書いている。**skill にしても、この理由はそのまま当たる** |
 | **[docs/releasing.md](../releasing.md) は公開の文書である** | [SECURITY.md](../../SECURITY.md) からも辿れる。**利用者への約束の裏付けがそこにある**ので、内輪の skill へ移すと辿れなくなる |
 | **skill は「呼ばれたときに読むもの」である** | リリースは人間が始める作業で、[docs/releasing.md](../releasing.md) を開くところから始まる。**skill を挟む段が増えるだけである** |
-
-**`block-merge-without-review.py` を消す前に、その穴は塞いだ。**
-**2026-09-21 に branch の保護設定で `enforce_admins` を有効にした**（人間の決定）。
-**repository の管理者も、必須の検査8本が緑にならないとマージできない。**
-それまでは管理者だけが赤いままマージできたので、CI は「最後の門」になれていなかった。
-**設定の手順と確認は [CONTRIBUTING.md](../../CONTRIBUTING.md) に、
-外れていないことの検査は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) にある。**
-
-**規則をリポジトリから消すと、clone した人には見えなくなる。それでよい**（人間の決定、2026-09-21）。
-**このリポジトリは OSS だが、`.claude/` の規則は maimuzo の開発環境向けであって、
-clone した人が従うものではない。**外部の貢献者が読むのは [CONTRIBUTING.md](../../CONTRIBUTING.md) である。
-
-**既存の `maimuzo-chat-response` が持っている Stop hook（`hooks/check-reply-structure.py`。5段構成の検査）は廃止する。**
-`.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み**）が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**
 
 ### 8-3. worker-briefing は、書き直してから移す
 

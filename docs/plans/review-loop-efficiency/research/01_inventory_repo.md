@@ -60,8 +60,8 @@
 | [.claude/rules/design-review.md:241-248](../../../../.claude/rules/design-review.md#L241-L248) | 設計レビューを飛ばしてよい場合 | 「迷ったら飛ばさない。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:93-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L131) | `/code-review <PR 番号>` の叩き方。プロンプトを足せない。`ultra` は人間の指示があるときだけ | 「`/code-review` は自由なプロンプトを足せない。」 | 開発者向け |
 | [internal/prompt/builtin.md:104-133](../../../../internal/prompt/builtin.md#L104-L133) | continuo が起動したエージェントの計画レビュー（3-2） | 「敵対的レビューの subagent に計画をレビューさせる」 | 利用者向け |
-| [internal/prompt/builtin.md:284-291](../../../../internal/prompt/builtin.md#L284-L291) | PR のレビュー（3-6）。**観点は具体的に書かず、エージェントに書き換えさせる** | 「差分に当たる観点へ書き換えて渡してください。」 | 利用者向け |
-| [internal/prompt/builtin.md:197](../../../../internal/prompt/builtin.md#L197) と [internal/prompt/builtin.md:1192](../../../../internal/prompt/builtin.md#L1192) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
+| [internal/prompt/builtin.md:319-328](../../../../internal/prompt/builtin.md#L319-L328) | PR のレビュー（3-6）。**観点は具体的に書かず、エージェントに書き換えさせる** | 「差分に当たる観点へ書き換えて渡してください。」 | 利用者向け |
+| [internal/prompt/builtin.md:198](../../../../internal/prompt/builtin.md#L198) と [internal/prompt/builtin.md:1214](../../../../internal/prompt/builtin.md#L1214) | どの subagent に頼むかは WORKFLOW.md の本文。既定は general-purpose | 「どの subagent へレビューを頼むか（書いていなければ general-purpose）」 | 利用者向け |
 | [internal/scaffold/template.go:281-287](../../../../internal/scaffold/template.go#L281-L287) | 雛形の `### レビューを頼む subagent`。名前を書かせる案内だけ | 「このリポジトリで使う名前を書いてください。」 | 利用者向け |
 
 ### 2-2. レビュワーへの指示
@@ -79,7 +79,7 @@
 | [.claude/rules/design-review.md:143-149](../../../../.claude/rules/design-review.md#L143-L149) | 前の周の対応表を渡す。`/code-review` では渡せないので、受け取る側が突き合わせる | 「`/code-review` では渡せない。」 | 開発者向け |
 | [.claude/skills/pr-review-and-merge/SKILL.md:99-120](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99-L120) | 2-6 と 2-7 は `/code-review` へ渡せない。根拠・分類・数えた件数が無くても落とさず、受け取る側で補う | 「落とすのではなく、こちらで補って対応表に載せる。」 | 開発者向け |
 | [.claude/rules/reporting.md:564-583](../../../../.claude/rules/reporting.md#L564-L583) | worker の報告（レビューを含む）を落とす条件と、読み替える条件 | 「同じ誤りが他に無いかを数えていない指摘」 | 開発者向け |
-| [internal/prompt/builtin.md:177-185](../../../../internal/prompt/builtin.md#L177-L185) | 計画レビューへ渡す文面（4観点・根拠・読むだけ）。**徹底度・数える・分類・重大度の指示は無い** | 「計画の穴を探してください。」 | 利用者向け |
+| [internal/prompt/builtin.md:187-196](../../../../internal/prompt/builtin.md#L187-L196) | 計画レビューへ渡す文面（4観点・根拠・読むだけ）。**徹底度・数える・分類・重大度の指示は無い** | 「計画の穴を探してください。」 | 利用者向け |
 
 ### 2-3. 指摘を受けた側（直す側）への指示
 
@@ -97,8 +97,8 @@
 | [.claude/skills/pr-review-and-merge/SKILL.md:168-188](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L168-L188)（段4） | CLAUDE.md の記録フローに従う（要点の写しを持つ） | 「ここには写さない。」 | 開発者向け |
 | [.claude/rules/plan-file.md:93-137](../../../../.claude/rules/plan-file.md#L93-L137) | 設計文書へ行を足したら、リンクを全部検算する（直しが持ち込む欠陥の予防） | 「8周のレビューのうち3周が、同じ原因である。」 | 開発者向け |
 | [internal/prompt/builtin.md:131](../../../../internal/prompt/builtin.md#L131) | 指摘を全部直そうとせず、1件ずつ判断する | 「1件ずつ「直すのが妥当か」を判断する」 | 利用者向け |
-| [internal/prompt/builtin.md:189-203](../../../../internal/prompt/builtin.md#L189-L203) | Critical と High は原則直す。判断票の5列 | 「Critical と High は原則すべて直します。」 | 利用者向け |
-| [internal/prompt/builtin.md:443-448](../../../../internal/prompt/builtin.md#L443-L448)（5-2） | issue に無い実装は根拠をレビュワーへ。否定されたら実装を変える | 「根拠を通すために説得しないでください。」 | 利用者向け |
+| [internal/prompt/builtin.md:202-227](../../../../internal/prompt/builtin.md#L202-L227) | 判断票の5列と、その見本 | 「判断票の形。**1行目と2行目の並びを変えないでください。**」。**「Critical と High は原則すべて直す」に当たる文は、builtin.md に1文字も無い**（2026-09-22 に `Critical と High` と `原則` で数えて0件。origin/main でも0件） | 利用者向け |
+| [internal/prompt/builtin.md:490-495](../../../../internal/prompt/builtin.md#L490-L495)（5-2） | issue に無い実装は根拠をレビュワーへ。否定されたら実装を変える | 「**レビュワーに否定されたら、実装を変えてください。**判定のしかたは 5-6 にあります。」 | 利用者向け |
 
 ### 2-4. 収束の定義・回数・止まる条件
 
@@ -141,10 +141,10 @@
 | [.claude/skills/pr-review-and-merge/SKILL.md:133-166](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L133-L166)（段3） | 貼るコメントの形（目印・題名・周目・対応表）。`--body-file` で貼る | 「何周目かと対応表を同じコメントに入れる」 | 開発者向け |
 | [CONTRIBUTING.md:133-150](CONTRIBUTING.md#L133-L150) | 外部の貢献者向けの2つの検査と数える条件 | 「レビュー結果が貼られていない PR は、CI が落とします。」 | 開発者向け（外部の貢献者） |
 | [internal/scaffold/ci_template.go:83](../../../../internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](../../../../internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](../../../../.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
-| [internal/prompt/builtin.md:192-211](../../../../internal/prompt/builtin.md#L192-L211) と [internal/prompt/builtin.md:293-309](../../../../internal/prompt/builtin.md#L293-L309) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
+| [internal/prompt/builtin.md:202-212](../../../../internal/prompt/builtin.md#L202-L212) と [internal/prompt/builtin.md:332-348](../../../../internal/prompt/builtin.md#L332-L348) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
 | [docs/FAQ.md:201-250](../../../../docs/FAQ.md#L201-L250) | 利用者が自分の CLAUDE.md に書く決まりの例 | 「この2つの目印を、機械が数えます。」 | 利用者向け |
-| [docs/plans/continuo_design.md:11179-11259](../../../../docs/plans/continuo_design.md#L11179-L11259)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
-| [docs/plans/continuo_design.md:11505-11506](../../../../docs/plans/continuo_design.md#L11505-L11506) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
+| [docs/plans/continuo_design.md:11201-11281](../../../../docs/plans/continuo_design.md#L11201-L11281)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
+| [docs/plans/continuo_design.md:11527-11528](../../../../docs/plans/continuo_design.md#L11527-L11528) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
 
 **機械が周回と重大度を見ていない根拠。**パターン `周目|回目|round|Critical|High|severity|対応表`、
 対象は block-merge-without-review.py・review-gate.yml・check-release-ready.sh・ci_template.go・test_block_merge_without_review.py・test_marker_pattern_parity.py、コミット `df36f9d7` で **0行**だった。
@@ -181,12 +181,12 @@
 
 | 検索パターン | 対象パス | 出たもの |
 | --- | --- | --- |
-| `Critical とは\|High とは\|重大度\|深刻さ\|severity\|Severity` | CLAUDE.md・.claude/・builtin.md・scaffold/template.go・docs/FAQ.md・CONTRIBUTING.md | **0件。**重さの定義そのものは無く、[internal/prompt/builtin.md:667-672](../../../../internal/prompt/builtin.md#L667-L672) の4段の表が、この pull request で入った（2026-09-22 に数え直した） |
+| `Critical とは\|High とは\|重大度\|深刻さ\|severity\|Severity` | CLAUDE.md・.claude/・builtin.md・scaffold/template.go・docs/FAQ.md・CONTRIBUTING.md | **0件。**重さの定義そのものは無く、[internal/prompt/builtin.md:685-690](../../../../internal/prompt/builtin.md#L685-L690) の4段の表が、**この pull request の前から origin/main に在る**（2026-09-22 に数え直した） |
 | `Critical(:\| =\|とする\|に当たる\|の基準)\|レベルの(決め方\|基準\|定義)\|レベルを決め\|重さの(基準\|定義)\|Info` | CLAUDE.md・.claude/・builtin.md | [CLAUDE.md:539](../../../../CLAUDE.md#L539) の対応表の列の定義1件だけ |
 
 対象コミットはどちらも `df36f9d7`。
 
-- **レビュワーへレベルを付けさせる指示も無い。**設計レビューの4観点（[.claude/rules/design-review.md:101-106](../../../../.claude/rules/design-review.md#L101-L106)）にも、builtin.md の計画レビューの文面（[internal/prompt/builtin.md:179-185](../../../../internal/prompt/builtin.md#L179-L185)）にも、レベルの語が入っていない
+- **レビュワーへレベルを付けさせる指示も無い。**設計レビューの4観点（[.claude/rules/design-review.md:101-106](../../../../.claude/rules/design-review.md#L101-L106)）にも、builtin.md の計画レビューの文面（[internal/prompt/builtin.md:187-196](../../../../internal/prompt/builtin.md#L187-L196)）にも、レベルの語が入っていない
 - **[CLAUDE.md:539](../../../../CLAUDE.md#L539) は Info も挙げるが、収まったあとの表（[CLAUDE.md:577-583](../../../../CLAUDE.md#L577-L583)）は Info の扱いを書いていない**
 - worker-briefing 2-5 の段4（[.claude/skills/worker-briefing/SKILL.md:199](../../../../.claude/skills/worker-briefing/SKILL.md#L199)）の「いちばん重いレベル」も、定義を指していない
 - **`/code-review` の出力にどのレベル名が出るかは、測っていない**（実行していない）。pr-review-and-merge/SKILL.md に、出力のレベルを読み替える記述は無い（93-131行を読んだ）
@@ -264,7 +264,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 | **実装レビューの道具が2通り** | [CLAUDE.md:396](../../../../CLAUDE.md#L396)「必ず `/code-review` でレビューする。」と [.claude/rules/design-review.md:15](../../../../.claude/rules/design-review.md#L15) の段7 | [.claude/rules/design-review.md:115-118](../../../../.claude/rules/design-review.md#L115-L118)「実装レビューでは `maimuzo-from-ecc:architect` を使わない。…Bash を持つエージェント（`general-purpose` など）を立てること。」。**どちらを毎周使うかを決めた箇所は無い**（[.claude/skills/pr-review-and-merge/SKILL.md:119-120](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L119-L120) は両方の場合を書き分けるだけ） |
 | **前の周の対応表を渡す、と渡せない** | [.claude/rules/design-review.md:143-144](../../../../.claude/rules/design-review.md#L143-L144)「渡さないと同じものが必ずまた挙がり、周だけが増える。」 | [.claude/rules/design-review.md:146](../../../../.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」。**必須の道具のほうで、規則自身が挙げた「周だけが増える」条件が毎周成り立つ** |
 | **1回で全部挙げさせる、と渡せない** | [.claude/skills/worker-briefing/SKILL.md:260](../../../../.claude/skills/worker-briefing/SKILL.md#L260)「まったく同じ結果になるくらい徹底的に洗い出すこと。」 | [.claude/skills/pr-review-and-merge/SKILL.md:102-103](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L102-L103)「2-6（1回で全部挙げる）と 2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。」 |
-| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:201](../../../../internal/prompt/builtin.md#L201) の見本「直さない \| この issue の範囲外」（Low） | [CLAUDE.md:545-546](../../../../CLAUDE.md#L545-L546)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
+| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:227](../../../../internal/prompt/builtin.md#L227) の見本「直さない \| この issue の範囲外」（Low） | [CLAUDE.md:545-546](../../../../CLAUDE.md#L545-L546)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
 
 ---
 
@@ -285,7 +285,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 測ったコマンドは `sed -n '<開始>,<終了>p' <ファイル> | wc -l` と `| wc -c`、全体は `wc -l` / `wc -c`。
 
 - **レビューを頼まれた worker は、worker-briefing/SKILL.md を全部（490行）読む前提である**（[.claude/skills/worker-briefing/SKILL.md:26](../../../../.claude/skills/worker-briefing/SKILL.md#L26) が「書いてあることを全部守れ」と書かせる）
-- **利用者向け**は [internal/prompt/builtin.md:104-213](../../../../internal/prompt/builtin.md#L104-L213)（91行）、[internal/prompt/builtin.md:284-309](../../../../internal/prompt/builtin.md#L284-L309)（26行）、[internal/prompt/builtin.md:443-448](../../../../internal/prompt/builtin.md#L443-L448)（6行）
+- **利用者向け**は [internal/prompt/builtin.md:104-214](../../../../internal/prompt/builtin.md#L104-L214)（111行）、[internal/prompt/builtin.md:293-318](../../../../internal/prompt/builtin.md#L293-L318)（26行）、[internal/prompt/builtin.md:490-495](../../../../internal/prompt/builtin.md#L490-L495)（6行）
 - **PR #267（人間が pane で直接続けるあいだ continuo が手を出さない Status を足す）がマージされると増える行**（`gh pr diff 267` の hunk の見出しから）: design-review.md が +53（`@@ -80,6 +80,59 @@`）、worker-briefing/SKILL.md が +3・+83・+1（`@@ -195,8 +195,11 @@` / `@@ -253,6 +256,89 @@` / `@@ -345,6 +431,7 @@`）、builtin.md が +14・+11、CLAUDE.md が +1
 
 ---
