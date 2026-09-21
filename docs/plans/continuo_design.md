@@ -10913,7 +10913,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 | `design-review-result` | `<!-- design-review-result -->` | **紐づく issue のコメント** |
 | `code-review-result` | `<!-- code-review-result -->` | **その pull request のコメント** |
 
-**数える条件は、既存の3箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
+**数える条件は、既存の2箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
 **揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。**
 
 **4通りの組み合わせと終了コード。**

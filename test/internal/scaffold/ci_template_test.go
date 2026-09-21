@@ -116,7 +116,7 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("雛形に目印の判定 %s がありません（条件が既存の3箇所とずれています）", want)
+			t.Errorf("雛形に目印の判定 %s がありません（条件が既存の2箇所とずれています）", want)
 		}
 	}
 
@@ -145,8 +145,8 @@ const reviewGatePath = "../../../.github/workflows/review-gate.yml"
 // **名乗っているだけでは揃わない。**同じことが既に1度起きた（2026-09-02、
 // 目印の前に全角空白を置いたコメントを、CI は数え、hook は数えなかった）。
 //
-// **.claude/hooks/tests/test_marker_pattern_parity.py が3箇所を見張っているが、
-// あちらは code-review-result しか見ない。**雛形は4箇所目であり、
+// **.claude/hooks/tests/test_marker_pattern_parity.py が2箇所を見張っているが、
+// あちらは code-review-result しか見ない。**雛形は3箇所目であり、
 // design-review-result はあちらの検査の対象に入っていない。**ここで両方を見る。**
 //
 // 与える情報: scaffold.CITemplate() と .github/workflows/review-gate.yml の全文。

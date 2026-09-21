@@ -168,7 +168,15 @@ def main():
     bodies = [prefix + MARKER for _, prefix in PREFIXES] + [b for _, b in NON_MARKER_BODIES]
 
     if shutil.which("jq") is None:
-        print("--  jq が無いので、実際に当ててみる段は飛ばした")
+        # **飛ばして緑にしてはならない。**
+        # 飛ばすと、2つの式を同時に緩めても段1（互いに同じか）と段2（`\s` を使っていないか）を
+        # 通ってしまい、**手元では `3 件中 3 件が想定どおり` と出て「揃っている」と読める。**
+        # このテストが生まれた原因（2026-09-02 に全角空白で2つの実装が割れた件）は、
+        # **当てて初めて分かる。**jq はこのリポジトリの検査に必須（`gh --jq` も使う）なので、
+        # 無い環境を緑にする理由が無い。
+        ran += 1
+        ng += 1
+        print("NG  jq が無いので、当てて確かめられない（jq を入れること）")
     elif jq_release is None or jq_ci is None:
         print("--  式を取り出せなかったので、実際に当ててみる段は飛ばした")
     else:

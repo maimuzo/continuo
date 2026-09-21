@@ -165,6 +165,27 @@ for p in ${prs}; do
 	fi
 done
 
+# **管理者にも検査が課されているか。**
+# **ここが false だと、上で数えたレビュー結果は、あってもなくてもマージを止められない。**
+# 管理者が「検査を待たずにマージする」を選べてしまうためである。
+# **外したことはリポジトリのファイルに1文字も残らないので、ここで見るしかない。**
+# 設定の手順は CONTRIBUTING.md の「管理者にも検査を課す」にある。
+echo ""
+enforce="$(gh api "repos/{owner}/{repo}/branches/main/protection" --jq '.enforce_admins.enabled' 2>/dev/null || echo "読めない")"
+case "${enforce}" in
+	true)  echo "管理者にも検査を課す設定 (enforce_admins) = 有効" ;;
+	false)
+		echo "管理者にも検査を課す設定 (enforce_admins) = **無効**"
+		echo "  → 管理者が赤いままマージできます。CONTRIBUTING.md の「管理者にも検査を課す」を実施してください"
+		ng=$((ng + 1))
+		;;
+	*)
+		echo "管理者にも検査を課す設定 (enforce_admins) = 読めませんでした"
+		echo "  → 管理権限が要ります。読めないまま通すと、外れていても気づけません"
+		ng=$((ng + 1))
+		;;
+esac
+
 echo ""
 if [ "${ng}" -gt 0 ]; then
 	echo "直すもの ${ng}件"

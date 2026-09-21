@@ -374,10 +374,16 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **hook は1本につきプラグイン1つにする。**副作用が強いので、要らなくなったらプラグインごと外せる形にする。
 
-**`block-merge-without-review.py` を消すと、守りが1枚減る。**
-**この hook は `gh pr merge` と `gh pr ready` を実行する前に止めるが、CI はイベントのあとで赤くするだけである。**
-**admin 権限のマージは、CI が赤くても通る。**
-**消す前に、その穴をどう塞ぐかを人間へ確認すること。**
+**`block-merge-without-review.py` を消す前に、その穴は塞いだ。**
+**2026-09-21 に branch の保護設定で `enforce_admins` を有効にした**（人間の決定）。
+**repository の管理者も、必須の検査8本が緑にならないとマージできない。**
+それまでは管理者だけが赤いままマージできたので、CI は「最後の門」になれていなかった。
+**設定の手順と確認は [CONTRIBUTING.md](../../CONTRIBUTING.md) に、
+外れていないことの検査は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) にある。**
+
+**規則をリポジトリから消すと、clone した人には見えなくなる。それでよい**（人間の決定、2026-09-21）。
+**このリポジトリは OSS だが、`.claude/` の規則は maimuzo の開発環境向けであって、
+clone した人が従うものではない。**外部の貢献者が読むのは [CONTRIBUTING.md](../../CONTRIBUTING.md) である。
 
 **既存の `maimuzo-chat-response` が持っている Stop hook（`hooks/check-reply-structure.py`。5段構成の検査）は廃止する。**
 [.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**

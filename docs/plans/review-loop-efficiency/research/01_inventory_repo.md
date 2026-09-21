@@ -131,7 +131,7 @@
 | --- | --- | --- | --- |
 | [CLAUDE.md:421-454](../../../../CLAUDE.md#L421-L454) | 貼ったことが唯一の証拠。3箇所で止める。数える条件2つ。逃がし口の環境変数 | 「3 を飛ばしたものは、レビューを実施していないものとして扱う。」 | 開発者向け |
 | [CLAUDE.md:535-545](../../../../CLAUDE.md#L535-L545) と [CLAUDE.md:727-729](../../../../CLAUDE.md#L727-L729) | 対応表を PR のコメントへ残す理由。何周目かを書く。設計レビューの回数を PR 本文へ写す | 「回数はレビュー結果のコメントへ書く。」 | 開発者向け |
-| [.claude/hooks/block-merge-without-review.py:212-223](../../../../.claude/hooks/block-merge-without-review.py#L212-L223) | `gh pr merge/ready <番号>` の前に、先頭の目印と投稿者を見る | `if not isinstance(body, str) or not MARKER_RE.match(body):` | 開発者向け |
+| `.claude/hooks/block-merge-without-review.py:212-223`（**2026-09-21 に廃止。**リンクを外した） | `gh pr merge/ready <番号>` の前に、先頭の目印と投稿者を見る | `if not isinstance(body, str) or not MARKER_RE.match(body):` | 開発者向け |
 | [.claude/settings.json:86-95](../../../../.claude/settings.json#L86-L95) | 上の hook を `PreToolUse` の Bash に張る | `"matcher": "Bash"` | 開発者向け |
 | [.github/workflows/review-gate.yml:64-229](../../../../.github/workflows/review-gate.yml#L64-L229) | `design-review-result`。断りの目印か、紐づく issue のどれか1件に目印 | `(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->` | 開発者向け |
 | [.github/workflows/review-gate.yml:234-314](../../../../.github/workflows/review-gate.yml#L234-L314) | `code-review-result`。PR のコメントに先頭の目印 | `test("^[ \\t\\r\\n]*<!-- code-review-result -->")` | 開発者向け |
