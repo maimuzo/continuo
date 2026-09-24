@@ -61,7 +61,7 @@ jobs:
   # **この job の名前も変えないこと。**理由は下の `code-review-result` と同じである。
   #
   # **貼る先が issue なのは、設計が issue に書かれるからである**
-  # （[.claude/rules/design-review.md](../../.claude/rules/design-review.md) の段2）。
+  # （[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 3-2「計画を書き、レビューを受ける」）。
   # **PR ができる前に設計を書き終えているので、PR のコメントには置けない。**
   design-review-result:
     runs-on: ubuntu-latest
@@ -148,7 +148,7 @@ jobs:
           # 段3. その issue のどれか1件に、設計のレビュー結果が貼られているか。
           #
           # **1件でよい。**グループでまとめて直す PR では、代表の issue にだけ設計が書かれる
-          # （[.claude/rules/issue.md](../../.claude/rules/issue.md) の「グループ化するときにやること」）。
+          # （`maimuzo-dev-core` の `issue-management` スキルの「グループ化するときにやること」）。
           # **全部に求めると、代表以外へ同じものを貼ることになる。**
           # **1件が読めなくても、残りを見に行く。**`set -e` の下で `gh api` が落ちると
           # step ごと終わるので、**後ろの issue に目印があっても数えない。**
@@ -204,7 +204,7 @@ jobs:
             echo ""
             echo "**通し方。**"
             echo ""
-            echo "1. 設計をサブエージェントにレビューさせる（\`.claude/rules/design-review.md\` の段3）"
+            echo "1. 設計をサブエージェントにレビューさせる（\`internal/prompt/builtin.md\` の 3-2「計画を書き、レビューを受ける」）"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
             echo "3. それを **issue のコメント**として貼る"
             echo "   **1行目を \`<!-- continuo:agent -->\`、2行目を \`<!-- design-review-result -->\` にする**"

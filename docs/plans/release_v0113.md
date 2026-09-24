@@ -41,7 +41,7 @@
 
 ## 4. 判定のしかた
 
-**24件それぞれについて、[.claude/rules/issue.md](../../.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
+**24件それぞれについて、[.claude/rules/issue.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
 
 | 順 | 何を確かめたか |
 | --- | --- |

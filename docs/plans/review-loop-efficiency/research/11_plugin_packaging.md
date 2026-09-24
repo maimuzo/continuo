@@ -24,11 +24,11 @@
   `.claude/settings.json`・`.claude/hooks/`・`.github/workflows/review-gate.yml`・`scripts/check-release-ready.sh`・`CONTRIBUTING.md`・`internal/prompt/builtin.md` と、
   `~/Sources/github/maimuzo-claude-plugins/README.md`・`SETUP_NEW_PROJECT.md`・`.github/workflows/test.yaml` を自分で見つけて読んだ
 - worker-briefing の 2-5（同じものが他に無いかを数える）。件数・検索パターン・範囲を「8」に書いた
-- [~/Sources/github/continuo/.claude/rules/reporting.md:554-562](../../../../.claude/rules/reporting.md#L554-L562) の根拠の付け方。公式文書は URL と原文と訳、手元のファイルはパスと行番号、「無い」は検索パターン・対象パス・対象コミットを付けた
-- [~/Sources/github/continuo/CLAUDE.md:95-118](../../../../CLAUDE.md#L95-L118)（公開してよい情報かを常に判断する）と [~/Sources/github/continuo/CLAUDE.md:286-291](../../../../CLAUDE.md#L286-L291)（不特定多数の環境と maimuzo の環境を混同しない）。後者は、この仕分けの判断そのものに効いた
+- [~/Sources/github/continuo/.claude/rules/reporting.md:554-562](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L554-L562) の根拠の付け方。公式文書は URL と原文と訳、手元のファイルはパスと行番号、「無い」は検索パターン・対象パス・対象コミットを付けた
+- [~/Sources/github/continuo/CLAUDE.md:95-118](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L95-L118)（公開してよい情報かを常に判断する）と [~/Sources/github/continuo/CLAUDE.md:286-291](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L286-L291)（不特定多数の環境と maimuzo の環境を混同しない）。後者は、この仕分けの判断そのものに効いた
 
-**2. 飛ばしてよい段。**[~/Sources/github/continuo/.claude/rules/design-review.md:5-17](../../../../.claude/rules/design-review.md#L5-L17) の9段は issue の実装作業の手順である。この作業は調査で、設計も実装もしないので通らない。
-[~/Sources/github/continuo/CLAUDE.md:120-284](../../../../CLAUDE.md#L120-L284) の hook の検討も、コードを1行も変えないので当たらない。
+**2. 飛ばしてよい段。**[~/Sources/github/continuo/.claude/rules/design-review.md:5-17](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L5-L17) の9段は issue の実装作業の手順である。この作業は調査で、設計も実装もしないので通らない。
+[~/Sources/github/continuo/CLAUDE.md:120-284](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L120-L284) の hook の検討も、コードを1行も変えないので当たらない。
 
 **3. 公開してよくない情報を書きうる場面。**このファイルは PUBLIC のリポジトリに置かれる。
 
@@ -216,7 +216,7 @@ https://code.claude.com/docs/en/skills が2箇所で書いている。
 > 見つけて呼び出すことはできる。**）
 
 **だが呼ぶ保証は無いうえ、こちらから頼む手段も無い。**
-[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md:99](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99) が
+[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99) が
 「`/code-review` は自由なプロンプトを足せない。」と書いている（この行は 01 が挙げたもので、私も原文を開いて確かめた）。
 
 **結論。**レビュワーへ届けたい決まり（重大度の基準・1回で全部挙げさせる指示・前の周の対応表）は、
@@ -363,7 +363,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 観点 | 当てた結果 |
 | --- | --- |
-| **誰に効く必要があるか** | **外部の貢献者にプラグインは効かない。**下の引用のとおり、project scope で commit しても install するまで読み込まれない。しかも [~/Sources/github/continuo/CLAUDE.md:107](../../../../CLAUDE.md#L107) が、プラグインの有効化とマーケットプレイスの登録を「絶対にコミットしないもの」として `.claude/settings.local.json`（`.gitignore` 済み）へ置けと定めている |
+| **誰に効く必要があるか** | **外部の貢献者にプラグインは効かない。**下の引用のとおり、project scope で commit しても install するまで読み込まれない。しかも [~/Sources/github/continuo/CLAUDE.md:107](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L107) が、プラグインの有効化とマーケットプレイスの登録を「絶対にコミットしないもの」として `.claude/settings.local.json`（`.gitignore` 済み）へ置けと定めている |
 | **機械が見ているか** | **目印の決まりはリポジトリ固有である。**`code-review-result` は規則の側に15件あり、CI と hook とリリース前の検査の3箇所が同じ正規表現を持つ（**hook は 2026-09-21 に廃止。いまは2箇所**） |
 | **`/code-review` に届くか** | **rules は届き、skill の本文は届かない**（3章） |
 | **利用者向けか** | [~/Sources/github/continuo/internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) は製品の一部である。`git grep -n -E '\.claude/(rules\|skills)\|worker-briefing\|maimuzo' -- internal/` は、Go の import 以外に1件も返さなかった。**境界は既に切れている** |
@@ -384,18 +384,18 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何（行数） | なぜ移すか |
 | --- | --- |
-| **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の全部**（490行・35,210バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
+| **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の全部**（490行・35,210バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
 | **[~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
-| **[~/Sources/github/continuo/.claude/rules/design-review.md:57-82](../../../../.claude/rules/design-review.md#L57-L82) と [同:124-240](../../../../.claude/rules/design-review.md#L124-L240)**（143行） | 設計を疑う段・根拠を否定できるなら直さない・回す回数・3回で収まらなかったとき。**同じく汎用である** |
-| **[~/Sources/github/continuo/.claude/rules/design-review.md:83-123](../../../../.claude/rules/design-review.md#L83-L123)**（41行。誰にレビューさせるか） | **`maimuzo-from-ecc:architect` を名指ししている**（85行と115行）。**OSS のリポジトリに個人のプラグイン名が書いてある状態そのものなので、プラグイン側へ引き取るのが正しい置き場所である** |
+| **[~/Sources/github/continuo/.claude/rules/design-review.md:57-82](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L82) と [同:124-240](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124-L240)**（143行） | 設計を疑う段・根拠を否定できるなら直さない・回す回数・3回で収まらなかったとき。**同じく汎用である** |
+| **[~/Sources/github/continuo/.claude/rules/design-review.md:83-123](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L83-L123)**（41行。誰にレビューさせるか） | **`maimuzo-from-ecc:architect` を名指ししている**（85行と115行）。**OSS のリポジトリに個人のプラグイン名が書いてある状態そのものなので、プラグイン側へ引き取るのが正しい置き場所である** |
 
 **残す（リポジトリ）。**
 
 | 何（行数） | なぜ残すか |
 | --- | --- |
-| **[~/Sources/github/continuo/CLAUDE.md:394-560](../../../../CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械（**2026-09-21 以降は2箇所**）・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
-| **[~/Sources/github/continuo/.claude/rules/design-review.md:1-56](../../../../.claude/rules/design-review.md#L1-L56)**（56行） | **`<!-- continuo:agent -->` を先頭にする順序**（2件）**と、CI の `design-review-result` の条件がある。**continuo が起動したエージェントの挙動に直結する |
-| **[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md)**（310行） | `block-merge-without-review.py`（**2026-09-21 に廃止**）と `review-gate.yml` と目印を名指しする。**`code-review-result` を含む行が多く、目印を引数にしない限り持ち出せない** |
+| **[~/Sources/github/continuo/CLAUDE.md:394-560](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械（**2026-09-21 以降は2箇所**）・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
+| **[~/Sources/github/continuo/.claude/rules/design-review.md:1-56](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L1-L56)**（56行） | **`<!-- continuo:agent -->` を先頭にする順序**（2件）**と、CI の `design-review-result` の条件がある。**continuo が起動したエージェントの挙動に直結する |
+| **[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)**（310行） | `block-merge-without-review.py`（**2026-09-21 に廃止**）と `review-gate.yml` と目印を名指しする。**`code-review-result` を含む行が多く、目印を引数にしない限り持ち出せない** |
 | **[~/Sources/github/continuo/CONTRIBUTING.md:133-241](../../../../CONTRIBUTING.md#L133-L241)**（109行） | **外部の貢献者だけが読む。**プラグインは効かない（5-0） |
 | **[~/Sources/github/continuo/internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) の 3-2 と 3-6** | **製品の一部である。**利用者の手元で動く |
 
@@ -414,12 +414,12 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 指している側 | 件数 |
 | --- | --- |
 | [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 4 |
-| [~/Sources/github/continuo/.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) | 5 |
-| [~/Sources/github/continuo/.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) | 1 |
-| [~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) | 1 |
+| [~/Sources/github/continuo/.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) | 5 |
+| [~/Sources/github/continuo/.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) | 1 |
+| [~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) | 1 |
 
 **そのうえで、worker-briefing 自身が「絶対パスで渡せ」という手順を持っている**
-（[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md:43-55](../../../../.claude/skills/worker-briefing/SKILL.md#L43-L55) の、
+（[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md:43-55](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L43-L55) の、
 在るほうのパスを1行で出すスクリプト）。**プラグインへ移すと、そのスクリプトは `.claude/skills/` を探すので当たらない。**
 置き場所は `~/.claude/plugins/cache/maimuzo-marketplace/<プラグイン名>/<版>/skills/worker-briefing/SKILL.md` になり、
 **版の文字列が入るので、パスを固定で書けなくなる。**
@@ -447,17 +447,17 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何 | 行数 | バイト数 |
 | --- | --- | --- |
-| [~/Sources/github/continuo/CLAUDE.md:310-318](../../../../CLAUDE.md#L310-L318)（設計のレビューの要約） | 9 | 1,104 |
+| [~/Sources/github/continuo/CLAUDE.md:310-318](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L310-L318)（設計のレビューの要約） | 9 | 1,104 |
 | [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 377 | 28,326 |
-| [~/Sources/github/continuo/.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の全部 | 248 | 14,561 |
-| [~/Sources/github/continuo/.claude/rules/reporting.md:554-592](../../../../.claude/rules/reporting.md#L554-L592) | 39 | 3,035 |
+| [~/Sources/github/continuo/.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の全部 | 248 | 14,561 |
+| [~/Sources/github/continuo/.claude/rules/reporting.md:554-592](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L554-L592) | 39 | 3,035 |
 | **合計** | **673** | **47,026** |
 
 測ったコマンドは `sed -n '<開始>,<終了>p' <ファイル> | wc -l` と `| wc -c`、全体は `wc -l` / `wc -c`。
 
 **skills は、この数に入っていない**（2-3）。
-[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の490行と
-[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](../../../../.claude/skills/pr-review-and-merge/SKILL.md) の310行は、
+[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の490行と
+[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) の310行は、
 **呼ばれたときにだけ入る。**ただし worker-briefing は worker ごとに毎回 Read されるので、
 **worker の側では毎回490行が入っている。**
 
@@ -495,12 +495,12 @@ CLAUDE.md 単体は774行から546行になる。**それでも200行の目安�
 | 何を移すか | 減る行数 |
 | --- | --- |
 | [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 228 |
-| [~/Sources/github/continuo/.claude/rules/design-review.md:57-123](../../../../.claude/rules/design-review.md#L57-L123) | 67 |
-| [~/Sources/github/continuo/.claude/rules/design-review.md:124-240](../../../../.claude/rules/design-review.md#L124-L240) | 117 |
+| [~/Sources/github/continuo/.claude/rules/design-review.md:57-123](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L123) | 67 |
+| [~/Sources/github/continuo/.claude/rules/design-review.md:124-240](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124-L240) | 117 |
 | **合計** | **412** |
 
 **案内の行が戻る。**移した先を指す1行は残さなければならない
-（[~/Sources/github/continuo/CLAUDE.md:308](../../../../CLAUDE.md#L308) が既に
+（[~/Sources/github/continuo/CLAUDE.md:308](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L308) が既に
 「`.claude/rules/` と `.claude/skills/` の下のファイルは自動では読まれない。**ここから辿る。**」と書いている形）。
 **4箇所ぶんで10行ほどと見積もる。**これは見積もりであって、測った値ではない。
 
@@ -511,7 +511,7 @@ CLAUDE.md 単体は774行から546行になる。**それでも200行の目安�
 | 公式の目安（200行）との差 | 3.9倍 | **2.7倍** |
 
 **つまり、レビューループのプラグイン化だけでは目安に届かない。**
-届かせるには、レビューループ以外（[~/Sources/github/continuo/CLAUDE.md:120-284](../../../../CLAUDE.md#L120-L284) の
+届かせるには、レビューループ以外（[~/Sources/github/continuo/CLAUDE.md:120-284](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L120-L284) の
 hook の検討の165行など）にも手を入れる必要がある。**それはこの調査の範囲外である。**
 
 ---

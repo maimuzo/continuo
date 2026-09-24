@@ -14,9 +14,9 @@
 
 | 規則 | この作業でどう当てたか |
 | --- | --- |
-| [.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) の 2-4（指示に書かれたことだけで判断しない） | 当てはめ先の規則を読んだ。既存の規則に同じ手法が書かれていないかを語で数えた（下の問い4） |
-| 同じファイルの 2-5（同じものが他に無いかを数える）（[L183](../../../../.claude/skills/worker-briefing/SKILL.md#L183)） | 直す指摘を出す作業ではない。**「見つからない」「書かれていない」と書く箇所に、検索語と探した場所を添える形で当てた** |
-| 同じファイルの 2-2 と [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) | 製品の紹介を書かない。記号を振らず、手法には内容を表す名前を付ける。英語の技術用語を直訳しない |
+| [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の 2-4（指示に書かれたことだけで判断しない） | 当てはめ先の規則を読んだ。既存の規則に同じ手法が書かれていないかを語で数えた（下の問い4） |
+| 同じファイルの 2-5（同じものが他に無いかを数える）（[L183](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183)） | 直す指摘を出す作業ではない。**「見つからない」「書かれていない」と書く箇所に、検索語と探した場所を添える形で当てた** |
+| 同じファイルの 2-2 と [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) | 製品の紹介を書かない。記号を振らず、手法には内容を表す名前を付ける。英語の技術用語を直訳しない |
 | reporting.md の「worker への指示に必ず入れること（根拠の付け方）」 | 主張ごとに URL と引用を添えた。引用の確度を下の「引用の確度」で3段に分けた |
 | [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 下の問い3 |
 | 呼ぶ側の禁止事項 | 書いたのはこのファイルだけ。git と gh は読み取りだけ（`gh api` の GET）。worker を立てていない。`claude -p` を叩いていない |
@@ -26,7 +26,7 @@
 ### 2. 飛ばしてよい段はあるか
 
 **飛ばした段は無い。**
-[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の9段（設計→設計レビュー→実装→PR→`/code-review`）は issue の作業の段である。
+[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の9段（設計→設計レビュー→実装→PR→`/code-review`）は issue の作業の段である。
 **この作業は設計も実装も PR の作成もしないので、そもそも9段に入らない。**
 同じ文書の「飛ばしてよい場合」（文書だけの変更）を根拠にしたのではない。
 
@@ -47,14 +47,14 @@
 
 | 検索語 | 件数 | 何を確かめたか |
 | --- | --- | --- |
-| `前の周の対応表` | 4 | 否定した指摘を次の周へ渡す仕組みは既にある（[design-review.md:143](../../../../.claude/rules/design-review.md#L143)） |
+| `前の周の対応表` | 4 | 否定した指摘を次の周へ渡す仕組みは既にある（[design-review.md:143](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143)） |
 | `確信度` / `多数決` / `差分だけ` / `P0` | 0 / 0 / 0 / 0 | 下の手法のうち、確信度・多数決・差分レビュー・優先度の印は、既存の規則に書かれていない |
-| `effort` / `ultra` / `--fix` | 2 / 1 / 1 | すべて [pr-review-and-merge/SKILL.md:99-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99-L131) |
+| `effort` / `ultra` / `--fix` | 2 / 1 / 1 | すべて [pr-review-and-merge/SKILL.md:99-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99-L131) |
 | `最大1周` / `1回で全部挙げる` | 5 / 4 | 2026-09-05 と 2026-09-04 の方向調整が規則に入っていることを確かめた |
 
-**読んだ規則。**[CLAUDE.md](../../../../CLAUDE.md) の「コードレビュー記録フロー」（[L504](../../../../CLAUDE.md#L504)）から「3回で通らなかったとき」（[L731](../../../../CLAUDE.md)）まで。
-[design-review.md](../../../../.claude/rules/design-review.md) 全体。worker-briefing 全体。
-[pr-review-and-merge/SKILL.md:80-159](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L80-L159)。
+**読んだ規則。**[CLAUDE.md](../../../../CLAUDE.md) の「コードレビュー記録フロー」（[L504](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L504)）から「3回で通らなかったとき」（[L731](../../../../CLAUDE.md)）まで。
+[design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) 全体。worker-briefing 全体。
+[pr-review-and-merge/SKILL.md:80-159](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L80-L159)。
 
 **外部。**WebSearch で各社・各実務家の名前と「false positives」「nits」「resolution rate」「incremental review」「learnings」「non-converging review loop」などを組み合わせて探し、見つけたページを WebFetch で開いた。
 OpenAI Codex のリポジトリは `gh api` で読み取りだけ行った。**開けなかったものは末尾の「開けなかった URL」にある。**
@@ -117,12 +117,12 @@ OpenAI Codex のリポジトリは `gh api` で読み取りだけ行った。**�
 **効く観点。**レビュワー側（出し切りと足切りを同じ指示に置く）。ループの制御（パッチ全体の判定が、止めてよいかの材料になる）。
 
 **制約に当たるか。**当たらない。**テキストの指示なので、Agent で立てるレビュワーのプロンプトへそのまま再現できる。**
-`/code-review` には渡せない（[pr-review-and-merge/SKILL.md:99](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99)）。
+`/code-review` には渡せない（[pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99)）。
 **受け取る側が対応表で「直さない」を判定するときの基準としてなら、`/code-review` の出力にも当てられる。**
 
 **このリポジトリへの当てはめ（案）。**
-- [worker-briefing の 2-6](../../../../.claude/skills/worker-briefing/SKILL.md#L256) に、条件4・6・7・8（持ち込まれたものだけ・推測に頼らない・影響箇所を特定する・意図した変更は出さない）を足す
-- [CLAUDE.md の「収まっている」](../../../../CLAUDE.md#L566) の定義に、「blocking な問題が無い」の判定をレベル名と並べて置く
+- [worker-briefing の 2-6](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L256) に、条件4・6・7・8（持ち込まれたものだけ・推測に頼らない・影響箇所を特定する・意図した変更は出さない）を足す
+- [CLAUDE.md の「収まっている」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の定義に、「blocking な問題が無い」の判定をレベル名と並べて置く
 - **注意。**条件4の「既存のバグ」は「その commit より前からコードベースに在ったもの」である。2-6 の「前の周に既に在ったもの」（前のレビューの周の時点で在ったもの）とは別物である
 
 ---
@@ -169,7 +169,7 @@ OpenAI Codex のリポジトリは `gh api` で読み取りだけ行った。**�
 レートリミットの消費は観点の数だけ増えるはずだが、**測っていない。**
 
 **このリポジトリへの当てはめ（案）。**
-- [design-review.md の「渡す4つの観点」](../../../../.claude/rules/design-review.md#L101) を、観点ごとに別のレビュワーへ分けて渡す
+- [design-review.md の「渡す4つの観点」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L101) を、観点ごとに別のレビュワーへ分けて渡す
 - このリポジトリで繰り返し出る不変条件（[CLAUDE.md](../../../../CLAUDE.md) の hook の挙動の4つの定義、設計文書の行番号リンクのずれ）を、観点ごとの短いファイルにする
 
 ---
@@ -257,7 +257,7 @@ Greptile は、1つのレビュワーへ「nit を減らせ」と指示しても
 
 **制約に当たるか。**当たらない。**Agent ツールで同じレビュワーを N 体並列に立て、指摘を束ねれば再現できる。**
 `/code-review` 自体は1回の実行である。`ultra` の effort level はクラウドで多数のエージェントを走らせるが、
-**このリポジトリは人間が明示したときだけ使うと決めている**（[pr-review-and-merge/SKILL.md:130-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L130-L131)）。
+**このリポジトリは人間が明示したときだけ使うと決めている**（[pr-review-and-merge/SKILL.md:130-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L130-L131)）。
 
 **このリポジトリへの当てはめ（案）と、注意。**
 - 設計レビューを、同じ入力で `maimuzo-from-ecc:architect` 2〜3体へ並列に投げ、読む順序を変える。指摘を束ねてから対応表を書く
@@ -300,7 +300,7 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 
 **このリポジトリへの当てはめ（案）。**
 - 対応表を書く前に、Critical と High の指摘1件ごとに「その経路・その食い違いを、コードか文書から示せるか」を別コンテキストの検証役に確かめさせる
-- [design-review.md の「合理的根拠を否定できるなら、直さない」](../../../../.claude/rules/design-review.md#L124) の判定を、直す本人ではなく検証役へ移す
+- [design-review.md の「合理的根拠を否定できるなら、直さない」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124) の判定を、直す本人ではなく検証役へ移す
 - Greptile の否定的な知見に合わせるなら、**検証役に問うのは「重大度はいくつか」より「その経路は実在するか」のほうが材料に合う。これは推論である**
 
 ---
@@ -347,8 +347,8 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 **制約に当たるか。**当たらない。規則の文面だけで再現できる。
 
 **このリポジトリへの当てはめ（案）。**
-- [CLAUDE.md の「対応表の列」](../../../../CLAUDE.md#L534) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を Critical や High とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
-- 3・6・9回目の段（[CLAUDE.md:561](../../../../CLAUDE.md#L561) の「回数を数える」）に、issue #1294 の「前の周に無かった新しい Low を抑える」と、Contrast の「blocking の件数が厳密に減っていなければ収まらない兆候とみなす」を並べる
+- [CLAUDE.md の「対応表の列」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を Critical や High とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
+- 3・6・9回目の段（[CLAUDE.md:561](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L561) の「回数を数える」）に、issue #1294 の「前の周に無かった新しい Low を抑える」と、Contrast の「blocking の件数が厳密に減っていなければ収まらない兆候とみなす」を並べる
 
 ---
 
@@ -381,7 +381,7 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 
 **効く観点。**ループの制御。
 
-**制約に当たるか。**一部当たる。`/code-review` は PR 番号・branch・path を受け取る（[pr-review-and-merge/SKILL.md:99](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99)）。
+**制約に当たるか。**一部当たる。`/code-review` は PR 番号・branch・path を受け取る（[pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99)）。
 **commit の範囲を渡せるかは確かめていない。**Agent で立てるレビュワーなら、`git diff <前回レビューした commit>..HEAD` と前の周の対応表を渡せる。
 
 **このリポジトリへの当てはめ（案）と、判断が要る点。**
@@ -429,7 +429,7 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 
 **制約に当たるか。**一部当たる。`/code-review` へは渡せない。
 **`/code-review` が CLAUDE.md などリポジトリの規則ファイルを読むかは、確かめていない。**
-Agent で立てるレビュワーには渡せる。**1つの PR の中では、[design-review.md:143](../../../../.claude/rules/design-review.md#L143) が既に「次の周のレビュワーには、前の周の対応表を渡す」と決めている。**
+Agent で立てるレビュワーには渡せる。**1つの PR の中では、[design-review.md:143](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143) が既に「次の周のレビュワーには、前の周の対応表を渡す」と決めている。**
 
 **このリポジトリへの当てはめ（案）。**
 - **PR をまたいで**繰り返し否定した指摘の型を、リポジトリ内の1ファイルへ貯め、Agent で立てるレビュワーの入力にする（いまは1つの PR の中だけで渡している）
@@ -479,8 +479,8 @@ issue #1298 は、禁止を機械で止める作りを4通り試して採らな�
 **制約に当たるか。**一部当たる。`/code-review` の出力の形は変えられない。
 Agent で立てるレビュワーには、まとめ方と「直し方を書くな」を指示できる。
 
-**既にある規則との関係。**[worker-briefing 2-5 の段4](../../../../.claude/skills/worker-briefing/SKILL.md#L199) が既に「2件以上なら、全部を1つの指摘としてまとめる」を持っている。
-`/code-review` の出力については、[pr-review-and-merge/SKILL.md:113-117](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L113-L117) が「受け取る側が数える」と決めている。
+**既にある規則との関係。**[worker-briefing 2-5 の段4](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L199) が既に「2件以上なら、全部を1つの指摘としてまとめる」を持っている。
+`/code-review` の出力については、[pr-review-and-merge/SKILL.md:113-117](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L113-L117) が「受け取る側が数える」と決めている。
 
 **このリポジトリへの当てはめ（案）。**
 - 対応表の1行を「型」の単位にし、出現箇所の一覧を列として持たせる
@@ -519,7 +519,7 @@ Böckeler（2026-05-27）は、閾値を超えた循環的複雑度の出現が�
 
 **このリポジトリへの当てはめ（案）。**
 - 過去の周で繰り返し出た指摘のうち、機械で判定できる型を、レビューに出す前の検査へ移す
-- 既に同じ向きのものがある。[.claude/rules/plan-file.md](../../../../.claude/rules/plan-file.md) の行番号リンクの検算、`.claude/hooks/` の3本の hook。[CLAUDE.md](../../../../CLAUDE.md) の「マージの条件は、なるべく機械で判定する」も同じ向きである
+- 既に同じ向きのものがある。[.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の行番号リンクの検算、`.claude/hooks/` の3本の hook。[CLAUDE.md](../../../../CLAUDE.md) の「マージの条件は、なるべく機械で判定する」も同じ向きである
 - **過去の指摘のうち何割が機械で判定できる型かは、この調査では測っていない**
 
 ---
@@ -550,7 +550,7 @@ Böckeler（2026-05-27）は、閾値を超えた循環的複雑度の出現が�
 
 **このリポジトリへの当てはめ（案）。**
 - 設計のコメントと PR の本文に「採らなかった案とその理由」「守る不変条件」を必ず書き、レビュワーの入力に入れる
-- [design-review.md の「合理的根拠を否定できるなら、直さない」](../../../../.claude/rules/design-review.md#L124) の判定材料にもなる
+- [design-review.md の「合理的根拠を否定できるなら、直さない」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124) の判定材料にもなる
 
 ---
 
@@ -618,7 +618,7 @@ Böckeler（2026-05-27）は、閾値を超えた循環的複雑度の出現が�
 **制約に当たるか。**当たらない。
 
 **このリポジトリへの当てはめ（案）。**
-- このリポジトリは既に「設計→設計レビュー→実装」の順を持つ（[design-review.md](../../../../.claude/rules/design-review.md)）
+- このリポジトリは既に「設計→設計レビュー→実装」の順を持つ（[design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md)）
 - **上の否定的な実測は、「先に書く文書を増やすと、レビューする対象そのものが増える」ことを示している。**設計のコメントを長くする向きではなく、**受け入れ条件（何が起きたら blocking か）を短く書く向きのほうが、材料に合う。これは推論である**
 
 ---

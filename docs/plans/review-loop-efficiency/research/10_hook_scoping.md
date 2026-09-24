@@ -18,13 +18,13 @@
 | --- | --- |
 | [CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」 | **この調査の中心軸である。**返答を検査する hook 3本は maimuzo の環境のものであり、continuo の利用者（不特定多数）は1本も持っていない。パターンごとに「maimuzo の環境だけで済むか / continuo の全利用者に及ぶか」を分けて書いた（下の 5-2） |
 | [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 成果物は公開リポジトリの worktree に置かれる。個人の絶対パスは `~/` から書き、トークンは書かない |
-| [.claude/rules/plan-file.md](../../../../.claude/rules/plan-file.md) の「何かを書くと書いたら、パスと中身のサンプルを必ず添える」 | 設定を書くパターンには、実際のパスと JSON / YAML の実物を添えた |
-| [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) の「案を並べる表は、列を『選ぶと何が起きるか』にする」 | 比較表は「選ぶと何が起きるか」と「選ばないと続くこと」を持たせた |
+| [.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の「何かを書くと書いたら、パスと中身のサンプルを必ず添える」 | 設定を書くパターンには、実際のパスと JSON / YAML の実物を添えた |
+| [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「案を並べる表は、列を『選ぶと何が起きるか』にする」 | 比較表は「選ぶと何が起きるか」と「選ばないと続くこと」を持たせた |
 
 **2. 飛ばしてよい段はあるか。**
 
 **無い。**ただし、この作業は**調査だけ**であり、設計でも実装でもない。
-[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の9段は、**人間がパターンを選んだあとに段1（設計を固める）から始まる。**
+[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の9段は、**人間がパターンを選んだあとに段1（設計を固める）から始まる。**
 いまはその前段の材料集めなので、段2以降には入らない。
 
 **3. 公開してよくない情報を、成果物に書きうる場面はあるか。**
@@ -61,7 +61,7 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 そちらの返答を読む人間は居ない（無人で回している）ので、**書き直しはレートリミットの枠を消費するだけで、誰の役にも立たない。**
 
 **なぜそれが困るか。**
-書き直しは1回につき turn を1つ増やす。実測値として、[.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) は
+書き直しは1回につき turn を1つ増やす。実測値として、[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) は
 「2026-08-31 からの5日間・18本のセッションで261回のやり直しがあり、そのうち186回（71%）がこの検査だった」と記録している。
 **無人のセッションでその割合が出ると、issue 1件あたりの枠の消費がそのぶん増える。**
 
@@ -567,7 +567,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 > 片付けの仕様がどこにも無いので実装していない。
 
 **この案を復活させるなら、却下の根拠を否定するところから始めること**
-（[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の「合理的根拠を否定できるなら、直さない」の裏である）。
+（[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の「合理的根拠を否定できるなら、直さない」の裏である）。
 
 ### 6-6. 目印のファイル（`.continuo.json`）を hook が見る — 人間の要求を満たさない
 
@@ -615,7 +615,7 @@ continuo は `--permission-mode` を毎回渡している
 **既定は `auto` である**（[internal/config/types.go:452-454](../../../../internal/config/types.go#L452-L454) の
 「**既定は "auto"。**"dontAsk" を選べば、いままでどおり入力を待たない」）。
 
-**だが `auto` は人間も使える。**[.claude/rules/](../../../../.claude/rules/) にも、
+**だが `auto` は人間も使える。**[.claude/rules/](https://github.com/maimuzo/continuo/tree/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules) にも、
 このセッション自身が auto mode で走っていることを示す記述がある。
 **「無人かどうか」ではなく「権限モードが何か」を見ているだけなので、判定として弱い。**
 
