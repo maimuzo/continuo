@@ -385,7 +385,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 何（行数） | なぜ移すか |
 | --- | --- |
 | **[~/Sources/github/continuo/.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の全部**（490行・35,210バイト） | **既に skill で、起動時には読まれていない。**そのファイル自身の9行目が「中身は continuo に固有ではないので、動けばプラグインへ移す。検討は issue #165（コードレビューの記録と敵対的レビューの手順を、プラグインへ移せるか検討する）」と書いている |
-| **[~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
+| **[~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)**（228行・16,638バイト。収まっている定義／最大1周／3・6・9／連続10回／敵対的レビュー判定後） | **continuo 固有の語が1つも要らない手順である。**メインエージェントが辿るもので、`/code-review` へ届ける必要が無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:57-82](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L82) と [同:124-240](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124-L240)**（143行） | 設計を疑う段・根拠を否定できるなら直さない・回す回数・3回で収まらなかったとき。**同じく汎用である** |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:83-123](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L83-L123)**（41行。誰にレビューさせるか） | **`maimuzo-from-ecc:architect` を名指ししている**（85行と115行）。**OSS のリポジトリに個人のプラグイン名が書いてある状態そのものなので、プラグイン側へ引き取るのが正しい置き場所である** |
 
@@ -413,7 +413,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 指している側 | 件数 |
 | --- | --- |
-| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 4 |
+| [~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 4 |
 | [~/Sources/github/continuo/.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) | 5 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) | 1 |
 | [~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) | 1 |
@@ -439,7 +439,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 
 | 何 | 行数 | バイト数 |
 | --- | --- | --- |
-| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 774 | 57,633 |
+| [~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 774 | 57,633 |
 | `.claude/rules/` の8本 | 1,694 | 102,204 |
 | **合計** | **2,468** | **159,837** |
 
@@ -448,7 +448,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | 何 | 行数 | バイト数 |
 | --- | --- | --- |
 | [~/Sources/github/continuo/CLAUDE.md:310-318](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L310-L318)（設計のレビューの要約） | 9 | 1,104 |
-| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 377 | 28,326 |
+| [~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 377 | 28,326 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の全部 | 248 | 14,561 |
 | [~/Sources/github/continuo/.claude/rules/reporting.md:554-592](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L554-L592) | 39 | 3,035 |
 | **合計** | **673** | **47,026** |
@@ -494,7 +494,7 @@ CLAUDE.md 単体は774行から546行になる。**それでも200行の目安�
 
 | 何を移すか | 減る行数 |
 | --- | --- |
-| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) | 228 |
+| [~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 228 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md:57-123](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L123) | 67 |
 | [~/Sources/github/continuo/.claude/rules/design-review.md:124-240](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124-L240) | 117 |
 | **合計** | **412** |
@@ -507,7 +507,7 @@ CLAUDE.md 単体は774行から546行になる。**それでも200行の目安�
 | 何 | いま | 移したあと（見積もり） |
 | --- | --- | --- |
 | 起動時に読まれる合計 | 2,468行 | **約2,066行**（-16%） |
-| [~/Sources/github/continuo/CLAUDE.md](../../../../CLAUDE.md) 単体 | 774行 | **約546行** |
+| [~/Sources/github/continuo/CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) 単体 | 774行 | **約546行** |
 | 公式の目安（200行）との差 | 3.9倍 | **2.7倍** |
 
 **つまり、レビューループのプラグイン化だけでは目安に届かない。**

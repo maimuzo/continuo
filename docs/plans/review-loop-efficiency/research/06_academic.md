@@ -19,7 +19,7 @@
 | [worker-briefing 2-4（指示に書かれたことだけで判断しない）](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L161) | 指示に名前が出ていない規則・スキルも読み、当てはめる場所を行番号で示した（下の「読んだもの」） |
 | [worker-briefing 2-5（同じものが他に無いかを数える）](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183) | 1本の論文で結論を出さず、同じ結論を支える論文と否定する論文を両方探した。「無い」と書くものには検索語と場所を書いた（5節） |
 | [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「測る前に断定しない」「根拠の付け方」 | 主張ごとに出典と読んだ範囲を書き、要約モデル経由の数値はそう明記した（1節） |
-| [CLAUDE.md](../../../../CLAUDE.md) の「`~/.claude/projects/` 配下を消さない」「公開してよい情報かを常に判断する」 | 書いたのはこのファイルだけ。PDF はメモリ上で読み、ファイルを作っていない |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「`~/.claude/projects/` 配下を消さない」「公開してよい情報かを常に判断する」 | 書いたのはこのファイルだけ。PDF はメモリ上で読み、ファイルを作っていない |
 
 [worker-briefing 2-6（1回で全部挙げる）](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L256) と [2-7（合理的根拠）](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L277) はレビュワー向けで、この調査には直接は当てはまらない。
 ただし論文ごとに「持ち込める限界」を書いたのは、2-7 の「否定できる形で書く」と同じ趣旨である。
@@ -321,7 +321,7 @@
 - **原文（訳、要約経由）**: 「Majority Voting alone accounts for most of the performance gains typically attributed to MAD」（討論の利得とされるものの大半は、多数決だけで説明がつく）
 - **答える問い**: 問い1、問い4
 - **持ち込める限界**: 小さいオープンモデル、正解が1つの課題
-- **当てはめうる場所（案）**: 3・6・9回目の「敵対的レビュワーを説得する」段（[CLAUDE.md](../../../../CLAUDE.md)）で、往復の討論に頼らず独立の判定を並べる
+- **当てはめうる場所（案）**: 3・6・9回目の「敵対的レビュワーを説得する」段（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)）で、往復の討論に頼らず独立の判定を並べる
 
 #### 繰り返しのサンプリングで被覆が伸びる
 
@@ -369,7 +369,7 @@
 - **原文（訳、要約経由）**: 「One test killed what 80+ agents' reasoning could not」（80以上のエージェントの推論が落とせなかったものを、テスト1本が落とした）
 - **答える問い**: 問い4（全員一致は正しさの保証にならない。実行による検証と別系統の批評役）
 - **持ち込める限界**: 証拠が弱い（事例研究）。脆弱性の発見でコードレビューではない
-- **当てはめうる場所（案）**: 「敵対的レビュワー」（[CLAUDE.md](../../../../CLAUDE.md)）の判定を、推論の合意でなく、再現・テストで裏を取れる形に寄せる
+- **当てはめうる場所（案）**: 「敵対的レビュワー」（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)）の判定を、推論の合意でなく、再現・テストで裏を取れる形に寄せる
 
 #### 静的解析の偽陽性を LLM で落とす
 

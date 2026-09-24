@@ -300,10 +300,14 @@ git worktree remove "$ROLLBACK"
 
 **そのファイルが無い環境では、この節は読み飛ばしてよい。**
 このリポジトリの規則は、この CLAUDE.md と、下の「作業の進め方」の表が指す先で完結している。
+**ただし表の多くは maimuzo のプラグインを指すので、このリポジトリを clone しただけの人には届かない。**外部の貢献者が読むのは [CONTRIBUTING.md](CONTRIBUTING.md) である。
 
 ---
 
 ## 作業の進め方
+
+**ここから下（作業の進め方・PR を出すときの絶対条件・コードレビュー記録フロー）は、人間と直接やりとりしている AI に当てる。**
+**continuo が起動したエージェントは、ここから下と組み込みの指示書が食い違うときは、組み込みの指示書に従う。**
 
 **規則は次の表の置き場にある。**`.claude/rules/` の2本のほかは、**自動では読まれない。ここから辿る。**
 
@@ -322,8 +326,11 @@ git worktree remove "$ROLLBACK"
 
 ### 組み込みの指示書を、自分の作業にも当てる
 
+**この節は、人間と直接やりとりしている AI にだけ当てる。**
+**continuo が起動したエージェント（continuo が continuo 自身の issue を回したとき）は、この節を読み飛ばし、組み込みの指示書どおりに動く。**下の読み替えの表を当ててはならない。`CONTINUO-STATUS:` も `<!-- continuo:agent -->` も、指示書どおりに書く。
+
 **組み込みの指示書は、continuo が起動したエージェントへ渡す文書である。**
-**このリポジトリを直す AI も、issue と PR のコメントの書き方（5-5）・レビューの回し方（5-6）・subagent への渡し方（5-7）は、そこに従う。**
+**人間と直接やりとりしている AI も、計画と pull request のレビュー（3-2・3-6）・issue と PR のコメントの書き方（5-5）・レビューの回し方（5-6）・subagent への渡し方（5-7）は、そこに従う。**
 読み替えは次のとおりである。
 
 | 指示書の書き方 | このリポジトリを直す AI は |
@@ -344,8 +351,9 @@ git worktree remove "$ROLLBACK"
 | --- | --- |
 | 1 | この CLAUDE.md |
 | 2 | `.claude/rules/` に残した2本 |
-| 3 | 組み込みの指示書（5-5・5-6・5-7） |
+| 3 | 組み込みの指示書（3-2・3-6・5-5・5-6・5-7） |
 | 4 | プラグインのスキル |
+| 5 | メモリ（`~/.claude/projects/` の下。古い決まりが残っていることがある） |
 
 **とくに次の2つは、プラグインのスキルと食い違っている。**
 - **レビュワーへ渡すものは、組み込みの指示書の 5-6・5-7 に従う。**前の周の判断票は「直さないと決めた指摘とその理由」だけを渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
@@ -361,6 +369,10 @@ git worktree remove "$ROLLBACK"
 
 ### このリポジトリに固有の決まり
 
+- **continuo が本番のカンバン（project #3）を見張っているあいだ、次の2つを守る。**`issue-management` スキルの例外より、こちらが勝つ
+  - **確認を待たずに着手してよい例外で直すときも、issue は `Ice Box` のまま直す。**`In Progress` へ動かすと、continuo が同じ issue にもう1つ Claude Code を起動する（`In Progress` は `tracker.active_states` の既定に入っている）
+  - **`Ready` と `In Progress` の item の並び順を動かさない。**走っている continuo が次に dispatch する issue が変わる
+- **AI が独断で issue を作らない。**人間の依頼か許可があるときだけ作る（`general-claude-md` の「bug-reporter で issue に登録する」より、こちらが勝つ）
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
 - **レビュワーの割り当て。**組み込みの指示書の 5-6「誰に見せるか」の2つの役に、次を当てる
@@ -377,7 +389,7 @@ git worktree remove "$ROLLBACK"
 - **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときだけ）
 - **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
 - **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9077](docs/plans/continuo_design.md#L9077) が認めている）。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9077](docs/plans/continuo_design.md#L9077) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
 
   > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、
@@ -481,6 +493,8 @@ git worktree remove "$ROLLBACK"
   | `MERGEABLE` / `UNSTABLE` | **マージしない。**必須でない検査が落ちている。何が落ちたかを確かめ、人間へ報告する |
   | `MERGEABLE` / `BLOCKED` | **マージしない。**必須の検査が赤いか、まだ走っている。検査を回し直す |
   | `CONFLICTING` | **マージしない。**先に競合を解決する |
+
+  **表に無い値（`UNKNOWN`・`BEHIND` など）も含め、`CLEAN` 以外はマージしない。**`UNKNOWN` は GitHub がまだ計算中なので、少し待って叩き直す
 - **マージは `gh pr merge <番号> --merge`（merge commit）で行う。**squash で入れた branch は `git branch --merged origin/main` に出ず、worktree の片付けの判定が効かなくなる
 - **`gh pr merge` が Claude Code の権限の判定で拒否されたら、別の経路を探さず、人間に押してもらう**
 - **確かめのコマンドには `--fail-fast` を付けず、`set -e` も置かない。**赤いときこそ、判定の1行を出させる。**シェルの変数は Bash の呼び出しをまたげないので、塊は1回の呼び出しで丸ごと叩く**
@@ -525,7 +539,7 @@ git worktree remove "$ROLLBACK"
 | 何を | どこへ | 1行目 |
 | --- | --- | --- |
 | **実装レビューの判断票** | **その pull request のコメント** | `<!-- code-review-result -->` |
-| **設計レビューの判断票** | **その pull request が閉じる issue のコメント** | `<!-- design-review-result -->` |
+| **設計レビューの判断票** | **その pull request が閉じる issue のコメント** | `<!-- design-review-result -->`（continuo が起動したエージェントは、1行目を `<!-- continuo:agent -->`、2行目をこの目印にする） |
 | **設計レビューを飛ばしてよい変更**（文書だけ・1行の修正） | **その pull request のコメント** | `<!-- design-review-skipped -->`。**2行目に理由を書く** |
 
 **CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は組み込みの指示書の 3-2、直す前の計画は 5-6 の「直す前に書くこと」にある。

@@ -25,8 +25,8 @@
 | [.claude/skills/worker-briefing/SKILL.md:161](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L161) の 2-4（指示に書かれたことだけで判断しない） | 当てはめ先を書くために、レビューループを定義している規則を自分で開いた（0-4） |
 | 同じファイルの [:183](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183) 2-5（同じものが他に無いかを数える） | 「見つからなかった」と書くものに、検索語・範囲・commit を添えた（5章） |
 | 同じファイルの「3. 言葉づかいと制約」と [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の根拠の付け方 | 英文の引用に訳を併記した。worktree / hook / subagent などは訳していない |
-| [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 0-3 |
-| [CLAUDE.md](../../../../CLAUDE.md) の「`claude -p` は使用禁止」 | 公式文書が `claude -p` の例を載せていても、試していない。当てはめ案にも入れていない |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「公開してよい情報かを常に判断する」 | 0-3 |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「`claude -p` は使用禁止」 | 公式文書が `claude -p` の例を載せていても、試していない。当てはめ案にも入れていない |
 
 ### 0-2. 飛ばしてよい段はあるか
 
@@ -39,7 +39,7 @@
 ### 0-3. 公開してよくない情報を書きうる場面
 
 - **ツールが結果を保存した場所の絶対パス**（スクラッチパッドと `~/.claude/projects/` の下）。利用者名を含むので書いていない。
-- **anthropics/* のリポジトリ名は書いた。**公開の一次情報の出典だからである。[CLAUDE.md](../../../../CLAUDE.md) が禁じているのは「自分の実在のリポジトリ名」である。
+- **anthropics/* のリポジトリ名は書いた。**公開の一次情報の出典だからである。[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) が禁じているのは「自分の実在のリポジトリ名」である。
 - このリポジトリの PR 番号や過去の事件の中身は書いていない。規則の行へのリンクだけにした。
 
 ### 0-4. どう探し、何を読んだか
@@ -63,7 +63,7 @@
 
 - `git grep -n -l -E 'code-review|収まっている|レビューを頼まれたら|同じものが他に無いか' -- .claude/ CLAUDE.md docs/` を叩いた（HEAD `df36f9d7`）。16ファイルが返った。
 - そのうち開いたのは次の5本である。
-  - [CLAUDE.md](../../../../CLAUDE.md) の486行目以降
+  - [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の486行目以降
   - [.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の全体
   - [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の全体
   - [.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) の段2と、見出しの一覧
@@ -642,7 +642,7 @@ Academy は "A long session carries everything it has read and decided. … it's
 
 > Critical と High の件数が2周続けて減らなかったら、その時点で修正を止め、対応表から学んだことを入れた設計で、新しい文脈の書き手に書き直させる。
 
-いまの6段（[CLAUDE.md](../../../../CLAUDE.md) 以下）には「実装を止める → 設計を敵対的レビューする → 実装し直す」が既にある。**入る時点を早めるだけで足りるかを検討する。**
+いまの6段（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) 以下）には「実装を止める → 設計を敵対的レビューする → 実装し直す」が既にある。**入る時点を早めるだけで足りるかを検討する。**
 
 ### 3-15. 規則を足し続けず、削る。機械で守らせられるものは hook へ移し、強い言い回しを減らす
 
@@ -653,7 +653,7 @@ Academy は "A long session carries everything it has read and decided. … it's
 
 | ファイル | 行数 | `**` を含む行 |
 | --- | --- | --- |
-| [CLAUDE.md](../../../../CLAUDE.md) | 774 | 350 |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 774 | 350 |
 | [.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) | 248 | 125 |
 | [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) | 490 | 247 |
 | [.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) | 310 | 112 |

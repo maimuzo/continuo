@@ -16,8 +16,8 @@
 
 | 規則 | どう効くか |
 | --- | --- |
-| [CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」 | **この調査の中心軸である。**返答を検査する hook 3本は maimuzo の環境のものであり、continuo の利用者（不特定多数）は1本も持っていない。パターンごとに「maimuzo の環境だけで済むか / continuo の全利用者に及ぶか」を分けて書いた（下の 5-2） |
-| [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 成果物は公開リポジトリの worktree に置かれる。個人の絶対パスは `~/` から書き、トークンは書かない |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」 | **この調査の中心軸である。**返答を検査する hook 3本は maimuzo の環境のものであり、continuo の利用者（不特定多数）は1本も持っていない。パターンごとに「maimuzo の環境だけで済むか / continuo の全利用者に及ぶか」を分けて書いた（下の 5-2） |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「公開してよい情報かを常に判断する」 | 成果物は公開リポジトリの worktree に置かれる。個人の絶対パスは `~/` から書き、トークンは書かない |
 | [.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の「何かを書くと書いたら、パスと中身のサンプルを必ず添える」 | 設定を書くパターンには、実際のパスと JSON / YAML の実物を添えた |
 | [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「案を並べる表は、列を『選ぶと何が起きるか』にする」 | 比較表は「選ぶと何が起きるか」と「選ばないと続くこと」を持たせた |
 
@@ -409,7 +409,7 @@ https://code.claude.com/docs/en/discover-plugins の原文。
 ### 5-2. 変えるものと、影響範囲
 
 **「maimuzo の環境だけか、continuo の利用者（不特定多数）にも及ぶか」を必ず見ること**
-（[CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
+（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
 
 | どうするか | 変えるもの | 影響範囲 |
 | --- | --- | --- |
@@ -491,7 +491,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 **「continuo が定めた変数」と誤読されうる**ので、人間が名前を決めること。
 
 **この変更は、CLAUDE.md の「hook の挙動が変化する変更」に当たるか。当たらない。**
-[CLAUDE.md](../../../../CLAUDE.md) が挙げる4つの定義は、
+[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) が挙げる4つの定義は、
 **hook が受け取る引数 / hook の宛先 / hook と本体の約束 / hook が Claude Code へ返すもの**であり、
 どれも `continuo hook` サブコマンドについてのものである。
 このパターンが触るのは `.claude/hooks/*.py`（返答を検査する側）と WORKFLOW.md だけで、
@@ -544,7 +544,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 | 1 | continuo が `--settings` で渡すファイルに `"disableAllHooks": true` が入る |
 | 2 | 4-1 のとおり、**個別に残す手段は無い**ので、同じファイルに書いた continuo 自身の `Stop` hook も止まる |
 | 3 | continuo は turn の終わりを永久に検知できない（3-4） |
-| 4 | **人間から見える症状は「エージェントが喋り終わっているのに continuo が次を送らない」である。**[CLAUDE.md](../../../../CLAUDE.md) が同じ症状をこう書いている: 「hook が1つも届かないことと、Claude Code がまだ喋っている最中であることは、本体からは区別できない」 |
+| 4 | **人間から見える症状は「エージェントが喋り終わっているのに continuo が次を送らない」である。**[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) が同じ症状をこう書いている: 「hook が1つも届かないことと、Claude Code がまだ喋っている最中であることは、本体からは区別できない」 |
 
 **測っていないこと。**`disableAllHooks` が「同じ `--settings` ファイルに書いた hook」まで止めるかどうかは、
 **文書に例外の記述が無い**だけで、実測はしていない。

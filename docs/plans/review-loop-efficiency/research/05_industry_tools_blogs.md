@@ -18,7 +18,7 @@
 | 同じファイルの 2-5（同じものが他に無いかを数える）（[L183](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183)） | 直す指摘を出す作業ではない。**「見つからない」「書かれていない」と書く箇所に、検索語と探した場所を添える形で当てた** |
 | 同じファイルの 2-2 と [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) | 製品の紹介を書かない。記号を振らず、手法には内容を表す名前を付ける。英語の技術用語を直訳しない |
 | reporting.md の「worker への指示に必ず入れること（根拠の付け方）」 | 主張ごとに URL と引用を添えた。引用の確度を下の「引用の確度」で3段に分けた |
-| [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 下の問い3 |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「公開してよい情報かを常に判断する」 | 下の問い3 |
 | 呼ぶ側の禁止事項 | 書いたのはこのファイルだけ。git と gh は読み取りだけ（`gh api` の GET）。worker を立てていない。`claude -p` を叩いていない |
 
 **2-6（1回で全部挙げる）と 2-7（合理的根拠を書く）は、レビューを頼まれた worker への規則なので、この作業には当てていない。**
@@ -52,7 +52,7 @@
 | `effort` / `ultra` / `--fix` | 2 / 1 / 1 | すべて [pr-review-and-merge/SKILL.md:99-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99-L131) |
 | `最大1周` / `1回で全部挙げる` | 5 / 4 | 2026-09-05 と 2026-09-04 の方向調整が規則に入っていることを確かめた |
 
-**読んだ規則。**[CLAUDE.md](../../../../CLAUDE.md) の「コードレビュー記録フロー」（[L504](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L504)）から「3回で通らなかったとき」（[L731](../../../../CLAUDE.md)）まで。
+**読んだ規則。**[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「コードレビュー記録フロー」（[L504](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L504)）から「3回で通らなかったとき」（[L731](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)）まで。
 [design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) 全体。worker-briefing 全体。
 [pr-review-and-merge/SKILL.md:80-159](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L80-L159)。
 
@@ -170,7 +170,7 @@ OpenAI Codex のリポジトリは `gh api` で読み取りだけ行った。**�
 
 **このリポジトリへの当てはめ（案）。**
 - [design-review.md の「渡す4つの観点」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L101) を、観点ごとに別のレビュワーへ分けて渡す
-- このリポジトリで繰り返し出る不変条件（[CLAUDE.md](../../../../CLAUDE.md) の hook の挙動の4つの定義、設計文書の行番号リンクのずれ）を、観点ごとの短いファイルにする
+- このリポジトリで繰り返し出る不変条件（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の hook の挙動の4つの定義、設計文書の行番号リンクのずれ）を、観点ごとの短いファイルにする
 
 ---
 
@@ -519,7 +519,7 @@ Böckeler（2026-05-27）は、閾値を超えた循環的複雑度の出現が�
 
 **このリポジトリへの当てはめ（案）。**
 - 過去の周で繰り返し出た指摘のうち、機械で判定できる型を、レビューに出す前の検査へ移す
-- 既に同じ向きのものがある。[.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の行番号リンクの検算、`.claude/hooks/` の3本の hook。[CLAUDE.md](../../../../CLAUDE.md) の「マージの条件は、なるべく機械で判定する」も同じ向きである
+- 既に同じ向きのものがある。[.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の行番号リンクの検算、`.claude/hooks/` の3本の hook。[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「マージの条件は、なるべく機械で判定する」も同じ向きである
 - **過去の指摘のうち何割が機械で判定できる型かは、この調査では測っていない**
 
 ---

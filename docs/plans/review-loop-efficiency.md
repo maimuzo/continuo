@@ -79,7 +79,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 場所（continuo リポジトリの根からの相対パス） | 何を定義しているか |
 | --- | --- |
 | [CLAUDE.md:394-560](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L394-L560) | `/code-review` を必ず通す。結果の目印を CI・リリース前の検査が数える |
-| [CLAUDE.md](../../CLAUDE.md) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)（この計画を書いた時点の版） | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
 | [.claude/rules/design-review.md:1-246](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L1-L246) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
 | [.claude/skills/worker-briefing/SKILL.md:1-520](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L1-L520) | worker への前置き。2-6（同じものを数える）・2-7（1回で全部挙げる）・2-8（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-325](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L1-L325) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
@@ -261,7 +261,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 7. 決まったこと: issue に無い機能を削る判定と削除を、毎回、書く側が主語で行う
 
-**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:640-661](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L661) の6段と、[CLAUDE.md](../../CLAUDE.md) の4段）。
+**前提。**いまは、issue が求めていない機能が入っていないかを調べて削る手順を、3・6・9回目にだけ通している（[CLAUDE.md:640-661](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L661) の6段と、[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の4段）。
 **その4段の段1は、目的を取り出す subagent を立て、diff を見せない形になっている。**理由は「diff を見せると、出来上がったものに引きずられる」である。
 
 **人間の決定（原文）。**
@@ -407,7 +407,7 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 **写し直すと、正が2つになる。**
 
 **採る形。**[.claude/rules/release.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/release.md) を消し、
-[CLAUDE.md](../../CLAUDE.md) の「リリースの手順」が [docs/releasing.md](../releasing.md) を直接指すようにする。
+[CLAUDE.md](../../CLAUDE.md) の「このリポジトリに固有の決まり」が [docs/releasing.md](../releasing.md) を直接指すようにする。
 
 **なぜ skill にしないか。**
 
@@ -501,7 +501,7 @@ Stop hook に `printenv MAIMUZO_HOOKS_UNATTENDED` を書き出させたところ
 
 **消したファイルを指していた文書のリンクは、消す直前の commit の固定リンクへ張り替えた。**調査メモと過去の計画は、書いた時点の中身を指しているためである。
 
-**メモリ。**124件のうち、移した部分を消した45件・触れていない79件。丸ごと消したものは無い。
+**メモリ。**124件のうち、移した部分を消した44件（うち7件は古い決まりも直した）・古い決まりだけを直した2件・触れていない78件。丸ごと消したものは無い。**CLAUDE.md と逆のことを言っていた行と、消したファイルを指していた行は、いまの在りかへ直した。**
 **どのファイルのどの部分をどこへ移したかは [13_memory_mapping.md](review-loop-efficiency/research/13_memory_mapping.md) にある。**
 消す前の全部の写しは、リポジトリの外に置いた。
 

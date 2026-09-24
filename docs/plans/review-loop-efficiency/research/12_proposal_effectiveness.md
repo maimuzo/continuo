@@ -25,8 +25,8 @@
 | 同じファイルの「名札は、単独で書かない」 | issue と PR の番号には題名を添えた。自分で記号を振らず、決めごとは内容そのもので呼んだ |
 | [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) の 2-5（同じものが他に無いかを数える） | 「確かめ役に依存する箇所」「差分だけの実測が無いと書いてある箇所」を数え、件数と検索パターンと範囲を本文に書いた |
 | 同じファイルの 2-7（合理的根拠を「誰が何を失うか」で書く） | 「要らない」と判定した2件は、直さなかったときではなく**採ったときに誰が何を失うか**で書いた |
-| [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | このファイルは PUBLIC の `docs/plans/` に置かれる。個人の絶対パスを書かず `~/` から書いた |
-| [CLAUDE.md](../../../../CLAUDE.md) の「`~/.claude/projects/` 配下を消さない」 | 書いたのはこのファイル1本だけ。git と gh は読み取りだけ（`git show` / `git grep` / `gh pr list`）。worker は立てていない |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「公開してよい情報かを常に判断する」 | このファイルは PUBLIC の `docs/plans/` に置かれる。個人の絶対パスを書かず `~/` から書いた |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「`~/.claude/projects/` 配下を消さない」 | 書いたのはこのファイル1本だけ。git と gh は読み取りだけ（`git show` / `git grep` / `gh pr list`）。worker は立てていない |
 
 ### 飛ばしてよい段はあるか
 
@@ -43,7 +43,7 @@
 | 前置き | [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) 全文を Read |
 | 計画と元資料 | [../../review-loop-efficiency.md](../../review-loop-efficiency.md)、[03_empirical_pr_rounds.md](03_empirical_pr_rounds.md)、[04_anthropic_official.md](04_anthropic_official.md)（755行を2回に分けて全部）、[05_industry_tools_blogs.md](05_industry_tools_blogs.md)（747行を2回に分けて全部）、[06_academic.md](06_academic.md)（540行を2回に分けて全部）、[07_sibling_fix_prevention.md](07_sibling_fix_prevention.md) 全文、[08_plan_review_round1.md](08_plan_review_round1.md) と [09_plan_review_round2.md](09_plan_review_round2.md) 全文 |
 | 指示に名前が出ていないもの（2-4） | [01_inventory_repo.md](01_inventory_repo.md) の4節（写し）・5節（食い違い）・6節（総量）と、[02_inventory_memory_plugins.md](02_inventory_memory_plugins.md) の4節（メモリの食い違い）・5節（プラグインに在って規則に無い考え方）・6節（重複して走りうるレビュー）。**どちらも指示の「読むもの」の表に無い。**決めごと6の費用と、確かめ役の重複を判定するために自分で開いた |
-| いまの規則 | [CLAUDE.md](../../../../CLAUDE.md)、[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md)、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)。[.claude/rules/parallel-work.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/parallel-work.md) は worktree の版と `git show origin/main:` の版の両方 |
+| いまの規則 | [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)、[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md)、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)。[.claude/rules/parallel-work.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/parallel-work.md) は worktree の版と `git show origin/main:` の版の両方 |
 | 開いている PR の現状 | `gh pr list --state open --json number,title,isDraft`（読み取りだけ） |
 | 数えたもの | `grep -c '確かめ役' review-loop-efficiency.md`、`git grep -c 'ここには写さない'`、`git grep -c '要点だけ'`、`wc -l`、`grep -l 'paths' .claude/rules/*.md` |
 

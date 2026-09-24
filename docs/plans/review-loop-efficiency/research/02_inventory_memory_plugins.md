@@ -3,7 +3,7 @@
 # レビューループの定義の棚卸し（リポジトリの外）
 
 **この文書は maimuzo の個人環境の棚卸しである。**このリポジトリを clone した人の手元には、ここに挙げるメモリも個人のプラグインも無い
-（[CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
+（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
 
 **調べた時点。**2026-09-15。worktree の HEAD は df36f9d7。プラグインは cache に展開されている版を読んだ。
 
@@ -28,7 +28,7 @@
   呼ぶ側が挙げた範囲に加え、~/.claude/skills・~/.claude/hooks・~/.claude/settings.local.json・~/.claude.json・continuo/.claude/local-guidelines.md・リポジトリ側の Stop hook の止め方まで読んだ
 - [worker-briefing 2-5](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183)（同じものが他に無いかを数える）。食い違いの文言ごとの件数と検索パターンを「8」に書いた
 - [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「worker への指示に必ず入れること（根拠の付け方）」。主張ごとに場所・原文・コマンドの出力を付けた
-- [CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」「公開してよい情報かを常に判断する」「`~/.claude/projects/` 配下を消さない」（読むだけにした）
+- [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」「公開してよい情報かを常に判断する」「`~/.claude/projects/` 配下を消さない」（読むだけにした）
 
 **2. 飛ばしてよい段。**
 
@@ -238,7 +238,7 @@ feedback_issue_creation_needs_human_approval.md:39「指摘に対応し、問題
 | **差し戻しの回ごとに直し方を変える**（1回目は類似パターンの全文走査、2回目は全面の書き直し、3回目は中断） | use-co-reviewer/SKILL.md:52-58 | `3 ストライク\|ストライク` で0件 |
 | **実装しない別コンテキストの検証者が、合否と指摘だけを構造化して返す** | cosper-team/SKILL.md:109-127「修正はせず指摘のみ返せ」、schema `{ pass, issues }` | `fresh-context\|別コンテキスト` で0件 |
 | **前回からの退行を毎回書かせる** | gan-evaluator.md:131「前回のイテレーションから退行した点」 | `退行` で0件 |
-| **仕様の軸で「頼まれていない振る舞い」を、毎回のレビューで挙げさせる** | mattpocock/skills/engineering/code-review/SKILL.md:70 "(b) behaviour in the diff that wasn't asked for (scope creep)" | `Standards\|Spec 軸\|scope creep\|頼まれていない` で0件。リポジトリでは3・6・9回目の6段で目的の確認役が行う（[CLAUDE.md](../../../../CLAUDE.md) の節）ので、毎回ではない |
+| **仕様の軸で「頼まれていない振る舞い」を、毎回のレビューで挙げさせる** | mattpocock/skills/engineering/code-review/SKILL.md:70 "(b) behaviour in the diff that wasn't asked for (scope creep)" | `Standards\|Spec 軸\|scope creep\|頼まれていない` で0件。リポジトリでは3・6・9回目の6段で目的の確認役が行う（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の節）ので、毎回ではない |
 | **再レビューの対象を、直前の変更に絞る** | codex/prompts/stop-review-gate.md:29-31 "Do not block based on older edits from earlier turns"（それより前の turn の編集を理由に止めるな） | **数えていない** |
 | **`/code-review` の effort level を決める** | このセッションの skill 一覧の説明文と、公式文書の「Tune effort and arguments」（3-5） | `effort\|/code-review (low\|…\|ultra)\|code-review ultra` で2件。[.claude/skills/pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99) は受け取る引数の説明、[同:130-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L130-L131) は ultra を人間の指示のときだけ使うという規則。**段2のコマンド（[同:95-96](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L95-L96)）は level を指定していない** |
 
@@ -254,7 +254,7 @@ bug-ticket-resolve と cosper-team を使えば、さらに重なる。codex の
 
 | 仕組み | いつ起きるか（原文と場所） | いま有効か（根拠） |
 | --- | --- | --- |
-| **同梱の `/code-review`** | PR を出すとき（[CLAUDE.md](../../../../CLAUDE.md) の「PR を出すときの絶対条件」）。コマンドは [.claude/skills/pr-review-and-merge/SKILL.md:95-96](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L95-L96) の `/code-review <PR 番号>` | 有効。~/.claude.json の skillUsage で246回、最終 2026-09-15 |
+| **同梱の `/code-review`** | PR を出すとき（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「PR を出すときの絶対条件」）。コマンドは [.claude/skills/pr-review-and-merge/SKILL.md:95-96](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L95-L96) の `/code-review <PR 番号>` | 有効。~/.claude.json の skillUsage で246回、最終 2026-09-15 |
 | **maimuzo-from-ecc の code-reviewer と security-reviewer**（general-claude-md の手順5） | general-claude-md/SKILL.md:106-108「コードを変更するたびに以下を実行: … 5. code-reviewerおよびsecurity-reviewerエージェントでコードレビューを受ける」 | general-claude-md は continuo/.claude/local-guidelines.md:5-7 で毎セッション必読。**実際に何回呼ばれたかは測っていない** |
 | **bug-ticket-resolve の Step 5** | bug-ticket-resolve/SKILL.md:102-105 | そのスキルを使ったときだけ。使われた回数は測っていない |
 | **cosper-team の Verify と受け入れ検査** | cosper-team/SKILL.md:109-134 | 同上 |

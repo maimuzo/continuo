@@ -2,7 +2,7 @@
 
 **言いたいこと。**レビューループの定義は、開発者向けの5ファイル（約880行・約60KB）に、写しを含めて散らばっている。
 **収束の判定（Critical と High が0件）を支える「重大度の決め方」は、利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) が4段の表として持っている**（`origin/main` の時点から在る。2026-09-22 に数え直した）。
-**開発者向けの [CLAUDE.md](../../../../CLAUDE.md) には無い。書く側が最初のレビューへ出す前の自己点検は、どちらにも無い。**
+**開発者向けの [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) には無い。書く側が最初のレビューへ出す前の自己点検は、どちらにも無い。**
 **必須の道具 `/code-review` には、1回で全部挙げさせる指示も、前の周の対応表も、effort level も渡っておらず、機械の関門は目印と投稿者しか見ていない。**
 
 ---
@@ -36,11 +36,11 @@
 
 | 発見 | 根拠の在りか |
 | --- | --- |
-| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は Critical と High が0件のこと（[CLAUDE.md:568](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L568)）だが、何を Critical / High にするかの基準が [CLAUDE.md](../../../../CLAUDE.md) に無い。**利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には4段の表として在る**（2026-09-22 に数え直した）。付けるのはレビュワーである | 3-2 |
+| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は Critical と High が0件のこと（[CLAUDE.md:568](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L568)）だが、何を Critical / High にするかの基準が [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) に無い。**利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には4段の表として在る**（2026-09-22 に数え直した）。付けるのはレビュワーである | 3-2 |
 | **書く側が最初のレビューへ出す前の自己点検の段が無い。**「同じものを数える」（worker-briefing 2-5）は、指摘を受けてから・指摘する前に効くもので、指摘が無ければ発火しない | 3-1 |
 | **必須の道具 `/code-review` に、徹底度の指示も前の周の対応表も effort level も渡っていない。**規則自身が「渡さないと同じものが必ずまた挙がり、周だけが増える」と書いている | [.claude/rules/design-review.md:143-146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L146)、[.claude/skills/pr-review-and-merge/SKILL.md:99-103](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99-L103)、3-3 |
 | **機械の関門は、目印が先頭にあるかと投稿者しか見ない。**周回数・重大度の件数・「数えた件数」の行は、どの機械も検査しない | 2-5 の表と、その下の grep |
-| **コードレビュー記録フロー（[CLAUDE.md](../../../../CLAUDE.md)）の中に、1回目のレビューの前に効く段は無い。**6段・4段・判定後の表・10回停止は、全部「収まらなかったあと」の手順である。設計側だけは、書く前の2節（[.claude/rules/design-review.md:57-79](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L79)）を持つ | 2-4 |
+| **コードレビュー記録フロー（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)）の中に、1回目のレビューの前に効く段は無い。**6段・4段・判定後の表・10回停止は、全部「収まらなかったあと」の手順である。設計側だけは、書く前の2節（[.claude/rules/design-review.md:57-79](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L57-L79)）を持つ | 2-4 |
 
 ---
 
@@ -105,7 +105,7 @@
 
 ### 2-4. 収束の定義・回数・止まる条件
 
-**言いたいこと。**正は [CLAUDE.md](../../../../CLAUDE.md) で、ほかは写しか要点である。
+**言いたいこと。**正は [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) で、ほかは写しか要点である。
 **利用者向けの builtin.md にも、回数・収束・停止の定義が在る**（2026-09-22 に数え直した）。
 [internal/prompt/builtin.md:740](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L740) が収束、[internal/prompt/builtin.md:939-950](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L939-L950) が何周回すか、
 [internal/prompt/builtin.md:950](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L950) が連続10回で止まる、である。**下の根拠は、そこに書いてあるコミット（`df36f9d7`）の時点では正しい。**
@@ -116,8 +116,8 @@
 | [CLAUDE.md:573-611](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573-L611) | 収まったあとは最大1周。Medium / Low を直したら最後に1回。最後の周の Medium / Low は直さない | 「そこから先は最大1周である。」 | 開発者向け |
 | [CLAUDE.md:613-639](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L613-L639) | 収まらないときの数え方。最後の1回も10回に数える | 「10回を超えて回してはならない。」 | 開発者向け |
 | [CLAUDE.md:640-661](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L661) | 3・6・9回目の6段（目的の確認役 → 理由をまとめる → 説得 → 削除と記録 → 報告 → 設計レビューへ戻る） | 「実装を止めて設計内容を敵対的レビューし、実装し直してから次のレビューを回す。」 | 開発者向け |
-| [CLAUDE.md](../../../../CLAUDE.md) | 設計と実装を別に数える。人間の方針変更でリセット。止まったときに人間へ見せる4項目 | 「足して20回まで、という意味ではない。」 | 開発者向け |
-| [CLAUDE.md](../../../../CLAUDE.md) | 3回で通らなかったときの4段と、判定後の2通り | 「PR の diff を見せない。」 | 開発者向け |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 設計と実装を別に数える。人間の方針変更でリセット。止まったときに人間へ見せる4項目 | 「足して20回まで、という意味ではない。」 | 開発者向け |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 3回で通らなかったときの4段と、判定後の2通り | 「PR の diff を見せない。」 | 開発者向け |
 | [CLAUDE.md:412-418](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L412-L418) | PR 手順の段4に、収束と最後の1周の要点 | 「ただし Medium か Low を1件でも直したなら、最後の1回は必ず回す。」 | 開発者向け |
 | [CLAUDE.md:310-317](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L310-L317) | 作業の進め方の要約4点 | 「3回ごとに issue と実装を突き合わせ直す。」 | 開発者向け |
 | [.claude/rules/design-review.md:153-202](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L153-L202) | 回す回数（要点の写しと、3・6・9 / 10回の絶対条件） | 「2回で止めてよいかを訊かない。」 | 開発者向け |
@@ -136,7 +136,7 @@
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
 | [CLAUDE.md:421-472](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L421-L472) | 貼ったことが唯一の証拠。3箇所で止める。数える条件2つ。逃がし口の環境変数（**いずれも 2026-09-21 に2箇所へ減り、逃がし口は無くなった**） | 「3 を飛ばしたものは、レビューを実施していないものとして扱う。」 | 開発者向け |
-| [CLAUDE.md:553-563](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L553-L563) と [CLAUDE.md](../../../../CLAUDE.md) | 対応表を PR のコメントへ残す理由。何周目かを書く。設計レビューの回数を PR 本文へ写す | 「回数はレビュー結果のコメントへ書く。」 | 開発者向け |
+| [CLAUDE.md:553-563](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L553-L563) と [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 対応表を PR のコメントへ残す理由。何周目かを書く。設計レビューの回数を PR 本文へ写す | 「回数はレビュー結果のコメントへ書く。」 | 開発者向け |
 | `.claude/hooks/block-merge-without-review.py:212-223`（**2026-09-21 に廃止。**リンクを外した） | `gh pr merge/ready <番号>` の前に、先頭の目印と投稿者を見る | `if not isinstance(body, str) or not MARKER_RE.match(body):` | 開発者向け |
 | `.claude/settings.json:86-95`（**2026-09-21 に hooks ごと廃止。**リンクを外した） | 上の hook を `PreToolUse` の Bash に張る | `"matcher": "Bash"` | 開発者向け |
 | [.github/workflows/review-gate.yml:66-231](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L66-L231) | `design-review-result`。断りの目印か、紐づく issue のどれか1件に目印 | `(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->` | 開発者向け |
@@ -181,7 +181,7 @@
 
 ### 3-2. 重大度の判定基準
 
-**言いたいこと。**開発者向けには無い。[CLAUDE.md](../../../../CLAUDE.md) には Critical / High / Medium / Low / Info の名前だけがあり、何をどれにするかを決めていない。
+**言いたいこと。**開発者向けには無い。[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) には Critical / High / Medium / Low / Info の名前だけがあり、何をどれにするかを決めていない。
 **利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には、4段の表として在る**（2026-09-22 に数え直した）。
 **それでも「収まっている」は Critical と High の件数だけで決まり、設計レビューにも同じ判定が効く**（[CLAUDE.md:665](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L665)）。
 
@@ -230,8 +230,8 @@
 | 定義 | 正 | 写し |
 | --- | --- | --- |
 | **最大1周・最後の1回・10回目の例外** | [CLAUDE.md:573-635](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573-L635) | [CLAUDE.md:412-418](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L412-L418)、[.claude/rules/design-review.md:160-165](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L160-L165)、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) |
-| **3・6・9回目で6段、10回で止まる** | [CLAUDE.md](../../../../CLAUDE.md) | [CLAUDE.md:315](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L315)、[CLAUDE.md:507](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L507)、[.claude/rules/design-review.md:155-192](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)、[.claude/skills/pr-review-and-merge/SKILL.md:185-188](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L185-L188) |
-| **3回で収まらないときの考え方** | [CLAUDE.md](../../../../CLAUDE.md) | [.claude/rules/design-review.md:206-218](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L105-L116) |
+| **3・6・9回目で6段、10回で止まる** | [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | [CLAUDE.md:315](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L315)、[CLAUDE.md:507](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L507)、[.claude/rules/design-review.md:155-192](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L155-L192)、[.claude/rules/design-review.md:209-213](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L209-L213)、[.claude/skills/worker-briefing/SKILL.md:117-118](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L117-L118)、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)、[.claude/skills/pr-review-and-merge/SKILL.md:185-188](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L185-L188) |
+| **3回で収まらないときの考え方** | [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | [.claude/rules/design-review.md:206-218](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L206-L218)、[.claude/skills/worker-briefing/SKILL.md:105-116](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L105-L116) |
 | **前の周の対応表を渡す** | [.claude/rules/design-review.md:143-149](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L149) | [.claude/skills/worker-briefing/SKILL.md:349](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L349) |
 | **数える条件（先頭の目印と投稿者）** | 3箇所の実装（**2026-09-21 以降は2箇所**） | [CLAUDE.md:433-436](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L433-L436)、[.claude/rules/design-review.md:33-36](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L33-L36)、[CONTRIBUTING.md:145-150](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CONTRIBUTING.md#L145-L150)、[docs/releasing.md:233-237](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/releasing.md#L233-L237) |
 
@@ -265,7 +265,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 | **3・6・9回目のあと、次に何をするか**（読み方が2通りに割れる） | [.claude/skills/pr-review-and-merge/SKILL.md:185-186](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L185-L186)「3・6・9回目で収まらないときは、CLAUDE.md の「回数を数える」にある6段を終えてから段5へ進む。」（このスキルの段5は検査の回し直し、段6はマージ） | [CLAUDE.md:649](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L649)「実装し直してから次のレビューを回す。」と [CLAUDE.md:412](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L412)「収まるまで 2〜4 を繰り返す。」。**スキルを字面どおりに読むと、収まっていないまま検査とマージの段へ進む** |
 | **「段5」が2つある** | [CLAUDE.md:418-419](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L418-L419)「段5 へ進まずに止まる」「5. `gh pr ready` で draft を外す」 | [.claude/skills/pr-review-and-merge/SKILL.md:190](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L190)「段5. 検査を回し直す」 |
 | **存在しない見出しを指している** | [.claude/skills/pr-review-and-merge/SKILL.md:188](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L188)「「絶対条件：連続10回で止まる」」 | 実在する見出しは [CLAUDE.md:663](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L663)「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」。`git grep -F '絶対条件：連続10回で止まる'` は SKILL.md:190 の1件だけ |
-| **同じ段の名前が2つ** | [CLAUDE.md](../../../../CLAUDE.md)「3回で通らなかったとき」 | [.claude/rules/design-review.md:206](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L206)「3回で収まらなかったとき」 |
+| **同じ段の名前が2つ** | [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)「3回で通らなかったとき」 | [.claude/rules/design-review.md:206](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L206)「3回で収まらなかったとき」 |
 | **要点は1行まで、と写しの長さ** | [CLAUDE.md:571](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L571)「要点を1行で添えるのはよい」 | 4章の写しは3〜8行 |
 | **実装レビューの道具が2通り** | [CLAUDE.md:396](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L396)「必ず `/code-review` でレビューする。」と [.claude/rules/design-review.md:15](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L15) の段7 | [.claude/rules/design-review.md:115-118](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L115-L118)「実装レビューでは `maimuzo-from-ecc:architect` を使わない。…Bash を持つエージェント（`general-purpose` など）を立てること。」。**どちらを毎周使うかを決めた箇所は無い**（[.claude/skills/pr-review-and-merge/SKILL.md:119-120](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L119-L120) は両方の場合を書き分けるだけ） |
 | **前の周の対応表を渡す、と渡せない** | [.claude/rules/design-review.md:143-144](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L144)「渡さないと同じものが必ずまた挙がり、周だけが増える。」 | [.claude/rules/design-review.md:146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」。**必須の道具のほうで、規則自身が挙げた「周だけが増える」条件が毎周成り立つ** |
@@ -281,7 +281,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 
 | 範囲 | 行数 | バイト数 |
 | --- | --- | --- |
-| [CLAUDE.md](../../../../CLAUDE.md) | 376 | 28,322 |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 376 | 28,322 |
 | [.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) 全体 | 248 | 14,561 |
 | [.claude/skills/worker-briefing/SKILL.md:105-121](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L105-L121) と [.claude/skills/worker-briefing/SKILL.md:183-298](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183-L298) | 17 + 116 = 133 | 10,910 |
 | [.claude/skills/pr-review-and-merge/SKILL.md:93-188](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L93-L188) | 98 | 6,450 |
