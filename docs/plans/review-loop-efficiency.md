@@ -8,6 +8,10 @@
 **行番号・件数・「いまはこうなっている」の記述は、決めた時点のものである。**
 **その後、この計画自身の実装でファイルが書き換わっているので、いまの実物とは合わない。**
 **いまどうなっているかは、実物を開いて確かめること。**この文書は、そのとき何を見て何を決めたかを残すためにある。
+**行番号と数値がいつの時点のものかは、そのそばに書いてある。**
+**`df36f9d7` か日付が添えてあれば、その時点の値である。**
+**何も添えていないものは、どちらとも決まっていない。**開く前に自分で確かめること。
+**この文書の中で範囲を狭めて言い切るのはやめた。**8周目・9周目・10周目と3周続けて、**言い切りを足すたびに、それが次の周の指摘になったためである。**
 **ファイルの場所は、どの階層のものかが分かる形で書く**（`.claude/rules/` なのか `.claude/skills/` なのか `docs/plans/` なのか）。この文書の中の相対パスは、すべて continuo リポジトリの根（`~/Sources/github/continuo/`）からのものである。
 
 | 元資料（`docs/plans/review-loop-efficiency/research/` の下） | 中身 |
@@ -69,17 +73,17 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **言いたいこと。**レビューループの定義は、continuo リポジトリの5ファイル・メモリ19ファイル・プラグインに散らばっている。
 **起動時に読み込まれるのは 2,468行・159,837バイト**（`CLAUDE.md` 774行＋`.claude/rules/` の8本 1,694行）で、そのうちレビューループが673行（27%）である。
-公式文書の目安は「CLAUDE.md 1枚あたり200行未満」で、いまは3.9倍である。
+公式文書の目安は「CLAUDE.md 1枚あたり200行未満」で、決めた時点では3.9倍だった。
 
 | 場所（continuo リポジトリの根からの相対パス） | 何を定義しているか |
 | --- | --- |
 | [CLAUDE.md:394-560](../../CLAUDE.md#L394-L560) | `/code-review` を必ず通す。結果の目印を CI・リリース前の検査が数える |
 | [CLAUDE.md](../../CLAUDE.md) | 「収まっている」の定義、収まったら最大1周、3・6・9回目の6段、連続10回で止まる |
-| [.claude/rules/design-review.md:1-248](../../.claude/rules/design-review.md#L1-L248) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
-| [.claude/skills/worker-briefing/SKILL.md:1-490](../../.claude/skills/worker-briefing/SKILL.md#L1-L490) | worker への前置き。2-5（同じものを数える）・2-6（1回で全部挙げる）・2-7（合理的根拠） |
-| [.claude/skills/pr-review-and-merge/SKILL.md:1-309](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L309) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
+| [.claude/rules/design-review.md:1-246](../../.claude/rules/design-review.md#L1-L246) | 設計レビューの9段、レビュワーの選び方、根拠を否定できるなら直さない、回数の写し |
+| [.claude/skills/worker-briefing/SKILL.md:1-520](../../.claude/skills/worker-briefing/SKILL.md#L1-L520) | worker への前置き。2-6（同じものを数える）・2-7（1回で全部挙げる）・2-8（合理的根拠） |
+| [.claude/skills/pr-review-and-merge/SKILL.md:1-325](../../.claude/skills/pr-review-and-merge/SKILL.md#L1-L325) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
-| [internal/prompt/builtin.md:104-194](../../internal/prompt/builtin.md#L104-L194) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
+| [internal/prompt/builtin.md:104-258](../../internal/prompt/builtin.md#L104-L258) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
 | [.claude/settings.json](../../.claude/settings.json) の hooks | 返答の形を検査する Stop hook 2本（`.claude/hooks/check-reply-clarity.py` と `check-verified-commands.py`）。**プラグインではない** |
@@ -99,7 +103,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 直しが生んだ 49件 | 直し方を指摘の文面から採る。前の周の判断と逆を求められても両方の根拠を並べない。守りを足す直しをその場で入れる | 6節 |
 | 「直さない」が残り続けた 35件 | `/code-review` には前の周の対応表を渡せない（[.claude/rules/design-review.md:143-146](../../.claude/rules/design-review.md#L143-L146) が自分でそう書いている） | 6節（受けた側で突き合わせる） |
 | 前から在った見落とし 17件 | 1周目に読む reviewer が `/code-review` の1つだけ | 5節 |
-| 重さの基準が無い | 何を Critical や High にするかがどこにも無く、対応表を書く本人が付けている | 4節 |
+| 重さの基準が、開発者向けの側に無い | **利用者向けの指示書には4段の定義が在る**（[internal/prompt/builtin.md:733-738](../../internal/prompt/builtin.md#L733-L738)）。**`.claude/` と `CLAUDE.md` には無く、**対応表を書く本人が付けている | 4節 |
 | 余計な機能を削る判定が3回に1度 | 4・5回目と7・8回目は、issue に無い機能が入っていても判定しない。判定の主語も、メインエージェントではなく subagent になっている | 7節 |
 
 **「同じ前提が語を変えて残る」とは何か。**実測の例を1つ挙げる。
@@ -111,9 +115,11 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ---
 
-## 4. 決まったこと: 重さの4つの定義を、リポジトリの rules に置く
+## 4. 決まったこと: 重さの4つの定義は、組み込みの指示書に在るものを正とする
 
-**前提。**いまは Critical と High を何で決めるかが、continuo リポジトリのどこにも無い（`Critical とは|重大度|深刻さ|severity` で検索して、出たのは利用者向けの表の見出し1件だけ）。
+**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:733-738](../../internal/prompt/builtin.md#L733-L738) の表。この pull request の前から `origin/main` に在る）。
+**無いのは開発者向けの側である。**`Critical とは|重大度|深刻さ|severity` で `.claude/` と `CLAUDE.md` を検索しても0件で、開発者はどの重さを付けるかを自分で決めている。
+**決めたこと。**`.claude/` に2枚目の定義を置かない。**正は組み込みの指示書の1箇所だけにする**（8-2 の表が「`maimuzo-dev-core` への review-loop スキルの新設は取りやめ」を人間の決定として記録している）。
 **経緯。**「収まっている」は Critical と High が0件と決まっているのに、その2つを何で決めるかが無いので、判定が定義の無いラベルに乗っている。人間からこの指摘を受けて、定義が出された。
 
 **人間が決めた定義（原文）。**
@@ -126,8 +132,11 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 > これはレビューする側の定義に関わらず、レビューを受けた側がこの基準で再評価して振り分けること。
 > レビューに使用するスキルやエージェントにより、事前に定義がされているかもしれないので、それを鵜呑みにせず、レビューされた側が判断すること。
 
-**提案。**この定義を、continuo リポジトリの `.claude/rules/review-loop.md`（新しく作る1枚）と `CLAUDE.md` の短い節に置く。
-**置き場所が rules と CLAUDE.md でなければならない理由。**`/code-review` は subagent として走り、その初期の文脈には CLAUDE.md と project rules が入るが、**skill の本文は入らない**（公式文書。8節）。プラグインの skill へ移すとレビュワーに届かない。
+**採らなかった案。**この定義を、continuo リポジトリの `.claude/rules/review-loop.md`（新しく作る1枚）と `CLAUDE.md` の短い節に置く。
+**そう考えた理由。**`/code-review` は subagent として走り、その初期の文脈には CLAUDE.md と project rules が入るが、**skill の本文は入らない**（公式文書。8節）。プラグインの skill へ移すとレビュワーに届かない。
+**採らなかった理由。**`.claude/` へ置くと、組み込みの指示書に既に在る定義と合わせて**正が2つになる。**
+**レビュワーへ届ける経路は、この新しい1枚でなくても足りる**（`CLAUDE.md` の短い節から組み込みの指示書の表を指せばよい）。
+**上の「決めたこと」が正である。**この案は採らない。
 
 **あわせて確定した方針（人間の指示。原文）。**
 
@@ -174,7 +183,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 2 | それを使っている箇所と、同じ前提に立つ箇所を、`git grep` の文字列一致と意味の両方で探す |
 | 3 | 食い違っている箇所を挙げる。**直し方の文面は書かない** |
 
-**直す前に、使い捨てのプランを書いて、自分で検討し直す。**置き場所は `/tmp/fix-plan-<pull request 番号>-<何周目>.md` で、**リポジトリには置かない。**書く内容と段取りは `maimuzo-dev-core` の `general-claude-md` スキルにある。**狙いは、書き出したものを自分で読み直すことで、指摘の文面ではなく自分の直し方を目の前に並べ、関連する箇所とその直しが新しく壊す箇所を、実装する前に見つけることである。**
+**直す前に、使い捨てのプランを書いて、自分で検討し直す。**置き場所は**判断票と同じコメント**である（別のファイルを作らない。**貼る決まりが既にあるので、そこへ足すほうが守られる**）。書く内容と段取りは `maimuzo-dev-core` の `general-claude-md` スキルにある。**狙いは、書き出したものを自分で読み直すことで、指摘の文面ではなく自分の直し方を目の前に並べ、関連する箇所とその直しが新しく壊す箇所を、実装する前に見つけることである。**
 
 **見てほしい場所があるときは、レビュワーを1つ増やす。**
 
@@ -318,7 +327,9 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](../../.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](../../.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書**（[internal/prompt/builtin.md:371-376](../../internal/prompt/builtin.md#L371-L376) の 5-2）には回数の定義が無い。**削除したら設計へ戻る、を足すかは利用者に及ぶので、別に判断する。**
+**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:948-950](../../internal/prompt/builtin.md#L948-L950) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
+**回数の決まりを直すときは、[internal/prompt/builtin.md](../../internal/prompt/builtin.md) も開くこと。**開かないと、利用者向けと開発者向けで回数の決まりが食い違ったまま残る。
+**「削除が起きた周だけ設計へ戻る」も、利用者向けの指示書に既に在る**（`origin/main` の時点から。`削除が起きた周` で1件）。**足す必要は無い。**
 
 
 ## 8. 決まったこと: 3つの行き先へ振り分ける
@@ -337,7 +348,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:360-362](../../internal/prompt/builtin.md#L360-L362) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:508-510](../../internal/prompt/builtin.md#L508-L510) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
@@ -351,7 +362,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 対応表の列と、貼る先・1行目の目印 | **リリースの手順** |
 | worker へ何を渡すか | **言葉づかいと禁止語** |
 
-### 8-2. ファイルごとの行き先（人間が指定したもの）
+### 8-2. ファイルごとの行き先（断りの無い行は、人間が指定したもの）
 
 | いまの場所 | 行き先 |
 | --- | --- |
@@ -365,7 +376,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/rules/parallel-work.md](../../.claude/rules/parallel-work.md) | **同上** |
 | [.claude/rules/plan-file.md](../../.claude/rules/plan-file.md) | **maimuzo-dev-core の docs-standard スキル** |
 | [.claude/rules/reporting.md](../../.claude/rules/reporting.md) | **maimuzo-chat-response プラグイン。**このプラグインは本文だけを持ち、hook は持たない |
-| [.claude/rules/release.md](../../.claude/rules/release.md) | **このリポジトリの skill として作り直す**（`release`） |
+| [.claude/rules/release.md](../../.claude/rules/release.md) | **削除。**[docs/releasing.md](../releasing.md) を正にし、[CLAUDE.md](../../CLAUDE.md) の参照を張り替える（下の 8-2a）。**この1行だけは AI の判定で、人間はまだ見ていない** |
 | 設計レビューと実装レビューの回し方 | **builtin.md。**`maimuzo-dev-core` への review-loop スキルの新設は取りやめ（人間の決定） |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） | **削除。**必ずレビューを通すことは CI で担保する |
 | `.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み。**リンクを外した） | **maimuzo-chat-response-hook-clarity プラグインを新設** |
@@ -388,9 +399,27 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 **既存の `maimuzo-chat-response` が持っている Stop hook（`hooks/check-reply-structure.py`。5段構成の検査）は廃止する。**
 `.claude/hooks/check-reply-clarity.py`（**2026-09-20 に移設済み**）が同じ5段を検査したうえで、名札・引用の長さ・名乗り・区切り線も見ているので、**clarity に一本化する。**
 
+### 8-2a. `.claude/rules/release.md` は skill にせず、消す
+
+**言いたいこと。**この1本だけは、行き先を skill から削除へ変えた。
+**手順の正は [docs/releasing.md](../releasing.md) にあり、規則の側は手順を1つも持っていないためである。**
+**写し直すと、正が2つになる。**
+
+**採る形。**[.claude/rules/release.md](../../.claude/rules/release.md) を消し、
+[CLAUDE.md](../../CLAUDE.md) の「リリースの手順」が [docs/releasing.md](../releasing.md) を直接指すようにする。
+
+**なぜ skill にしないか。**
+
+| 何 | 中身 |
+| --- | --- |
+| **中身が案内だけである** | [.claude/rules/release.md](../../.claude/rules/release.md) は「[docs/releasing.md](../releasing.md) のとおりに行うこと」と、そこから3点を抜き出した要約しか持たない。**手順は1つも持っていない** |
+| **正を2つにしない** | 規則自身が「**手順の正はあちらであり、この規則は手順を持たない。同じ工程を2つの文書が持つと、緩いほうへ流れる**」と書いている。**skill にしても、この理由はそのまま当たる** |
+| **[docs/releasing.md](../releasing.md) は公開の文書である** | [SECURITY.md](../../SECURITY.md) からも辿れる。**利用者への約束の裏付けがそこにある**ので、内輪の skill へ移すと辿れなくなる |
+| **skill は「呼ばれたときに読むもの」である** | リリースは人間が始める作業で、[docs/releasing.md](../releasing.md) を開くところから始まる。**skill を挟む段が増えるだけである** |
+
 ### 8-3. worker-briefing は、書き直してから移す
 
-**人間の指摘。**いまの [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（490行）は書いてあることが整理されていない。
+**人間の指摘。**[.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md)（`df36f9d7` の時点で490行）は書いてあることが整理されていない。
 **builtin.md へまとめるときは、次の3つだけを、初見で1通りにしか読めない短さで書く。**
 
 | 何を | 中身 |
@@ -462,7 +491,7 @@ clone した人が従うものではない。**外部の貢献者が読むのは
 1. この計画に人間の承認をもらう
 2. **issue を1件立てる**（[.claude/rules/issue.md](../../.claude/rules/issue.md) と、AI の独断の起票を禁じるメモリがあるので、**人間の許可が要る**）
 3. プラグインを `~/Sources/github/maimuzo-claude-plugins` で作り、PR を出す（**編集用の clone は導入済みの写しより古い。先に `git pull` が要る**）
-4. continuo リポジトリ側は、`.claude/rules/review-loop.md`（重さの定義と目印と1行の案内）だけを足す PR を出す
+4. ~~continuo リポジトリ側は、`.claude/rules/review-loop.md`（重さの定義と目印と1行の案内）だけを足す PR を出す~~ **← 採らなかった。**上の4節の「決めたこと」を見よ
 5. **動くことを確かめてから**、上の表のものを消す PR を出す
 
 ---

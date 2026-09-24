@@ -21,7 +21,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 `In Progress` → `Blocked` を動かす経路を認めている
 （[docs/plans/continuo_design.md:9077](../../docs/plans/continuo_design.md#L9077)）。
 **組み込みの指示書は、それを勧めてはいない**
-（[internal/prompt/builtin.md:314](../../internal/prompt/builtin.md#L314) は「あなたが `gh` を叩く必要はありません」）。
+（[internal/prompt/builtin.md:435](../../internal/prompt/builtin.md#L435) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **カンバンの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
@@ -214,7 +214,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外にも、エージェントが「何をしたか」を1件書く。**
-組み込みの指示書（[internal/prompt/builtin.md:681-684](../../internal/prompt/builtin.md#L681-L684) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:1152-1174](../../internal/prompt/builtin.md#L1152-L1174) の 7-2）が、
 `review` か `blocked` を出した代表以外の issue へ、その issue で何をしたかを書かせている。
 **それでも、人間が代表の pull request を見て確かめること。**そのコメントを書くのはエージェント自身で、中身を機械は確かめていない。
 
