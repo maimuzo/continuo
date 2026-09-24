@@ -267,7 +267,7 @@
 
 **なぜ置いていないか。****どの hook にも登録しておらず、1度も走らないためである。**
 動かないものを置くと、次に読む人が「これは動いている」と読む
-（[.claude/rules/reporting.md](../../.claude/rules/reporting.md) の「事実の扱い」）。
+（[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「事実の扱い」）。
 
 **取り出し方。**5本とも commit `ea8090db145f1001c7f89cc054b34ca906d2fe91` に入っている。
 

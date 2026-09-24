@@ -3,7 +3,7 @@
 # レビューループの定義の棚卸し（リポジトリの外）
 
 **この文書は maimuzo の個人環境の棚卸しである。**このリポジトリを clone した人の手元には、ここに挙げるメモリも個人のプラグインも無い
-（[CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
+（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
 
 **調べた時点。**2026-09-15。worktree の HEAD は df36f9d7。プラグインは cache に展開されている版を読んだ。
 
@@ -24,17 +24,17 @@
 
 **1. この作業に当てはまる規則。**
 
-- [worker-briefing 2-4](../../../../.claude/skills/worker-briefing/SKILL.md#L161)（指示に名前が出ていないものも探して読む）。
+- [worker-briefing 2-4](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L161)（指示に名前が出ていないものも探して読む）。
   呼ぶ側が挙げた範囲に加え、~/.claude/skills・~/.claude/hooks・~/.claude/settings.local.json・~/.claude.json・continuo/.claude/local-guidelines.md・リポジトリ側の Stop hook の止め方まで読んだ
-- [worker-briefing 2-5](../../../../.claude/skills/worker-briefing/SKILL.md#L183)（同じものが他に無いかを数える）。食い違いの文言ごとの件数と検索パターンを「8」に書いた
-- [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) の「worker への指示に必ず入れること（根拠の付け方）」。主張ごとに場所・原文・コマンドの出力を付けた
-- [CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」「公開してよい情報かを常に判断する」「`~/.claude/projects/` 配下を消さない」（読むだけにした）
+- [worker-briefing 2-5](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183)（同じものが他に無いかを数える）。食い違いの文言ごとの件数と検索パターンを「8」に書いた
+- [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「worker への指示に必ず入れること（根拠の付け方）」。主張ごとに場所・原文・コマンドの出力を付けた
+- [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」「公開してよい情報かを常に判断する」「`~/.claude/projects/` 配下を消さない」（読むだけにした）
 
 **2. 飛ばしてよい段。**
 
-- [.claude/rules/design-review.md:9-17](../../../../.claude/rules/design-review.md#L9-L17) の9段は issue の作業の手順である。この作業は設計も実装もしないので通らない
+- [.claude/rules/design-review.md:9-17](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L9-L17) の9段は issue の作業の手順である。この作業は設計も実装もしないので通らない
 - commit と PR の段は、呼ぶ側の指示が禁じている
-- [worker-briefing 2-6](../../../../.claude/skills/worker-briefing/SKILL.md#L256-L258) は「この節は、コードレビューや設計レビューを頼まれた worker に効く。」とある。この作業は棚卸しなので直接は当たらない。ただし「4」の食い違いの表には、2-7 に倣って「誰が何を失うか」を書いた
+- [worker-briefing 2-6](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L256-L258) は「この節は、コードレビューや設計レビューを頼まれた worker に効く。」とある。この作業は棚卸しなので直接は当たらない。ただし「4」の食い違いの表には、2-7 に倣って「誰が何を失うか」を書いた
 
 **3. 公開してよくない情報を書きうる場面。**この文書は公開リポジトリの worktree に置かれる。
 
@@ -209,14 +209,14 @@
 
 | メモリの場所と原文 | リポジトリの規則の場所と原文 | 食い違いで誰が何を失うか |
 | --- | --- | --- |
-| feedback_review_loop_max_three.md:3「上限は3回。3回で通らなかったら目的の確認役を立て」 | [CLAUDE.md:668](../../../../CLAUDE.md#L668)「どちらかが連続10回で収まらなかったら、そこで完全に止めて人間の返事を待つ。」 | 説明文だけで当たりを付けた AI が、3回で止まるか、4回目以降の手順を知らないまま回す。本文 11-13 と索引 MEMORY.md:76 は更新済みで、説明文だけが残っている |
-| 同:40-44 の表が3回目で終わる。「収まったあと最大1周」は、このファイルに無い（全文を読んだ） | [CLAUDE.md:566](../../../../CLAUDE.md#L566)「「収まっている」とは何か」、[CLAUDE.md:573](../../../../CLAUDE.md#L573)「収まったあと、何周回すか」 | メモリだけを読んだ AI は、Critical と High が0件になったあとも Medium と Low のために回す。2026-09-05 に人間が止めさせた周回が戻る |
-| 同:92「重い指摘（Critical / High）だけ直す。中くらい以下は follow-up の issue へ切り出す」 | [CLAUDE.md:545](../../../../CLAUDE.md#L545)「Critical と High は直す。それ以下は、簡単に直るなら直し、設計に触るなら follow-up の issue へ切り出す。」 | どちらを読むかで、簡単な Medium と Low を直すかが変わる。直すと「最後に1回」が発火するので、最後の1周の有無まで変わる |
-| feedback_agent_review_response_format.md:14「列は5つ。」、feedback_code_review_before_pr_ready.md:30「（識別子・レベル・内容・修正可否・理由）」 | [CLAUDE.md:543](../../../../CLAUDE.md#L543) の「分類」列（前の周に既に在ったか、前の周の直しが持ち込んだか） | 分類の列が落ちる。周が増えた原因が「前の周のレビューの見落とし」か「直しが持ち込んだ誤り」かを数えられず、効率化の打ち手を選べない |
-| feedback_agent_review_response_format.md:50「同じ表をそのまま人間へ報告し、追加の指示を待つ」 | [CLAUDE.md:527](../../../../CLAUDE.md#L527)「同じ表をそのまま人間へ報告する。返事は待たずに次を回す」 | メモリに従うと、毎周で人間待ちになる。人間の時間が周の数だけ取られる |
-| feedback_check_overfit_after_many_reviews.md:35「見つけても自分で消さない。表にして人間に確認する」、MEMORY.md:77「見つけても消さず人間に確認」 | [CLAUDE.md:647](../../../../CLAUDE.md#L647)「説得できなかった内容は削除する。削除する内容を、対になる issue のコメントへまとめてから消す。」 | 3・6・9回目の6段で、削除せずに人間待ちになる。issue に無い仕様が残ったまま、次の周が回る |
-| feedback_review_the_design_before_implementing.md:18「指摘を直す。直したことも issue に書く」 | [.claude/rules/design-review.md:12](../../../../.claude/rules/design-review.md#L12)「指摘ごとの判断票を issue のコメントに貼る（1行目を `<!-- design-review-result -->` にする）。そのとおりに直す」 | 目印の無いコメントになり、[.claude/rules/design-review.md:29](../../../../.claude/rules/design-review.md#L29) の CI の検査が赤になる。直さないと決めた指摘の理由も残らない |
-| feedback_adversarial_review_needs_reasons.md:34-35「納得できない指摘には、理由を付けて反論する。」「議論して決める。」 | [.claude/rules/design-review.md:124](../../../../.claude/rules/design-review.md#L124)「絶対条件：合理的根拠を否定できるなら、直さない」、[.claude/rules/design-review.md:146](../../../../.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」 | `/code-review` には反論を返す経路が無い。メモリの「議論」をやろうとすると、手段が無いまま周が増えるか、反論を人間へ回すことになる |
+| feedback_review_loop_max_three.md:3「上限は3回。3回で通らなかったら目的の確認役を立て」 | [CLAUDE.md:668](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L668)「どちらかが連続10回で収まらなかったら、そこで完全に止めて人間の返事を待つ。」 | 説明文だけで当たりを付けた AI が、3回で止まるか、4回目以降の手順を知らないまま回す。本文 11-13 と索引 MEMORY.md:76 は更新済みで、説明文だけが残っている |
+| 同:40-44 の表が3回目で終わる。「収まったあと最大1周」は、このファイルに無い（全文を読んだ） | [CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566)「「収まっている」とは何か」、[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573)「収まったあと、何周回すか」 | メモリだけを読んだ AI は、Critical と High が0件になったあとも Medium と Low のために回す。2026-09-05 に人間が止めさせた周回が戻る |
+| 同:92「重い指摘（Critical / High）だけ直す。中くらい以下は follow-up の issue へ切り出す」 | [CLAUDE.md:545](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545)「Critical と High は直す。それ以下は、簡単に直るなら直し、設計に触るなら follow-up の issue へ切り出す。」 | どちらを読むかで、簡単な Medium と Low を直すかが変わる。直すと「最後に1回」が発火するので、最後の1周の有無まで変わる |
+| feedback_agent_review_response_format.md:14「列は5つ。」、feedback_code_review_before_pr_ready.md:30「（識別子・レベル・内容・修正可否・理由）」 | [CLAUDE.md:543](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L543) の「分類」列（前の周に既に在ったか、前の周の直しが持ち込んだか） | 分類の列が落ちる。周が増えた原因が「前の周のレビューの見落とし」か「直しが持ち込んだ誤り」かを数えられず、効率化の打ち手を選べない |
+| feedback_agent_review_response_format.md:50「同じ表をそのまま人間へ報告し、追加の指示を待つ」 | [CLAUDE.md:527](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L527)「同じ表をそのまま人間へ報告する。返事は待たずに次を回す」 | メモリに従うと、毎周で人間待ちになる。人間の時間が周の数だけ取られる |
+| feedback_check_overfit_after_many_reviews.md:35「見つけても自分で消さない。表にして人間に確認する」、MEMORY.md:77「見つけても消さず人間に確認」 | [CLAUDE.md:647](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L647)「説得できなかった内容は削除する。削除する内容を、対になる issue のコメントへまとめてから消す。」 | 3・6・9回目の6段で、削除せずに人間待ちになる。issue に無い仕様が残ったまま、次の周が回る |
+| feedback_review_the_design_before_implementing.md:18「指摘を直す。直したことも issue に書く」 | [.claude/rules/design-review.md:12](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L12)「指摘ごとの判断票を issue のコメントに貼る（1行目を `<!-- design-review-result -->` にする）。そのとおりに直す」 | 目印の無いコメントになり、[.claude/rules/design-review.md:29](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L29) の CI の検査が赤になる。直さないと決めた指摘の理由も残らない |
+| feedback_adversarial_review_needs_reasons.md:34-35「納得できない指摘には、理由を付けて反論する。」「議論して決める。」 | [.claude/rules/design-review.md:124](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124)「絶対条件：合理的根拠を否定できるなら、直さない」、[.claude/rules/design-review.md:146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」 | `/code-review` には反論を返す経路が無い。メモリの「議論」をやろうとすると、手段が無いまま周が増えるか、反論を人間へ回すことになる |
 
 **食い違いではないが、上限が書かれていないループ。**
 feedback_issue_creation_needs_human_approval.md:39「指摘に対応し、問題が無くなるまで直す」は、起票の前の敵対的レビューである。
@@ -231,16 +231,16 @@ feedback_issue_creation_needs_human_approval.md:39「指摘に対応し、問題
 | 考え方 | プラグイン側の原文と場所 | リポジトリの規則で探した結果 |
 | --- | --- | --- |
 | **確信度の閾値で、出す指摘を絞る** | ecc/agents/code-reviewer.md:18-27 の ">80% confident"（80%を超える確信）。codex/schemas/review-output.schema.json:68-72 の confidence。同梱の `/code-review` の low と medium（3-5） | `confiden\|確信度\|80%` で0件 |
-| **指摘を出す前に、実際の挙動と突き合わせる検証の段** | 公式の Code Review（GitHub の有料機能）"a verification step checks candidates against actual code behavior to filter out false positives"（候補を実際のコードの挙動と突き合わせ、偽陽性を落とす検証の段がある）。同 "Verification bar: … behavior claims need a file:line citation in the source, not an inference from naming"（振る舞いの主張には、名前からの推測ではなく file:line の引用を求める）。co-reviewer/SKILL.md:37「未確認 = high で差し戻し」 | 根拠を添えさせる規則はある（[worker-briefing 2-7](../../../../.claude/skills/worker-briefing/SKILL.md#L277)）。**レビュワーとは別の役が、指摘を再現してから採る段**は `fresh-context\|別コンテキスト` で0件。「検証」の語そのものでは数えていない |
-| **2回目以降のレビューでは、重い指摘だけを出させる** | 公式の Code Review "Re-review convergence: … "after the first review, suppress new nits and post Important findings only" stops a one-line fix from reaching round seven on style alone."（初回のあとは新しい nit を抑えて Important だけ出す、という規則で、1行の直しがスタイルだけで7周目に達するのを防ぐ） | 受けた側の「収まったら最大1周」は在る（[CLAUDE.md:573](../../../../CLAUDE.md#L573)）。**レビュワー側に出す指摘を絞らせる規則**は、nit と件数の上限のパターンで0件。`/code-review` にはプロンプトを渡せない（[.claude/rules/design-review.md:146](../../../../.claude/rules/design-review.md#L146)） |
-| **PR が持ち込んでいない既存のバグを、別の重大度に分ける** | 公式の Code Review "Pre-existing: A bug that exists in the codebase but was not introduced by this PR"（この PR が持ち込んだのではない、コードベースに既に在るバグ） | `Pre-existing\|pre-existing\|既存のバグ\|前から在ったバグ` で0件。近いのは分類の列（[CLAUDE.md:543](../../../../CLAUDE.md#L543)）だが、分けているのは「前の周に在ったか」で、「PR の前から在ったか」ではない |
+| **指摘を出す前に、実際の挙動と突き合わせる検証の段** | 公式の Code Review（GitHub の有料機能）"a verification step checks candidates against actual code behavior to filter out false positives"（候補を実際のコードの挙動と突き合わせ、偽陽性を落とす検証の段がある）。同 "Verification bar: … behavior claims need a file:line citation in the source, not an inference from naming"（振る舞いの主張には、名前からの推測ではなく file:line の引用を求める）。co-reviewer/SKILL.md:37「未確認 = high で差し戻し」 | 根拠を添えさせる規則はある（[worker-briefing 2-7](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L277)）。**レビュワーとは別の役が、指摘を再現してから採る段**は `fresh-context\|別コンテキスト` で0件。「検証」の語そのものでは数えていない |
+| **2回目以降のレビューでは、重い指摘だけを出させる** | 公式の Code Review "Re-review convergence: … "after the first review, suppress new nits and post Important findings only" stops a one-line fix from reaching round seven on style alone."（初回のあとは新しい nit を抑えて Important だけ出す、という規則で、1行の直しがスタイルだけで7周目に達するのを防ぐ） | 受けた側の「収まったら最大1周」は在る（[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573)）。**レビュワー側に出す指摘を絞らせる規則**は、nit と件数の上限のパターンで0件。`/code-review` にはプロンプトを渡せない（[.claude/rules/design-review.md:146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L146)） |
+| **PR が持ち込んでいない既存のバグを、別の重大度に分ける** | 公式の Code Review "Pre-existing: A bug that exists in the codebase but was not introduced by this PR"（この PR が持ち込んだのではない、コードベースに既に在るバグ） | `Pre-existing\|pre-existing\|既存のバグ\|前から在ったバグ` で0件。近いのは分類の列（[CLAUDE.md:543](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L543)）だが、分けているのは「前の周に在ったか」で、「PR の前から在ったか」ではない |
 | **1回に出す軽い指摘の件数に上限を置き、残りは件数だけ書く** | 公式の Code Review "Nit volume: cap how many 🟡 Nit comments a single review posts."（1回のレビューで出す Nit の数に上限を置く） | nit と件数の上限のパターンで0件 |
 | **差し戻しの回ごとに直し方を変える**（1回目は類似パターンの全文走査、2回目は全面の書き直し、3回目は中断） | use-co-reviewer/SKILL.md:52-58 | `3 ストライク\|ストライク` で0件 |
 | **実装しない別コンテキストの検証者が、合否と指摘だけを構造化して返す** | cosper-team/SKILL.md:109-127「修正はせず指摘のみ返せ」、schema `{ pass, issues }` | `fresh-context\|別コンテキスト` で0件 |
 | **前回からの退行を毎回書かせる** | gan-evaluator.md:131「前回のイテレーションから退行した点」 | `退行` で0件 |
-| **仕様の軸で「頼まれていない振る舞い」を、毎回のレビューで挙げさせる** | mattpocock/skills/engineering/code-review/SKILL.md:70 "(b) behaviour in the diff that wasn't asked for (scope creep)" | `Standards\|Spec 軸\|scope creep\|頼まれていない` で0件。リポジトリでは3・6・9回目の6段で目的の確認役が行う（[CLAUDE.md](../../../../CLAUDE.md) の節）ので、毎回ではない |
+| **仕様の軸で「頼まれていない振る舞い」を、毎回のレビューで挙げさせる** | mattpocock/skills/engineering/code-review/SKILL.md:70 "(b) behaviour in the diff that wasn't asked for (scope creep)" | `Standards\|Spec 軸\|scope creep\|頼まれていない` で0件。リポジトリでは3・6・9回目の6段で目的の確認役が行う（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の節）ので、毎回ではない |
 | **再レビューの対象を、直前の変更に絞る** | codex/prompts/stop-review-gate.md:29-31 "Do not block based on older edits from earlier turns"（それより前の turn の編集を理由に止めるな） | **数えていない** |
-| **`/code-review` の effort level を決める** | このセッションの skill 一覧の説明文と、公式文書の「Tune effort and arguments」（3-5） | `effort\|/code-review (low\|…\|ultra)\|code-review ultra` で2件。[.claude/skills/pr-review-and-merge/SKILL.md:99](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99) は受け取る引数の説明、[同:130-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L130-L131) は ultra を人間の指示のときだけ使うという規則。**段2のコマンド（[同:95-96](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L95-L96)）は level を指定していない** |
+| **`/code-review` の effort level を決める** | このセッションの skill 一覧の説明文と、公式文書の「Tune effort and arguments」（3-5） | `effort\|/code-review (low\|…\|ultra)\|code-review ultra` で2件。[.claude/skills/pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99) は受け取る引数の説明、[同:130-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L130-L131) は ultra を人間の指示のときだけ使うという規則。**段2のコマンド（[同:95-96](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L95-L96)）は level を指定していない** |
 
 **材料にならないもの。**REVIEW.md は、公式文書が「ローカルの `/code-review` は読まない」と書いている（3-5）。リポジトリの規則にも0件（`REVIEW\.md`）。
 
@@ -254,7 +254,7 @@ bug-ticket-resolve と cosper-team を使えば、さらに重なる。codex の
 
 | 仕組み | いつ起きるか（原文と場所） | いま有効か（根拠） |
 | --- | --- | --- |
-| **同梱の `/code-review`** | PR を出すとき（[CLAUDE.md](../../../../CLAUDE.md) の「PR を出すときの絶対条件」）。コマンドは [.claude/skills/pr-review-and-merge/SKILL.md:95-96](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L95-L96) の `/code-review <PR 番号>` | 有効。~/.claude.json の skillUsage で246回、最終 2026-09-15 |
+| **同梱の `/code-review`** | PR を出すとき（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「PR を出すときの絶対条件」）。コマンドは [.claude/skills/pr-review-and-merge/SKILL.md:95-96](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L95-L96) の `/code-review <PR 番号>` | 有効。~/.claude.json の skillUsage で246回、最終 2026-09-15 |
 | **maimuzo-from-ecc の code-reviewer と security-reviewer**（general-claude-md の手順5） | general-claude-md/SKILL.md:106-108「コードを変更するたびに以下を実行: … 5. code-reviewerおよびsecurity-reviewerエージェントでコードレビューを受ける」 | general-claude-md は continuo/.claude/local-guidelines.md:5-7 で毎セッション必読。**実際に何回呼ばれたかは測っていない** |
 | **bug-ticket-resolve の Step 5** | bug-ticket-resolve/SKILL.md:102-105 | そのスキルを使ったときだけ。使われた回数は測っていない |
 | **cosper-team の Verify と受け入れ検査** | cosper-team/SKILL.md:109-134 | 同上 |

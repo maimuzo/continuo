@@ -13,8 +13,8 @@
 
 | 問い | 答え |
 | --- | --- |
-| この作業はどの規則に当てはまるか | 2-4（指示に名前が出ていない関連ファイルも自分で探して読む）、2-5（自分が書く「無い」「件数」にも検索パターン・範囲・件数を添える）、2-2 と [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md)（名札に意味を貼る・測る前に断定しない・根拠の付け方）、3 の表（公開してよい情報か・英語の技術用語を直訳しない）。2-6 と 2-7 はレビューを頼まれた worker 向けで、この調査には直接は効かない。分析の対象として読んだ |
-| 飛ばしてよい段はあるか | worker-briefing に「飛ばしてよい段」の記述は無い。[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の9段は issue の作業（設計→実装→PR）の段で、調査メモの作成はそれに当たらないと判断した（どの文書も「調査は飛ばしてよい」とは書いていないので、これは私の判断である）。2-5 の段4（2件以上をまとめる）は指摘を出すときの段なので、この作業では使っていない |
+| この作業はどの規則に当てはまるか | 2-4（指示に名前が出ていない関連ファイルも自分で探して読む）、2-5（自分が書く「無い」「件数」にも検索パターン・範囲・件数を添える）、2-2 と [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md)（名札に意味を貼る・測る前に断定しない・根拠の付け方）、3 の表（公開してよい情報か・英語の技術用語を直訳しない）。2-6 と 2-7 はレビューを頼まれた worker 向けで、この調査には直接は効かない。分析の対象として読んだ |
+| 飛ばしてよい段はあるか | worker-briefing に「飛ばしてよい段」の記述は無い。[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の9段は issue の作業（設計→実装→PR）の段で、調査メモの作成はそれに当たらないと判断した（どの文書も「調査は飛ばしてよい」とは書いていないので、これは私の判断である）。2-5 の段4（2件以上をまとめる）は指摘を出すときの段なので、この作業では使っていない |
 | 公開してよくない情報を書きうる場面 | (1) WebFetch が PDF を保存した場所がホームの下の絶対パスだった。本文には書かない。(2) PR のコメントの URL にはリポジトリ名が入る。PR 番号だけで書いた。(3) トークンやホスト名は扱っていない |
 | 作業に効く場所をどう探し、何を読んだか | 下の表。読めなかったものは 7・8 節 |
 
@@ -22,11 +22,11 @@
 
 | 何 | どう探したか |
 | --- | --- |
-| [.claude/skills/worker-briefing/SKILL.md](../../../../.claude/skills/worker-briefing/SKILL.md) 全文（2-5 は 183-254 行） | 指示のパス。Read |
-| [CLAUDE.md:520-528](../../../../CLAUDE.md#L520-L528)（コードレビュー記録フローの手順） | 指示の行番号を `sed -n 495,520p` で開いた |
+| [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) 全文（2-5 は 183-254 行） | 指示のパス。Read |
+| [CLAUDE.md:520-528](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L520-L528)（コードレビュー記録フローの手順） | 指示の行番号を `sed -n 495,520p` で開いた |
 | 2-5 を指している箇所 | `git grep -n '2-5' -- '.claude/' 'CLAUDE.md'` → 8行（design-review.md:117、reporting.md:572・575、worker-briefing 4行、CLAUDE.md:506） |
-| [.claude/skills/pr-review-and-merge/SKILL.md:93-131](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L93-L131)（段2. レビューを回す） | `grep -n -E '^#|数え|同じ誤り|2-5|2-6|前の周'` で見出しと言及を拾ってから開いた |
-| [.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) と [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) | 注入された版と worktree の版を読んだ |
+| [.claude/skills/pr-review-and-merge/SKILL.md:93-131](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L93-L131)（段2. レビューを回す） | `grep -n -E '^#|数え|同じ誤り|2-5|2-6|前の周'` で見出しと言及を拾ってから開いた |
+| [.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) と [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) | 注入された版と worktree の版を読んだ |
 | 2-5 が入った commit | `git log -S '1件だけ見て終わるな'` → `63fe82b8 2026-09-04 09:37:44 +0900`、`git log -S '数えるのは「前提」である'` → `d92501b1 2026-09-04 10:14:30 +0900` |
 | 別の worker が集めたレビュー結果コメント [research/03_work/code_comments.json](03_work/code_comments.json) | ディレクトリを `ls` して見つけた。**別の worker が 2026-09-15 21:35 に取得したもので、取得範囲が網羅的かは確かめていない**。337件、2026-08-27〜2026-09-15 |
 
@@ -37,7 +37,7 @@
 | 何を | 中身 |
 | --- | --- |
 | 何が起きているか | レビューで「A が誤り」と指摘され、A を直して次の周へ出すと、**A と同じ前提に立つ別の箇所 B** が Critical / High で指摘される。例: PR #230（本文の題名は未取得）の周で、同じ PR が消した設定キー `rate_limit.pause_above_percent` を、設計文書と要約版の図とコードのコメントが「こうすると」と勧めたまま残っていた（下の 5 節の表） |
-| なぜ困るか | 1件の見落としが1周を消費する。2-5 の実例（PR #190。v0.1.14 の案内の「破壊的変更はありません」を直した PR）では、[worker-briefing:221-232](../../../../.claude/skills/worker-briefing/SKILL.md#L221-L232) が「10周のうち5周が、この1つの失敗で潰れた」と書いている |
+| なぜ困るか | 1件の見落としが1周を消費する。2-5 の実例（PR #190。v0.1.14 の案内の「破壊的変更はありません」を直した PR）では、[worker-briefing:221-232](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L221-L232) が「10周のうち5周が、この1つの失敗で潰れた」と書いている |
 | いま何を決めるのか | この文書は材料である。決めるのはオーケストレーターと人間。**下の「当てはめ」は案であって決定ではない** |
 
 ---
@@ -201,7 +201,7 @@
 | Christoph Kern「Safe Coding」ACM Queue 23(5), 2025（[Google Research](https://research.google/pubs/safe-coding-rigorous-modular-reasoning-about-software-safety/)） | 「systematically eliminating the direct use of risky operations—those with complex safety preconditions—in application code.」XSS をほぼ根絶（検索要約。Queue と CACM の本文は 403 で開けていない） | Google Research の要旨を要約で取得 |
 | John Lunney, Sue Lueder「Postmortem Culture」Google SRE book（[URL](https://sre.google/sre-book/postmortem-culture/)） | 事後検証の目的は、原因の理解と「effective preventive actions are put in place to reduce the likelihood and/or impact of recurrence」 | 要約で取得 |
 | Wright（3-4 の Tricorder） | レビュー時の検査で後戻りを防ぐ | 同上 |
-| このリポジトリの既存の例 | [.claude/rules/plan-file.md](../../../../.claude/rules/plan-file.md) の「設計文書へ1行でも足したら、そこを指すリンクを全部検算する」の検査スクリプト。行番号リンクのずれという**種類**を機械で拾っている | リポジトリで読んだ |
+| このリポジトリの既存の例 | [.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の「設計文書へ1行でも足したら、そこを指すリンクを全部検算する」の検査スクリプト。行番号リンクのずれという**種類**を機械で拾っている | リポジトリで読んだ |
 
 > SRE book: "effective preventive actions are put in place to reduce the likelihood and/or impact of recurrence."
 > 訳: **再発の可能性や影響を減らす、効果のある予防策を入れる**（ことが事後検証の目的である）。
@@ -225,7 +225,7 @@
 > 訳: 問題が確実に直るのに必要な深さで根本原因を分析するには、**単純すぎる道具である。**
 
 - 入れる側: 書く側。
-- 当てはめ案: 2-5 の「前提を1文にする」の結果（1文・そこから作った検索パターン・件数）を**対応表の列として残させる**。いまの [CLAUDE.md:525](../../../../CLAUDE.md#L525) が PR のコメントへ求めているのは「数えた件数・叩いた検索パターン・範囲」で、前提の1文は求めていない。
+- 当てはめ案: 2-5 の「前提を1文にする」の結果（1文・そこから作った検索パターン・件数）を**対応表の列として残させる**。いまの [CLAUDE.md:525](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L525) が PR のコメントへ求めているのは「数えた件数・叩いた検索パターン・範囲」で、前提の1文は求めていない。
 
 ### 3-8. 文書での横展開（写しを減らす・参照の残りを機械で探す）
 
@@ -277,11 +277,11 @@
 
 | 仮説 | 根拠 | 確かめるなら何を測るか |
 | --- | --- | --- |
-| **1. 数える種類の表に「消した・やめた・名前を変えた」の行が無い** | [worker-briefing:213-219](../../../../.claude/skills/worker-briefing/SKILL.md#L213-L219) の表は「言い回し・grep のパターン・節の移動・版の名乗り・行番号リンク」の5行。`git grep -n -E '消した\|削除した\|やめた' -- .claude/skills/worker-briefing/SKILL.md`（HEAD `df36f9d7`）は0件。4-1 の14行のうち6行が削除の取り残し。Tan らの「消したあとも文書に残る参照」、Park らの「依存する要素の更新漏れ」と同じ形 | 周をまたいだ Critical / High の取り残しを全 PR で「削除・改名・移動・言い回し・コード」に分け、表の5行で拾える割合を出す |
-| **2. 数える段が「指摘を受けたあと」にしかなく、最初の変更を書く段に無い** | 2-5 は「指摘する前・直す前に」数えると書く（[worker-briefing:185](../../../../.claude/skills/worker-briefing/SKILL.md#L185)）。1周目より前、設定キーを消した最初の commit で参照を棚卸しする段は無い。Reason は、主な目的を達したあとの段が抜けやすいと書く（4つの特徴の一覧は本文が取れず、確かめていない） | 取り残しの行が、1周目の時点で既にあったか（最初の変更が残したか）を `git show <1周目の commit>:<ファイル>` で調べ、割合を出す |
-| **3. `/code-review` のレビュワーには 2-5 が届かず、差分の外の sibling は見られにくい** | [pr-review-and-merge:99](../../../../.claude/skills/pr-review-and-merge/SKILL.md#L99)「`/code-review` は自由なプロンプトを足せない」、[CLAUDE.md:308](../../../../CLAUDE.md#L308)「`.claude/rules/` と `.claude/skills/` の下のファイルは自動では読まれない」。公式文書は `/code-review` が CLAUDE.md に従うと書くが、CLAUDE.md の段1 は 2-5 へのリンクだけである。`low` / `medium` は確信の高い指摘だけで、レベルは前回の値を使い回す。プラグイン版は「差分だけを見よ」「既存の問題は偽陽性」と書く（同梱版は未確認）。差分の外にある sibling は、直しが近くを触って差分へ入った周に初めて指摘される、という流れが起きうる | 取り残しの行について、指摘された周の1つ前の周の差分（`git diff <base>...<その周の commit>`）にその行が入っていたかを数える。入っていなかった割合が高ければ支持。あわせて各周で使った effort を記録から拾う（記録が無ければ、それ自体が分かったこと） |
+| **1. 数える種類の表に「消した・やめた・名前を変えた」の行が無い** | [worker-briefing:213-219](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L213-L219) の表は「言い回し・grep のパターン・節の移動・版の名乗り・行番号リンク」の5行。`git grep -n -E '消した\|削除した\|やめた' -- .claude/skills/worker-briefing/SKILL.md`（HEAD `df36f9d7`）は0件。4-1 の14行のうち6行が削除の取り残し。Tan らの「消したあとも文書に残る参照」、Park らの「依存する要素の更新漏れ」と同じ形 | 周をまたいだ Critical / High の取り残しを全 PR で「削除・改名・移動・言い回し・コード」に分け、表の5行で拾える割合を出す |
+| **2. 数える段が「指摘を受けたあと」にしかなく、最初の変更を書く段に無い** | 2-5 は「指摘する前・直す前に」数えると書く（[worker-briefing:185](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L185)）。1周目より前、設定キーを消した最初の commit で参照を棚卸しする段は無い。Reason は、主な目的を達したあとの段が抜けやすいと書く（4つの特徴の一覧は本文が取れず、確かめていない） | 取り残しの行が、1周目の時点で既にあったか（最初の変更が残したか）を `git show <1周目の commit>:<ファイル>` で調べ、割合を出す |
+| **3. `/code-review` のレビュワーには 2-5 が届かず、差分の外の sibling は見られにくい** | [pr-review-and-merge:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99)「`/code-review` は自由なプロンプトを足せない」、[CLAUDE.md:308](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L308)「`.claude/rules/` と `.claude/skills/` の下のファイルは自動では読まれない」。公式文書は `/code-review` が CLAUDE.md に従うと書くが、CLAUDE.md の段1 は 2-5 へのリンクだけである。`low` / `medium` は確信の高い指摘だけで、レベルは前回の値を使い回す。プラグイン版は「差分だけを見よ」「既存の問題は偽陽性」と書く（同梱版は未確認）。差分の外にある sibling は、直しが近くを触って差分へ入った周に初めて指摘される、という流れが起きうる | 取り残しの行について、指摘された周の1つ前の周の差分（`git diff <base>...<その周の commit>`）にその行が入っていたかを数える。入っていなかった割合が高ければ支持。あわせて各周で使った effort を記録から拾う（記録が無ければ、それ自体が分かったこと） |
 | **4. 数えた結果が、修正後に検査されていない** | 数えた記録はコメントの大半に付く（4-1）。しかし PR #256 では、対応表が「直す」と名指しした2箇所が2件とも未編集のまま次の周へ出た。CLAUDE.md の段3「段1で数えた件数の全部を直す」を、機械も次の周も確かめていない。Claude Code の公式は「成功を主張させず証拠を見せさせる」 | 対応表に書かれた検索パターンを、その周の修正 commit で叩き直し、残り件数が0でない割合を出す |
-| **5. 「前提を1文にする」が本人の頭の中で閉じている** | 2-5 は前提の言い直しを求めるが（[worker-briefing:237-254](../../../../.claude/skills/worker-briefing/SKILL.md#L237-L254)）、PR のコメントへ残すのは件数・パターン・範囲だけ（[CLAUDE.md:525](../../../../CLAUDE.md#L525)）。前提の1文は検査されない。Huang らは、外からの手掛かり無しの自己修正はうまくいかないと測っている | コメントの表の行のうち、前提の1文が書かれた行の割合と、その行の指摘が次の周で取り残しとして再び出た割合を比べる |
+| **5. 「前提を1文にする」が本人の頭の中で閉じている** | 2-5 は前提の言い直しを求めるが（[worker-briefing:237-254](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L237-L254)）、PR のコメントへ残すのは件数・パターン・範囲だけ（[CLAUDE.md:525](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L525)）。前提の1文は検査されない。Huang らは、外からの手掛かり無しの自己修正はうまくいかないと測っている | コメントの表の行のうち、前提の1文が書かれた行の割合と、その行の指摘が次の周で取り残しとして再び出た割合を比べる |
 | **6. 同じ前提が多くの場所に写されていること自体が、漏れの面を作っている** | `git grep -c` で「ここには写さない」12件（design-review.md 4・reporting.md 2・pr-review-and-merge 3・worker-briefing 3）、「要点だけ」5件（design-review.md 4・pr-review-and-merge 1）。4-1 で写し（要約版・PR の本文）の取り残しが出ている。Juergens らは「意図しない不整合の2つに1つが障害」と測る。別の worker が写しの数を正確に数えているので、この数は目安 | 取り残しの行が「正（元の文）」と「写し（要約・本文・要約版）」のどちらにあったかを数える |
 | **7. 文字列1本の検索は、構造上ぜんぶには届かない** | 2-5 の段1 は「いちばん短い特徴的な文字列」を1つ決める。LASE は1例からの一般化は外れやすいと書き、Park らはクローン分析だけでは不十分、Yue らは繰り返しの修正がクローンに閉じないと測った | 取り残しの行について、その前の周の対応表に書いたパターンで、その行が当たったかを叩き直して数える。当たらなかった割合が高ければ支持 |
 | **8. 周を重ねること自体が漏れを増やしている** | 09-06 以降の表の行で、分類が「直しが持ち込んだ」だけの行が211、「前の周に既に在った」だけの行が143（正規表現。Medium と Low の行も含み、「持ち込んだ」の証明の有無は見ていない）。CLAUDE.md は「8周目の Critical が7周目の直しから生まれた」例を持つ | 「直しが持ち込んだ」行について、前の周の commit でその行が違っていたかを `git blame` で確かめ、本当に持ち込まれた割合を出す |

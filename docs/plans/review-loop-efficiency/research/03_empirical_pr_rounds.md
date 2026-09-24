@@ -19,15 +19,15 @@
 
 ### この作業は、どの規則に当てはまるか
 
-- [.claude/rules/reporting.md:3](../../../../.claude/rules/reporting.md#L3) の「測る前に断定しない」。数値には出したスクリプトを添え、測っていないものは5節に並べた
-- [.claude/rules/reporting.md:629](../../../../.claude/rules/reporting.md#L629) の「数字は、合否の線とセットでしか出さない」。線は依頼の目的どおり「1〜2周で収まる」とした
-- [.claude/rules/reporting.md:337](../../../../.claude/rules/reporting.md#L337) の「名札は、単独で書かない」。PR と issue の番号には題名を添えた。自分で付けた記号は使わず、件を指すときは「系列・周・短縮名」で指した
-- [.claude/skills/worker-briefing/SKILL.md:183](../../../../.claude/skills/worker-briefing/SKILL.md#L183) の 2-5（同じものが他に無いかを数える）。分類で「同じ前提が別の周にも出ていないか」を探すときに使った
-- [CLAUDE.md:69](../../../../CLAUDE.md#L69) の「~/.claude/projects/ 配下を消さない」と、[CLAUDE.md:95](../../../../CLAUDE.md#L95) の「公開してよい情報かを常に判断する」
+- [.claude/rules/reporting.md:3](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L3) の「測る前に断定しない」。数値には出したスクリプトを添え、測っていないものは5節に並べた
+- [.claude/rules/reporting.md:629](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L629) の「数字は、合否の線とセットでしか出さない」。線は依頼の目的どおり「1〜2周で収まる」とした
+- [.claude/rules/reporting.md:337](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md#L337) の「名札は、単独で書かない」。PR と issue の番号には題名を添えた。自分で付けた記号は使わず、件を指すときは「系列・周・短縮名」で指した
+- [.claude/skills/worker-briefing/SKILL.md:183](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L183) の 2-5（同じものが他に無いかを数える）。分類で「同じ前提が別の周にも出ていないか」を探すときに使った
+- [CLAUDE.md:69](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L69) の「~/.claude/projects/ 配下を消さない」と、[CLAUDE.md:95](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L95) の「公開してよい情報かを常に判断する」
 
 ### 飛ばしてよい段はあるか
 
-**無い。**[.claude/rules/design-review.md:3](../../../../.claude/rules/design-review.md#L3) の9段は、issue を実装する作業の順番である。この作業は実装を含まないので対象にならない（「飛ばしてよい場合」を使ったのではない）。
+**無い。**[.claude/rules/design-review.md:3](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L3) の9段は、issue を実装する作業の順番である。この作業は実装を含まないので対象にならない（「飛ばしてよい場合」を使ったのではない）。
 
 ### 公開してよくない情報を書きうる場面はあるか
 
@@ -44,7 +44,7 @@
 | 何を | どうやって |
 | --- | --- |
 | 前置きと規則 | worker-briefing の SKILL.md を Read で開いた。CLAUDE.md と .claude/rules/ は注入された worktree の写しを読み、指す行は `grep -n` で確かめた |
-| CI の数え方 | [.github/workflows/review-gate.yml:271-275](../../../../.github/workflows/review-gate.yml#L271-L275)（実装）と [.github/workflows/review-gate.yml:161-165](../../../../.github/workflows/review-gate.yml#L161-L165)（設計）を Read で読んだ |
+| CI の数え方 | [.github/workflows/review-gate.yml:271-275](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L271-L275)（実装）と [.github/workflows/review-gate.yml:161-165](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L161-L165)（設計）を Read で読んだ |
 | コメント | `gh api --paginate "repos/maimuzo/continuo/issues/comments?per_page=100"`（1,595件） |
 | PR | `gh api graphql --paginate` で pullRequests（148本）。ファイルが100を超えた2本は `gh api --paginate repos/maimuzo/continuo/pulls/<番号>/files` で全件取った |
 | 題名 | `gh api repos/maimuzo/continuo/issues/<番号> --jq .title` |
@@ -234,11 +234,11 @@ PR のコメントの中に書かれた設計レビューは、設計の周回�
 | 読む側は空白を落としてから先頭を見るので、書く側も同じに判定する | PR #254 の系列2の1周目（2件）・7周目・8周目 | 4 | 無い。空白の種類が違う（CRLF ／ CR ／ 字下げ ／ 1行目の空行） |
 | 飛ばす断り（design-review-skipped）には印を足さない | PR #254 の系列1の8・9周目、系列2の2・3周目 | 4 | 4件とも「飛ばす断り」を含む |
 
-**worker-briefing の 2-5 は、この形を既に書いている**（[.claude/skills/worker-briefing/SKILL.md:237-254](../../../../.claude/skills/worker-briefing/SKILL.md#L237-L254) の「数えるのは『前提』である」）。上の5つのうち3つは、本文に共通する語が無い。
+**worker-briefing の 2-5 は、この形を既に書いている**（[.claude/skills/worker-briefing/SKILL.md:237-254](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L237-L254) の「数えるのは『前提』である」）。上の5つのうち3つは、本文に共通する語が無い。
 
 ### 2-4. 振り子になった例
 
-「6段」は、3・6・9周目で収まらないときに issue と実装を突き合わせて削る手順である（[CLAUDE.md:561](../../../../CLAUDE.md#L561) の「回数を数える」）。
+「6段」は、3・6・9周目で収まらないときに issue と実装を突き合わせて削る手順である（[CLAUDE.md:561](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L561) の「回数を数える」）。
 
 | PR と周 | 何が往復したか | 本文の記述 |
 | --- | --- | --- |
@@ -281,14 +281,14 @@ PR のコメントの中に書かれた設計レビューは、設計の周回�
 - 「turn ループが戻ったまま起き直せない」は、系列3の3・4・5周目で3回「直さない」とし、系列4の1周目に直した
 - 「打ち切りを切っている機械で、健全な run を手放しうる」は、系列3の4・6周目で「直さない」とし、系列4の2周目に直した
 
-**「収まっている」の定義（[CLAUDE.md:566](../../../../CLAUDE.md#L566)）は、Critical と High の件数だけで書かれている。直さないと決めたものを除く書き方は無い。**
+**「収まっている」の定義（[CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566)）は、Critical と High の件数だけで書かれている。直さないと決めたものを除く書き方は無い。**
 
 ### 2-7. 規則の文面にあった実例との照合
 
 | 規則の文面 | 実データ | 食い違いがあるか |
 | --- | --- | --- |
-| [.claude/skills/worker-briefing/SKILL.md:221-230](../../../../.claude/skills/worker-briefing/SKILL.md#L221-L230) が、PR #190（v0.1.14 の案内が「破壊的変更はありません」と書いていたのを直し、起動しなくなる経路をもう1つ足す。閉じる issue は無い）を「10周のレビューのうち5周が、この1つの失敗で潰れた」とする | 系列の最大は10周（投稿は7コメント。6と7、8〜10をそれぞれ1コメントにまとめている）。2〜5周目のそれぞれと、まとめた2つのコメントのそれぞれに、前提や見出しの取り残し・写しの食い違いと読める C/H がある。件ごとの分類はしていない | **周回数10は一致。**「5周」とも食い違わない |
-| [.claude/rules/plan-file.md:100](../../../../.claude/rules/plan-file.md#L100) が、PR #215（ボードの操作を AI が行う形へ規則と設計を直す（並び順の段は、そもそも書かれていなかった）。閉じる issue は無い）を「8周のレビューのうち3周が、同じ原因」とする | 系列の最大は10周。行番号のずれの C/H は、8周目（リンク13本）と9周目（本文のリンク2本）の2周 | **周回数10は一致。**「3周」は C/H だけでは2周。Medium 以下を数えていないので確かめきれない |
+| [.claude/skills/worker-briefing/SKILL.md:221-230](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L221-L230) が、PR #190（v0.1.14 の案内が「破壊的変更はありません」と書いていたのを直し、起動しなくなる経路をもう1つ足す。閉じる issue は無い）を「10周のレビューのうち5周が、この1つの失敗で潰れた」とする | 系列の最大は10周（投稿は7コメント。6と7、8〜10をそれぞれ1コメントにまとめている）。2〜5周目のそれぞれと、まとめた2つのコメントのそれぞれに、前提や見出しの取り残し・写しの食い違いと読める C/H がある。件ごとの分類はしていない | **周回数10は一致。**「5周」とも食い違わない |
+| [.claude/rules/plan-file.md:100](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md#L100) が、PR #215（ボードの操作を AI が行う形へ規則と設計を直す（並び順の段は、そもそも書かれていなかった）。閉じる issue は無い）を「8周のレビューのうち3周が、同じ原因」とする | 系列の最大は10周。行番号のずれの C/H は、8周目（リンク13本）と9周目（本文のリンク2本）の2周 | **周回数10は一致。**「3周」は C/H だけでは2周。Medium 以下を数えていないので確かめきれない |
 
 ---
 
@@ -402,7 +402,7 @@ PR 1本の実装レビューだけで20周を超えたのは、PR #230（枠が�
 - 全111本の、周ごとの Critical / High / Medium / Low（表の書式がばらばらなので、上位5本だけ数えた）
 - Medium と Low の分類
 - diff による分類の確かめ（PR #230 の commit 6つの存在と題名だけは確かめた）
-- 「分類」の列の決まりで読み替えたときの件数。[CLAUDE.md:534](../../../../CLAUDE.md#L534) の「分類」の列は、commit を示せない「直しが持ち込んだ」を「前の周に既に在った」として扱うと決めている。この報告は実装者の分類に従った。「直しが持ち込んだ」21件のうち、どの周のどの直しかを本文で名指ししていないものは7件ある。それを読み替えたときの数は出していない
+- 「分類」の列の決まりで読み替えたときの件数。[CLAUDE.md:534](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) の「分類」の列は、commit を示せない「直しが持ち込んだ」を「前の周に既に在った」として扱うと決めている。この報告は実装者の分類に従った。「直しが持ち込んだ」21件のうち、どの周のどの直しかを本文で名指ししていないものは7件ある。それを読み替えたときの数は出していない
 - 表に載っていない C/H（PR #230 の系列4の4・5周目、PR #220 の系列1の3〜6周目と系列2の1〜4周目）
 - 規則が足された日の前後の差（1-4 の理由による）
 - Agent で立てたレビュワーの種類を、セッションのログから数えること

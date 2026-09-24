@@ -1298,7 +1298,7 @@ push した branch の名前でも引いてください。
 **issue のリポジトリは信頼登録されていなくてよい。**そこでは1行も実行しない。
 
 **受け入れ（塊ごとに実機で1件通す）。**
-[.claude/rules/release.md](../../../.claude/rules/release.md) が「実機で issue を1件通してから出す」と
+[.claude/rules/release.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/release.md) が「実機で issue を1件通してから出す」と
 決めている。**3つ目の塊は、開発者の環境の fork（`<ACCOUNT>/oss-project`）と
 テスト用のカンバン（project #10（実データを持たない検証用のカンバン））で通す。**
 **本番のカンバン（project #3（AI自動進行管理。実データが入っている））では試さない。**

@@ -26,8 +26,8 @@
 
 | 入れた pull request | 何を変えたか |
 | --- | --- |
-| **PR #181**（測る前に断定し、操作の結果を確かめず、試さずにできないと言う——1セッションで34回訂正した） | [.claude/rules/reporting.md](../../.claude/rules/reporting.md) |
-| **PR #189**（worker へ渡すコンテキストが足りず、worker が既に否定された方向へ進む） | [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) |
+| **PR #181**（測る前に断定し、操作の結果を確かめず、試さずにできないと言う——1セッションで34回訂正した） | [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) |
+| **PR #189**（worker へ渡すコンテキストが足りず、worker が既に否定された方向へ進む） | [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) |
 | **PR #201**（巡回と hook がメモリを共有しているのかが、どの文書にも書かれていない） | [docs/spec/event_process_system.md](../spec/event_process_system.md) |
 | **PR #205**（git worktree remove の禁止を外す（規則が片付けの手段と定めているものを、設定が塞いでいた）） | [.claude/settings.json](../../.claude/settings.json)。**配布物には入らない** |
 

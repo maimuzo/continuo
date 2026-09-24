@@ -16,15 +16,15 @@
 
 | 規則 | どう効くか |
 | --- | --- |
-| [CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」 | **この調査の中心軸である。**返答を検査する hook 3本は maimuzo の環境のものであり、continuo の利用者（不特定多数）は1本も持っていない。パターンごとに「maimuzo の環境だけで済むか / continuo の全利用者に及ぶか」を分けて書いた（下の 5-2） |
-| [CLAUDE.md](../../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 | 成果物は公開リポジトリの worktree に置かれる。個人の絶対パスは `~/` から書き、トークンは書かない |
-| [.claude/rules/plan-file.md](../../../../.claude/rules/plan-file.md) の「何かを書くと書いたら、パスと中身のサンプルを必ず添える」 | 設定を書くパターンには、実際のパスと JSON / YAML の実物を添えた |
-| [.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) の「案を並べる表は、列を『選ぶと何が起きるか』にする」 | 比較表は「選ぶと何が起きるか」と「選ばないと続くこと」を持たせた |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」 | **この調査の中心軸である。**返答を検査する hook 3本は maimuzo の環境のものであり、continuo の利用者（不特定多数）は1本も持っていない。パターンごとに「maimuzo の環境だけで済むか / continuo の全利用者に及ぶか」を分けて書いた（下の 5-2） |
+| [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「公開してよい情報かを常に判断する」 | 成果物は公開リポジトリの worktree に置かれる。個人の絶対パスは `~/` から書き、トークンは書かない |
+| [.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の「何かを書くと書いたら、パスと中身のサンプルを必ず添える」 | 設定を書くパターンには、実際のパスと JSON / YAML の実物を添えた |
+| [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「案を並べる表は、列を『選ぶと何が起きるか』にする」 | 比較表は「選ぶと何が起きるか」と「選ばないと続くこと」を持たせた |
 
 **2. 飛ばしてよい段はあるか。**
 
 **無い。**ただし、この作業は**調査だけ**であり、設計でも実装でもない。
-[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の9段は、**人間がパターンを選んだあとに段1（設計を固める）から始まる。**
+[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の9段は、**人間がパターンを選んだあとに段1（設計を固める）から始まる。**
 いまはその前段の材料集めなので、段2以降には入らない。
 
 **3. 公開してよくない情報を、成果物に書きうる場面はあるか。**
@@ -61,7 +61,7 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 そちらの返答を読む人間は居ない（無人で回している）ので、**書き直しはレートリミットの枠を消費するだけで、誰の役にも立たない。**
 
 **なぜそれが困るか。**
-書き直しは1回につき turn を1つ増やす。実測値として、[.claude/rules/reporting.md](../../../../.claude/rules/reporting.md) は
+書き直しは1回につき turn を1つ増やす。実測値として、[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) は
 「2026-08-31 からの5日間・18本のセッションで261回のやり直しがあり、そのうち186回（71%）がこの検査だった」と記録している。
 **無人のセッションでその割合が出ると、issue 1件あたりの枠の消費がそのぶん増える。**
 
@@ -149,13 +149,13 @@ maimuzo の環境では、Claude Code の turn が終わる直前に、返答の
 
 **ここが、この件でいちばん効く既存の仕組みである。**
 
-[internal/orchestrator/settings.go:425](../../../../internal/orchestrator/settings.go#L425) が起動フラグを組み立てる。
+[internal/orchestrator/settings.go:425](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L425) が起動フラグを組み立てる。
 
 ```go
 args := []string{"--settings", settingsPath}
 ```
 
-そのファイルの中身は [internal/orchestrator/settings.go:326-333](../../../../internal/orchestrator/settings.go#L326-L333) の docstring にサンプルがある。
+そのファイルの中身は [internal/orchestrator/settings.go:326-333](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L326-L333) の docstring にサンプルがある。
 
 ```json
 {
@@ -167,12 +167,12 @@ args := []string{"--settings", settingsPath}
 ```
 
 置き場所は `<実行時ディレクトリ>/issues/<issue のスラグ>/settings.json` で、
-**worktree の外である**（[internal/orchestrator/settings.go:18-23](../../../../internal/orchestrator/settings.go#L18-L23)）。
+**worktree の外である**（[internal/orchestrator/settings.go:18-23](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L18-L23)）。
 
 `env` の中身は、利用者が WORKFLOW.md に書いた `claude.env` がそのまま入る
-（[internal/config/types.go:457-458](../../../../internal/config/types.go#L457-L458)。
-[internal/orchestrator/settings.go:393](../../../../internal/orchestrator/settings.go#L393) が `Env: o.cfg.Claude.Env` で載せる）。
-雛形の既定値は [internal/scaffold/template.go:148-149](../../../../internal/scaffold/template.go#L148-L149) にある。
+（[internal/config/types.go:457-458](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L457-L458)。
+[internal/orchestrator/settings.go:393](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L393) が `Env: o.cfg.Claude.Env` で載せる）。
+雛形の既定値は [internal/scaffold/template.go:148-149](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/scaffold/template.go#L148-L149) にある。
 
 ```yaml
   env:                                      # Claude Code に渡す環境変数
@@ -184,7 +184,7 @@ args := []string{"--settings", settingsPath}
 
 ### 3-4. continuo が張る hook は8種類。`Stop` を含む
 
-[internal/orchestrator/settings.go:93-107](../../../../internal/orchestrator/settings.go#L93-L107) が並べている。
+[internal/orchestrator/settings.go:93-107](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L93-L107) が並べている。
 
 `Stop` / `UserPromptSubmit` / `SubagentStop` / `SubagentStart` / `Notification` / `SessionStart` /
 `PreToolUse`（matcher は `*`）/ `PostToolUse`（matcher は `*`）の8つ。
@@ -196,14 +196,14 @@ args := []string{"--settings", settingsPath}
 
 | 何 | 値 |
 | --- | --- |
-| worktree の根 | `~/worktrees`。中の並べ方は `<root>/<ホスト>/<owner>/<repo>/<branch>` に固定（[internal/scaffold/template.go:103-105](../../../../internal/scaffold/template.go#L103-L105)） |
-| 身元ファイル | `<worktree>/.continuo.json`（[internal/config/default.go:147](../../../../internal/config/default.go#L147) の `IdentityFile: ".continuo.json"`） |
+| worktree の根 | `~/worktrees`。中の並べ方は `<root>/<ホスト>/<owner>/<repo>/<branch>` に固定（[internal/scaffold/template.go:103-105](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/scaffold/template.go#L103-L105)） |
+| 身元ファイル | `<worktree>/.continuo.json`（[internal/config/default.go:147](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/default.go#L147) の `IdentityFile: ".continuo.json"`） |
 
 **`.claude/settings.json` は git の追跡下にある**（`git ls-files .claude/` に出る）。
 **つまり continuo が切る worktree にも、この2本の hook 定義がそのまま入る。**
 一方 `.claude/settings.local.json` は `.gitignore` 済みで、
 **実測でも worktree には1つも無かった**（`find ~/Sources/github/continuo/.claude/worktrees -maxdepth 3 -name "settings.local.json"` が0件）。
-設計も同じことを書いている（[docs/plans/continuo_design.md:7479](../../../../docs/plans/continuo_design.md#L7479)）。
+設計も同じことを書いている（[docs/plans/continuo_design.md:7479](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L7479)）。
 
 > | 対象リポジトリの `.claude/settings.local.json` | 読まない | gitignore されるので worktree に出てこない |
 
@@ -409,7 +409,7 @@ https://code.claude.com/docs/en/discover-plugins の原文。
 ### 5-2. 変えるものと、影響範囲
 
 **「maimuzo の環境だけか、continuo の利用者（不特定多数）にも及ぶか」を必ず見ること**
-（[CLAUDE.md](../../../../CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
+（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) の「不特定多数の環境と、maimuzo の環境を混同しない」）。
 
 | どうするか | 変えるもの | 影響範囲 |
 | --- | --- | --- |
@@ -438,10 +438,10 @@ https://code.claude.com/docs/en/discover-plugins の原文。
 | --- | --- |
 | **無人の印を環境変数で渡し、hook スクリプトが先頭で抜ける** | **印の名前を継いでしまう経路がある。**人間が continuo を起動した端末からそのまま `claude` を叩くと、その shell に印が export されていれば継がれる。**`claude.env` は設定ファイル経由なので shell には出ないが、人間が手で export したら継がれる。**／ **`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` が `1` のとき、変数が削られる可能性がある**（4-6 の原文）。削られる変数の一覧は確かめていない |
 | **issue ごとの設定ファイルで、プラグインを1つ切る** | **プラグイン単位でしか切れない**（4-8）。`maimuzo-chat-response` は hook だけのプラグインなので今は問題が無いが、**あとでスキルを足すと、そのスキルも一緒に消える。**／ **リポジトリの2本には効かない。**3本のうち1本しか止まらない |
-| **hook の入力の `permission_mode` を見る** | **人間の `auto` を巻き込む。**continuo の既定は `auto` である（[internal/config/types.go:452-454](../../../../internal/config/types.go#L452-L454)）。**判定として弱い** |
+| **hook の入力の `permission_mode` を見る** | **人間の `auto` を巻き込む。**continuo の既定は `auto` である（[internal/config/types.go:452-454](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L452-L454)）。**判定として弱い** |
 | **worktree の `.continuo.json` を hook スクリプトが見て抜ける** | **人間が continuo の worktree で作業すると検査が消える。**continuo に自分自身の issue をやらせている以上、人間がその worktree を開く場面は実際にある |
 | **worktree に `.claude/settings.local.json` を置いてプラグインを切る** | **設計 3-12 が却下済み**（6-5）。worktree が汚れ、`info/exclude` の手当てと片付けが要る |
-| **リポジトリの2本をプラグインへ移し、プラグイン単位で切る** | **プラグインは信頼していないフォルダでは黙って無効になる**（[docs/plans/continuo_design.md:1898](../../../../docs/plans/continuo_design.md#L1898) が「信頼していないフォルダでは、subagent の frontmatter に書いた hook、プラグイン、追加のマーケットプレースが**ダイアログも出さずに無効化される**」と実測を記録している）。**人間のセッションでも黙って検査が消えうる** |
+| **リポジトリの2本をプラグインへ移し、プラグイン単位で切る** | **プラグインは信頼していないフォルダでは黙って無効になる**（[docs/plans/continuo_design.md:1898](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L1898) が「信頼していないフォルダでは、subagent の frontmatter に書いた hook、プラグイン、追加のマーケットプレースが**ダイアログも出さずに無効化される**」と実測を記録している）。**人間のセッションでも黙って検査が消えうる** |
 | **issue ごとの設定ファイルで hook を全部切る** | **continuo が turn の終わりを永久に受け取れなくなる**（6-4） |
 | **起動オプションで拡張を全部切る** | **同上。加えて CLAUDE.md も skills も MCP も消える** |
 
@@ -486,12 +486,12 @@ def unattended() -> bool:
 
 **名前を `CONTINUO_` で始めるべきか。**
 continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` を使っている
-（[internal/daemon/daemon.go:65-68](../../../../internal/daemon/daemon.go#L65-L68)）ので、名前空間としては揃う。
+（[internal/daemon/daemon.go:65-68](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/daemon/daemon.go#L65-L68)）ので、名前空間としては揃う。
 **ただし continuo のコードはこの変数を読まない。**読むのは maimuzo の hook スクリプトだけである。
 **「continuo が定めた変数」と誤読されうる**ので、人間が名前を決めること。
 
 **この変更は、CLAUDE.md の「hook の挙動が変化する変更」に当たるか。当たらない。**
-[CLAUDE.md](../../../../CLAUDE.md) が挙げる4つの定義は、
+[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) が挙げる4つの定義は、
 **hook が受け取る引数 / hook の宛先 / hook と本体の約束 / hook が Claude Code へ返すもの**であり、
 どれも `continuo hook` サブコマンドについてのものである。
 このパターンが触るのは `.claude/hooks/*.py`（返答を検査する側）と WORKFLOW.md だけで、
@@ -529,7 +529,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 ```
 
 **続けるには WORKFLOW.md に新しい設定キーが要る。**
-いまの `ClaudeConfig`（[internal/config/types.go:448-470](../../../../internal/config/types.go#L448-L470)）に
+いまの `ClaudeConfig`（[internal/config/types.go:448-470](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L448-L470)）に
 プラグインを指すキーは無いので、**不特定多数の利用者の語彙が1つ増える。**
 
 **測っていないこと。**`--settings` のファイル経由で `enabledPlugins` の `false` が実際に効くかは、**実測していない。**
@@ -544,7 +544,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 | 1 | continuo が `--settings` で渡すファイルに `"disableAllHooks": true` が入る |
 | 2 | 4-1 のとおり、**個別に残す手段は無い**ので、同じファイルに書いた continuo 自身の `Stop` hook も止まる |
 | 3 | continuo は turn の終わりを永久に検知できない（3-4） |
-| 4 | **人間から見える症状は「エージェントが喋り終わっているのに continuo が次を送らない」である。**[CLAUDE.md](../../../../CLAUDE.md) が同じ症状をこう書いている: 「hook が1つも届かないことと、Claude Code がまだ喋っている最中であることは、本体からは区別できない」 |
+| 4 | **人間から見える症状は「エージェントが喋り終わっているのに continuo が次を送らない」である。**[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) が同じ症状をこう書いている: 「hook が1つも届かないことと、Claude Code がまだ喋っている最中であることは、本体からは区別できない」 |
 
 **測っていないこと。**`disableAllHooks` が「同じ `--settings` ファイルに書いた hook」まで止めるかどうかは、
 **文書に例外の記述が無い**だけで、実測はしていない。
@@ -552,14 +552,14 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 
 ### 6-5. worktree に `.claude/settings.local.json` を置く — 設計が却下済み
 
-[docs/plans/continuo_design.md:2054-2062](../../../../docs/plans/continuo_design.md#L2054-L2062) の 3-12 が、
+[docs/plans/continuo_design.md:2054-2062](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2054-L2062) の 3-12 が、
 2つの経路を並べて比べたうえで `--settings` に決めている。
 
 | | worktree に `.claude/settings.local.json` を置く | **`--settings` で外部のファイルを指す** |
 | --- | --- | --- |
 | worktree が汚れるか | **汚れる。**`.gitignore` の手当てと、削除前に消す手間が要る | **汚れない** |
 
-さらに [internal/config/types.go:439-443](../../../../internal/config/types.go#L439-L443) が、実装しない理由を書いている。
+さらに [internal/config/types.go:439-443](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L439-L443) が、実装しない理由を書いている。
 
 > **届け方は `--settings` で外部の設定ファイルを指す経路に固定である**（設計 3-12）。
 > 届け方を選ぶ設定キーは持たない。"worktree_local"（worktree に
@@ -567,12 +567,12 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 > 片付けの仕様がどこにも無いので実装していない。
 
 **この案を復活させるなら、却下の根拠を否定するところから始めること**
-（[.claude/rules/design-review.md](../../../../.claude/rules/design-review.md) の「合理的根拠を否定できるなら、直さない」の裏である）。
+（[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) の「合理的根拠を否定できるなら、直さない」の裏である）。
 
 ### 6-6. 目印のファイル（`.continuo.json`）を hook が見る — 人間の要求を満たさない
 
 **身元ファイルは実在する。**`<worktree>/.continuo.json` で、中身は
-[docs/plans/continuo_design.md:2551](../../../../docs/plans/continuo_design.md#L2551) の 3-18 にサンプルがある
+[docs/plans/continuo_design.md:2551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2551) の 3-18 にサンプルがある
 （`issue_url` / `branch` / `session_uuid` / `settings_path` など）。
 
 **だが、これはディレクトリに紐づく。**
@@ -604,7 +604,7 @@ hook の入力の `session_id` を突き合わせれば、理屈の上ではセ�
 ### 6-8. hook の入力の `permission_mode` を見る — 判定として弱い
 
 continuo は `--permission-mode` を毎回渡している
-（[internal/orchestrator/settings.go:431-433](../../../../internal/orchestrator/settings.go#L431-L433)）。
+（[internal/orchestrator/settings.go:431-433](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/orchestrator/settings.go#L431-L433)）。
 
 ```go
 	if mode := o.cfg.Claude.PermissionMode; mode != "" {
@@ -612,10 +612,10 @@ continuo は `--permission-mode` を毎回渡している
 	}
 ```
 
-**既定は `auto` である**（[internal/config/types.go:452-454](../../../../internal/config/types.go#L452-L454) の
+**既定は `auto` である**（[internal/config/types.go:452-454](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L452-L454) の
 「**既定は "auto"。**"dontAsk" を選べば、いままでどおり入力を待たない」）。
 
-**だが `auto` は人間も使える。**[.claude/rules/](../../../../.claude/rules/) にも、
+**だが `auto` は人間も使える。**[.claude/rules/](https://github.com/maimuzo/continuo/tree/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules) にも、
 このセッション自身が auto mode で走っていることを示す記述がある。
 **「無人かどうか」ではなく「権限モードが何か」を見ているだけなので、判定として弱い。**
 
