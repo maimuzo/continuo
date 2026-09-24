@@ -53,6 +53,22 @@ type fakeHerdr struct {
 	// 片付けの段4 を検証できない）。
 	// **接続ごとの goroutine から呼ばれるので、この中で t.Fatalf を呼んではならない。**
 	onRequest map[string]func(params map[string]any)
+	// errorCodes はメソッド名ごとに返すエラーコードである。**登録したメソッドは result より先に
+	// エラー応答になる。**本物の herdr が断る場面（例: workspace_group_close_required）を作るために使う。
+	errorCodes map[string]string
+}
+
+// SetErrorCode は、そのメソッドにエラー応答を返させる。
+//
+// method: 対象のメソッド名。
+// code: 返すエラーコード（例: herdr.ErrCodeWorkspaceGroupCloseRequired）。
+func (fh *fakeHerdr) SetErrorCode(method, code string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	if fh.errorCodes == nil {
+		fh.errorCodes = map[string]string{}
+	}
+	fh.errorCodes[method] = code
 }
 
 // SetOnRequest はメソッドを受け取ったときの副作用を登録する。
@@ -161,6 +177,7 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
 	result, ok := fh.results[req.Method]
 	sideEffect := fh.onRequest[req.Method]
+	errorCode, failing := fh.errorCodes[req.Method]
 	fh.mu.Unlock()
 
 	if req.Method == herdr.MethodWorktreeOpen {
@@ -172,7 +189,12 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 
 	var resp map[string]any
-	if ok {
+	if failing {
+		resp = map[string]any{
+			"id":    req.ID,
+			"error": map[string]any{"code": errorCode, "message": req.Method},
+		}
+	} else if ok {
 		resp = map[string]any{"id": req.ID, "result": result}
 	} else {
 		resp = map[string]any{

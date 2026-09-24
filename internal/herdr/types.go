@@ -2,7 +2,8 @@ package herdr
 
 // このファイルは herdr の socket API の**応答（result）に出てくる値の形**を、
 // `herdr api schema --json` の `schemas.success_response.$defs` からそのまま写したものである
-// （2026-08-18 に確認。protocol=19 / herdr 0.8.0）。
+// （2026-08-18 に確認。protocol=19 / herdr 0.8.0。2026-09-24 に herdr 0.9.1（protocol=22）の
+// スキーマと照合し、continuo が使うメソッドが残っていることを確かめた）。
 //
 // 【ここに書いてある形は推測ではない】
 // 応答のスキーマは実在する。以前は「result のフィールド名は推測である」と各所に

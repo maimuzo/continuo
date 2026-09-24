@@ -817,7 +817,7 @@ workspace:
   root: %s
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
   read_timeout_ms: 3000
 rate_limit:
   source: none

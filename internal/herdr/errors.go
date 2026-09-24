@@ -36,6 +36,15 @@ const ErrCodeAgentNotFound = "agent_not_found"
 // 「turn が時間切れした」と誤認する）。
 const ErrCodeTimeout = "timeout"
 
+// ErrCodeWorkspaceGroupCloseRequired は、配下に worktree の workspace を持つリポジトリの
+// 親 workspace を、`close_group` を付けずに `workspace.close` したときに返るエラーコードである
+// （herdr 0.9.0 以降。実測: 2026-09-24、herdr 0.9.1）。**このとき herdr は何も閉じない。**
+//
+// **continuo は `close_group` を送らない。**配下が残っていないことを確かめてから親を閉じるので、
+// これが返るのは、確かめてから閉じるまでの間に別の issue が worktree を開いたときだけである。
+// **送ると、その worktree の pane ごと閉じる。**
+const ErrCodeWorkspaceGroupCloseRequired = "workspace_group_close_required"
+
 // ErrCodeTransport は herdr の socket へ届かなかった・送れなかった・応答を読めなかった
 // ことを表す、**continuo 側が付けるエラーコード**である（herdr は返さない）。
 //

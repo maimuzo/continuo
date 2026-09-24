@@ -91,7 +91,7 @@ How many issues run at once is a setting (two by default).
 | | |
 | --- | --- |
 | OS | macOS or Linux. **No native Windows** — use WSL2 |
-| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.8.0** (it refuses to start on a socket protocol mismatch) |
+| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.9.1** (it refuses to start on a socket protocol mismatch; set `herdr.protocol: 22` in `WORKFLOW.md`) |
 | [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.266 |
 | [`gh`](https://cli.github.com/) | Signed in with `gh auth login -s project`. Verified against 2.97.0 |
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |

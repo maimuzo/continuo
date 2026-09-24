@@ -28,8 +28,9 @@ import (
 //
 // **どちらを落としても人の pane が消える。**1 を落とすと人間が自分で開いた workspace を、
 // 2 を落とすと別の issue が使っている worktree の workspace を閉じる
-// （**親を閉じると配下も一緒に消えることは本物の herdr で確認済みである。**
-// test/live/herdr_test.go の TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える）。
+// （**herdr 0.8.x では、親を閉じると配下も一緒に消えた**（2026-08-25 に本物で確認）。
+// **0.9.0 以降は workspace_group_close_required で断られ、何も閉じない。**
+// 本物での確認は test/live/herdr_test.go の TestLive_WorkspaceClose_配下があると親は断られ何も消えない）。
 
 // repoWorkspaceFixture は「親 workspace を閉じるか」の検査1件分の状態である。
 type repoWorkspaceFixture struct {
@@ -140,8 +141,8 @@ func TestCleanup_人間が開いた親workspaceは閉じない(t *testing.T) {
 // 別の worktree の workspace も返す workspace.list。
 // 成功条件: workspace.close を1回も送らないこと。
 //
-// **親を閉じると配下の worktree の workspace と pane も一緒に消える**ので、
-// ここで閉じると別の issue の Claude Code が動いている pane が落ちる。
+// **herdr 0.8.x では親を閉じると配下の worktree の workspace と pane も一緒に消える**ので、
+// ここで閉じると別の issue の Claude Code が動いている pane が落ちる（0.9.0 以降は断られる）。
 func TestCleanup_同じリポジトリのworktreeが残っていれば親workspaceを閉じない(t *testing.T) {
 	fx := newRepoWorkspaceFixture(t, "wRepo")
 	fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
@@ -199,6 +200,58 @@ func TestCleanup_親workspaceを閉じる責任を残ったworktreeへ渡す(t *
 	}
 	if identity.HerdrRepoWorkspaceID != "wRepo" {
 		t.Fatalf("親 workspace を閉じる責任を渡していない: got %q, want %q（この親は二度と閉じられない）",
+			identity.HerdrRepoWorkspaceID, "wRepo")
+	}
+}
+
+// {"RUCM-PATH": "P009"}
+//
+// 目的: 親を閉じようとして herdr に断られたときも、**閉じる責任を残っている worktree へ
+// 書き移す**ことを確認する（issue #281）。
+//
+// **herdr 0.9.0 以降は、配下に worktree の workspace がある親を `close_group` なしで閉じると
+// `workspace_group_close_required` で断り、何も閉じない。**continuo は一覧を引いて配下が
+// 無いことを確かめてから閉じるので、断られるのは、その間に別の issue が worktree を開いたときである。
+// **そのまま戻ると、あとから開いた worktree の身元ファイルは herdr_repo_workspace_id が空なので、
+// 親は誰にも閉じられないまま溜まる。**
+//
+// 与える情報: herdr_repo_workspace_id に "wRepo" を書いた issue 188 の worktree、
+// 同じリポジトリの issue 189 の worktree（その値は空）。1回目の workspace.list は親だけを返し、
+// workspace.close は workspace_group_close_required で断り、そのあとの workspace.list は
+// 親と 189 の workspace を返す。
+//
+// 成功条件: Cleanup が成功し、**189 の身元ファイルの herdr_repo_workspace_id が "wRepo" になっている**こと。
+func TestCleanup_親workspaceを閉じて断られたら残ったworktreeへ責任を渡す(t *testing.T) {
+	fx := newRepoWorkspaceFixture(t, "wRepo")
+
+	second := prepareWorktree(t, fx.managerFixture, sampleIssue(189))
+	writeSecondIdentity(t, fx, second)
+
+	// 閉じる前の一覧には親しか無い。**閉じようとした瞬間に 189 の worktree が開いた**形を作る。
+	fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
+		workspaceEntry("wRepo", fx.RepoDir, fx.RepoDir),
+	))
+	fx.Herdr.SetErrorCode(herdr.MethodWorkspaceClose, herdr.ErrCodeWorkspaceGroupCloseRequired)
+	fx.Herdr.SetOnRequest(herdr.MethodWorkspaceClose, func(map[string]any) {
+		fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
+			workspaceEntry("wRepo", fx.RepoDir, fx.RepoDir),
+			workspaceEntry("wOther", second.Path, fx.RepoDir),
+		))
+	})
+
+	if _, err := fx.Manager.Cleanup(context.Background(), cleanupRequest(fx.cleanupFixture)); err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if got := closedWorkspaceIDs(t, fx); len(got) != 1 || got[0] != "wRepo" {
+		t.Fatalf("親 workspace を閉じにいっていない（断られる経路を通っていない）: %v", got)
+	}
+
+	identity, err := fx.Manager.ReadIdentity(second.Path)
+	if err != nil {
+		t.Fatalf("残った worktree の身元ファイルを読めない: %v", err)
+	}
+	if identity.HerdrRepoWorkspaceID != "wRepo" {
+		t.Fatalf("断られたあと、親 workspace を閉じる責任を渡していない: got %q, want %q（この親は二度と閉じられない）",
 			identity.HerdrRepoWorkspaceID, "wRepo")
 	}
 }
