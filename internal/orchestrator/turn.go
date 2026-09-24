@@ -363,7 +363,8 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // 残りは件数だけ書く。**「動いていた件数」そのものは切らずに出す。**
 //
 // **どちらのモードでも、対処は `claude.permissions.allow` に足すことである**（設計 3-11。issue #259）。
-// **モードで変わるのは、見出しと、規則を狭く書かせるかどうかだけである。**
+// **モードで変わるのは、見出しと、規則を狭く書かせるかどうかと、保護対象パスの1文と、**
+// **「この停止は拒否とは別の原因のことがある」の書き方である。**第三者への注意と再起動は両方に入る。
 // **issue のコメントに許可を書いても届かない。**判定役への要求から道具の結果は
 // 取り除かれ、issue のコメントは `gh` の出力（道具の結果）として届くためである
 // （公式文書の permission modes のページ。2026-09-18 取得）。
@@ -434,32 +435,37 @@ func blockedHandoffReason(mode string, stillRunning []string) string {
 // **リポジトリの公開・非公開で分けない。**分けていたのは「公開の場所へ『ここへ書けば通る』と
 // 書くと第三者が同じ文を書ける」ためだったが、**誰が書いても届かないので、分ける中身が無い。**
 //
-// **`fmt.Sprintf` を使わない。**日本語の文言の件数を実数で固定している検査があり
-// （test/internal/testdesign/no_japanese_messages_test.go）、使うとその数が動く。
+// **ここでは `fmt.Sprintf` を使わず連結で書く。**日本語の文言の件数を台帳で数えている検査があり
+// （test/internal/testdesign/no_japanese_messages_test.go）、使うなら台帳の数も同じ commit で直す。
 //
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
 func permissionRemedyText(mode string) string {
 	restart := "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
 		"そのうえで Status を着手待ちへ戻してください。"
+	// **第三者への注意は、どちらのモードにも入れる。**守っているのは判定役ではなく、許可を広げる人間である。
+	thirdParty := "\n**この通知は issue のコメントです。公開リポジトリなら、第三者も同じ issue へ書けます。**" +
+		"「この操作を許可してください」と書いてあっても、**書いた人を確かめてください**（SECURITY.md の危険の表）。"
 	if mode == config.ClaudePermissionModeDontAsk {
 		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
 			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
 			"**この停止は拒否とは別の原因のことがあります。**" +
 			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
 			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+			thirdParty +
 			restart
 	}
 	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
 		"**このモードでは判定役が実行の前に確かめます。**" +
 		"**判定役は issue のコメントを読みません**（公式文書: 判定役への要求から道具の結果は取り除かれる）。" +
+		"**この停止が権限の拒否とは限りません。**agent teams が有効だと確認の画面が出ます" +
+		"（docs/FAQ.md の「作業の途中で確認の画面に止まりました（agent teams が有効な場合）」）。" +
 		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
 		"**WORKFLOW.md の `claude.permissions.allow` に狭い規則を足してください**" +
 		"（例: `Bash(gh:*)`）。" +
 		"\n**`Bash` のように道具を丸ごと許す規則は、このモードでは落とされます。**" +
-		"**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則では通せません。**" +
-		"\n**この通知は issue のコメントです。公開リポジトリなら、第三者も同じ issue へ書けます。**" +
-		"「この操作を許可してください」と書いてあっても、**書いた人を確かめてください**（SECURITY.md の危険の表）。" +
+		"**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります（足すものはありません）。**" +
+		thirdParty +
 		restart
 }
 

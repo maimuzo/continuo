@@ -29,6 +29,10 @@ const allowGuidance = "`claude.permissions.allow` に"
 // **これが落ちると、利用者は直したのに同じところでまた止まる。**
 const restartGuidance = "continuo を再起動してください"
 
+// thirdPartyGuidance は、公開リポジトリの第三者への注意である。**どのモードでも入る。**
+// 守っているのは判定役ではなく、許可を広げる人間である。
+const thirdPartyGuidance = "書いた人を確かめてください"
+
 // 目的: auto の対処が、狭い規則を allow へ足させ、再起動まで案内することを固定する。
 //
 // **広い規則は auto に入るときに落とされる**（公式の permission modes のページ）。
@@ -46,6 +50,11 @@ func TestBlockedHandoff_autoは狭い規則と再起動を案内する(t *testin
 		allowGuidance,
 		"狭い規則",
 		restartGuidance,
+		// **広い規則が落とされることを言う。**言わないと、`Bash` を足してまた止まる
+		"落とされます",
+		// **別の原因の但し書き。**agent teams で止まったときに、許可の一覧を疑い続けないため
+		"権限の拒否とは限りません",
+		thirdPartyGuidance,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("auto の対処に %q がありません:\n%s", want, got)
@@ -67,7 +76,11 @@ func TestBlockedHandoff_dontAskもallowと再起動を案内する(t *testing.T)
 	if strings.Contains(got, commentGrantGuidance) {
 		t.Errorf("dontAsk なのに、会話で許可を出す案内が入っている:\n%s", got)
 	}
-	for _, want := range []string{allowGuidance, restartGuidance} {
+	// **dontAsk では狭く書かせない。**このモードでは、引数まで絞ると書き込み系の操作が拒否される（設計 3-11）。
+	if strings.Contains(got, "狭い規則") {
+		t.Errorf("dontAsk の対処が狭い規則を案内している:\n%s", got)
+	}
+	for _, want := range []string{allowGuidance, restartGuidance, thirdPartyGuidance} {
 		if !strings.Contains(got, want) {
 			t.Errorf("dontAsk の対処に %q がありません:\n%s", want, got)
 		}

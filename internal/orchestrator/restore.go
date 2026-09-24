@@ -751,7 +751,7 @@ func (o *Orchestrator) decideOne(
 				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
 				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
 				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
-				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
+				"\n【よくある原因】フォルダの信頼が切れた。何が確認の画面を出したかは continuo の側に残りません。"+
 				permissionRemedyText(o.cfg.Claude.PermissionMode),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)

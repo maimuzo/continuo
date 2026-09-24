@@ -1296,7 +1296,7 @@ cd ~/continuo-work && continuo prompt --show
 **起動できずに止まる場合は、`claude.permissions.allow` に
 subagent を起動する道具を足してください**（雛形の HTML のコメントにも書いてあります）。
 **ただし `permission_mode: auto`（既定）では、`Agent` の規則は落とされます**（公式文書の permission modes のページ。2026-09-18 取得）。
-**auto で止まるなら、この足し方では解けません。**
+**auto では `Agent` の呼び出しも判定役が確かめるので、allow に足す話ではありません。**止まったら、引き渡しの通知が挙げる記録で、何が止めたかを確かめてください。
 
 ### 応答を差し戻す `Stop` hook との噛み合わせ — 設定は要りません
 

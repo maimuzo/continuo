@@ -1851,13 +1851,9 @@ herdr:
 
 #### 「起動直後に確認の画面で止まりました」と出る
 
-**原因。**そのフォルダが Claude Code に信頼登録されていないか、許可されていないコマンドを実行しようとしました。
+**よくある原因。**そのフォルダが Claude Code に信頼登録されていないことです。**何が確認の画面を出したかは、continuo の側に残りません。**
 
-**直し方。**まず画面を読みます。
-
-```bash
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
-```
+**直し方。****continuo はこの通知を書いたあとで pane を閉じるので、画面は残っていません。**worktree の中身を見てください。
 
 信頼登録が足りないなら `continuo trust ~/continuo-work`。
 許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します（`auto` では狭い規則で）。
@@ -1902,16 +1898,15 @@ issue のコメントは `gh` の出力、つまり道具の結果として届�
 **許してよい操作だと分かったときは、`claude.permissions.allow` に狭い規則を足します**
 （例: `Bash(gh:*)`）。
 **`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**
-**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則では通せません。**
+**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります。**足すものはありません。
 
-**狭い規則の書き方。**実測で確かめてある形は次の4つです。
+**狭い規則の書き方。**`dontAsk` で実測して確かめてある形は次の3つです。**`auto` で残るかは測っていません。**
 
 | 書き方 | 何に当たるか |
 | --- | --- |
 | `Bash(gh:*)` | `gh` で始まるコマンド全部。**`:*` は末尾でしか認識されません** |
 | `Bash(ls *)` | `ls` に引数が付いたもの。**空白を挟むと語境界が入ります** |
-| `Bash(ls*)` | `ls` で始まるもの |
-| `Bash(npx tsc)` | この1本だけ |
+| `Bash(ls*)` | `ls` で始まるもの。**ワイルドカード付きなので、`auto` で落とされる側に当たるかは測っていません** |
 
 **拒否されたコマンドは、引き渡しの通知の【調べるところ】に挙げた記録で見てください。**
 
@@ -2175,9 +2170,9 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 ```bash
 command -v claude
-herdr agent explain continuo-hello-world-42
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```
+
+**continuo はこの通知を書いたあとで pane を閉じるので、`herdr agent explain` も `herdr agent read` も agent を見つけられません。**
 
 `continuo doctor` は `claude` という見出し語で PATH 上の実行ファイルを調べています。
 

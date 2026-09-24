@@ -114,7 +114,7 @@ func TestHandoff_復元したrunがblockedなら対処を載せる(t *testing.T)
 //
 // **この文言は公開かどうかを見ずに投稿される。**許可の文が戻ると、公開リポジトリの issue へも載る。
 //
-// 与える情報: `Ready` の issue（非公開 / 取れなかった）と、`agent.get` が blocked を返す台本。
+// 与える情報: `Ready` の issue（非公開 / 公開 / 取れなかった）と、`agent.get` が blocked を返す台本。
 // 成功条件: 投稿された本文に許可の文が無く、`continuo trust` があること。
 func TestHandoff_起動直後のblockedは許可の文を持たず信頼を案内する(t *testing.T) {
 	for _, tc := range remedyCases() {

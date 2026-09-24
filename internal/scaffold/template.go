@@ -284,8 +284,8 @@ language: auto                              # 画面に出す文言の言語。a
 <!-- 組み込みの 5-6 が「差分を読む役」と「関連処理まで見る役」を毎周並列に走らせろと言っています。 -->
 <!-- 差分を読む役・関連処理まで見る役 の順に、使う名前を2つ書いてください。 -->
 <!-- subagent を起動する道具の名前は Claude Code の版によって変わります。 -->
-<!-- permission_mode: auto（既定）では Agent の規則は落とされるので、この足し方では解けません。 -->
 <!-- dontAsk で起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
 <!-- claude.permissions.allow に足してください。 -->
+<!-- permission_mode: auto（既定）では Agent の規則は落とされ、Agent の呼び出しも判定役が確かめるので、allow に足す話ではありません。 -->
 
 `

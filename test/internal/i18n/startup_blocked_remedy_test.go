@@ -37,7 +37,7 @@ func TestStartupBlocked_許可の文を持たず信頼の案内を持つ(t *test
 		if !ok {
 			t.Fatalf("%v の資源を引けません", lang)
 		}
-		got := c.T(i18n.KeyOrchestratorConfirmStartupBlocked, "agent-1", "agent-1")
+		got := c.T(i18n.KeyOrchestratorConfirmStartupBlocked, "agent-1")
 		for _, ng := range startupGrantRecipes {
 			if strings.Contains(got, ng) {
 				t.Errorf("%v: 起動直後の文言に %q が入っています。"+
@@ -46,6 +46,14 @@ func TestStartupBlocked_許可の文を持たず信頼の案内を持つ(t *test
 		}
 		if !strings.Contains(got, "continuo trust") {
 			t.Errorf("%v: 起動直後の文言に `continuo trust` の案内がありません:\n%s", lang, got)
+		}
+		// **閉じた pane を見ろと案内しない**（設計 3-34b と同じ決まり）。continuo はこの文言を投稿したあとで
+		// pane を閉じるので、人間が読むときには agent が消えている。
+		// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない。
+		for _, ng := range []string{"herdr agent read", "許可されていないコマンド", "a command that is not allowed"} {
+			if strings.Contains(got, ng) {
+				t.Errorf("%v: 起動直後の文言に %q が入っています:\n%s", lang, ng, got)
+			}
 		}
 	}
 }
