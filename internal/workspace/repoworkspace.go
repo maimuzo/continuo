@@ -152,7 +152,7 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 		// 「手で閉じて」とは案内しない。
 		if herdr.IsCode(err, herdr.ErrCodeWorkspaceGroupCloseRequired) {
 			m.logger.Warn("herdr が配下の worktree を理由に断ったので、リポジトリの親 workspace は残します"+
-				"（閉じるなら、その worktree が片付いてから herdr の画面で閉じてください）",
+				"（閉じるなら、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください）",
 				"repo", repoDir, "workspace_id", target, "error", err)
 			return
 		}
@@ -221,7 +221,8 @@ func (m *Manager) handOverRepoWorkspace(
 		}
 	}
 	if handed == 0 {
-		m.logger.Warn("リポジトリの親 workspace を閉じる相手が居なくなりました（herdr の画面から手で閉じてください）",
+		m.logger.Warn("リポジトリの親 workspace を閉じる責任を、残っている worktree へ渡せませんでした"+
+			"（閉じるなら、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください）",
 			"repo", repoDir, "repo_workspace_id", target)
 	}
 }
