@@ -206,58 +206,6 @@ func TestCleanup_親workspaceを閉じる責任を残ったworktreeへ渡す(t *
 
 // {"RUCM-PATH": "P009"}
 //
-// 目的: 親を閉じようとして herdr に断られたときも、**閉じる責任を残っている worktree へ
-// 書き移す**ことを確認する（issue #281）。
-//
-// **herdr 0.9.0 以降は、配下に worktree の workspace がある親を `close_group` なしで閉じると
-// `workspace_group_close_required` で断り、何も閉じない。**continuo は一覧を引いて配下が
-// 無いことを確かめてから閉じるので、断られるのは、その間に別の issue が worktree を開いたときである。
-// **そのまま戻ると、あとから開いた worktree の身元ファイルは herdr_repo_workspace_id が空なので、
-// 親は誰にも閉じられないまま溜まる。**
-//
-// 与える情報: herdr_repo_workspace_id に "wRepo" を書いた issue 188 の worktree、
-// 同じリポジトリの issue 189 の worktree（その値は空）。1回目の workspace.list は親だけを返し、
-// workspace.close は workspace_group_close_required で断り、そのあとの workspace.list は
-// 親と 189 の workspace を返す。
-//
-// 成功条件: Cleanup が成功し、**189 の身元ファイルの herdr_repo_workspace_id が "wRepo" になっている**こと。
-func TestCleanup_親workspaceを閉じて断られたら残ったworktreeへ責任を渡す(t *testing.T) {
-	fx := newRepoWorkspaceFixture(t, "wRepo")
-
-	second := prepareWorktree(t, fx.managerFixture, sampleIssue(189))
-	writeSecondIdentity(t, fx, second)
-
-	// 閉じる前の一覧には親しか無い。**閉じようとした瞬間に 189 の worktree が開いた**形を作る。
-	fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
-		workspaceEntry("wRepo", fx.RepoDir, fx.RepoDir),
-	))
-	fx.Herdr.SetErrorCode(herdr.MethodWorkspaceClose, herdr.ErrCodeWorkspaceGroupCloseRequired)
-	fx.Herdr.SetOnRequest(herdr.MethodWorkspaceClose, func(map[string]any) {
-		fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
-			workspaceEntry("wRepo", fx.RepoDir, fx.RepoDir),
-			workspaceEntry("wOther", second.Path, fx.RepoDir),
-		))
-	})
-
-	if _, err := fx.Manager.Cleanup(context.Background(), cleanupRequest(fx.cleanupFixture)); err != nil {
-		t.Fatalf("Cleanup に失敗した: %v", err)
-	}
-	if got := closedWorkspaceIDs(t, fx); len(got) != 1 || got[0] != "wRepo" {
-		t.Fatalf("親 workspace を閉じにいっていない（断られる経路を通っていない）: %v", got)
-	}
-
-	identity, err := fx.Manager.ReadIdentity(second.Path)
-	if err != nil {
-		t.Fatalf("残った worktree の身元ファイルを読めない: %v", err)
-	}
-	if identity.HerdrRepoWorkspaceID != "wRepo" {
-		t.Fatalf("断られたあと、親 workspace を閉じる責任を渡していない: got %q, want %q（この親は二度と閉じられない）",
-			identity.HerdrRepoWorkspaceID, "wRepo")
-	}
-}
-
-// {"RUCM-PATH": "P009"}
-//
 // 目的: 引き継ぎが**既に持っている値を上書きしない**ことを確認する（issue #19）。
 //
 // **上書きすると、別のリポジトリの親を閉じにいく身元ファイルを continuo 自身が作る。**

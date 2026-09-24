@@ -41,8 +41,8 @@ const ErrCodeTimeout = "timeout"
 // （herdr 0.9.0 以降。実測: 2026-09-24、herdr 0.9.1）。**このとき herdr は何も閉じない。**
 //
 // **continuo は `close_group` を送らない。**配下が残っていないことを確かめてから親を閉じるので、
-// これが返るのは、確かめてから閉じるまでの間に別の issue が worktree を開いたときだけである。
-// **送ると、その worktree の pane ごと閉じる。**
+// これが返るのは主に、確かめてから閉じるまでの間に別の worktree が開いたときである。
+// **送ると、その worktree の pane ごと閉じる。**断られたら親は残す（internal/workspace/repoworkspace.go）。
 const ErrCodeWorkspaceGroupCloseRequired = "workspace_group_close_required"
 
 // ErrCodeTransport は herdr の socket へ届かなかった・送れなかった・応答を読めなかった

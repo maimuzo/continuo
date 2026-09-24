@@ -870,7 +870,7 @@ cd ~/continuo-try
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✓ カンバン        <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
@@ -961,7 +961,7 @@ hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✗ カンバン        カンバンを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください

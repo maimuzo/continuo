@@ -1664,7 +1664,7 @@ level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states に�
 | 条件 | どう確かめるか | 落とすと何が起きるか |
 | --- | --- | --- |
 | continuo が開かせたこと | `worktree.open` の**前**に `workspace.list` を引き、そのリポジトリの workspace が無かったことを見る。無ければ開いた**あと**にその ID を身元ファイルの `herdr_repo_workspace_id` へ書く（3-18） | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
-| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る。**見てから閉じるまでの間に worktree が開いて、herdr 0.9.0 以降に `workspace_group_close_required` で断られたときは、一覧を引き直して下の引き継ぎを行う** | **herdr 0.8.x では親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる。0.9.0 以降は断られるが、引き継がないと親は誰にも閉じられないまま溜まる |
+| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る。**見てから閉じるまでの間に worktree が開いて、herdr 0.9.0 以降に `workspace_group_close_required` で断られたときは、親を残す。**引き継ぎは行わない（あとから開いた worktree の身元ファイルは段6 で初めて書かれ、書けても上書きで消える） | **herdr 0.8.x では親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる。0.9.0 以降は断られ、親が1つ残るだけで済む |
 
 **身元ファイルの値は現物と突き合わせてから使う。**そこはエージェントが書き換えられるので
 （3-18）、`herdr_repo_workspace_id` が指す workspace が**いま片付けたリポジトリ本体を

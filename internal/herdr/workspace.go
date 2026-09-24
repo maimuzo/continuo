@@ -62,7 +62,7 @@ func (c *Client) WorkspaceList(ctx context.Context) (*WorkspaceListResult, error
 // 送らないと、配下に worktree の workspace を持つ親は閉じず、
 // `workspace_group_close_required` で断られる（ErrCodeWorkspaceGroupCloseRequired）。
 // **送ると、配下の worktree の pane ごと閉じる。**continuo は配下が残っていないことを
-// 確かめてから親を閉じるので、断られるのは、その間に別の issue が worktree を開いたときだけである。
+// 確かめてから親を閉じるので、断られるのは主に、その間に別の worktree が開いたときである。
 type WorkspaceCloseParams struct {
 	// WorkspaceID は閉じる workspace の ID である。
 	WorkspaceID string `json:"workspace_id"`

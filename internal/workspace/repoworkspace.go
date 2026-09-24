@@ -26,7 +26,7 @@ import (
 //	2 その親の下に worktree の workspace が1つも残っていないこと
 //
 // 1 を見ないと**人間が自分で開いたリポジトリの workspace を閉じてしまう。**
-// 2 を見ないと**別の issue が使っている worktree の pane ごと消す。**
+// 2 を見ないと、herdr 0.8.x では**別の issue が使っている worktree の pane ごと消す**（0.9.0 以降は断られる）。
 
 // repoWorkspaceOpen は、そのリポジトリの親 workspace が既に開かれているかを返す
 // （`worktree.open` を呼ぶ前に見る）。
@@ -144,19 +144,17 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 	}
 
 	if _, err := m.herdr.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: target}); err != nil {
-		// **一覧を引いてから閉じるまでの間に、別の issue が worktree を開いた。**
-		// herdr 0.9.0 以降はここで断り、何も閉じない。**責任を渡さずに戻ると、
-		// あとから開いた worktree の身元ファイルは herdr_repo_workspace_id が空なので、
-		// 親は誰にも閉じられないまま溜まる。**引き直して、上と同じく責任を渡す。
+		// **herdr 0.9.0 以降は、配下に worktree の workspace がある親を断り、何も閉じない。**
+		// 主に、一覧を引いてから閉じるまでの間に別の worktree が開いたときに起きる。
+		// **ここで責任は渡さない。**あとから開いた worktree の身元ファイルは着手の段6 で
+		// 初めて書かれるので、この時点では書き込む先が無く、書けても段6 の上書きで消える。
+		// **親は残る。**herdr の画面から閉じると close_group が付いて配下の pane ごと閉じるので、
+		// 「手で閉じて」とは案内しない。
 		if herdr.IsCode(err, herdr.ErrCodeWorkspaceGroupCloseRequired) {
-			m.logger.Info("閉じる直前に同じリポジトリの worktree が開いたので、リポジトリの親 workspace は残します",
-				"repo", repoDir, "repo_workspace_id", target, "error", err)
-			relisted, listErr := m.herdr.WorkspaceList(ctx)
-			if listErr == nil {
-				m.handOverRepoWorkspace(ctx, relisted.Workspaces, repoDir, target)
-				return
-			}
-			err = listErr
+			m.logger.Warn("herdr が配下の worktree を理由に断ったので、リポジトリの親 workspace は残します"+
+				"（閉じるなら、その worktree が片付いてから herdr の画面で閉じてください）",
+				"repo", repoDir, "workspace_id", target, "error", err)
+			return
 		}
 		m.logger.Warn("リポジトリの親 workspace を閉じられませんでした（手で閉じてください）",
 			"repo", repoDir, "workspace_id", target, "error", err)
