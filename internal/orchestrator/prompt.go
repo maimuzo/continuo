@@ -123,7 +123,10 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// **見本は囲みに入れ、中身を行頭から書く。**この文面は表示されず、文字列のまま届く。
 	// 字下げした見本をそのまま写すと、`DONE` の行が終わりと読まれず、後ろの `gh` まで本文に取り込まれて
 	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。
-	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n\n")
+	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n")
+	// **本文に `DONE` だけの行があると、そこで本文が切れ、後ろの行がシェルのコマンドになる**（設計 5-3t）。
+	// 書かせ直しは単独で届き、組み込みの 3-2 を読み直すとは限らないので、ここにも書く。
+	b.WriteString("本文の中に `DONE` だけの行を作らないでください。入るなら、終わりの語を別のものに変えてください（例: `DONE2`）。\n\n")
 	b.WriteString("```bash\nF=$(mktemp)\n")
 	fmt.Fprintf(&b, "cat > \"$F\" <<'DONE'\n%s\nここに何をしたかを書く\nDONE\n", marker)
 	fmt.Fprintf(&b, "gh issue comment %s --body-file \"$F\"\n```\n\n", issueURL)

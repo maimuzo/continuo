@@ -216,6 +216,11 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	if !strings.Contains(sent, `--body-file "$F"`) || strings.Contains(sent, `--body "`) {
 		t.Errorf("本文をファイルから渡させていません。二重引用符の中の backtick と `$` はシェルが実行します:\n%s", sent)
 	}
+	// **本文に `DONE` だけの行を作らせない**（設計 5-3t）。作ると、そこで本文が切れ、後ろの行がコマンドになる。
+	// 書かせ直しは単独で届き、組み込みの 3-2 を読み直すとは限らない。
+	if !strings.Contains(sent, "終わりの語を別のものに変えてください") {
+		t.Errorf("本文に終わりの語だけの行を作るなという注意がありません:\n%s", sent)
+	}
 	if !strings.Contains(sent, "囲み付きの") {
 		t.Errorf("禁じる印を「囲み付き」と名指ししていません:\n%s", sent)
 	}
