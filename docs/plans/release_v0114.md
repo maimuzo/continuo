@@ -26,8 +26,8 @@
 
 | 入れた pull request | 何を変えたか |
 | --- | --- |
-| **PR #181**（測る前に断定し、操作の結果を確かめず、試さずにできないと言う——1セッションで34回訂正した） | [.claude/rules/reporting.md](../../.claude/rules/reporting.md) |
-| **PR #189**（worker へ渡すコンテキストが足りず、worker が既に否定された方向へ進む） | [.claude/skills/worker-briefing/SKILL.md](../../.claude/skills/worker-briefing/SKILL.md) |
+| **PR #181**（測る前に断定し、操作の結果を確かめず、試さずにできないと言う——1セッションで34回訂正した） | [.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) |
+| **PR #189**（worker へ渡すコンテキストが足りず、worker が既に否定された方向へ進む） | [.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) |
 | **PR #201**（巡回と hook がメモリを共有しているのかが、どの文書にも書かれていない） | [docs/spec/event_process_system.md](../spec/event_process_system.md) |
 | **PR #205**（git worktree remove の禁止を外す（規則が片付けの手段と定めているものを、設定が塞いでいた）） | [.claude/settings.json](../../.claude/settings.json)。**配布物には入らない** |
 
@@ -46,7 +46,7 @@
 
 ## 3. 破壊的変更（4つ）
 
-**案内の正は [docs/upgrading.md:747-1112](../upgrading.md#L747-L1112) の「v0.1.13 から v0.1.14 へ」である。ここには写さない。**
+**案内の正は [docs/upgrading.md:766-1131](../upgrading.md#L766-L1131) の「v0.1.13 から v0.1.14 へ」である。ここには写さない。**
 **ここに置くのは、何が壊れるかの一覧だけである。**
 
 | どの pull request が持ち込んだか | 4つのうちいくつか |
@@ -67,8 +67,8 @@
 | --- | --- |
 | **破壊的変更を許容する** | **人間の判断である**（2026-09-03）。「既存ユーザを気にして変な設計にするより、理想の形を目指せ」。**`runtime.lock_file` を受け取って捨てる案を捨て、キーごと消した** |
 | **巡回が continuo 自身の書いた Status に反応しない門を置く**（[docs/plans/continuo_design.md:7942-7995](continuo_design.md#L7942-L7995) の 3-74c） | **後片付けが4つとも飛ぶ窓が実在した。**`finishRunClaimed` と `stopAndReleaseAsync` が権利を取り合い、**巡回が先に取ると、ログを1行も残さずに run が消える** |
-| **`WORKFLOW.md` の本文にだけ、空になった見出しを落とす処理を当てる**（[docs/plans/continuo_design.md:10737-10781](continuo_design.md#L10737-L10781) の 5-3m） | **継ぎ合わせた全文に当てると、組み込みの `## 4-4` が消える。**そこは「ここから先は利用者が書いたもの」という唯一の区切りである |
-| **進捗報告の間隔の下限を 60000（1分）にする**（[docs/plans/continuo_design.md:11229-11266](continuo_design.md#L11229-L11266) の 5-3n） | **送る文面へは分に直して埋める。**59999 までは全部「0分以上黙らない」になり、**エージェントは書けない指示を受け取る** |
+| **`WORKFLOW.md` の本文にだけ、空になった見出しを落とす処理を当てる**（[docs/plans/continuo_design.md:11220-11236](continuo_design.md#L11220-L11236) の 5-3m） | **継ぎ合わせた全文に当てると、組み込みの `## 4-4` が消える。**そこは「ここから先は利用者が書いたもの」という唯一の区切りである |
+| **進捗報告の間隔の下限を 60000（1分）にする**（[docs/plans/continuo_design.md:11815-11825](continuo_design.md#L11815-L11825) の 5-3n） | **送る文面へは分に直して埋める。**59999 までは全部「0分以上黙らない」になり、**エージェントは書けない指示を受け取る** |
 
 ---
 
@@ -97,8 +97,8 @@
 **手順の正は [docs/releasing.md](../releasing.md) にある。ここには写さない。**
 **この版でとくに効くのは次の4つで、書いてある場所が離れている。**
 
-- **実機で issue を1件通す**（[docs/releasing.md:81-203](../releasing.md#L81-L203)）。検証用のカンバンを使う。**本番のカンバン（project #3）には触れない**
+- **実機で issue を1件通す**（[docs/releasing.md:82-204](../releasing.md#L82-L204)）。検証用のカンバンを使う。**本番のカンバン（project #3）には触れない**
 - **[docs/FAQ.md](../FAQ.md) と [docs/upgrading.md](../upgrading.md) の両方に、この版の内容が入っていること**
-- **破壊的変更を `<!-- breaking:start -->` と `<!-- breaking:end -->` で囲む**（[docs/releasing.md:354-395](../releasing.md#L354-L395)）。
+- **破壊的変更を `<!-- breaking:start -->` と `<!-- breaking:end -->` で囲む**（[docs/releasing.md:360-401](../releasing.md#L360-L401)）。
   **囲まないと、インストーラーは1件も警告しない。**この版は破壊的変更が4つあるので、いちばん効く
-- **`--generate-notes` のまま放置しない**（[docs/releasing.md:449-471](../releasing.md#L449-L471)）。commit の一覧は利用者に読めない
+- **`--generate-notes` のまま放置しない**（[docs/releasing.md:455-477](../releasing.md#L455-L477)）。commit の一覧は利用者に読めない

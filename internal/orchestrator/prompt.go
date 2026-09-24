@@ -122,7 +122,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n")
 	// **見本は囲みに入れ、中身を行頭から書く。**この文面は表示されず、文字列のまま届く。
 	// 字下げした見本をそのまま写すと、`DONE` の行が終わりと読まれず、後ろの `gh` まで本文に取り込まれて
-	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3s）。
+	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。
 	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n\n")
 	b.WriteString("```bash\nF=$(mktemp)\n")
 	fmt.Fprintf(&b, "cat > \"$F\" <<'DONE'\n%s\nここに何をしたかを書く\nDONE\n", marker)

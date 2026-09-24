@@ -239,6 +239,34 @@ review-result
 | **`app_id` を落とさない** | `null` にすると、**どのアプリが報告した検査でも合格として扱われます** |
 | **job の名前を変えない** | 必須の検査は `code-review-result` と `design-review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
 
+### 管理者にも検査を課す（メンテナ向け・1回だけ）
+
+**上の「この検査をマージの条件にする」を先に済ませてください。**
+**GitHub は、branch protection が有効でない branch にこの設定を入れられません**（404 が返ります）。
+
+**必須の検査へ入れただけでは、リポジトリの管理者は止まりません。**
+**管理者には「検査を待たずにマージする」が出ます。**赤いままマージできます。
+
+**`enforce_admins` を有効にすると、管理者にも例外がなくなります。**
+
+```bash
+OWNER=<owner>   # 自分のアカウント名に書き換える
+
+# 一、有効にする
+gh api --method POST "repos/$OWNER/continuo/branches/main/protection/enforce_admins"
+
+# 二、有効になったかを確かめる
+gh api "repos/$OWNER/continuo/branches/main/protection" --jq '.enforce_admins.enabled'
+```
+
+**二が `true` を返せば入っています。**
+
+| 気をつけること | なぜ |
+| --- | --- |
+| **有効にすると、あなた自身も素通りできなくなります** | 急ぎで直したいときも、検査が全部緑になるまでマージできません。**それが狙いです** |
+| **外すと、必須の検査8本すべての強制が外れます** | `code-review-result` と `design-review-result` だけでなく、`test` 2本と `build` 4本も外れます。**外したことはリポジトリのファイルに1文字も残りません** |
+| **外れていないかは、タグを打つ前に検査します** | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) が見ます |
+
 ## 設計を読む
 
 | 何を知りたいか | どこ |

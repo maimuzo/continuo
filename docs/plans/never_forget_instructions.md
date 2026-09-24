@@ -267,7 +267,7 @@
 
 **なぜ置いていないか。****どの hook にも登録しておらず、1度も走らないためである。**
 動かないものを置くと、次に読む人が「これは動いている」と読む
-（[.claude/rules/reporting.md](../../.claude/rules/reporting.md) の「事実の扱い」）。
+（[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) の「事実の扱い」）。
 
 **取り出し方。**5本とも commit `ea8090db145f1001c7f89cc054b34ca906d2fe91` に入っている。
 
@@ -306,6 +306,8 @@ GET だけの `api` など）、`continuo version`。これらを `&&` `||` `|` 
 | **`UserPromptSubmit` hook の登録**（`type: "agent"` か `"prompt"`） | **未実施** |
 | **`Stop` hook への `check-open-tasks.py` の登録** | **未実施** |
 
-**実測**（2026-09-02、[.claude/settings.json](../../.claude/settings.json)）。
-`Stop` 2本（`check-verified-commands.py` / `check-reply-clarity.py`）と
-`PreToolUse` 1本（`block-merge-without-review.py`）のみ。
+**実測**（2026-09-21、[.claude/settings.json](../../.claude/settings.json)）。
+**このファイルは hook を1本も持たない。**
+`Stop` の2本は `maimuzo-chat-response-hook-verified-commands` と
+`maimuzo-chat-response-hook-clarity` のプラグインが張るので、このファイルには書かれていない。
+`PreToolUse` に在った `block-merge-without-review.py` は、同じ日に廃止した。

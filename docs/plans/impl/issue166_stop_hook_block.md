@@ -68,12 +68,15 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 利用者の `~/.claude/settings.json` と worktree の `.claude/settings.json` に書かれた `Stop` hook は、
 **continuo が張った `Stop` hook と並行して走る。**
 
-**このリポジトリには差し戻す `Stop` hook が2本ある。**
+**差し戻す `Stop` hook は2本ある。**どちらもプラグインが張るもので、
+このリポジトリの [.claude/settings.json](../../../.claude/settings.json) には書かれていない。
+**そのプラグインを有効にしたときだけ走る。**有効にする場所は `.claude/settings.local.json`（このリポジトリの中。`.gitignore` 済み）か、
+利用者の `~/.claude/settings.json` の `enabledPlugins` である。
 
 | hook | いつ差し戻すか |
 | --- | --- |
-| [.claude/hooks/check-reply-clarity.py:1032](../../../.claude/hooks/check-reply-clarity.py#L1032) | 200文字以上の応答で、引用が80文字未満のときなど |
-| [.claude/hooks/check-verified-commands.py:339](../../../.claude/hooks/check-verified-commands.py#L339) | 確認していないコマンドを実行したと書いたとき |
+| `maimuzo-chat-response-hook-clarity` plugin の Stop hook | 200文字以上の応答で、引用が80文字未満のときなど |
+| `maimuzo-chat-response-hook-verified-commands` plugin の Stop hook | 確認していないコマンドを実行したと書いたとき |
 
 **つまり continuo で continuo 自身を開発すると、ほぼ毎 turn 差し戻しが起きる。**
 **ただし「差し戻しが起きる」と「continuo が誤判定する」は同じではない。**誤判定するのは 4 節の3つの経路だけである。
