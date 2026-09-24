@@ -324,7 +324,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 **回数で区切ると、不要なものを消した設計のまま最大2周進むことになる。**
 
 **要らなくなるもの。**この仕組みから **3・6・9回目という回数の条件は消える。**判定と削除は毎周、設計の見直しは削除が起きた周だけである。
-**連続10回で完全に止まる線は、そのまま残す**（[CLAUDE.md](../../CLAUDE.md) の「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」）。
+**連続10回で完全に止まる線は、そのまま残す**（[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 5-6「何周回すか」）。
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
@@ -481,24 +481,27 @@ Stop hook に `printenv MAIMUZO_HOOKS_UNATTENDED` を書き出させたところ
 ## 10. 決まったこと: 消すもの
 
 **言いたいこと。**移し終えたものだけを消す。**ファイルの中の移していない部分は残す**（人間の決定）。
-リポジトリの規則は、8-2 の行き先へ移したファイルを丸ごと消した。メモリは、移した行だけを消した。
+リポジトリの規則は、8-2 の行き先へ移し切れたファイルを消し、移し切れなかった2本は、移していない決まりだけを残した。メモリは、移した行だけを消した。
 
 **リポジトリから消したもの。**
 
 | 消したもの | 正はどこか |
 | --- | --- |
-| `.claude/rules/` の8本（design-review / issue / parallel-work / plan-file / plugins / release / reporting / worktree） | 8-2 の表の行き先。release は [docs/releasing.md](../releasing.md) |
+| `.claude/rules/` の6本（design-review / issue / parallel-work / plugins / release / worktree） | 8-2 の表の行き先。release は [docs/releasing.md](../releasing.md) |
+| `.claude/rules/reporting.md` と `.claude/rules/plan-file.md` の、移した決まり | `chat-response` と `docs-standard`。**移していない決まり（chat での質問の訊き方と図、プランファイルの補足2つ）は、2本に残した** |
 | `.claude/skills/worker-briefing/` と `.claude/skills/pr-review-and-merge/` | [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 3-6・5-6・5-7 と、`chat-response` スキルの「worker へ渡すもの」 |
-| [CLAUDE.md](../../CLAUDE.md) の中の、レビューの回し方の写し（「最大1周」「連続10回」「毎周の6段」） | 組み込みの指示書の 5-6。CLAUDE.md には、このリポジトリに固有の3つ（貼る先と目印・対で書くこと・人間へ見せるもの）だけを残した |
+| [CLAUDE.md](../../CLAUDE.md) の中の、レビューの回し方の写し（「最大1周」「連続10回」「毎周の6段」） | 組み込みの指示書の 5-6。**CLAUDE.md には、このリポジトリに固有の決まり（レビュワーの割り当て・マージの判定の細部・mid と low を切り出さないこと ほか）を残した** |
 
 **残したもの。**`.claude/settings.json`（権限）と `.claude/hooks/tests/test_marker_pattern_parity.py`（CI の数え方が2か所で同じかを見るテスト）。どちらも移していない。
+
+**消す前に、消すファイルの決まりを1つずつ移した先と突き合わせた。**移した先に無い決まりは、消さずに上の2本か CLAUDE.md に残した。**組み込みの指示書とプラグインのスキルが食い違う箇所は、CLAUDE.md の「食い違ったときにどれが勝つか」で勝ち負けを決めた。**
 
 **CLAUDE.md は、規則の在りかを指す表を持つ。**プラグインのスキルは自動では読まれないので、セッション開始時と compaction のあとに Skill で読む。
 **組み込みの指示書も自動では読まれないので、レビューを回すときは毎周 5-6 を開き直す**（重さを受けた側で付け直すことを、開き直さずに落としたため）。
 
 **消したファイルを指していた文書のリンクは、消す直前の commit の固定リンクへ張り替えた。**調査メモと過去の計画は、書いた時点の中身を指しているためである。
 
-**メモリ。**124件のうち、丸ごと消した2件・移した部分を消した62件・触れていない60件。
+**メモリ。**124件のうち、移した部分を消した45件・触れていない79件。丸ごと消したものは無い。
 **どのファイルのどの部分をどこへ移したかは [13_memory_mapping.md](review-loop-efficiency/research/13_memory_mapping.md) にある。**
 消す前の全部の写しは、リポジトリの外に置いた。
 

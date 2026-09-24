@@ -44,7 +44,7 @@
 | 何を | どうやって |
 | --- | --- |
 | 前置きと規則 | worker-briefing の SKILL.md を Read で開いた。CLAUDE.md と .claude/rules/ は注入された worktree の写しを読み、指す行は `grep -n` で確かめた |
-| CI の数え方 | [.github/workflows/review-gate.yml:271-275](../../../../.github/workflows/review-gate.yml#L271-L275)（実装）と [.github/workflows/review-gate.yml:161-165](../../../../.github/workflows/review-gate.yml#L161-L165)（設計）を Read で読んだ |
+| CI の数え方 | [.github/workflows/review-gate.yml:271-275](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L271-L275)（実装）と [.github/workflows/review-gate.yml:161-165](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L161-L165)（設計）を Read で読んだ |
 | コメント | `gh api --paginate "repos/maimuzo/continuo/issues/comments?per_page=100"`（1,595件） |
 | PR | `gh api graphql --paginate` で pullRequests（148本）。ファイルが100を超えた2本は `gh api --paginate repos/maimuzo/continuo/pulls/<番号>/files` で全件取った |
 | 題名 | `gh api repos/maimuzo/continuo/issues/<番号> --jq .title` |

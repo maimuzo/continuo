@@ -396,7 +396,7 @@ fetch は済んでいて、checkout している branch が古いだけである
 | **[~/Sources/github/continuo/CLAUDE.md:394-560](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L394-L560)**（149行。PR の手順・3箇所の機械（**2026-09-21 以降は2箇所**）・数える条件・対応表の列） | **目印の決まりそのものである。**`CONTINUO_ALLOW_UNREVIEWED_MERGE`（**2026-09-21 に廃止**）も `check-release-ready` もここにしか無い |
 | **[~/Sources/github/continuo/.claude/rules/design-review.md:1-56](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L1-L56)**（56行） | **`<!-- continuo:agent -->` を先頭にする順序**（2件）**と、CI の `design-review-result` の条件がある。**continuo が起動したエージェントの挙動に直結する |
 | **[~/Sources/github/continuo/.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md)**（310行） | `block-merge-without-review.py`（**2026-09-21 に廃止**）と `review-gate.yml` と目印を名指しする。**`code-review-result` を含む行が多く、目印を引数にしない限り持ち出せない** |
-| **[~/Sources/github/continuo/CONTRIBUTING.md:133-241](../../../../CONTRIBUTING.md#L133-L241)**（109行） | **外部の貢献者だけが読む。**プラグインは効かない（5-0） |
+| **[~/Sources/github/continuo/CONTRIBUTING.md:133-241](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CONTRIBUTING.md#L133-L241)**（109行） | **外部の貢献者だけが読む。**プラグインは効かない（5-0） |
 | **[~/Sources/github/continuo/internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) の 3-2 と 3-6** | **製品の一部である。**利用者の手元で動く |
 
 **消す（プラグイン化が終わってから）。**

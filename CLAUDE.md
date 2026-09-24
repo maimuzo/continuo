@@ -299,21 +299,23 @@ git worktree remove "$ROLLBACK"
 （`.gitignore` 済み。環境ごとに違うため共有しない）。
 
 **そのファイルが無い環境では、この節は読み飛ばしてよい。**
-このリポジトリの規則は、この CLAUDE.md と、下の「作業の進め方」が指す3か所だけで完結している。
+このリポジトリの規則は、この CLAUDE.md と、下の「作業の進め方」の表が指す先で完結している。
 
 ---
 
 ## 作業の進め方
 
-**規則は3か所にある。どれも自動では読まれない。ここから辿る。**
+**規則は次の表の置き場にある。**`.claude/rules/` の2本のほかは、**自動では読まれない。ここから辿る。**
 
 | 何の規則か | どこにあるか | どう読むか |
 | --- | --- | --- |
-| **設計 → 人間確認 → 設計レビュー → 実装 → 実装レビューの段取り、レビューの回し方、subagent への渡し方** | [internal/prompt/builtin.md](internal/prompt/builtin.md)（continuo の組み込みの指示書。3-2・3-6・5-6・5-7） | **Read で開く** |
+| **設計 → 設計レビュー → 実装 → 実装レビューの段取り、issue と PR のコメントの書き方、レビューの回し方、subagent への渡し方** | [internal/prompt/builtin.md](internal/prompt/builtin.md)（continuo の組み込みの指示書。3-2・3-6・5-5・5-6・5-7） | **Read で開く** |
 | **worktree・並列・プラグイン・issue の作り方と着手** | `maimuzo-dev-core` の `general-claude-md` スキル | **セッション開始時と compaction のあとに Skill で読む** |
 | **カンバンの操作** | `maimuzo-dev-core` の `issue-management` スキル | カンバンに触る前に Skill で読む |
 | **プランファイルの書き方** | `maimuzo-dev-core` の `docs-standard` スキル | プランファイルを書く前に Skill で読む |
 | **報告・返答の書き方、worker へ渡すもの** | `maimuzo-chat-response` の `chat-response` スキル | **セッション開始時と compaction のあとに Skill で読む** |
+| **chat での質問の訊き方と図の書き方**（上のスキルへ移していないもの） | [.claude/rules/reporting.md](.claude/rules/reporting.md) | 自動で読まれる |
+| **プランファイルの補足**（`docs-standard` へ移していないもの） | [.claude/rules/plan-file.md](.claude/rules/plan-file.md) | 自動で読まれる |
 | **リリースの手順** | [docs/releasing.md](docs/releasing.md) | Read で開く |
 
 **プラグインの規則は開発者の環境向けである**（上の「不特定多数の環境と、maimuzo の環境を混同しない」）。**このリポジトリを clone した人には当てはまらない。**
@@ -321,14 +323,33 @@ git worktree remove "$ROLLBACK"
 ### 組み込みの指示書を、自分の作業にも当てる
 
 **組み込みの指示書は、continuo が起動したエージェントへ渡す文書である。**
-**このリポジトリを直す AI も、レビューの回し方と subagent への渡し方は、そこに従う。**
-読み替えるのは次の3つだけである。
+**このリポジトリを直す AI も、issue と PR のコメントの書き方（5-5）・レビューの回し方（5-6）・subagent への渡し方（5-7）は、そこに従う。**
+読み替えは次のとおりである。
 
 | 指示書の書き方 | このリポジトリを直す AI は |
 | --- | --- |
 | 応答の最後に `CONTINUO-STATUS:` を書く | **書かない。**カンバンの操作は `issue-management` スキルに従う |
-| 質問は issue のコメントへ書いて止まる | **人間へチャットで訊く** |
+| 質問は issue のコメントへ書いて止まる | **人間へチャットで訊く。**訊き方は [.claude/rules/reporting.md](.claude/rules/reporting.md) |
 | 4-4 の「このプロジェクトの決まり」 | **この CLAUDE.md が、それに当たる** |
+| 計画と設計レビューの判断票の1行目に `<!-- continuo:agent -->` を置く | **置かない。**判断票の1行目は目印そのもの（下の「貼る先と目印」） |
+| 設計レビューを飛ばす断りを、自分で書かない | **このリポジトリでは、作業している AI が貼る**（下の「貼る先と目印」） |
+| マージは、あなたの仕事ではない | **メインエージェントが自分で行う**（下の「PR のマージは、メインエージェントが自分で行う」） |
+| カンバンの Status は continuo が動かすので、subagent へ渡してよい | **カンバンへの書き込みは worker に渡さない** |
+
+#### 食い違ったときにどれが勝つか
+
+**上から順に勝つ。**
+
+| 順 | どれ |
+| --- | --- |
+| 1 | この CLAUDE.md |
+| 2 | `.claude/rules/` に残した2本 |
+| 3 | 組み込みの指示書（5-5・5-6・5-7） |
+| 4 | プラグインのスキル |
+
+**とくに次の2つは、プラグインのスキルと食い違っている。**
+- **レビュワーへ渡すものは、組み込みの指示書の 5-6・5-7 に従う。**前の周の判断票は「直さないと決めた指摘とその理由」だけを渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
+- **mid と low を、新しい issue へ切り出さない**（`general-claude-md` の「スコープ外として放置しない。bug-reporter で issue に登録する」より、下の「このリポジトリに固有の決まり」が勝つ）
 
 **レビューを回すときは、毎周 5-6 を開き直す。**とくに次の2つを落とさない。
 
@@ -342,8 +363,31 @@ git worktree remove "$ROLLBACK"
 
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
-- **設計レビューは `maimuzo-from-ecc:architect` に、設計をファイルへ書いて渡す。**実装レビューには Bash を持つエージェント（`general-purpose` など）を立てる。architect は `git` を叩けない
+- **レビュワーの割り当て。**組み込みの指示書の 5-6「誰に見せるか」の2つの役に、次を当てる
+
+  | どのレビュー | 差分を読む役 | 関連処理まで見る役 |
+  | --- | --- | --- |
+  | **設計レビュー** | `maimuzo-from-ecc:architect`（設計をファイルへ書いて、そのパスを渡す） | Bash を持つエージェント（`general-purpose` など） |
+  | **実装レビュー** | `/code-review <PR 番号>` | Bash を持つエージェント（`general-purpose` など） |
+
+  **architect は `git` を叩けないので、実装レビューと、関連処理まで見る役には使わない**
+- **設計レビューを飛ばしてよいのは、文書だけの変更と、1行の修正で他に影響しないことが明らかなもの（定数の値・typo）だけである。迷ったら飛ばさない**
+- **mid と low は、簡単に直るならその issue の中で直す。設計に触るなら放置する。新しい issue へ切り出さない。**直さないと決めた理由は判断票に書く。**判断票に「保留」は置かない**（直すか直さないかのどちらか）
+- **削除した内容は、対になる issue のコメントへ残す。対になる issue が無ければ、その pull request のコメントへ残す。**対になる issue が無いときは、人間がチャットで出した指示の原文を issue の代わりにして突き合わせる
+- **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときだけ）
+- **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
+- **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
 - **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9077](docs/plans/continuo_design.md#L9077) が認めている）。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
+
+  > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、
+  > issue ごとに git worktree を用意して、その中で Claude Code を対話モードで起動し、
+  > 完了までを面倒見る常駐プロセスです。Go で書かれています。**
+  >
+  > **利用者は `continuo init` で WORKFLOW.md という1枚のファイルを受け取ります。
+  > 上半分（`---` に挟まれた front matter）が continuo の設定、
+  > 下半分（本文）が Claude Code へそのまま送られるプロンプトです。
+  > continuo はこのファイルを勝手に書き換えません。**
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents`（continuo が同時に走らせる Claude Code の数の上限）とは別物である。**この行を読んで、その設定に手を入れてはならない**
 - **リリースは [docs/releasing.md](docs/releasing.md) のとおりに行う。**実機で issue を1件通してから出す。[docs/FAQ.md](docs/FAQ.md) と [docs/upgrading.md](docs/upgrading.md) の両方を直してから出す。`--generate-notes` のまま放置しない
 
@@ -365,7 +409,7 @@ git worktree remove "$ROLLBACK"
 2. **`/code-review` を通す**
 3. **レビュー結果と、指摘ごとの対応表を、その PR のコメントに貼る。**
    **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）。
-   **判断票の中身は [internal/prompt/builtin.md](internal/prompt/builtin.md) の 5-6 にある**
+   **判断票の中身は [internal/prompt/builtin.md](internal/prompt/builtin.md) の 3-2 と 5-6 にある**
 4. **指摘に対応する。収まるまで 2〜4 を繰り返す。**「収まっている」の定義（Critical と High が0件）・収まったあと何周回すか・
    連続10回で完全に止まることは、[internal/prompt/builtin.md](internal/prompt/builtin.md) の 5-6「何周回すか」にある。
    **重さは、受けた側が同じ 5-6 の4段で付け直してから数える**
@@ -424,6 +468,24 @@ git worktree remove "$ROLLBACK"
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
 
+### `/code-review` とマージの細部
+
+- **`/code-review` には PR 番号を必ず渡す。**渡さないと、その worktree の `HEAD` からの差分がレビューされる。**出力の冒頭で、対象が PR になっていることを確かめる**
+- **`/code-review ultra` は、人間が明示的に指示したときだけ使う。**レートリミットを大きく使う
+- **`gh pr ready` を打ったら、新しく立った run の完了を待ってからマージへ進む。**直後は1つ前の結果が出る
+- **合否は `gh pr view <番号> --json mergeable,mergeStateStatus` の1行だけで決める。**検査の一覧を自分で数えて決めない（必須の検査が1本も報告していないと、一覧にそもそも出てこない）
+
+  | 返った値 | どうするか |
+  | --- | --- |
+  | `MERGEABLE` / `CLEAN` | マージしてよい |
+  | `MERGEABLE` / `UNSTABLE` | **マージしない。**必須でない検査が落ちている。何が落ちたかを確かめ、人間へ報告する |
+  | `MERGEABLE` / `BLOCKED` | **マージしない。**必須の検査が赤いか、まだ走っている。検査を回し直す |
+  | `CONFLICTING` | **マージしない。**先に競合を解決する |
+- **マージは `gh pr merge <番号> --merge`（merge commit）で行う。**squash で入れた branch は `git branch --merged origin/main` に出ず、worktree の片付けの判定が効かなくなる
+- **`gh pr merge` が Claude Code の権限の判定で拒否されたら、別の経路を探さず、人間に押してもらう**
+- **確かめのコマンドには `--fail-fast` を付けず、`set -e` も置かない。**赤いときこそ、判定の1行を出させる。**シェルの変数は Bash の呼び出しをまたげないので、塊は1回の呼び出しで丸ごと叩く**
+- **目印の数え方は、[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) と [scripts/check-release-ready.sh](scripts/check-release-ready.sh) の2か所が持っている。変えるときは2つとも直す**
+
 ### 絶対条件：PR のマージは、メインエージェントが自分で行う
 
 **worker（subagent / Workflow の agent）に `gh pr merge` を実行させてはならない。**
@@ -466,7 +528,7 @@ git worktree remove "$ROLLBACK"
 | **設計レビューの判断票** | **その pull request が閉じる issue のコメント** | `<!-- design-review-result -->` |
 | **設計レビューを飛ばしてよい変更**（文書だけ・1行の修正） | **その pull request のコメント** | `<!-- design-review-skipped -->`。**2行目に理由を書く** |
 
-**CI が数えるので、1行目を変えない。**判断票の列・直す前の計画・何周目かの書き方は 5-6 にある。
+**CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は組み込みの指示書の 3-2、直す前の計画は 5-6 の「直す前に書くこと」にある。
 **判断票は、直す前に貼る。**貼らずに直したものは、レビューを実施していないものとして扱う。
 
 **判断票をプランファイルへ書かない。**指摘ごとの可否は修正の履歴そのもので、プランファイルは修正の履歴を持たない（`docs-standard` スキル）。

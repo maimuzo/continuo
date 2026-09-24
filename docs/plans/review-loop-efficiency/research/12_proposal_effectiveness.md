@@ -116,12 +116,12 @@
 | 観点 | 判定の中身 |
 | --- | --- |
 | **どの原因に効くか** | **再指摘23件（10.6%）だけ。**しかも [03](03_empirical_pr_rounds.md) の 2-6 が「**C/H が全部これだった周は2つで、どちらも10周目で止まった周である**」と測っている。**上位5本で、再指摘を消して減る周は最大2周である** |
-| **効果の根拠** | **無い。**「差分だけにして周回が減った実測」は、**4箇所で探して見つかっていない**（[../../review-loop-efficiency.md](../../review-loop-efficiency.md)、[05:711](05_industry_tools_blogs.md#L711)、[06:510](06_academic.md#L510)、[04:728](04_anthropic_official.md#L728)）。採る根拠は「Bugbot が既定でそうしている」だけで、その出典は WebFetch の要約モデル経由である |
-| **反証** | **2件ある。**GitHub Docs「**再レビューのとき、Copilot は、解決済みにしたり低評価を付けたりしたコメントでも、繰り返すことがある**」（[05:369-371](05_industry_tools_blogs.md#L369-L371)）。GitHub Community の Discussion #189767「500〜1000行の PR で5周、新しいコメントが10・6・4・2・2件出た。**前の diff に既に在ったのに指摘されなかったコードへの新しいコメントだった。**約24件のうち役に立ったのは約3件」（[05:373-378](05_industry_tools_blogs.md#L373-L378)）。**差分だけにしても、変えていない行からの新しい指摘は止まっていない** |
+| **効果の根拠** | **無い。**「差分だけにして周回が減った実測」は、**4箇所で探して見つかっていない**（[../../review-loop-efficiency.md](../../review-loop-efficiency.md)、[05:711](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L711)、[06:510](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/06_academic.md#L510)、[04:728](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L728)）。採る根拠は「Bugbot が既定でそうしている」だけで、その出典は WebFetch の要約モデル経由である |
+| **反証** | **2件ある。**GitHub Docs「**再レビューのとき、Copilot は、解決済みにしたり低評価を付けたりしたコメントでも、繰り返すことがある**」（[05:369-371](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L369-L371)）。GitHub Community の Discussion #189767「500〜1000行の PR で5周、新しいコメントが10・6・4・2・2件出た。**前の diff に既に在ったのに指摘されなかったコードへの新しいコメントだった。**約24件のうち役に立ったのは約3件」（[05:373-378](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L373-L378)）。**差分だけにしても、変えていない行からの新しい指摘は止まっていない** |
 | **費用** | **決めごと7（測る10本の読み直し）を丸ごと生む。**PR 1本につき1周分×10本で、出た C/H は直して回し10回に数える。**つまり周を減らすための決めごとが、周を増やす決めごとを1つ連れてくる** |
 | **無くても達成できるか** | **できる。**[.claude/rules/design-review.md:143-146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L146) が既に「次の周のレビュワーには、前の周の対応表を渡す」「`/code-review` では渡せない。**そのときは、受け取った側が前の周の対応表と突き合わせる**」と決めている。再指摘は、受けた側が同じ理由を書き直すだけで1行で終わる |
 | **副作用** | **いちばん多い群（同様の箇所74件）を見つける経路が細る。**修正漏れは「触っていない文書に残った参照」なので、差分の外にある。9節の表は「差分の周のレビュワーに、差分の外を探させはしない」と書いており、[03](03_empirical_pr_rounds.md) の 2-3 が数えた5つの前提のうち4つは、差分の外の文書に出ている |
-| **未検証の前提** | **`/code-review` に2つの SHA を渡せるかを、誰も試していない**（[../../review-loop-efficiency.md:509](../../review-loop-efficiency.md#L510)）。このセッションの skill の一覧に出る `code-review` の説明文は「Review the current diff, or a **PR number/branch/path target**」で、**commit の範囲を受け取るとは書いていない。**計画でいちばん構造を変える決めごとが、いちばん確かめられていない前提の上に乗っている |
+| **未検証の前提** | **`/code-review` に2つの SHA を渡せるかを、誰も試していない**（[../../review-loop-efficiency.md:509](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency.md#L510)）。このセッションの skill の一覧に出る `code-review` の説明文は「Review the current diff, or a **PR number/branch/path target**」で、**commit の範囲を受け取るとは書いていない。**計画でいちばん構造を変える決めごとが、いちばん確かめられていない前提の上に乗っている |
 
 **判定。要らない。**採ると、上位5本で最大2周しか減らない見込みのために、未検証の呼び出し方と、周を増やす測定の決めごとと、最大の原因群を見つけにくくする副作用の3つを同時に背負う。
 **採らないと続くこと。**毎周 PR 全体を読み直す費用は残る。**それを減らしたいなら、範囲を差分に限定するのではなく、差分と前の周の対応表を「材料として渡す」だけにすればよい**（範囲は絞らない）。これなら未検証の呼び出し方も、測定の周も要らない。
@@ -134,7 +134,7 @@
 | --- | --- |
 | **どの原因に効くか** | 「既存」の行だけを見ると、当たるのは範囲外の要求2件（0.9%）である。**それ以上に、当たってはいけない群に当たる** |
 | **副作用（いちばん重い）** | 10節の文言は「**この PR の diff に入らない行に前から在るもの**」を既存と定義する。**修正漏れ52件（単独最多、24.0%）が、この定義に文字どおり当たる。**例: [03](03_empirical_pr_rounds.md) の 2-3 の「消した設定 `pause_above_percent` を文書に残さない」は、PR #230（枠が残り少ないときに止まる理由を出し、1週間の枠を待つ上限を足す（#173 / #197 / #199））の3つの周に4件出ている。**その文書の行は、この PR が1文字も触っていない。**つまり「既存」として、この PR を止めない側へ落ちる |
-| **反証** | Code Review 文書「**This works bidirectionally: if your PR changes code in a way that makes a `CLAUDE.md` statement outdated, Claude flags that the docs need updating too.**（PR の変更が CLAUDE.md の記述を古くしたら、文書の更新も要ると指摘する）」（[04:528](04_anthropic_official.md#L528)、WebFetch の全文）。OpenAI Codex の rubric も「既存のバグ」を「**その commit より前からコードベースに在ったもの**」と定義し、[05:126](05_industry_tools_blogs.md#L126) が「2-6 の『前の周に既に在ったもの』とは別物である」と注意している |
+| **反証** | Code Review 文書「**This works bidirectionally: if your PR changes code in a way that makes a `CLAUDE.md` statement outdated, Claude flags that the docs need updating too.**（PR の変更が CLAUDE.md の記述を古くしたら、文書の更新も要ると指摘する）」（[04:528](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L528)、WebFetch の全文）。OpenAI Codex の rubric も「既存のバグ」を「**その commit より前からコードベースに在ったもの**」と定義し、[05:126](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L126) が「2-6 の『前の周に既に在ったもの』とは別物である」と注意している |
 | **費用** | 文言に1文足すだけ |
 | **衝突** | 既存の規則4つと衝突することは、計画が既に書いている（[CLAUDE.md:545](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545)・[:551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L551)、[design-review.md:134-136](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L134-L136)、maimuzo-dev-core の general-claude-md） |
 
@@ -168,11 +168,11 @@
 | 観点 | 判定の中身 |
 | --- | --- |
 | **どの原因に効くか** | **同様の箇所74件（34.1%、上位5本でいちばん多い群）。**これに当たる「見つける側」の手は、この計画でこれ1つだけである |
-| **効果の根拠** | **実測がある。**Hatton 2008「Testing the value of checklists in code inspections」（[07:311](07_sibling_fix_prevention.md#L311)。07 の書き手が PDF を起こして読んだ）が、**308件の点検で「チェックリストは点検の成果を有意に変えなかった。1人で平均53%、2人組で平均76%の欠陥を見つけた」**と測っている。**これは「表に行を足す」を否定し、「人を足す」を支持する。**この調査で集まった材料のうち、この判定にいちばん直接当たる実測である |
+| **効果の根拠** | **実測がある。**Hatton 2008「Testing the value of checklists in code inspections」（[07:311](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/07_sibling_fix_prevention.md#L311)。07 の書き手が PDF を起こして読んだ）が、**308件の点検で「チェックリストは点検の成果を有意に変えなかった。1人で平均53%、2人組で平均76%の欠陥を見つけた」**と測っている。**これは「表に行を足す」を否定し、「人を足す」を支持する。**この調査で集まった材料のうち、この判定にいちばん直接当たる実測である |
 | **補強** | [03](03_empirical_pr_rounds.md) の 2-3 が「同じ前提が、形を変えて何周にもわたって出た例」を5つ挙げ、**5つのうち3つは「指摘の本文に共通する語が無い」**（関数名・欄の名前・空白の種類が毎回違う）。**文字列の検索では届かないので、意味で探す役が要る。**これはこのリポジトリで測ったものである |
 | **費用** | 1周目に Agent 1体。`/code-review` と並列に走らせるなら 決めごと3 の例外が要る |
 | **無くても達成できるか** | **できない。**6節（出す前の記録）と 8節（直すときの記録）は書く側の手で、**書く側が気づかなかった前提には当たらない。**Hatton の実測が、まさにその差を測っている |
-| **副作用** | トークンが増える。[04:602](04_anthropic_official.md#L602) は複数 agent が「約15倍のトークンを使う」と書くが、**これは調査タスクの社内評価であってコードレビューではない**（04 自身がそう注意している） |
+| **副作用** | トークンが増える。[04:602](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L602) は複数 agent が「約15倍のトークンを使う」と書くが、**これは調査タスクの社内評価であってコードレビューではない**（04 自身がそう注意している） |
 
 **判定。要る。**
 
@@ -182,10 +182,10 @@
 | --- | --- |
 | **どの原因に効くか** | **レビュワーの誤り5件（2.3%）が最大である。**計画は「指摘は1件も落とさない」と決めている（[../../review-loop-efficiency.md](../../review-loop-efficiency.md)）ので、**対応表の行数は1行も減らない。**残る仕事は「重さを付ける」「根拠を補う」の2つになる |
 | **人間の方針との衝突** | **正面から衝突する。**人間が 2-1 で「**レビューを受けた側がこの基準で再評価して振り分けること**」と決めた仕事を、計画は「対応表を書く本人でもなく、確かめ役が付ける」（[../../review-loop-efficiency.md](../../review-loop-efficiency.md)）と、名指しで取り上げている |
-| **反証** | **2件ある。**Greptile「**LLM に自分のコメントの重大度を判定させる → ほぼでたらめだった**（`the LLMs judgment of its own output was nearly random`）」（[05:688](05_industry_tools_blogs.md#L688)、WebFetch の抽出）。Lu ほか（ICML 2025）「**Validator で誤警報は下がるが、key bug inclusion も 31.11%→20.00% に下がる**」（[06:310](06_academic.md#L310)、要約経由） |
+| **反証** | **2件ある。**Greptile「**LLM に自分のコメントの重大度を判定させる → ほぼでたらめだった**（`the LLMs judgment of its own output was nearly random`）」（[05:688](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L688)、WebFetch の抽出）。Lu ほか（ICML 2025）「**Validator で誤警報は下がるが、key bug inclusion も 31.11%→20.00% に下がる**」（[06:310](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/06_academic.md#L310)、要約経由） |
 | **費用** | **計画の23行が確かめ役に依存している**（`grep -c '確かめ役' ~/Sources/github/continuo/.claude/worktrees/review-loop-efficiency/docs/plans/review-loop-efficiency.md` が23）。**1周ごとに1体増えるので、周が増えるほど費用が比例して増える。**周を減らす計画の中で、周に比例する費用を持つ唯一の決めごとである |
 | **無くても達成できるか** | **できる。**[.claude/rules/design-review.md:124](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124) の「絶対条件：合理的根拠を否定できるなら、直さない」を受けた側が行う形は既に規則にあり、[.claude/skills/pr-review-and-merge/SKILL.md:113-117](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L113-L117) が「根拠が足りなければ**受け取る側が補って対応表に載せる**」と既に決めている。**確かめ役は、この2つを別のエージェントへ移すだけである** |
-| **公式の注意** | Prompting Claude Opus 5「`do not use subagents to verify or double-check your own work`」（[04:167](04_anthropic_official.md#L167)、WebFetch の全文）。04 は「他の agent が挙げた指摘の検証とは別物だと読める。**ただしそう読んでよいかは文書に書かれておらず、確かめていない**」と書いている。**計画は、この未確認の読み方の上に役を1つ立てている** |
+| **公式の注意** | Prompting Claude Opus 5「`do not use subagents to verify or double-check your own work`」（[04:167](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L167)、WebFetch の全文）。04 は「他の agent が挙げた指摘の検証とは別物だと読める。**ただしそう読んでよいかは文書に書かれておらず、確かめていない**」と書いている。**計画は、この未確認の読み方の上に役を1つ立てている** |
 
 **判定。要らない。**残したい仕事は2つだけで、どちらも新しい役を立てずに置ける。
 
@@ -200,7 +200,7 @@
 | **効果の根拠** | [03](03_empirical_pr_rounds.md) の 2-5 が「**High は、上位2本では減らなかった**」を測っている。**症状の存在は測れている** |
 | **副作用（いちばん重い）** | **1回の比較では、騒音で発火する。**同じ 2-5 の実測で、PR #230（枠が残り少ないときに止まる理由を出し、1週間の枠を待つ上限を足す（#173 / #197 / #199））の系列4の High は **5・2・3・3・4・3・3・4・2・6**。「前の回より減っていない」は 2→3・3→3・3→4・3→4・2→6 の**5箇所で成り立つ。10周のうち5回、6段を通すことになる** |
 | **費用** | 6段は目的の確認役・敵対的レビュワー・設計の敵対的レビュー・**作り直す worker** を伴う（[CLAUDE.md:640-659](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L659)）。しかも [03](03_empirical_pr_rounds.md) の 2-2 は「**作り直しで入った 6件**」を数えている。**作り直しそのものが C/H を生む** |
-| **出典との食い違い** | 計画が引いている出典は、どちらも「2周続けて」である。workflows 文書「`two rounds in a row make no progress`」（[04:631](04_anthropic_official.md#L631)、全文）、Best practices「`corrected Claude more than twice`」（[04:622](04_anthropic_official.md#L622)、全文）。**計画が1回にした理由は「発動が1周遅れる」だが、上の推移では1回だと騒音に反応する** |
+| **出典との食い違い** | 計画が引いている出典は、どちらも「2周続けて」である。workflows 文書「`two rounds in a row make no progress`」（[04:631](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L631)、全文）、Best practices「`corrected Claude more than twice`」（[04:622](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L622)、全文）。**計画が1回にした理由は「発動が1周遅れる」だが、上の推移では1回だと騒音に反応する** |
 | **無くても達成できるか** | **半分はできる。**3・6・9回目の6段は既にある（[CLAUDE.md:640](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640)）。足すのは「前倒しで入る条件」だけである |
 
 **判定。形を変えれば要る。**2つ直す。
@@ -215,7 +215,7 @@
 | **どの原因に効くか** | **写しの食い違い4件（1.8%）に直接。**間接には、規則が届かないことによる全体に効く（下の根拠） |
 | **効果の根拠（このセッションで直接確かめた）** | **`.claude/rules/*.md` は自動で読まれる。**このセッションの system reminder に、`~/Sources/github/continuo/.claude/rules/` の worktree.md・parallel-work.md・reporting.md・issue.md・release.md・plugins.md・plan-file.md・design-review.md の**8本が「project instructions, checked into the codebase」として注入された。私はこの8本を Read していない。**`grep -l 'paths' .claude/rules/*.md` は0件である。一方 skills は名前と説明だけが一覧に出て、本文は注入されていない（worker-briefing は Read で開いた）。**つまり [CLAUDE.md:308](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L308) の「`.claude/rules/` と `.claude/skills/` の下のファイルは自動では読まれない」は、rules については事実と逆である**（skills については正しい） |
 | **写しの実測** | `git grep -c 'ここには写さない' -- CLAUDE.md .claude/` が **12件**（design-review.md 4・worker-briefing 3・pr-review-and-merge 3・reporting.md 2）。`git grep -c '要点だけ'` が **5件**（design-review.md 4・pr-review-and-merge 1）。[01](01_inventory_repo.md) の4節は、書式の崩れ `****そのとき` が**3ファイルに同じ形で複製**されていること、[01](01_inventory_repo.md) の5節は pr-review-and-merge:190 が**実在しない見出し**「絶対条件：連続10回で止まる」を指していることを挙げている |
-| **総量** | 実装レビューの1周で直す側が従う規則は **883行・約60KB**（[01](01_inventory_repo.md) の6節）。Best practices「**禁じる規則があるのに Claude が同じことを続けるなら、ファイルが長すぎて規則が埋もれている可能性が高い**」（[07:176](07_sibling_fix_prevention.md#L176)、全文を開いたもの） |
+| **総量** | 実装レビューの1周で直す側が従う規則は **883行・約60KB**（[01](01_inventory_repo.md) の6節）。Best practices「**禁じる規則があるのに Claude が同じことを続けるなら、ファイルが長すぎて規則が埋もれている可能性が高い**」（[07:176](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/07_sibling_fix_prevention.md#L176)、全文を開いたもの） |
 | **費用** | 文書の移動。**足す行より消す写しのほうが多くなる見込み**だが、行数は書いてから測る（計画の12節がそう書いている） |
 | **無くても達成できるか** | **できない。**写しの食い違いは、写しがある限り出続ける |
 | **副作用** | [CLAUDE.md:308](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L308) を直すのは、レビューループの外（全作業の読み方）に触る。08 の1周目でも Low として挙がり、「直す対象に残す」と判定されている |
@@ -262,13 +262,13 @@
 
 **Hatton 2008 の否定的な実測に照らして、効くと言えるか。**
 
-**半分は言えない。半分は言える。**Hatton が測ったのは「**チェックリストの有無で点検の成果が変わるか**」である（[07:311](07_sibling_fix_prevention.md#L311)）。
+**半分は言えない。半分は言える。**Hatton が測ったのは「**チェックリストの有無で点検の成果が変わるか**」である（[07:311](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/07_sibling_fix_prevention.md#L311)）。
 
 | 6節・8節のどの部分か | Hatton の否定に当たるか |
 | --- | --- |
 | **[worker-briefing 2-5](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L211-L219) の表に4行足す**（消した・状態を足した・読む回数を変えた・前提を変えた） | **当たる。**これは点検項目を増やすことそのものである。**この4行だけでは効かないと見るべきである** |
 | **前提を1文にし、探し方と当たった箇所を表に書いて残す** | **当たらない。**Hatton は記録も再検査も測っていない |
-| **次の周に、その探し方を叩き直す** | **当たらない。**むしろ [07](07_sibling_fix_prevention.md) の仮説4（「数えた結果が、修正後に検査されていない」）と、Claude Code 公式の「**成功を主張させるのではなく、証拠を見せさせる**」（[07:179-180](07_sibling_fix_prevention.md#L179-L180)、全文）が支える |
+| **次の周に、その探し方を叩き直す** | **当たらない。**むしろ [07](07_sibling_fix_prevention.md) の仮説4（「数えた結果が、修正後に検査されていない」）と、Claude Code 公式の「**成功を主張させるのではなく、証拠を見せさせる**」（[07:179-180](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/07_sibling_fix_prevention.md#L179-L180)、全文）が支える |
 
 **[07](07_sibling_fix_prevention.md) の 4-1 が、この区別を裏づける実測を持っている。**2-5 が入ってから「数えた記録」はコメントの大半に付くようになったのに（〜09-03 で7件 → 09-04〜05 で103件 → 09-06〜 で57件）、**取り残し系の Critical / High の行は0にならない**（7 → 17 → 14）。07 の読み取りは「**『数えていない』より『数え方が当たっていない』を疑うほうが合う**」である。
 
@@ -276,7 +276,7 @@
 
 > 修正 commit で、対応表のパターンを叩き直して残り件数を表に並べる（hook か検査スクリプトにできる）
 
-**これは Best practices の「`Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens.`（CLAUDE.md の指示は助言にすぎないが、hook は決定的で、その動作が必ず起きることを保証する）」（[07:173-174](07_sibling_fix_prevention.md#L173-L174)、全文）と合う。**
+**これは Best practices の「`Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens.`（CLAUDE.md の指示は助言にすぎないが、hook は決定的で、その動作が必ず起きることを保証する）」（[07:173-174](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/07_sibling_fix_prevention.md#L173-L174)、全文）と合う。**
 **同型のものが既にリポジトリに在る。**[.claude/rules/plan-file.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/plan-file.md) の「設計文書へ1行でも足したら、そこを指すリンクを全部検算する」の検査スクリプトである。
 
 **判定。形を変えれば要る。**記録は残す。**叩き直しは人ではなくスクリプトへ移す。**表に4行足すだけで終わらせない。
@@ -286,10 +286,10 @@
 | 観点 | 判定の中身 |
 | --- | --- |
 | **どの原因に効くか** | **このリポジトリでは測っていない。**[03](03_empirical_pr_rounds.md) の 2-1 の分類の表に「指摘の文面を採った」という分類は無い。近いのは「直しが持ち込んだ 21件」「膨張 9件」だが、**その21件が指摘の文面を採ったものかは、03 が diff を読んでいないので言えない** |
-| **効果の根拠** | **外部の観測1件だけ。**bentleypark/aiwatch の issue #1298（9周。「`each round's findings landed on prose the previous round's fix had just written`」）。オーケストレーターが原文の先頭5,000字を開いている。**さらに、その対策の効果は「直し方を書かないレビュー役を出した結果、1回の実行で4件の指摘・書き換え案0件」という1回の観測である**（[05:471](05_industry_tools_blogs.md#L471)）。**1例の観測から1例の対策へ、という鎖である** |
+| **効果の根拠** | **外部の観測1件だけ。**bentleypark/aiwatch の issue #1298（9周。「`each round's findings landed on prose the previous round's fix had just written`」）。オーケストレーターが原文の先頭5,000字を開いている。**さらに、その対策の効果は「直し方を書かないレビュー役を出した結果、1回の実行で4件の指摘・書き換え案0件」という1回の観測である**（[05:471](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/05_industry_tools_blogs.md#L471)）。**1例の観測から1例の対策へ、という鎖である** |
 | **費用** | ほぼ0。Agent で立てるレビュワーへの指示1行 |
 | **制約** | **`/code-review` には渡せない**（[.claude/skills/pr-review-and-merge/SKILL.md:99](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99)「自由なプロンプトを足せない」）。**必須の道具では守れない。**規則の本文に禁止として書くと、毎周守れない条項が1つ増える |
-| **無くても達成できるか** | 一部できる。[04:400-402](04_anthropic_official.md#L400-L402) の Best practices「抜けを探せと言われたレビュワーは、作業が健全でも普通はいくつか報告する。**指摘を全部追いかけると過剰設計になる**」が、同じ向きを別の言い方で押さえている |
+| **無くても達成できるか** | 一部できる。[04:400-402](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L400-L402) の Best practices「抜けを探せと言われたレビュワーは、作業が健全でも普通はいくつか報告する。**指摘を全部追いかけると過剰設計になる**」が、同じ向きを別の言い方で押さえている |
 
 **判定。形を変えれば要る。**規則の禁止条項にせず、**Agent で立てるレビュワーへの指示に1行として入れる。`/code-review` には効かないと同じ場所に書く。**採る理由は「費用がほぼ0」だけで、根拠は弱い。**弱いと書いたうえで採る。**
 
@@ -299,7 +299,7 @@
 | --- | --- |
 | **どの原因に効くか** | **膨張9件（4.1%）。**件数は小さい |
 | **効果の根拠** | **件数は小さいが、根拠はこの12件でいちばん強い部類である。**[.claude/rules/design-review.md:220-237](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L220-L237) が、このリポジトリで測った3件を持つ。ログ1行 → **17ファイル**（3回目の Critical 1）、文面1本 → **11ファイル**（Critical 2）、文書のみ → 文書＋検査の仕組み（**Critical 7**）。**レビューの回数と設計の大きさが比例した**、と書いている |
-| **補強** | Best practices「`A reviewer prompted to find gaps will usually report some, even when the work is sound … Chasing every finding leads to over-engineering`」（[04:400](04_anthropic_official.md#L400)、全文）。Prompting Claude Opus 5「Opus 5 は頼まれていない段を足してタスクの範囲を広げることがある」（[04:414](04_anthropic_official.md#L414)、全文） |
+| **補強** | Best practices「`A reviewer prompted to find gaps will usually report some, even when the work is sound … Chasing every finding leads to over-engineering`」（[04:400](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L400)、全文）。Prompting Claude Opus 5「Opus 5 は頼まれていない段を足してタスクの範囲を広げることがある」（[04:414](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/review-loop-efficiency/research/04_anthropic_official.md#L414)、全文） |
 | **費用** | 計画の形（確かめ役に判定させる）だと、3-4 (b) で落とした役が要る |
 | **無くても達成できるか** | **判定の段だけは既にある。**3・6・9回目の6段の段2が「issue に無い内容が入っているなら、それが必要となる合理的理由をまとめる」（[CLAUDE.md:640-659](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L659)）。**足りないのは「どの行が仕組みを足す直しか」の印だけである** |
 
