@@ -5437,7 +5437,7 @@ CI から呼ぶときに使う。
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
 | `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:86](../../internal/orchestrator/comment.go#L86)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:183-264](../../internal/orchestrator/comment.go#L183-L264)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:84](../../internal/orchestrator/comment.go#L84)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:181-262](../../internal/orchestrator/comment.go#L181-L262)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -11773,7 +11773,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:299-332](../../internal/prompt/builtin.md#L299-L332) の
+**採る形。**[internal/prompt/builtin.md:307-354](../../internal/prompt/builtin.md#L307-L354) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。

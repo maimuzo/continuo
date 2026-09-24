@@ -84,7 +84,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | [.claude/skills/worker-briefing/SKILL.md:1-520](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L1-L520) | worker への前置き。2-6（同じものを数える）・2-7（1回で全部挙げる）・2-8（合理的根拠） |
 | [.claude/skills/pr-review-and-merge/SKILL.md:1-325](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L1-L325) | `/code-review` の叩き方、結果の貼り方、マージまでの段取り |
 | `.claude/hooks/block-merge-without-review.py`（**2026-09-21 に廃止。**リンクを外した） ／ [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) ／ [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 目印の位置と投稿者だけを数える。周回数と重さは見ない |
-| [internal/prompt/builtin.md:104-258](../../internal/prompt/builtin.md#L104-L258) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
+| [internal/prompt/builtin.md:104-266](../../internal/prompt/builtin.md#L104-L266) | continuo が起動するエージェントの計画レビューと判断票（製品の一部。利用者向け） |
 | `~/.claude/projects/（このリポジトリ）/memory/` の19ファイル | うち6ファイルと索引1行が、現行の規則と逆のことを言っている |
 | `~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/` の各プラグイン | general-claude-md の手順5（変更のたびに code-reviewer と security-reviewer）、co-review、cosper-team、auto-debug |
 | [.claude/settings.json](../../.claude/settings.json) の hooks | 返答の形を検査する Stop hook 2本（`.claude/hooks/check-reply-clarity.py` と `check-verified-commands.py`）。**プラグインではない** |
@@ -104,7 +104,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 | 直しが生んだ 49件 | 直し方を指摘の文面から採る。前の周の判断と逆を求められても両方の根拠を並べない。守りを足す直しをその場で入れる | 6節 |
 | 「直さない」が残り続けた 35件 | `/code-review` には前の周の対応表を渡せない（[.claude/rules/design-review.md:143-146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L146) が自分でそう書いている） | 6節（受けた側で突き合わせる） |
 | 前から在った見落とし 17件 | 1周目に読む reviewer が `/code-review` の1つだけ | 5節 |
-| 重さの基準が、開発者向けの側に無い | **利用者向けの指示書には4段の定義が在る**（[internal/prompt/builtin.md:733-738](../../internal/prompt/builtin.md#L733-L738)）。**`.claude/` と `CLAUDE.md` には無く、**対応表を書く本人が付けている | 4節 |
+| 重さの基準が、開発者向けの側に無い | **利用者向けの指示書には4段の定義が在る**（[internal/prompt/builtin.md:781-786](../../internal/prompt/builtin.md#L781-L786)）。**`.claude/` と `CLAUDE.md` には無く、**対応表を書く本人が付けている | 4節 |
 | 余計な機能を削る判定が3回に1度 | 4・5回目と7・8回目は、issue に無い機能が入っていても判定しない。判定の主語も、メインエージェントではなく subagent になっている | 7節 |
 
 **「同じ前提が語を変えて残る」とは何か。**実測の例を1つ挙げる。
@@ -118,7 +118,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 ## 4. 決まったこと: 重さの4つの定義は、組み込みの指示書に在るものを正とする
 
-**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:733-738](../../internal/prompt/builtin.md#L733-L738) の表。この pull request の前から `origin/main` に在る）。
+**前提。**利用者向けの指示書には、4段の定義が既に在る（[internal/prompt/builtin.md:781-786](../../internal/prompt/builtin.md#L781-L786) の表。この pull request の前から `origin/main` に在る）。
 **無いのは開発者向けの側である。**`Critical とは|重大度|深刻さ|severity` で `.claude/` と `CLAUDE.md` を検索しても0件で、開発者はどの重さを付けるかを自分で決めている。
 **決めたこと。**`.claude/` に2枚目の定義を置かない。**正は組み込みの指示書の1箇所だけにする**（8-2 の表が「`maimuzo-dev-core` への review-loop スキルの新設は取りやめ」を人間の決定として記録している）。
 **経緯。**「収まっている」は Critical と High が0件と決まっているのに、その2つを何で決めるかが無いので、判定が定義の無いラベルに乗っている。人間からこの指摘を受けて、定義が出された。
@@ -328,7 +328,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 
 **直す箇所（2026-09-18 に数え直した）。**`3・6・9` が19行、`3回ごと` が10行、`6段` が21行。重なりを除くと **40行**である。内訳は [CLAUDE.md](../../CLAUDE.md) 23行、[.claude/rules/design-review.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md) 11行、[.claude/skills/pr-review-and-merge/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md) 5行、[.claude/skills/worker-briefing/SKILL.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md) 1行。
 **書き換えの中身。**回数で通す表（3・6・9回目のあとに6段を通す）を丸ごと落とし、**毎周の判定・削除と、削除が起きたときの設計の見直し**に置き換える。
-**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:948-950](../../internal/prompt/builtin.md#L948-L950) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
+**利用者向けの指示書には、回数・収束・停止の定義が既に在る**（[internal/prompt/builtin.md:996-998](../../internal/prompt/builtin.md#L996-L998) の 5-6）。**`3・6・9` は0件だが、「連続10回」は在る。**
 **回数の決まりを直すときは、[internal/prompt/builtin.md](../../internal/prompt/builtin.md) も開くこと。**開かないと、利用者向けと開発者向けで回数の決まりが食い違ったまま残る。
 **「削除が起きた周だけ設計へ戻る」も、利用者向けの指示書に既に在る**（`origin/main` の時点から。`削除が起きた周` で1件）。**足す必要は無い。**
 
@@ -349,7 +349,7 @@ PR 1本の実装レビューだけでも最大36周で、10周以上が111本中
 ### 8-1. 設計から実装までの構造は、continuo の標準に組み込む
 
 **人間の決定。**設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループという構造は、**continuo の標準構造として [internal/prompt/builtin.md](../../internal/prompt/builtin.md) に書く。**
-プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:508-510](../../internal/prompt/builtin.md#L508-L510) の差し込み口）**で表す。
+プロジェクトごとの細部は、**そのプロジェクトの CLAUDE.md と、WORKFLOW.md の 4-4（[internal/prompt/builtin.md:536-538](../../internal/prompt/builtin.md#L536-L538) の差し込み口）**で表す。
 
 **どちらが持つかの切り分け。**
 
@@ -462,7 +462,7 @@ claude:
 ```
 
 **continuo は `claude.env` を issue ごとの設定ファイルの `env` へ写し、`--settings` で Claude Code へ渡す**
-（[internal/config/types.go:457-458](../../internal/config/types.go#L457-L458) と [internal/orchestrator/settings.go:393](../../internal/orchestrator/settings.go#L393)）。
+（[internal/config/types.go:462-463](../../internal/config/types.go#L462-L463) と [internal/orchestrator/settings.go:393](../../internal/orchestrator/settings.go#L393)）。
 
 **実測（2026-09-24）。**`--settings` の `env` に `MAIMUZO_HOOKS_UNATTENDED: "1"` を置いた設定ファイルで対話モードの Claude Code を起動し、
 Stop hook に `printenv MAIMUZO_HOOKS_UNATTENDED` を書き出させたところ、**`1` が書かれた。**

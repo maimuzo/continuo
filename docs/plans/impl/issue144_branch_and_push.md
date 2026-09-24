@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:412](../../../internal/orchestrator/prompt.go#L412) が書いているとおり
+[internal/orchestrator/prompt.go:415](../../../internal/orchestrator/prompt.go#L415) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が

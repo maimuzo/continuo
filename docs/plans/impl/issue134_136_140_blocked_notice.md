@@ -772,7 +772,7 @@ GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったとき
 **`buildGatedComment` は知らない理由に空文字を返し、`postGateNotice` はそれを投稿せずに
 `no_body` の印を立てる。**理由を足して本文を書き忘れても、中身の無い案内が issue へ残らない。
 
-**本文は `postComment` を通る。**[internal/orchestrator/comment.go:402-412](../../../internal/orchestrator/comment.go#L402-L412) の `postCommentWithMarker` が
+**本文は `postComment` を通る。**[internal/orchestrator/comment.go:400-410](../../../internal/orchestrator/comment.go#L400-L410) の `postCommentWithMarker` が
 手元の絶対パスを `~` へ縮める唯一の場所である。**この案内はパスを1つも載せないが、経路は揃える。**
 
 **`buildGatedComment` が返すのは2行目からである。**1行目の `<!-- continuo:self -->` は

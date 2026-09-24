@@ -203,7 +203,7 @@ args := []string{"--settings", settingsPath}
 **つまり continuo が切る worktree にも、この2本の hook 定義がそのまま入る。**
 一方 `.claude/settings.local.json` は `.gitignore` 済みで、
 **実測でも worktree には1つも無かった**（`find ~/Sources/github/continuo/.claude/worktrees -maxdepth 3 -name "settings.local.json"` が0件）。
-設計も同じことを書いている（[docs/plans/continuo_design.md:7536](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L7536)）。
+設計も同じことを書いている（[docs/plans/continuo_design.md:7479](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L7479)）。
 
 > | 対象リポジトリの `.claude/settings.local.json` | 読まない | gitignore されるので worktree に出てこない |
 
@@ -441,7 +441,7 @@ https://code.claude.com/docs/en/discover-plugins の原文。
 | **hook の入力の `permission_mode` を見る** | **人間の `auto` を巻き込む。**continuo の既定は `auto` である（[internal/config/types.go:452-454](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/config/types.go#L452-L454)）。**判定として弱い** |
 | **worktree の `.continuo.json` を hook スクリプトが見て抜ける** | **人間が continuo の worktree で作業すると検査が消える。**continuo に自分自身の issue をやらせている以上、人間がその worktree を開く場面は実際にある |
 | **worktree に `.claude/settings.local.json` を置いてプラグインを切る** | **設計 3-12 が却下済み**（6-5）。worktree が汚れ、`info/exclude` の手当てと片付けが要る |
-| **リポジトリの2本をプラグインへ移し、プラグイン単位で切る** | **プラグインは信頼していないフォルダでは黙って無効になる**（[docs/plans/continuo_design.md:1953](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L1953) が「信頼していないフォルダでは、subagent の frontmatter に書いた hook、プラグイン、追加のマーケットプレースが**ダイアログも出さずに無効化される**」と実測を記録している）。**人間のセッションでも黙って検査が消えうる** |
+| **リポジトリの2本をプラグインへ移し、プラグイン単位で切る** | **プラグインは信頼していないフォルダでは黙って無効になる**（[docs/plans/continuo_design.md:1898](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L1898) が「信頼していないフォルダでは、subagent の frontmatter に書いた hook、プラグイン、追加のマーケットプレースが**ダイアログも出さずに無効化される**」と実測を記録している）。**人間のセッションでも黙って検査が消えうる** |
 | **issue ごとの設定ファイルで hook を全部切る** | **continuo が turn の終わりを永久に受け取れなくなる**（6-4） |
 | **起動オプションで拡張を全部切る** | **同上。加えて CLAUDE.md も skills も MCP も消える** |
 
@@ -552,7 +552,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 
 ### 6-5. worktree に `.claude/settings.local.json` を置く — 設計が却下済み
 
-[docs/plans/continuo_design.md:2111-2119](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2111-L2119) の 3-12 が、
+[docs/plans/continuo_design.md:2054-2062](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2054-L2062) の 3-12 が、
 2つの経路を並べて比べたうえで `--settings` に決めている。
 
 | | worktree に `.claude/settings.local.json` を置く | **`--settings` で外部のファイルを指す** |
@@ -572,7 +572,7 @@ continuo は既に `CONTINUO_RUNTIME_DIR` と `CONTINUO_GITHUB_GRAPHQL_ENDPOINT`
 ### 6-6. 目印のファイル（`.continuo.json`）を hook が見る — 人間の要求を満たさない
 
 **身元ファイルは実在する。**`<worktree>/.continuo.json` で、中身は
-[docs/plans/continuo_design.md:2608](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2608) の 3-18 にサンプルがある
+[docs/plans/continuo_design.md:2551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L2551) の 3-18 にサンプルがある
 （`issue_url` / `branch` / `session_uuid` / `settings_path` など）。
 
 **だが、これはディレクトリに紐づく。**
