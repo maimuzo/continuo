@@ -147,7 +147,7 @@ return nil, i18n.Errorf(
 指す「上の節」がずれないようにするためである。**前に差し込むと、この案内が新しい節を指してしまう。**
 
 **[docs/upgrading.md](../../upgrading.md) にも節を足す。**
-detached HEAD のときは [docs/upgrading.md:77-108](../../upgrading.md#L77-L108) に
+detached HEAD のときは [docs/upgrading.md:77-273](../../upgrading.md#L77-L273) に
 「detached HEAD の worktree で出るメッセージが変わりました」の節が立っている。**同じ形で1つ足す。**
 
 **detached HEAD と1つにまとめない**（#142 の5-3 の案は採らない）。

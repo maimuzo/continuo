@@ -382,6 +382,11 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 | **エージェントに許可を出す方法** | **`dontAsk` と同じく、設定ファイルを書き換えます。**`claude.permissions.allow` に**狭い規則**を足してください（例: `Bash(gh:*)`）。**`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**足したら **continuo を再起動してください。**走行中は設定を読み直しません。**issue のコメントに許可を書いても届きません**（判定役への要求から道具の結果は取り除かれます） |
 | **止まり方** | **確認の画面へ戻ることがあります**（**この経路は実機で観測できていません**）。戻ったときは、continuo が esc を送って Status を `tracker.failure_state`（既定は `Blocked`）へ動かし、issue に引き渡しを書きます。**固まりはしませんが、人間が見るまで進みません** |
 | **速さ** | **シェルのコマンドは毎回、Claude Code 側の判定を通ります。**どれだけ遅くなるかは測っていません |
+| **`AskUserQuestion`** | **上の `deny` で禁じてあります。**外すと、質問の画面が出て pane が止まります（実測。上の節） |
+| **判定役の呼び出しの費用** | 公式文書は *"On Enterprise plans and on accounts that use the Claude API, … classifier calls count toward your token usage."*（**訳:** Enterprise プランと、Claude API などを使うアカウントでは、判定役の呼び出しがトークン消費に数えられる）と書いています。**continuo の入札の判定にどれだけ効くかは検証していません** |
+| **会話で述べた制約** | 公式文書は *"Boundaries are not stored as rules. The classifier re-reads them from the transcript on each check, so a boundary can be lost if context compaction removes the message that stated it. For a hard guarantee, add a deny rule instead."*（**訳:** 制約はルールとして保存されない。判定役は判定のたびに会話から読み直すので、それを述べたメッセージが compaction で消えると、制約も失われる。確実に守らせたいなら、代わりに deny の規則を足すこと）と書いています。**組み込みの指示書が述べる制約が、compaction のあとも判定役に効くかは検証していません** |
+
+**止まり方・判定役の呼び出しの費用・会話で述べた制約の3つは、検証していません。**この版を実際に使って確かめます。
 
 **いままでどおり「入力を待たない」ことを最優先するなら、`permission_mode: dontAsk` のままにしてください。**
 **そのモードは残してあります。**
@@ -419,6 +424,48 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 
 **あなたの側に要るものはありません。**`continuo init` が置いた `WORKFLOW.md` は書き換わりません。
 **`WORKFLOW.md` の本文（front matter の下）で、コメントの書き方を自分で指示している場合だけ、そちらを新しい形に合わせてください。**本文は組み込みの指示書の真ん中へ挟まり、コメントの形を決める組み込みの節はその後ろに来ます。**形が食い違うと、エージェントは2つの形を受け取ります。**
+
+### herdr 0.9.1 に合わせました。**herdr を 0.9.1 へ上げたら、`WORKFLOW.md` の `herdr.protocol` を手で `22` へ直してください**
+
+**この版は herdr 0.9.1 で動作を確認しています。**herdr 0.8.2 には、長い指示の本文を打ち込んだあとの Enter が届かない不具合があります。
+**そうなると、エージェントは1文字も読まずに黙ったまま止まり、continuo は `claude.turn_timeout_ms`（既定60分）を使い切るまで待ち続けます。**
+**この不具合は herdr 0.9.0 で直っています。**herdr を 0.9.1 へ上げてください。
+
+**herdr を上げると、`WORKFLOW.md` を直すまで continuo は起動しません。**
+continuo は起動するときに herdr へ `ping` を送り、返ってきた protocol の番号が `herdr.protocol` と1でも違うと止まります。
+
+| herdr の版 | 返す protocol |
+| --- | --- |
+| **0.9.1 / 0.9.0** | **22** |
+| 0.8.2 | 20 |
+| 0.8.0 | 19 |
+
+**v0.1.15 までの `continuo init` で `WORKFLOW.md` を作った人は、全員が手で直す必要があります。**
+**その雛形が `protocol: 20` を書いていたためです。**書いてある値は既定値より優先されるので、continuo の既定値を 22 に上げただけでは効きません。
+**逆に `protocol:` の行を消して既定値に任せている人は、continuo を上げた時点で 22 になります。**herdr を 0.8.2 のまま使うなら、`protocol: 20` を書き足してください。
+**`continuo setup` でも `continuo doctor --missing-keys-patch` でも直りません。**どちらも、既にあるこの行には触りません。
+
+```yaml
+herdr:
+  protocol: 22    # herdr 0.9.1 と 0.9.0 は 22。0.8.2 は 20、0.8.0 は 19
+```
+
+**直したら `continuo doctor` で確かめてください。**`herdr --version` ではなく doctor の出力を見ます。
+**照合するのは、動いている herdr の server が返す値だからです。**herdr 0.9.0 以降は client だけを上げて server を古いまま残せるので、
+`herdr --version` が 0.9.1 でも、server は古い版のままということがあります。
+
+```bash
+grep -n "protocol:" ~/continuo-work/WORKFLOW.md
+continuo doctor
+# ✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
+```
+
+**doctor の行に出る版が 0.9.1 でなければ、herdr の server がまだ古いままです。**herdr を立て直してから、もう一度確かめてください。
+
+**herdr 0.9.0 から、配下に worktree を持つリポジトリの workspace を閉じると、herdr が断るようになりました。**
+**continuo の片付けは、配下が残っていないことを確かめてから閉じるので、ふだんは当たりません。**
+断られるのは主に、確かめてから閉じるまでの間に同じリポジトリの worktree が開いたときです。**そのときは親を閉じずに残します。**
+**閉じたいときは、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください。**配下が残っているうちに画面から閉じると、herdr は配下の pane ごと閉じます。
 
 ### コメントと pull request の本文・題名を、ファイルから渡すようになりました — 設定に足すものはありません
 

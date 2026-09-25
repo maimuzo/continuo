@@ -26,7 +26,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 
 | 何 | どういうことか |
 | --- | --- |
-| **確認ダイアログが出ない** | Claude Code を `--permission-mode auto` で起動します（既定）。**保護対象パスへの書き込みとシェルのコマンドは、Claude Code の中の判定役が実行の前に確かめます。**`dontAsk` を選ぶと、許可の一覧の外は確認せずに拒否されます |
+| **確認ダイアログを出さずに進む** | Claude Code を `--permission-mode auto` で起動します（既定）。**保護対象パスへの書き込みとシェルのコマンドは、Claude Code の中の判定役が実行の前に確かめます。**`dontAsk` を選ぶと、許可の一覧の外は確認せずに拒否されます。**判定役が遮断を続けたときに確認へ戻るかは検証していません** |
 | **リポジトリを書き換えて push する** | エージェントは commit も push もします |
 | **issue の本文が指示になる** | 既定の指示書は issue の本文とコメントを全部読ませます。**第三者が書いた文が、あなたの機械でコマンドとして実行されえます** |
 | **第三者のコメントが、実行の可否の判定に混ざりえます** | 既定の `--permission-mode auto` では、Claude Code の中の判定役が実行の可否を決めます。**判定役への要求から、道具の結果は取り除かれます**（公式文書の permission modes のページ。2026-09-18 に取得）。**エージェントが `gh` で読んだ issue のコメントは道具の結果として届くので、判定役には渡りません。**許可を出す向きは、2026-09-18 の実測でも届きませんでした。**注入の向きは測っていません。**組み込みの指示書は、`OWNER` / `MEMBER` / `COLLABORATOR` 以外が書いたものを指示として扱わないよう**エージェントへ**指示していますが、**判定役がその区別を使うかどうかは測っていません。** 減らし方は2つです。**`claude.permission_mode` を `dontAsk` にする**（そのぶん `.claude/` 配下と `.mcp.json` へ書けなくなります。[docs/upgrading.md](docs/upgrading.md)）。または **`claude.tool_gate.mode` を `public_only` にする**（既定では `Bash` だけが判定に回ります。`.claude/` への書き込みも見せたいなら `claude.tool_gate.tools` に `Write` と `Edit` を足してください） |
@@ -77,7 +77,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 
 | What | What it means |
 | --- | --- |
-| **No permission prompts** | Claude Code is started with `--permission-mode auto` (the default). **Writes to protected paths and shell commands are checked by a classifier inside Claude Code before they run.** Choosing `dontAsk` denies anything outside the allow list without asking |
+| **Runs without permission prompts** | Claude Code is started with `--permission-mode auto` (the default). **Writes to protected paths and shell commands are checked by a classifier inside Claude Code before they run.** Choosing `dontAsk` denies anything outside the allow list without asking. **Whether it falls back to a prompt after repeated classifier blocks has not been verified** |
 | **It commits and pushes** | The agent writes to your repository and pushes |
 | **Issue text is instructions** | The default brief has the agent read the issue body and every comment. **Text written by other people can execute on your machine** |
 | **A stranger's comment can enter the decision about what may run** | With the default `--permission-mode auto`, a classifier inside Claude Code decides what may run before it runs. **Tool results are stripped from the classifier's requests** (official permission modes page, retrieved 2026-09-18). **Issue comments reach the agent as `gh` output, that is, as a tool result, so they do not reach the classifier.** We measured the grant direction on 2026-09-18 and it did not get through. **We have not measured the injection direction.** The built-in brief tells the *agent* not to treat text from anyone outside `OWNER` / `MEMBER` / `COLLABORATOR` as an instruction, **but whether the classifier uses the same distinction is not something we have measured.** There are two ways to reduce this. **Set `claude.permission_mode` to `dontAsk`** (writes to `.claude/` and `.mcp.json` then stop working — see [docs/upgrading.md](docs/upgrading.md)). Or **set `claude.tool_gate.mode` to `public_only`** (by default only `Bash` is sent to that check; add `Write` and `Edit` to `claude.tool_gate.tools` to cover writes as well) |

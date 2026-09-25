@@ -248,7 +248,7 @@ const labelColumn = 16
 
 // Write は検査結果を人間が読む形で書き出す（設計 3-32 の出力の形）。
 //
-//	✓ herdr           protocol 19（設定と一致）
+//	✓ herdr           protocol 22（設定と一致）
 //	✗ clone           octocat/hello-world が見つからない
 //	                  → ghq get octocat/hello-world を実行してください
 //

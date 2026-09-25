@@ -1635,11 +1635,18 @@ continuo allow-keychain-access
 **原因。**continuo が想定している herdr の socket の protocol 版と、入っている herdr の版が食い違っています。
 
 **直し方。**herdr を設定に合う版へ更新するか、`WORKFLOW.md` の `herdr.protocol` を herdr が返した版に合わせます。
-**herdr 0.8.2 は protocol 20、0.8.0 は 19 です。**
+**herdr 0.9.1 と 0.9.0 は protocol 22、0.8.2 は 20、0.8.0 は 19 です。**
+
+**v0.1.15 までの `continuo init` で作った `WORKFLOW.md` には `protocol: 20` が書いてあります。**書いてある値は continuo の既定値より優先されるので、
+**continuo を上げても、この行は手で直す必要があります**（[docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」）。
+
+**版は `herdr --version` ではなく `continuo doctor` の行で確かめてください。**照合するのは、動いている herdr の server が返す値です。
+herdr 0.9.0 以降は client だけを上げて server を古いまま残せるので、`herdr --version` が新しくても server は古いままのことがあります。
+**doctor の行に出る版が古ければ、herdr の server を立て直してください。**
 
 ```bash
-herdr --version
 grep -n "protocol:" ~/continuo-work/WORKFLOW.md
+continuo doctor    # ✓ herdr  protocol 22（設定と一致）／herdr 0.9.1／… の行を見る
 ```
 
 #### `! clone` `! 信頼登録` と出るが、何が悪いのか分からない

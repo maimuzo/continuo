@@ -47,7 +47,7 @@ body:
     attributes:
       label: 道具の版
       description: "`herdr --version` / `claude --version` / `gh --version` の3つ"
-      placeholder: herdr 0.8.0 / claude 2.1.233 / gh 2.97.0
+      placeholder: herdr 0.9.1 / claude 2.1.233 / gh 2.97.0
     validations:
       required: true
 

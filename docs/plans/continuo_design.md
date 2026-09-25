@@ -506,7 +506,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `worktree.list` | `cwd` / `workspace_id` | worktree の一覧 |
 | `workspace.rename` | **`workspace_id`** / **`label`** | herdr workspace に label を書く |
 | `workspace.list` | （なし） | herdr workspace の一覧 |
-| `workspace.close` | **`workspace_id`** | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10） |
+| `workspace.close` | **`workspace_id`** / `close_group`（herdr 0.9.0 から） | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10）。**`close_group` は送らない。**送ると配下の worktree の pane ごと閉じる。送らなければ、配下を持つ親は `workspace_group_close_required` で断られ、何も閉じない（3-9 の段3b） |
 | `agent.rename` | **`target`** / `name` | agent の名前を変える |
 | `session.snapshot` | （なし） | 現在の状態をまとめて取る |
 | `pane.report_agent` | **`pane_id`** / **`source`** / **`agent`** / **`state`** / `agent_session_id` ほか | **実プロセスを起動せずに「agent が居る pane」として登録する。**統合テストで使う。**`state` は4値で `done` を含まない** |
@@ -1664,7 +1664,7 @@ level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states に�
 | 条件 | どう確かめるか | 落とすと何が起きるか |
 | --- | --- | --- |
 | continuo が開かせたこと | `worktree.open` の**前**に `workspace.list` を引き、そのリポジトリの workspace が無かったことを見る。無ければ開いた**あと**にその ID を身元ファイルの `herdr_repo_workspace_id` へ書く（3-18） | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
-| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る | **親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる |
+| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る。**見てから閉じるまでの間に worktree が開いて、herdr 0.9.0 以降に `workspace_group_close_required` で断られたときは、親を残す。**引き継ぎは行わない（あとから開いた worktree の身元ファイルは段6 で初めて書かれ、書けても上書きで消える） | **herdr 0.8.x では親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる。0.9.0 以降は断られ、親が1つ残るだけで済む |
 
 **身元ファイルの値は現物と突き合わせてから使う。**そこはエージェントが書き換えられるので
 （3-18）、`herdr_repo_workspace_id` が指す workspace が**いま片付けたリポジトリ本体を
@@ -1783,7 +1783,7 @@ terminal_states: ["Done"]
 
 | 止まる箇所 | 打つ手 |
 | --- | --- |
-| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**判定役が実行の前に確かめる。判定役へ渡る入力から道具の結果は取り除かれるので、issue のコメントで人間が出した許可は届かない**（下の実測）。`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式文書は、3回続けて、または通算20回遮断すると確認の画面へ戻ると書いている）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない** |
+| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**判定役が実行の前に確かめる。判定役へ渡る入力から道具の結果は取り除かれるので、issue のコメントで人間が出した許可は届かない**（下の実測）。`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式文書は、3回続けて、または通算20回遮断すると確認の画面へ戻ると書いている）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない。****判定役の呼び出しがトークン消費に数えられるプランで入札の判定にどれだけ効くかと、組み込みの指示書が述べる制約が compaction のあとも判定役に効くかは検証していない**（公式文書は、制約は判定のたびに会話から読み直され、compaction で消えうると書いている）。**`AskUserQuestion` は `deny` で禁じる**（外すと pane が止まることを実測した。雛形の `deny`） |
 | — **`--permission-mode` とは何か** | **`claude` コマンドの起動フラグである。**そのセッション全体で、ツールの実行に人間の許可を求めるかどうかを決める。**`dontAsk` は「許可リストに載っているものだけを確認なしで実行し、それ以外は拒否する」という意味である。**拒否であって、確認ではない |
 | — **止まらないことと、人間に判断を仰ぐことは別である** | **権限で拒否されたり、判断に迷ったりしたら、エージェントは `CONTINUO-STATUS: blocked` を出す**（3-25）。continuo はそれを受けて Status を `Blocked` へ動かし、**人間に渡す。**「絶対に止まらない」とは「**キー入力を待って固まらない**」という意味であって、「人間の判断を仰がない」という意味ではない |
 | — **`auto` を既定にした理由** | **`dontAsk` では保護対象パス**（`.claude` 配下と `.mcp.json`）**へどうやっても書けない。**`permissions.allow` に書いても、`PreToolUse` hook が `allow` を返しても、`Bash` のリダイレクトでも拒否された（実測）。**人間が issue のコメントで許可を出しても、どちらのモードでも効かない**（下の実測）。`dontAsk` は権限が設定ファイルからしか来ないためで、`auto` は判定役へ渡る入力から道具の結果が取り除かれ、`gh` の出力として届いたコメントを読まないためである。**代償は、遮断が続いたときに確認へ戻りうること**（この経路は観測できていない）。**そのときも固まらず、continuo が esc を送って `failure_state` へ落とす。**入力を待たないことを最優先するなら `dontAsk` を選ぶ。**起動直後に確認の画面で止まったときの引き渡しの文言は、issue のコメントに書く許可の文を持たず、公開かどうかも差し込まない。**この文言は公開かどうかを見ずに投稿され、何の確認だったかは continuo の側に残らないためである。案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。 |
@@ -4305,7 +4305,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 
 ```text
 $ continuo doctor
-✓ herdr           protocol 19（設定と一致）
+✓ herdr           protocol 22（設定と一致）
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
@@ -9567,7 +9567,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20）
+  protocol: 22                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.9.1 と 0.9.0 が 22。0.8.2 は 20、0.8.0 は 19）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -12681,7 +12681,7 @@ pane / workspace には手を出さない。
 | `cwd` を省く | `worktree_not_found: worktree path not found` |
 | `cwd` に worktree のパスを渡す | `linked_worktree_source: New and open worktree actions start from the repo parent workspace.` |
 | `worktree.remove` | 親は閉じない（**放置すると issue 1件につき1つ溜まる**） |
-| 親を `workspace.close` する | **配下の worktree の workspace と pane も一緒に消える** |
+| 親を `workspace.close` する | **herdr 0.8.x では、配下の worktree の workspace と pane も一緒に消える。**herdr 0.9.0 以降は `workspace_group_close_required` で断られ、何も閉じない（実測: 2026-09-24、herdr 0.9.1） |
 
 ---
 

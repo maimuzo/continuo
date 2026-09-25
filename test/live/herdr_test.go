@@ -346,18 +346,20 @@ func TestLive_WorktreeOpen_cwdはリポジトリ本体しか受け付けない(t
 	}
 }
 
-// 目的: **リポジトリの親 workspace を閉じると、その下の worktree の workspace と pane も
-// 一緒に消える**ことを本物で固定する（実測: 2026-08-25）。
+// 目的: **配下に worktree の workspace がある親を `close_group` なしで閉じると、
+// herdr が `workspace_group_close_required` で断り、何も閉じない**ことを本物で固定する
+// （herdr 0.9.0 以降。実測: 2026-09-24、herdr 0.9.1）。
 // 与える情報: 使い捨てのリポジトリと、そこから切った worktree 1本。
-// 成功条件: 親を workspace.close で閉じたあと、worktree 側の workspace も pane も
-// 一覧から消えていること。
+// 成功条件: 親への workspace.close が workspace_group_close_required で失敗し、
+// 親も worktree 側の workspace も、worktree 側の pane も一覧に残っていること。
 //
-// **これが片付けの条件そのものである。**だから
-// [internal/workspace/repoworkspace.go](internal/workspace/repoworkspace.go) の
+// **herdr 0.8.x では、同じ呼び出しで配下の workspace と pane も一緒に消えた**（実測: 2026-08-25）。
+// だから [internal/workspace/repoworkspace.go](internal/workspace/repoworkspace.go) の
 // closeRepoWorkspace は、**同じリポジトリの worktree の workspace が1つも残っていない
-// ことを確かめてからしか親を閉じない。**確かめずに閉じると、別の issue が使っている
-// Claude Code の pane ごと消える。
-func TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える(t *testing.T) {
+// ことを確かめてからしか親を閉じない。**continuo は `close_group` を送らないので、
+// 確かめてから閉じるまでの間に worktree が開いても、0.9.0 以降は herdr が断る。
+// 配下が無いときに親が閉じることは TestLive_WorktreeOpen_cwdを渡すとリポジトリ側のworkspaceも開く が確かめている。
+func TestLive_WorkspaceClose_配下があると親は断られ何も消えない(t *testing.T) {
 	client := requireLiveHerdr(t)
 	repo := newLiveRepo(t)
 	worktreePath, _ := addWorktree(t, repo)
@@ -370,7 +372,7 @@ func TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える(t *
 		Path:  worktreePath,
 		Cwd:   repo.Path,
 		Focus: &focus,
-		Label: liveLabelPrefix + "/octocat/hello-world/issues/19",
+		Label: liveLabelPrefix + "/octocat/hello-world/issues/281",
 	})
 	if err != nil {
 		t.Fatalf("本物の herdr で worktree.open が失敗した: %v", err)
@@ -388,24 +390,29 @@ func TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える(t *
 	if parent == "" {
 		t.Fatalf("リポジトリの親 workspace が見つからない: %v", myWorkspaces(t, client, repo.Root))
 	}
+	// 親は後始末係の段2（workspace.close）が閉じる。**worktree 側を段1 で消したあとなので断られない。**
 
-	if _, err := client.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: parent}); err != nil {
-		t.Fatalf("リポジトリの親 workspace を閉じられない: %v", err)
+	_, err = client.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: parent})
+	if !herdr.IsCode(err, herdr.ErrCodeWorkspaceGroupCloseRequired) {
+		t.Fatalf("配下がある親の workspace.close が %s で断られなかった: %v",
+			herdr.ErrCodeWorkspaceGroupCloseRequired, err)
 	}
-	// 親を閉じた時点で worktree 側も消えているので、後始末の対象から外す。
-	janitor.Forget(opened.Workspace.WorkspaceID)
 
-	if remaining := myWorkspaces(t, client, repo.Root); len(remaining) != 0 {
-		t.Errorf("親を閉じたのに workspace が残っている: %v", remaining)
+	if remaining := myWorkspaces(t, client, repo.Root); len(remaining) != 2 {
+		t.Errorf("断られたのに workspace が減っている: %v（親と worktree 側の2つが残るはず）", remaining)
 	}
 	list, err := client.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
 		t.Fatalf("pane.list が失敗した: %v", err)
 	}
+	found := false
 	for _, p := range list.Panes {
 		if p.PaneID == opened.RootPane.PaneID {
-			t.Errorf("親を閉じたのに worktree 側の pane %q が残っている", p.PaneID)
+			found = true
 		}
+	}
+	if !found {
+		t.Errorf("断られたのに worktree 側の pane %q が消えている", opened.RootPane.PaneID)
 	}
 }
 

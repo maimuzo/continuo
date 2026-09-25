@@ -153,7 +153,7 @@ claude:
   turn_timeout_ms: 600000
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
   read_timeout_ms: %d
   startup_timeout_ms: 3000
 cleanup:
@@ -568,7 +568,7 @@ func TestDaemon_起動時の検査に落ちたら生きているpaneを閉じず
 	// **protocol が合わない。**起動時の検査で止まるべきである。
 	env.Herdr.Handle("ping", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{
-			"type": "pong", "version": "0.9.0-fake", "protocol": 21,
+			"type": "pong", "version": "mismatch-fake", "protocol": 21,
 			"capabilities": map[string]any{"live_handoff": true},
 		}, nil
 	})
