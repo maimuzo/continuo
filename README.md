@@ -69,7 +69,7 @@ How many issues run at once is a setting (two by default).
 
 ## Before you start
 
-**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default). Nothing will stop and ask you. Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
+**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default), which is meant to run without asking you. Whether it falls back to a prompt after repeated classifier blocks has not been verified yet (see the `permission_mode: auto` table in [docs/upgrading.md](docs/upgrading.md)). Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
 
 **Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The classifier does not read issue comments, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
 

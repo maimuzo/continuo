@@ -217,6 +217,11 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 | **エージェントに許可を出す方法** | **`dontAsk` と同じく、設定ファイルを書き換えます。**`claude.permissions.allow` に**狭い規則**を足してください（例: `Bash(gh:*)`）。**`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**足したら **continuo を再起動してください。**走行中は設定を読み直しません。**issue のコメントに許可を書いても届きません**（判定役への要求から道具の結果は取り除かれます） |
 | **止まり方** | **確認の画面へ戻ることがあります**（**この経路は実機で観測できていません**）。戻ったときは、continuo が esc を送って Status を `tracker.failure_state`（既定は `Blocked`）へ動かし、issue に引き渡しを書きます。**固まりはしませんが、人間が見るまで進みません** |
 | **速さ** | **シェルのコマンドは毎回、Claude Code 側の判定を通ります。**どれだけ遅くなるかは測っていません |
+| **`AskUserQuestion`** | **上の `deny` で禁じてあります。**外すと、質問の画面が出て pane が止まります（実測。上の節） |
+| **判定役の呼び出しの費用** | 公式文書は *"On Enterprise plans and on accounts that use the Claude API, … classifier calls count toward your token usage."*（**訳:** Enterprise プランと、Claude API などを使うアカウントでは、判定役の呼び出しがトークン消費に数えられる）と書いています。**continuo の入札の判定にどれだけ効くかは検証していません** |
+| **会話で述べた制約** | 公式文書は *"Boundaries are not stored as rules. The classifier re-reads them from the transcript on each check, so a boundary can be lost if context compaction removes the message that stated it. For a hard guarantee, add a deny rule instead."*（**訳:** 制約はルールとして保存されない。判定役は判定のたびに会話から読み直すので、それを述べたメッセージが compaction で消えると、制約も失われる。確実に守らせたいなら、代わりに deny の規則を足すこと）と書いています。**組み込みの指示書が述べる制約が、compaction のあとも判定役に効くかは検証していません** |
+
+**止まり方・判定役の呼び出しの費用・会話で述べた制約の3つは、検証していません。**この版を実際に使って確かめます。
 
 **いままでどおり「入力を待たない」ことを最優先するなら、`permission_mode: dontAsk` のままにしてください。**
 **そのモードは残してあります。**
