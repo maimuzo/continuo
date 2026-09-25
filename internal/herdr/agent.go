@@ -15,7 +15,8 @@ import (
 // 「socket API の実在するメソッドと引数」。protocol=19 / herdr 0.8.0）。
 // 2026-09-24 に herdr 0.9.1（protocol=22）の `herdr api schema --json` と照合し、continuo が使う
 // メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
-// （continuo は送らない。workspace.go）。
+// （continuo は送らない。workspace.go）。**`worktree.create` / `worktree.open` / `worktree.list` /
+// `worktree.remove` に任意の `trust_repository` が増えた**（continuo は送らない）。
 // result に出てくる値の形は types.go を参照すること。
 const (
 	// MethodAgentStart は agent を起動するメソッド名である。

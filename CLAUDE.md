@@ -50,7 +50,7 @@ herdr agent prompt <名前> "<プロンプト>" --wait --timeout 120000  # idle/
 herdr agent read <名前> --source recent-unwrapped --lines 50
 ```
 
-**`herdr wait agent-status …` は存在しない**（herdr 0.8.0 で確認）。待機は `herdr agent wait <名前> --until <status>`。
+**`herdr wait agent-status …` は存在しない**（herdr 0.8.0 と 0.9.1 で確認）。待機は `herdr agent wait <名前> --until <status>`。
 **`pane run "claude"` で起動する経路も避ける。**`agent start` と違って起動完了を待たないため、直後に `agent wait` を呼ぶと `agent_not_found` で失敗する。
 
 ### 2. GitHub Projects v2 の project #3 は本番のカンバンである
