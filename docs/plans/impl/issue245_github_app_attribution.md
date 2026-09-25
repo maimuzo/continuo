@@ -2287,6 +2287,64 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 **どちらも `HTTP 401` を含む。**GraphQL の経路（`gh issue comment`）で `HTTP 401:` が先頭に出る。
 
+### 7-13. PATH の先頭に置いた `gh` が選ばれるか（2026-09-25）
+
+**PATH の先頭に置くだけで gh wrapper が選ばれるかを測った。**偽の `gh`（`shim が呼ばれた` と出すだけのスクリプト）を置いたディレクトリを、PATH の先頭に足して叩いた。macOS、`/etc/paths.d/homebrew` あり、本物は `/opt/homebrew/bin/gh`。
+
+| 何で測ったか | どの `gh` が選ばれたか |
+| --- | --- |
+| `sh -c 'command -v gh'`（初期化ファイルを読まない） | 偽の `gh` |
+| `zsh -f -c 'command -v gh'`（初期化ファイルを読まない） | 偽の `gh` |
+| `zsh -l -c 'command -v gh'`（ログインシェル） | **`/opt/homebrew/bin/gh`**。足したディレクトリは17番目へ回った |
+| `bash -l -c 'command -v gh'`（ログインシェル） | **`/opt/homebrew/bin/gh`**。12番目へ回った |
+| `/usr/libexec/path_helper -s` だけ | `/etc/paths` と `/etc/paths.d/` の並びが先頭に来て、足したディレクトリは末尾へ回った |
+| continuo が起動した Claude Code の Bash の PATH | 有効な plugin の `bin/` の19本は17〜35番目。`/opt/homebrew/bin` は8番目。**plugin の `bin/gh` では本物の `gh` を上書きできない** |
+
+**測れなかったもの。**新しく起動した Claude Code の Bash の中で、settings の `env` や `CLAUDE_ENV_FILE` で足した PATH がどこへ並ぶか。使い捨ての pane で Claude Code を起動する操作は、auto mode に拒否された。
+
+**Claude Code の文書が書いていること**（2026-09-25 に原文を取った）。
+
+| 何 | 原文 | 訳 |
+| --- | --- | --- |
+| Bash の初期化（[tools-reference](https://code.claude.com/docs/en/tools-reference)） | At session start, Claude Code sources `~/.zshrc`, `~/.bashrc`, or `~/.profile` depending on your shell, captures the resulting aliases, functions, and shell options, and applies them to every Bash command. | session の開始時にシェルの初期化ファイルを読み、alias・関数・shell option を取り込んで、すべての Bash のコマンドに当てる |
+| `CLAUDE_ENV_FILE`（[env-vars](https://code.claude.com/docs/en/env-vars)） | Path to a shell script whose contents Claude Code runs before each Bash command in the same shell process, so exports in the file are visible to the command. | Bash の各コマンドの直前に、同じシェルの中で実行するスクリプトのパス。そこで `export` したものはコマンドから見える |
+| hook が重なったとき（[hooks](https://code.claude.com/docs/en/hooks)） | All matching hooks run in parallel. If you define the same handler in more than one settings file, it runs once. A plugin's or skill's copy of the same handler stays separate. | 当たる hook は全部並行に動く。同じ hook を複数の設定ファイルに書いても1回だけ動く。plugin や skill が持つ同じ hook は別に動く |
+| subagent（[sub-agents](https://code.claude.com/docs/en/sub-agents)） | Hooks from settings files, managed policy settings, and plugins all apply inside subagents | 設定ファイル・管理者の設定・plugin の hook は、subagent の中でも全部効く |
+| PreToolUse の拒否（[hooks](https://code.claude.com/docs/en/hooks)） | `permissionDecisionReason` … For `"deny"`, shown to Claude. | `"deny"` のとき、理由は Claude に見える |
+| PostToolUse（[hooks](https://code.claude.com/docs/en/hooks)） | `decision` … `"block"` adds the `reason` next to the tool result. | `"block"` なら、理由をツールの結果の横に添える |
+| plugin（[plugins](https://code.claude.com/docs/en/plugins)） | An enabled plugin is part of every session, not only the sessions where you use it. … its hooks fire at their events. | 有効にした plugin はすべての session に入り、その hook はそれぞれの時点で動く |
+| plugin の `bin/`（[plugins-reference](https://code.claude.com/docs/en/plugins-reference)） | Files here are on the Bash tool's `PATH` while the plugin is enabled | plugin が有効なあいだ、Bash ツールの PATH に入る（前か後ろかは書いていない。上の表で末尾と測った） |
+
+### 7-14. GitHub が GitHub App attribution を記録する範囲（2026-09-25）
+
+**GitHub の OpenAPI の記述（`github/rest-api-description` の `api.github.com.json`）で、応答に `performed_via_github_app` の欄があるかを数えた。**
+
+| 応答 | 欄があるか |
+| --- | --- |
+| `issue` / `issue-comment` | **ある** |
+| `pull-request` / `pull-request-review` / `pull-request-review-comment` / `review-comment` / `commit-comment` | **無い** |
+
+**pull request の review と行コメントは、GitHub App で書いても機械が見分けられない。**pull request 本体は、issue の API（`GET /repos/{owner}/{repo}/issues/{number}`）で取れば欄がある。
+
+**GitHub の文書が書いていること。**
+
+| 何 | 原文 | 訳 |
+| --- | --- | --- |
+| 画面の表示（[on behalf of a user](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user)） | API requests made by an app on behalf of a user will be attributed to that user. For example, if your app posts a comment on behalf of a user, the GitHub UI will show the user's avatar photo along with the app's identicon badge as the author of the issue. | 人間の代理の要求は、その人間のものとして記録される。画面は投稿者として、人間のアイコンに GitHub App の identicon badge を重ねて出す |
+| 読める範囲（[choosing permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)） | they do have implicit permissions to read public resources when acting on behalf of a user | 人間の代理で動くときは、public なものを読む権限を暗黙に持つ |
+| 書ける範囲（[user access token](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app#about-user-access-tokens)） | a user access token can only access resources that both the user and app can access | user access token が触れるのは、人間と GitHub App の両方が触れるものだけ |
+
+### 7-15. まだ無いサブコマンドを渡したときの終了コード（2026-09-25）
+
+**plugin の hook が叩く予定の `continuo github-app hook pre-tool-use` を、それを持たない実行ファイルへ渡した。**標準入力には `{}` を渡した。
+
+| どの実行ファイルか | 終了コード | 標準エラー |
+| --- | --- | --- |
+| そのとき動いていた `~/.local/bin/continuo`（2026-09-15 に作られたもの） | **2** | `Error: only one positional argument is accepted, the path to WORKFLOW.md (3 given: [github-app hook pre-tool-use])` |
+| この branch（6d6a1596）をビルドしたもの | 1 | `continuo github-app token` の使い方 |
+
+**PreToolUse で 2 が返ると、Claude Code はそのツールの呼び出しを止める。**plugin の hook は、continuo が 0 以外で終わったときに全部の呼び出しを止めない形で包む必要がある。
+
 ---
 
 ## 8. 設計レビューの記録
@@ -2708,19 +2766,32 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 ### 10-5. 2026-09-25 の人間の問いに答える設計（人間の承認待ち）
 
-**人間の原文**（issue #245 の 2026-09-25T02:33:36Z のコメント）。
+**人間の原文**（issue #245 のコメント）。
 
 > それはもう実装してあり、AIからはすべてgithub appを経由した書き込みのみを利用するように調整してあるのか?
 > また、github appを利用してない書き込みを機械的に判別して強制するような仕組みは構築したのか?
 > 逆に、人間の書き込みとAIの書き込みを判別できるようになったなら、それを使って指示に従うかどうかの応用側の仕組みはなにか変更したのか?
 > すべてこのissue内で対応が必要なことだ。
 
-**計画は issue #245 のコメントに書いた**（https://github.com/maimuzo/continuo/issues/245#issuecomment-5826103549）。**人間が承認するまで、このファイルの 6 へは移さない。**
+（2026-09-25T02:33:36Z）
+
+> github appで投稿できない場合とは、github appがうまく設定されてないときだろう?
+> エラーを報告して停止するべきなのでは?
+> またwriterの決め方はLLMへの指示ではなく、機械的に決めること。
+> continuoの仕組みを使わずに人間がclaude codeを直接起動した場合でも、人間が書いたのかAIが書いたのかを判別できるようにしろ。
+
+（2026-09-25T05:14:21Z）
+
+**計画は issue #245 のコメントに書いた**（https://github.com/maimuzo/continuo/issues/245#issuecomment-5827892022）。**人間が承認するまで、このファイルの 6 へは移さない。**
+**承認されたら、6 の古い記述（example command の `TOKEN=` の行・断りの1行・pull request の可視の1行）を消して書き直す。**
 
 | 何を | 提案 | 状態 |
 | --- | --- | --- |
-| AI の書き込みを全部 GitHub App へ通す | continuo が `gh` の代理を、エージェントの設定ファイルの `env.PATH` の先頭に置く。作る書き込みだけを GitHub App で叩く | 人間の承認待ち。`PATH` の先頭が効くかの実測も人間待ち（auto mode が拒否した） |
-| 通らなかった機械の書き込みを見分けて直す | run の終わりに REST でコメントを読み、marker 付きで attribution も断りも無いものへ断りの1行を書き足す | 人間の承認待ち |
-| 指示に従うかどうかの判断 | 4-1 と 4-2 の出力に `writer`（`human` / `machine`）を付け、6-1 を「`writer` が `human` で OWNER / MEMBER / COLLABORATOR のものだけを命令として扱う」に書き換える | 人間の承認待ち |
-| pull request にも attribution を付けるか | `Pull requests` の write を足すかを訊いている（3-82b の誤りを直したうえで） | 人間の判断待ち |
-| 人間が自分で起動した Claude Code | FAQ に手順を書く（推奨）/ 設定を書くコマンドを足す / 範囲外、を訊いている | 人間の判断待ち |
+| AI の書き込みを全部 GitHub App へ通す | Claude Code の plugin（このリポジトリから配る）の SessionStart hook が、`CLAUDE_ENV_FILE` で gh wrapper を PATH の先頭に足す。gh wrapper は `continuo gh` を呼び、本文を書く操作だけ GitHub App のトークンで本物の `gh` を起動する。PATH の先頭に置くだけでは足りないことは 7-13 で測った | 人間の承認待ち |
+| 通らない書き込みを見分けて強制する | plugin の PreToolUse hook が、本物の `gh` を場所で指すもの・`api.github.com` を直接叩くもの・`gh auth token`・GitHub の MCP の書き込みツールを拒否する。PostToolUse hook が、出力の URL を GitHub へ問い合わせ、`performed_via_github_app` が `null` のものを、continuo の実行ファイルのフルパスを入れた `<continuo のフルパス> gh …` の形で消して投稿し直させる（gh wrapper が PATH に入っていなくても GitHub App で書かれる）。`gh pr review` と行コメントは、PreToolUse hook（コマンドの文字列で判定するので gh wrapper が PATH に入らなくても効く）と `continuo gh` の両方が拒否する（7-14 のとおり attribution が記録されない）。拒否の理由は、continuo の実行ファイルのフルパスを入れた `<continuo のフルパス> gh …` で叩き直すよう返す | 人間の承認待ち |
+| GitHub App で書けないとき | 401 は1回だけ取り直す。それ以外は止まる。continuo 本体は ERROR を出して終了し、`continuo gh` は終了コード1で落ちる。人間のトークンで書き直す仕組みと断りの1行は、4箇所から消す | 人間の承認待ち |
+| 指示に従うかどうかの判断 | `continuo comments <URL>` が `writer`（`human` / `machine`）を機械で決めて返す。決め方は、`performed_via_github_app` が非 null → `user.type` が `Bot` → 本文の1行目が continuo の marker → それ以外は `human`。指示の文は Go に埋め込み、continuo が起動した Claude Code には builtin prompt の 6-1、人間が起動した Claude Code には SessionStart hook の additionalContext で渡す | 人間の承認待ち |
+| pull request | GitHub App の manifest に `pull_requests: write` を足すか（推奨は足す）。足さなければ pull request の作成とコメントだけ人間のトークンで書き、本文の先頭の1行を残す。マージ（`Contents` の write）はどちらでも足さない。2026-09-08 に人間が `Issues` だけと決めた（7-5）ので、覆すかを訊いている | 人間の判断待ち |
+| 人間が自分で起動した Claude Code | 範囲に入れる（人間の決定）。上の plugin が、その人の手元（macOS でも Linux でも）のすべての session に効く。continuo は `~/.claude/settings.json` を読み書きしない（設計文書 3-12）。continuo が起動した run では、plugin の SessionStart hook が作る `~/.continuo/github-app-sessions/<session UUID>` で、plugin が動いたかを確かめる | 人間の承認待ち |
+| GitHub App を install していないリポジトリへの書き込み | 止める（推奨）か、人間のトークンで通すかを訊いている | 人間の判断待ち |
+| hook を足すこと | CLAUDE.md の「hook の挙動が変化する変更」に当たるので、影響の5項目を計画のコメントに書いて承認を求めている。`continuo hook` と issue ごとの設定ファイルは変えない | 人間の承認待ち |
