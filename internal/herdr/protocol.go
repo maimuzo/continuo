@@ -23,18 +23,20 @@ const MethodPing = "ping"
 type PingResult struct {
 	// Type は応答の種別である。実測では "pong" が返る。
 	Type string `json:"type"`
-	// Version は herdr 本体のバージョンである（実測: "0.8.0"）。
+	// Version は herdr 本体のバージョンである（実測: herdr 0.8.0 は "0.8.0"、herdr 0.9.1 は "0.9.1"）。
 	// **protocol の照合には使わない。**人間へのログに出す用途で持つ
 	// （「herdr のどの版に繋がっているのか」が運用時にすぐ分かるようにするため）。
 	Version string `json:"version"`
-	// Protocol は socket API の protocol 版である（実測: 19）。
+	// Protocol は socket API の protocol 版である（実測: herdr 0.8.0 は 19、herdr 0.9.1 は 22）。
 	// 設定ファイルの herdr.protocol と照合する（5-2）。
 	Protocol int `json:"protocol"`
 	// Capabilities は herdr が持つ機能の一覧である
-	// （実測: live_handoff / detached_server_daemon の2つ）。
+	// （実測: herdr 0.8.0 は live_handoff / detached_server_daemon の2つ）。
 	//
-	// 実スキーマの `schemas.success_response.$defs.ServerCapabilities` も同じ2つを
+	// herdr 0.8.0 の実スキーマの `schemas.success_response.$defs.ServerCapabilities` も同じ2つを
 	// 定義している（live_handoff が必須、detached_server_daemon は既定 false）。
+	// herdr 0.9.1 のスキーマは detached_server_daemon / endpoint_protocol_generation /
+	// health_check / live_handoff / surface_interest の5つを定義している（2026-09-24 に確認）。
 	//
 	// 【それでも map[string]any で受ける】
 	// キーの顔ぶれと値の型は herdr の版によって増減しうる。将来これ以外の型の値が
