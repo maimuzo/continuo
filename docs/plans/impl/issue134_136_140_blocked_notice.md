@@ -8,7 +8,7 @@
 
 **3-68 は残す。置き換えない。**あちらは着手の検査の4つの経路（worktree・信頼・枠・担当者）をまとめて扱い、
 **「重複を抑える鍵は、飛ばす原因の広がりより細かくしない。worktree の経路だけが issue 単位で、残る3つはリポジトリ単位である」**
-という決めごとを持っている（[docs/plans/continuo_design.md:7165-7167](../continuo_design.md#L7165-L7167)）。
+という決めごとを持っている（[docs/plans/continuo_design.md:7222-7224](../continuo_design.md#L7222-L7224)）。
 **置き換えると、この文書が扱わない3つの経路の決定が、文書のどこにも残らなくなる。**
 **3-68 へ足すのは1行だけである。**「担当者の経路は [docs/plans/impl/issue134_136_140_blocked_notice.md](issue134_136_140_blocked_notice.md) が正」（14 節）。
 
@@ -772,7 +772,7 @@ GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったとき
 **`buildGatedComment` は知らない理由に空文字を返し、`postGateNotice` はそれを投稿せずに
 `no_body` の印を立てる。**理由を足して本文を書き忘れても、中身の無い案内が issue へ残らない。
 
-**本文は `postComment` を通る。**[internal/orchestrator/comment.go:402-412](../../../internal/orchestrator/comment.go#L402-L412) の `postCommentWithMarker` が
+**本文は `postComment` を通る。**[internal/orchestrator/comment.go:400-410](../../../internal/orchestrator/comment.go#L400-L410) の `postCommentWithMarker` が
 手元の絶対パスを `~` へ縮める唯一の場所である。**この案内はパスを1つも載せないが、経路は揃える。**
 
 **`buildGatedComment` が返すのは2行目からである。**1行目の `<!-- continuo:self -->` は

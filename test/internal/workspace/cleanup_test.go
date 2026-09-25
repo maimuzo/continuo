@@ -672,7 +672,7 @@ func TestShouldCleanup_on_statesに入った時点で片付ける(t *testing.T) 
 // tamperIdentity は worktree の身元ファイルを書き換える（エージェントが書き換えた状態を作る）。
 //
 // **身元ファイルは worktree の直下にあり、その worktree ではエージェントが
-// `--permission-mode dontAsk` で動く**（設計 3-16 の段9）ので、この状態は現実に起こりうる。
+// `--permission-mode auto`（既定）で動く**（設計 3-16 の段9）ので、この状態は現実に起こりうる。
 //
 // t: 呼び出し元のテスト。
 // cf: 片付けの検査に使う状態。
@@ -798,7 +798,7 @@ func TestCleanup_置き場所を渡していなければsettings_pathを消さ�
 // tamperGitFile は worktree の `.git` を書き換え、別のリポジトリを指させる。
 //
 // **worktree の `.git` はディレクトリではなく `gitdir: …` と書かれただけの 0644 の
-// ファイルである。**その worktree ではエージェントが `--permission-mode dontAsk` で
+// ファイルである。**その worktree ではエージェントが `--permission-mode auto`（既定）で
 // 動く（設計 3-16 の段9）ので、この書き換えは現実に起こりうる。
 //
 // t: 呼び出し元のテスト。

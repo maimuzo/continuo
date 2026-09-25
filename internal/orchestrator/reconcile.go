@@ -241,7 +241,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // **閉じないと、次の巡回で同じ worktree に2つ目の Claude Code が立つ。**
 //
 // **身元ファイルの `herdr_workspace_id` を宛先にしてはならない。**身元ファイルは
-// worktree の直下にあり、その worktree ではエージェントが `--permission-mode dontAsk` で
+// worktree の直下にあり、その worktree ではエージェントが `--permission-mode auto`（既定）で
 // 動く（設計 3-16 の段9）。**つまりこの値はエージェントが書き換えられる。**
 // 書き換えられた値をそのまま `pane.close` へ渡すと、**同じ機械で走っている別の run の
 // Claude Code を turn の途中で殺せる。**
