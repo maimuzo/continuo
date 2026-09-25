@@ -2364,6 +2364,29 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 
 ---
 
+### 7-17. gh wrapper の試作が、本物の gh と同じに動くか（2026-09-25 23:08〜23:10 (JST)）
+
+**何を確かめたか。**`~/.continuo/bin/gh` に置く gh wrapper を、誰が呼んでも困らない形にできるか（10-5）。
+試作は POSIX sh の18行で、`CLAUDECODE=1` かつ continuo の実行ファイルがあるときだけ `continuo gh` を呼び、それ以外は PATH から自分の置き場を飛ばして本物の `gh` を `exec` する。
+本物の代わりに、受け取った引数と、標準出力が端末かどうかを出して終了コード 7 で終わる偽物を置いた。
+
+| # | 呼ばれ方 | 結果 |
+| --- | --- | --- |
+| 1 | `CLAUDECODE` なしで `gh issue comment 1 --body 'a b "c"' ''` | 6個の引数がそのまま届いた。終了コード 7 がそのまま返った |
+| 2 | 標準入力に `hello` を流す | 本物に届いた |
+| 3 | 本物の `gh` が PATH に無い | `gh: command not found`、終了コード 127 |
+| 4 | `CLAUDECODE=1` で continuo の実行ファイルが無い | 本物が動いた |
+| 5 | `CLAUDECODE=1` で continuo がある | `continuo gh issue comment 1 --body x` が呼ばれた |
+| 6 | PATH に `~/.continuo/bin` が2回 | 自分を飛ばして本物が動いた |
+| 7 | `~/.continuo/bin` が無いのに PATH の先頭へ足した | 本物が動いた |
+| 8 | シンボリックリンク経由で置き場が PATH に入っている | 自分を飛ばして本物が動いた |
+| 9 | `script` で tty を割り当てて叩く | 本物にも標準出力が端末に見えた |
+| 10 | 本物の `gh`（v2.100.0）を越しに `--version` と存在しないサブコマンド | 表示も終了コード（1）も直接叩いたときと同じ |
+
+**上乗せの時間。**100回で 0.887 秒（直に叩くと 0.255 秒）。1回あたり約 6 ミリ秒。
+
+**測っていないもの。**`continuo gh` の中身（3つ目と4つ目の条件）。この Mac には GitHub App の資格情報が無い。
+
 ## 8. 設計レビューの記録
 
 **設計レビューは10周回した。**方針が変わった 2026-09-09（GitHub App の作成をこの設計に含める）から数え直したものである。
@@ -2812,9 +2835,10 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | --- | --- | --- |
 | GitHub App で書く範囲 | issue を作る・issue にコメントする・issue やそのコメントを書き換える、の3つだけ。pull request・マージ・ラベル・読むことは人間のトークン。GitHub App の権限は `Issues` の write のまま | 人間の承認待ち |
 | Claude Code の issue への書き込み | `~/.continuo/bin/gh`（gh wrapper）を PATH の先頭に置く。`CLAUDECODE=1` のときだけ `continuo gh` を呼び、issue への書き込みだけを GitHub App のトークンで書く。それ以外は本物の `gh` をそのまま起動する。PATH の先頭に置けることは 7-16 で測った | 人間の承認待ち |
-| gh wrapper を PATH の先頭に置く方法 | continuo が起動した Claude Code: issue ごとの設定ファイルの `env` に `CLAUDE_ENV_FILE` を書き、そのファイルで PATH の先頭に足す。人間が起動した Claude Code: 利用者がシェルの設定の末尾に1行足す（質問中） | 人間の判断待ち |
+| gh wrapper を PATH の先頭に置く方法 | continuo が起動した Claude Code: issue ごとの設定ファイルの `env` に `CLAUDE_ENV_FILE` を書き、そのファイルで PATH の先頭に足す。人間が起動した Claude Code: 利用者がシェルの設定の末尾に1行足す。人間の条件は「副作用が無いこと」（2026-09-25 23:05 (JST)） | 人間の承認待ち |
+| gh wrapper が働く条件 | `CLAUDECODE=1`・continuo の実行ファイルがある・GitHub App を作ってあり issue への書き込みである・書く先のリポジトリに install してある、の4つが全部そろったときだけ。1つでも欠けたら本物の `gh` を同じ引数のまま起動する。install していないリポジトリで止まる案はやめた（1行足した人が困るため）。install してあるかは `GET /user/installations` と `GET /user/installations/{installation_id}/repositories` で決める（文書で確かめた。実機では測っていない。実装のときにテスト用の環境で測る）。試作は 7-17 | 人間の承認待ち（https://github.com/maimuzo/continuo/issues/245#issuecomment-5833820487） |
 | 止める仕組み | plugin・issue への書き込みを止めるための hook・書いたあとに見つける仕組みは作らない。6・7・9〜12番の経路は防げないものとして受け入れる。GitHub 用の MCP server の書き込みツールについてだけ、continuo専用プロンプトに「issue へは `gh` で書く」と書く | 人間の承認待ち |
-| GitHub App で書けないとき | 止まる。continuo 本体は理由を端末とログに出して終了し、`continuo gh` は終了コード1で落ちる。人間のトークンで投稿し直す仕組みと断りの1行を消す | 人間の承認待ち |
+| GitHub App で書けないとき | 止まる。continuo 本体は理由を端末とログに出して終了し、`continuo gh` は終了コード1で落ちる（GitHub App を作ってあるのにトークンが取れないときだけ。Claude Code の中に限る）。人間のトークンで投稿し直す仕組みと断りの1行を消す | 人間の承認待ち |
 | 書いたのが人間か AI かの判定 | `continuo read-issue <issue の URL>` が、issue の本文とコメントに `writer`（`human` / `machine`）を付けて返す。決め方は、マーカーが付いている → bot → 本文の1行目が continuo の HTML コメント → それ以外は `human`。continuo専用プロンプトで、writer が `human` かつ OWNER / MEMBER / COLLABORATOR のものだけを指示として扱わせる | 人間の承認待ち |
 | pull request | 誰が書いたものでも指示として扱わない、と continuo専用プロンプトに書く。pull request の本文の先頭の1行（「attribution が付きません」）を消す | 人間の承認待ち |
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 人間の承認待ち |
