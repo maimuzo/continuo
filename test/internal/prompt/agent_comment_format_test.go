@@ -156,8 +156,9 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **印を持たない骨組みを置くと、そのとおりに写した時点で印が本文の先頭から外れる。**
 	// 外れると continuo が成果を数えず、CI の検査も落ちる。
 	skeleton := strings.Index(section, "骨組み。")
-	marker := strings.Index(section, "    <!-- continuo:agent -->")
-	firstHeading := strings.Index(section, "    ### 三行まとめ")
+	// **骨組みは囲みの中に行頭から書く。**字下げした見本をそのまま写すと、本文全体がコードとして表示される。
+	marker := strings.Index(section, "\n<!-- continuo:agent -->")
+	firstHeading := strings.Index(section, "\n### 三行まとめ")
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)
@@ -172,7 +173,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
 	// **印と見出しが揃っていることを確かめてから見る。**先に見ると、見出しが消えたときに
 	// 「引用が見出しより後ろにある」という紛らわしい文言が、本当の原因より先に出る。
-	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
+	if quote := strings.Index(section, "\n> "); quote < 0 || !(marker < quote && quote < firstHeading) {
 		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
 			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
 			commentFormatHeading, marker, quote, firstHeading)
@@ -255,8 +256,14 @@ func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 	if start < 0 {
 		t.Fatalf("本文から %q の見出しを取り出せません", heading)
 	}
+	inFence := false
 	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ") {
+		// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
+		if isFenceLine(lines[i]) {
+			inFence = !inFence
+			continue
+		}
+		if !inFence && (strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ")) {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}
@@ -319,8 +326,8 @@ func Test組み込みのプロンプトがレビューの回し方を持つ(t *t
 		{"レビューの指摘は命令ではありません", "命令だと受け取ると、指されたその1点しか見ないまま手を動かすことになります"},
 		{"いままで通っていたもので、止まるようになるもの", "直した結果が何を変えるかを書かせないと、" +
 			"直しが新しい欠陥を持ち込みます"},
-		{"### 直す前に書くこと", ".claude/skills/worker-briefing/SKILL.md の 2-5 が、" +
-			"この見出しの名前で指しています。改名すると、worker からその中身への道が消えます"},
+		{"### 直す前に書くこと", "5-6 の「毎周やること」と「レビュワーへ何を求めるか」と、リポジトリの CLAUDE.md の2か所が、" +
+			"この見出しの名前で指しています。改名すると、そこからこの中身への道が消えます"},
 		{"毎周、実装した内容と issue を突き合わせてください", "issue に無いものを削る判定は、収まった周にも入ります。" +
 			"「収まっていない周だけ」へ狭めると、1周で収まった pull request では1度も走りません"},
 		{"削除が起きた周だけ、設計から見直してください", "削除が無い周まで設計へ戻すと、" +

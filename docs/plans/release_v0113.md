@@ -41,7 +41,7 @@
 
 ## 4. 判定のしかた
 
-**24件それぞれについて、[.claude/rules/issue.md](../../.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
+**24件それぞれについて、[.claude/rules/issue.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
 
 | 順 | 何を確かめたか |
 | --- | --- |
@@ -141,7 +141,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 ## 7. 4本の PR のレビュー結果は、それぞれの PR のコメントにある
 
 **言いたいこと。****指摘ごとの可否は、この文書には置かない。**
-[CLAUDE.md](../../CLAUDE.md) の「なぜ PR のコメントへ残すか」が
+[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)（このリリースの時点の版）の「なぜ PR のコメントへ残すか」が
 「プランファイルは**採らない**。指摘ごとの可否は修正の履歴そのものである」と決めている。
 **4本とも merge 済みで、結果は下のコメントに残っている。**
 
@@ -323,7 +323,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 | 止まりそうな場所 | 実際にどうなっているか |
 | --- | --- |
 | 権限 | [internal/config/default.go:113-129](../../internal/config/default.go#L113-L129)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
-| 雛形の禁止事項 | [internal/scaffold/template.go:215-224](../../internal/scaffold/template.go#L215-L224) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
+| 雛形の禁止事項 | [internal/scaffold/template.go:216-225](../../internal/scaffold/template.go#L216-L225) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
 | tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:299-306](../../internal/orchestrator/settings.go#L299-L306)） |
 
 ### 作らない理由（3つ）

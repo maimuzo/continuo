@@ -100,15 +100,9 @@ func TestTemplate_worktreeの外への逃げ道は立場と4_4の両方で絞る
 func TestTemplate_3_5も3_4の例外のときは4_4へ譲る(t *testing.T) {
 	body := prompt.Builtin()
 
-	at := strings.Index(body, "## 3-5. pull request を出す")
-	if at < 0 {
-		t.Fatalf("組み込みのプロンプトに 3-5 の節がありません")
-	}
-	end := strings.Index(body[at+1:], "\n## ")
-	if end < 0 {
-		end = len(body) - at - 1
-	}
-	section := body[at : at+1+end]
+	// **囲みを見る sectionOf で切る。**3-5 の見本は囲みの中に行頭から書いてあるので、
+	// 素朴に `"\n## "` で切ると、見本が `## ` を持った時点で後ろの検査が素通りする。
+	section := sectionOf(t, body, "## 3-5. pull request を出す")
 
 	for _, want := range []string{
 		"3-4 の例外を使ったときは、この段も 4-4 の指示に従います",

@@ -55,7 +55,7 @@
 `tracker.active_states` も `automated_state_rewrite` も、この人は設定ファイルの中でしか見たことがない。
 
 **`worktree` `hook` `branch` `issue` は英語のまま使う。**
-[.claude/rules/reporting.md](../../../.claude/rules/reporting.md) が、これらを日本語へ直訳することを禁じている。
+[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md) が、これらを日本語へ直訳することを禁じている。
 **画面と手順書に出る語なので、訳すと同じものに名前が2つできる。**
 
 **「ボード」と書かない。「カンバン」と書く。**

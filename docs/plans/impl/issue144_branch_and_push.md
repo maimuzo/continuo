@@ -977,7 +977,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 [test/internal/scaffold/design_template_test.go:99-101](../../../test/internal/scaffold/design_template_test.go#L99-L101) の
 `TestTemplate_雛形の本文が設計5_3の本文と一致する` が突き合わせるのは、
 **5-3 の ```markdown ブロック（本文）だけ**である
-（[:325-334](../../../test/internal/scaffold/design_template_test.go#L325-L334) の
+（[:331-340](../../../test/internal/scaffold/design_template_test.go#L331-L340) の
 `readDesignBodyExample` がそのブロックを読む）。表は人間が読むためのものなので、忘れても落ちない。
 **だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
 
@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:401](../../../internal/orchestrator/prompt.go#L401) が書いているとおり
+[internal/orchestrator/prompt.go:415](../../../internal/orchestrator/prompt.go#L415) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
@@ -1298,7 +1298,7 @@ push した branch の名前でも引いてください。
 **issue のリポジトリは信頼登録されていなくてよい。**そこでは1行も実行しない。
 
 **受け入れ（塊ごとに実機で1件通す）。**
-[.claude/rules/release.md](../../../.claude/rules/release.md) が「実機で issue を1件通してから出す」と
+[.claude/rules/release.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/release.md) が「実機で issue を1件通してから出す」と
 決めている。**3つ目の塊は、開発者の環境の fork（`<ACCOUNT>/oss-project`）と
 テスト用のカンバン（project #10（実データを持たない検証用のカンバン））で通す。**
 **本番のカンバン（project #3（AI自動進行管理。実データが入っている））では試さない。**

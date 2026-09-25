@@ -1858,16 +1858,13 @@ herdr:
 
 #### 「起動直後に確認の画面で止まりました」と出る
 
-**原因。**そのフォルダが Claude Code に信頼登録されていないか、許可されていないコマンドを実行しようとしました。
+**よくある原因。**そのフォルダが Claude Code に信頼登録されていないことです。**何が確認の画面を出したかは、continuo の側に残りません。**
 
-**直し方。**まず画面を読みます。
-
-```bash
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
-```
+**直し方。****continuo はこの通知を書いたあとで pane を閉じるので、画面は残っていません。**worktree の中身を見てください。
 
 信頼登録が足りないなら `continuo trust ~/continuo-work`。
-許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します。
+許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します（`auto` では狭い規則で）。
+**足したら continuo を再起動してください。**走行中は設定を読み直しません。
 
 #### 「作業の途中で確認の画面に止まりました」と出る
 
@@ -1900,21 +1897,35 @@ git -C <worktree のパス> diff
 grep -n 'permission_mode' ~/continuo-work/WORKFLOW.md
 ```
 
-**`auto` のとき**（v0.1.16 からの既定）**は、許可の一覧を増やしても解けないことがあります。**
-このモードは Claude Code の中の判定役が**会話の流れを読んで**決めるので、
-**この issue のコメントに「その操作を許可します」と書いてください。**判定役はそれを読みます。
-**公開リポジトリの issue では、同じことを第三者も書けます。**
-判定役が書いた人の立場を見るかどうかは測っていません（[SECURITY.md](../SECURITY.md) の危険の表）。
-**恒久的に効かせたいものだけ** `claude.permissions.allow` に足します。
+**`auto` のとき**（v0.1.16 からの既定）**は、判定役が実行の前に確かめます。**
+**判定役は issue のコメントを読みません。**判定役への要求から道具の結果は取り除かれ、
+issue のコメントは `gh` の出力、つまり道具の結果として届くためです
+（公式文書の permission modes のページ。2026-09-18 に取得して確かめました）。
+
+**許してよい操作だと分かったときは、`claude.permissions.allow` に狭い規則を足します**
+（例: `Bash(gh:*)`）。
+**`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**
+**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります。**足すものはありません。
+
+**狭い規則の書き方。**`dontAsk` で実測して確かめてある形は次の3つです。**`auto` で残るかは測っていません。**
+
+| 書き方 | 何に当たるか |
+| --- | --- |
+| `Bash(gh:*)` | `gh` で始まるコマンド全部。**`:*` は末尾でしか認識されません** |
+| `Bash(ls *)` | `ls` に引数が付いたもの。**空白を挟むと語境界が入ります** |
+| `Bash(ls*)` | `ls` で始まるもの。**ワイルドカード付きなので、`auto` で落とされる側に当たるかは測っていません** |
+
+**拒否されたコマンドは、引き渡しの通知の【調べるところ】に挙げた記録で見てください。**
 
 **`dontAsk` のときは、許可の一覧に無いツールが確認の画面を出さずに、その場で拒否されます。**
 拒否は静かに起きるので、**確認の画面が出て止まったのなら、それは許可の一覧の不足とは別の原因です。**
 **許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足してください。
 
-**どちらの場合も、そのあと Status を着手待ちへ戻してください。**
+**どちらの場合も、足したら continuo を再起動してください。**走行中は設定を読み直しません。
+**そのあと Status を着手待ちへ戻してください。**
 
 **それでも、何が確認の画面を出したのか分からないときは、次の節を読んでください。**
-**agent teams が有効だと、`dontAsk` で起動していても確認の画面が出ます。**
+**agent teams が有効だと、`dontAsk` を選んでいても確認の画面が出ます。**
 
 #### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
 
@@ -1941,8 +1952,8 @@ continuo はそれを「人間の入力を待っている」と読み、esc を�
 出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
 
 **上の節の「`dontAsk` では確認の画面が出ない」と食い違って見えますが、両方とも起きます。**
-continuo は `--permission-mode dontAsk` で起動するので、**リード自身は確認の画面を出しません。**
-**ところが teammate はそれを継がず、`default` で走ることが観測されています**
+continuo は `--permission-mode auto`（既定）で起動します。公式文書は、判定役が3回続けて、または通算20回遮断すると確認の画面へ戻ると書いています（continuo では観測できていません）。`dontAsk` を選んだときは、許可の一覧の外がその場で拒否されます。
+**ところが teammate はリードの権限モードを継がず、`default` で走ることが観測されています**
 （2026-08-27、外部の利用者の実測。報告された `meta.json` が3件とも `permissionMode: "default"` でした）。
 **公式は「teammate はリードの許可設定を継ぐ」と書いており、この観測と食い違っています。**
 **理由は分かっていません。**
@@ -2166,9 +2177,9 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 ```bash
 command -v claude
-herdr agent explain continuo-hello-world-42
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```
+
+**continuo はこの通知を書いたあとで pane を閉じるので、`herdr agent explain` も `herdr agent read` も agent を見つけられません。**
 
 `continuo doctor` は `claude` という見出し語で PATH 上の実行ファイルを調べています。
 
@@ -2396,6 +2407,28 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対�
 
 **件数そのものは見ないでください。**在るかどうかだけで見分けられます。いくつ出るかは指示書の書き方で変わります。
 
+#### エージェントのコメントで、backtick で囲んだ語が消えている
+
+**v0.1.16 で直りました。**上げてください。**設定に足すものはありません。**
+
+**v0.1.15 まで何が起きていたか。**組み込みの指示書は、コメントや PR の本文を `--body "…"` の二重引用符の中へ直に書かせていました。
+**二重引用符の中では、シェルが backtick と `$( )` をコマンドとして実行します。**
+報告に `` `auto` `` と書くと、`auto` というコマンドが worktree の中で走り、その部分はコマンドの出力（無ければ空）に置き換わります。
+issue から `$(…)` を含む文を引いた場合も同じです。
+
+**v0.1.16 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
+計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
+
+**入っているかは、送る文面で確かめられます。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-file "$F"'
+```
+
+**`1` 以上なら v0.1.16 の形です。**`0` なら上げてください。
+
+**`WORKFLOW.md` の本文で `--body "…"` の形を自分で指示している場合は、そこも直してください。**直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
+
 ### issue が勝手に止まる・戻るとき
 
 #### issue が急に `Blocked` になった
@@ -2576,10 +2609,13 @@ gh pr view <PR番号> --repo <owner>/<repo> --json closingIssuesReferences --jq 
 **直し方。**PR の本文へ1行足します。エージェントが次に起動されたときから見えるようになります。
 
 ```bash
-gh pr edit <PR番号> --repo <owner>/<repo> --body "$(gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body)
-
-Closes #<issue の番号>"
+F=$(mktemp)
+gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body > "$F" \
+  && printf '\nCloses #<issue の番号>\n' >> "$F" \
+  && gh pr edit <PR番号> --repo <owner>/<repo> --body-file "$F"
 ```
+
+**本文を読めなかったときは、書き戻しません。**読めないまま書き戻すと、本文が足した1行だけになります。
 
 **組み込みのプロンプトは、この1行を入れるようエージェントに指示しています。**
 **それでも落ちていたときの直し方が、これです。**
