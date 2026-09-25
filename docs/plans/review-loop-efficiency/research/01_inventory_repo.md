@@ -148,8 +148,8 @@
 | [internal/scaffold/ci_template.go:83](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/scaffold/ci_template.go#L83) と [internal/scaffold/ci_template.go:242](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/scaffold/ci_template.go#L242) | 利用者へ配る同じ2つの検査。本体と条件を揃える（[.github/workflows/review-gate.yml:11-14](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.github/workflows/review-gate.yml#L11-L14)） | 「判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。」 | 利用者向け |
 | [internal/prompt/builtin.md:203-223](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L203-L223) と [internal/prompt/builtin.md:347-365](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L347-L365) | 判断票の目印の置き方（計画は2行目、実装は1行目） | 「1行目と2行目の並びを変えないでください。」 | 利用者向け |
 | [docs/FAQ.md:201-250](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/FAQ.md#L201-L250) | 利用者が自分の CLAUDE.md に書く決まりの例 | 「この2つの目印を、機械が数えます。」 | 利用者向け |
-| [docs/plans/continuo_design.md:11384-11461](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L11384-L11461)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
-| [docs/plans/continuo_design.md:11709-11710](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L11709-L11710) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
+| [docs/plans/continuo_design.md:11312-11389](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L11312-L11389)（5-3p / 5-3q） | 利用者向けの CI と印の設計。既定のレビュワー | 「既定のレビュワーは general-purpose である」 | 利用者向け（設計） |
+| [docs/plans/continuo_design.md:11637-11638](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L11637-L11638) | CLAUDE.md の「draft → `/code-review` → ready」は、このリポジトリの決まりで配らない | 「このリポジトリの決まりであって、配るものではない。」 | 開発者向けと利用者向けの境界 |
 
 **機械が周回と重大度を見ていない根拠。**パターン `周目|回目|round|Critical|High|severity|対応表`、
 対象は block-merge-without-review.py・review-gate.yml・check-release-ready.sh・ci_template.go・test_block_merge_without_review.py・test_marker_pattern_parity.py、コミット `df36f9d7` で **0行**だった。
@@ -252,7 +252,7 @@
 CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま follow-up の issue へ切り出す。**回さずに終えるので、
 ```
 
-（ほかに docs/plans/continuo_design.md:12710 が当たるが、別の表の行で、この文面ではない。）
+（ほかに docs/plans/continuo_design.md:12638 が当たるが、別の表の行で、この文面ではない。）
 
 ---
 

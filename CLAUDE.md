@@ -389,7 +389,7 @@ git worktree remove "$ROLLBACK"
 - **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときだけ）
 - **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
 - **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9223](docs/plans/continuo_design.md#L9223) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9151](docs/plans/continuo_design.md#L9151) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
 
   > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、

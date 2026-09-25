@@ -203,7 +203,7 @@ args := []string{"--settings", settingsPath}
 **つまり continuo が切る worktree にも、この2本の hook 定義がそのまま入る。**
 一方 `.claude/settings.local.json` は `.gitignore` 済みで、
 **実測でも worktree には1つも無かった**（`find ~/Sources/github/continuo/.claude/worktrees -maxdepth 3 -name "settings.local.json"` が0件）。
-設計も同じことを書いている（[docs/plans/continuo_design.md:7551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L7551)）。
+設計も同じことを書いている（[docs/plans/continuo_design.md:7479](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/docs/plans/continuo_design.md#L7479)）。
 
 > | 対象リポジトリの `.claude/settings.local.json` | 読まない | gitignore されるので worktree に出てこない |
 
