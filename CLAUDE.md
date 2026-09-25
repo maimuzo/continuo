@@ -373,6 +373,7 @@ git worktree remove "$ROLLBACK"
   - **確認を待たずに着手してよい例外で直すときも、issue は `Ice Box` のまま直す。**`In Progress` へ動かすと、continuo が同じ issue にもう1つ Claude Code を起動する（`In Progress` は `tracker.active_states` の既定に入っている）
   - **`Ready` と `In Progress` の item の並び順を動かさない。**走っている continuo が次に dispatch する issue が変わる
 - **AI が独断で issue を作らない。**人間の依頼か許可があるときだけ作る（`general-claude-md` の「bug-reporter で issue に登録する」より、こちらが勝つ）
+- **このプロジェクトの開発のやりとりに書く時刻は、特別な理由が無い限り JST で書く。**issue と pull request のコメント・チャットの返答・計画ファイルが当たる。GitHub の API が返す時刻（`2026-09-25T05:14:21Z` のように末尾が `Z` のもの）と `date -u` の値は UTC なので、9時間足して `2026-09-25 14:14 (JST)` の形に直してから書く。**ただし continuo 本体が利用者へ出す時刻（ログ・continuo が issue へ書くコメント・ダッシュボード）は JST に固定しない。**continuo は世界中の人が使う
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
 - **レビュワーの割り当て。**組み込みの指示書の 5-6「誰に見せるか」の2つの役に、次を当てる
