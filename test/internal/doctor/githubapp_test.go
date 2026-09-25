@@ -1,5 +1,5 @@
 // Package doctor_test のうち、このファイルは見出し語 `GitHub App` を確かめる
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「`continuo doctor` が検査すること」・3-82f）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「`continuo doctor` が検査すること」・3-82f）。
 //
 // **本物の GitHub は1回も叩かない。**この検査はトークンを取らない（更新用のトークンを回さない）ので、
 // 偽サーバも要らない。資格情報は fixture の一時ディレクトリの `.continuo/` に置く。

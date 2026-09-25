@@ -1,6 +1,6 @@
 // Package githubapp は GitHub App の資格情報（`~/.continuo/github-app-credentials.json`）を
 // 読み書きし、更新用のトークンを回してアクセストークンを取る
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82b / 3-82d / 3-82g）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82b / 3-82d / 3-82g）。
 //
 // **使う側は4つある。**continuo 本体（`PostComment` の投稿）・`continuo github-app token`・
 // `continuo doctor`・ダッシュボードの `/github-app` の画面である。**読み書きと回転の処理は

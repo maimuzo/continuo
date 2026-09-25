@@ -101,7 +101,7 @@ type ProjectWorkflow struct {
 }
 
 // AppTokenFunc は GitHub App の資格情報からアクセストークンを1本取る関数の型である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「continuo 本体の投稿」）。
 //
 // **呼ぶたびに更新用のトークンが1回転する。**返ったトークンは、次に誰か（本体・
 // `continuo github-app token`・ダッシュボード）が回すまでしか生きていない（回転すると古いものは
@@ -195,7 +195,7 @@ func NewAdapter(
 }
 
 // ProbeAppToken は GitHub App のトークンが実際に取れることを確かめる
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「取れないときに止める」）。
 //
 // **起動時の検査が呼ぶ。**トークンを取る関数は NewAdapter へ渡した1つだけなので、検査は
 // この経路を通る（検査が別に関数を持つと、テストが片方だけ差し替えて「たまたま通る」形になる）。
@@ -1220,7 +1220,7 @@ func (a *Adapter) FetchComments(
 
 // AppTokenFallbackNote は、GitHub App のトークンで投稿できなかったときに、人間の認証で
 // 書き直す本文へ挟む断りの1行である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「取れないときに止める」）。
 //
 // **この1文で固定する。理由もエラーの文言も入れない。**
 // 画面で「機械が書いた」と見分けるためには固定の1文で足りる。理由の全文は Warn のログにある。
@@ -1248,7 +1248,7 @@ const AppTokenFallbackNote = "GitHub App のトークンで投稿できなかっ
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。
 //
 // **どのトークンで書くかは、ここで決める。呼ぶ側は知らないし、引数も増えない**
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「continuo 本体の投稿」）。
 //
 //   - appToken が nil なら、人間の認証（NewAdapter へ渡した token）で1回書く。いままでどおり。
 //   - appToken が nil でなければ、投稿のたびに GitHub App のトークンを取り、そのトークンで書く
@@ -1302,7 +1302,7 @@ func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker
 }
 
 // postWithAppToken は GitHub App のトークンで addComment を叩く。401 なら1回だけ取り直す
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「continuo 本体の投稿」）。
 //
 // **取ったトークンは、この1件の投稿にしか使わない。**フィールドへ持たない（AppTokenFunc）。
 // ロックは a.appToken の中（githubapp.AcquireToken）が取って放し、投稿はロックの外で行う
@@ -1385,7 +1385,7 @@ func (a *Adapter) addComment(ctx context.Context, gql *graphqlClient, issueNodeI
 }
 
 // insertAfterLeadingMarkers は、s の先頭に並ぶ marker（`<!--` で始まる行）を全部通した直後に
-// note の行を挟む（docs/plans/impl/issue245_github_app_attribution.md の 3-82c
+// note の行を挟む（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c
 // 「本文の先頭に並ぶ marker を全部通したあとの行」）。
 //
 // **「先頭の marker の次の行」ではない。**着手の門の案内は `<!-- continuo:gated:… -->` を本文の

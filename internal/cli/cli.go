@@ -89,7 +89,7 @@ type Deps struct {
 	// （`continuo github-app token` と常駐の `daemon.Options.HomeDir`。3-82b）。
 	UserHomeDir func() (string, error)
 	// GitHubAppToken は GitHub App の更新用のトークンを1回転させ、アクセストークンを返す
-	// （`continuo github-app token`。docs/plans/impl/issue245_github_app_attribution.md の 3-82d）。
+	// （`continuo github-app token`。docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d）。
 	//
 	// **本物の GitHub を叩き、`~/.continuo/` の資格情報を書き戻すので、検査では必ず差し替える。**
 	// 既定は `githubapp.AcquireToken`（ロックを取る → 読む → 回す → 書き戻す → 放す）である。
@@ -231,7 +231,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 const githubAppTokenTimeout = githubapp.DefaultLockTimeout + githubapp.DefaultHTTPTimeout
 
 // runGitHubApp は `continuo github-app token` サブコマンドである
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「`continuo github-app token` の輪郭」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「`continuo github-app token` の輪郭」）。
 //
 // **更新用のトークンを1回転させ、アクセストークンを標準出力へ1行だけ出す。**投稿は `gh` が行う
 // （`GH_TOKEN="$TOKEN" gh issue comment …`）。continuo はエージェントの代わりに投稿しない。
@@ -646,7 +646,7 @@ func runPromptExpanded(
 	}
 
 	// **continuo 自身の実行ファイルのパスは、ここでは `os.Executable()` から取る**
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 	// このコマンドは `Orchestrator` を持たないので、常駐が hook のコマンド行に書いている
 	// `o.continuoPath` を引けない。**決め打ちしない。**決め打ちすると、このコマンドが
 	// 「送られる文面」ではないものを見せる。**取れなければ落とす**（部分的な文面を出さない）。

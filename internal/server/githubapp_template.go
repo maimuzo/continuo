@@ -7,7 +7,7 @@ import (
 )
 
 // githubAppTemplateText は GitHub App を作る導線の4枚の画面（と、続けられなかったときの1枚）の
-// HTML である（docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+// HTML である（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）。
 //
 // **押す前に、そのボタンが何をするかを画面へ出す。**人間の決定（2026-09-08）
 // 「ボタンを押すと何が起こるのか、どういう仕組なのかを人間に提示しておかないと、怖がって人間が

@@ -69,7 +69,7 @@ func TestPrompt_取得したコメントを平文へ潰す指示が本文に無�
 // issue のコメントも本文も REST の `author_association` で取る
 // （`gh issue view --json` が受け付ける項目に issue 本文の投稿者の立場は無い。gh 2.97.0 で実測。
 // **コメントも REST にした。**GraphQL の `--json comments` には GitHub App の attribution
-// （`performed_via_github_app`）が無い。docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// （`performed_via_github_app`）が無い。docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 //
 // **PR 側も同じ扱いにする。**レビューの指摘は PR に書かれるので、
 // **issue だけ JSON にしても、PR 経由で同じ偽装が通る。**
@@ -228,7 +228,7 @@ const commandLinePrefix = "    gh "
 // **合わせて、読ませる場所は5種類すべてを覆う。**
 //
 // **issue のコメントは REST（`author_association`）で読む**
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。GraphQL の `--json comments` には
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。GraphQL の `--json comments` には
 // GitHub App の attribution（`performed_via_github_app`）が無く、エージェントが
 // 「人間が決めたのか AI が書いたのか」を見分けられない。**この番人の意図は減っていない。**
 // 立場を読ませる場所は5種類のままで、issue のコメントを読む手段が GraphQL から REST へ変わっただけである。

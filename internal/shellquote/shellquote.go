@@ -4,7 +4,7 @@
 // hook のコマンド行の組み立てだけが使っていた。GitHub App のトークンを取るコマンド
 // （`continuo github-app token`）を送る文面へ埋める側（internal/prompt の `RenderData` と
 // internal/orchestrator の書かせ直し）にも同じ包み方が要るので、両方が import できる
-// package へ移した（docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// package へ移した（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 // **internal/prompt から internal/orchestrator は import できない**（逆向きに import 済みで、循環する）。
 //
 // **hook の挙動は変えない。**包み方は移す前と1バイトも変えていない

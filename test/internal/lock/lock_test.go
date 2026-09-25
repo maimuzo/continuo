@@ -95,7 +95,7 @@ func TestAcquire_二重起動のエラーはErrAlreadyRunningである(t *testin
 }
 
 // 目的: AcquireWait が、誰も掴んでいないロックを待たずに取ることを確認する
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「同時に叩かれたとき」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「同時に叩かれたとき」）。
 // 与える情報: 一時ディレクトリの下のロックファイルのパスと、短い上限。
 // 成功条件: 即座に *Lock が返ること。
 func TestAcquireWait_空いていれば待たずに取れる(t *testing.T) {
@@ -194,7 +194,7 @@ func TestAcquireWait_親ディレクトリが無ければ待たずに落ちる(t
 }
 
 // 目的: 上限より先に ctx が終わったら、AcquireWait がそこで待つのをやめることを確認する
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d。起動時の検査は全体で60秒しか
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d。起動時の検査は全体で60秒しか
 // 持たないので、ロックの待ちがそれを超えると、本当の理由が文面に出ないまま落ちる）。
 // 与える情報: 掴んだままのロックと、200ms で終わる ctx、5秒の上限。
 // 成功条件: 1秒以内にエラーが返り、それが context.DeadlineExceeded を包んでいること。

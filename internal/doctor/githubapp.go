@@ -18,7 +18,7 @@ import (
 const githubAppPortPlaceholder = "<port>"
 
 // checkGitHubApp は GitHub App の資格情報を検査する（見出し語 `GitHub App`。
-// docs/plans/impl/issue245_github_app_attribution.md の 3-82c「`continuo doctor` が検査すること」・3-82f）。
+// docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「`continuo doctor` が検査すること」・3-82f）。
 //
 // **トークンは1度も取らない。回さない。**取ると更新用のトークンが回り、doctor が continuo を
 // 起動不能にしうる（回転の書き戻しの直前で落ちれば認可のやり直しになる）。

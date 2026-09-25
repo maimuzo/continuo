@@ -29,7 +29,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 	// **`internal/shellquote` を import している。**送る文面へ埋める `continuo` の実行ファイルの
 	// パス（`.continuo.command`）を、ここで単一引用符に包むためである
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 	// **包むのはこの package の `RenderData` の中だけである。**呼ぶ側は包まない。
 	// 二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。
 	"github.com/maimuzo/continuo/internal/shellquote"
@@ -619,7 +619,7 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 // `.continuo.self_marker` の2通り（空と非空）の組み合わせである。
 // **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためであり、
 // **`{{if .github_app_attribution}}` の中も、偽のときには一度も解釈されない**
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 // 片方だけを回すと、もう片方の枝に書いた一覧に無い変数を、起動するまで誰も見つけられない。
 //
 // **これで全部を捕まえられるわけではない。**`{{if eq .issue.state "Done"}}` のように
@@ -679,7 +679,7 @@ func (f Fragments) Validate() error {
 // githubAppAttribution: `tracker.comments.github_app_attribution` の値。真なら、送る文面の
 // 新しく投稿する6本の `gh issue comment` が `continuo github-app token` でトークンを取ってから
 // 投稿する形に展開される（`{{if .github_app_attribution}}`。
-// docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 // continuoPath: continuo 自身の実行ファイルの絶対パス（hook のコマンド行に書いているものと同じ）。
 //
 //	**単一引用符で包むのはこの中である。**呼び出し側で包ませない。
@@ -732,7 +732,7 @@ func RenderData(
 		// **「3600000ミリ秒以上黙らないでください」では通じない。**
 		"progress_interval_minutes": progressIntervalMs / 60000,
 		// **GitHub App の attribution を付けるかどうか**
-		// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+		// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 		// 偽のまま `TOKEN=$(… github-app token) || exit 1` を配ると、
 		// 資格情報を持たない利用者の投稿が全部落ちる。だから文面の側で `{{if}}` で分ける。
 		"github_app_attribution": githubAppAttribution,
@@ -783,7 +783,7 @@ func SampleData() map[string]any {
 		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
 		"progress_interval_minutes": 60,
 		// **GitHub App の attribution を付けるかどうか**
-		// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+		// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 		// **`Validate` が偽と真の両方へ入れ直す。**ここの値は「空でないもの」として真にしてある。
 		"github_app_attribution": true,
 		// **continuo 自身を指す値**（同 3-82e）。`RenderData` と同じく、単一引用符で包んだ形で持つ。

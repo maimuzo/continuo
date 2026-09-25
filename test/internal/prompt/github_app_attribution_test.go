@@ -1,6 +1,6 @@
 // 組み込みの指示書が、GitHub App の attribution の設定で投稿の形を分けることの検査である
 // （issue #245（issue のコメントを人間が書いたのか AI が書いたのか、あとから見分けられない）。
-// docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 //
 // **外部へ1回も接続しない。**組み込みの文面を変数展開して、その文字列だけを見る。
 package prompt_test

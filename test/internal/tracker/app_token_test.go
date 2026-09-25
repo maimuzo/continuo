@@ -13,7 +13,7 @@ import (
 )
 
 // このファイルは、PostComment がどのトークンで書くかを決める経路を検証する
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」と
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「取れないときに止める」と
 // 3-82d「continuo 本体の投稿」）。
 //
 // **本物の GitHub も本物の資格情報も叩かない。**トークンを取る関数は固定の文字列を返す偽物で、

@@ -1,5 +1,5 @@
 // Package cli_test のうち、このファイルは `continuo github-app token` を確かめる
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「`continuo github-app token` の輪郭」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「`continuo github-app token` の輪郭」）。
 //
 // **本物の GitHub は1回も叩かない。**トークンを取る処理は `cli.Deps.GitHubAppToken` から偽物へ向ける。
 // **本物のホームも見ない。**`cli.Deps.UserHomeDir` を一時ディレクトリへ向ける。

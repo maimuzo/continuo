@@ -22,7 +22,7 @@ import (
 	"github.com/maimuzo/continuo/internal/server"
 )
 
-// fakeGitHub は、GitHub App を作る導線（docs/plans/impl/issue245_github_app_attribution.md の 3-82g）が
+// fakeGitHub は、GitHub App を作る導線（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）が
 // 叩く GitHub の3本の経路だけを持つ偽の GitHub である。
 //
 // **本物の GitHub を叩かない。**`GitHubAppOptions.Endpoints` の `Web` と `API` を両方この URL に向ける。

@@ -100,7 +100,7 @@ func (l *Lock) Release() error {
 const acquireWaitInterval = 100 * time.Millisecond
 
 // AcquireWait は Acquire と同じロックを、別のプロセスが放すまで timeout を上限に待って取る
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「同時に叩かれたとき」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「同時に叩かれたとき」）。
 //
 // **二重起動を止めるロックには使わない。**あちらは待たずに即座に終了する（Acquire）。
 // **使うのは GitHub App の資格情報のロック**（`~/.continuo/github-app-credentials.lock`）だけである。

@@ -17,7 +17,7 @@ import (
 const attributionExe = "/opt/my continuo/bin/continuo"
 
 // attributionTokenLine は、attribution を付けるときに投稿の前へ来る1行である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 const attributionTokenLine = "TOKEN=$('" + attributionExe + "' github-app token) || exit 1"
 
 // attributionFixture は、attribution の設定と実行ファイルのパスを渡した fixture を組み立てる。

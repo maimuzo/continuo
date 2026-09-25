@@ -10,7 +10,7 @@
 //	実行中の run の一覧を出す   … issue / Status / turn 数 / 最後に hook を受けた時刻
 //	トークンの集計を出す        … `requestId` で重複排除済みの累計（設計 3-15）
 //	それを HTML と JSON で返す  … GET だけ
-//	GitHub App を作る導線を出す … `/github-app` の5本（docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。これも GET だけ
+//	GitHub App を作る導線を出す … `/github-app` の5本（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）。これも GET だけ
 //
 // **run を動かす書き込みの経路は作らない。**run を止める・Status を書くといった操作は
 // 一切受け付けない。**このサーバは認証を持たない**ので、操作を受け付けたら
@@ -136,7 +136,7 @@ type Options struct {
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
 	Now func() time.Time
 	// GitHubApp は GitHub App を作る導線（`/github-app` の5本の経路）に要るものである
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）。
 	// **nil なら、その5本の経路を張らない。**既にあるダッシュボードのテストは渡さないので変わらない。
 	// **internal/daemon は、ダッシュボードが開くかぎり `github_app_attribution` の値に関わらず常に渡す**
 	// （`false` で起動して画面を通す手順が、これに依る。3-82c）。
@@ -371,7 +371,7 @@ func (s *Server) Handler() http.Handler {
 // **POST / PUT / DELETE はハンドラまで届かない。**run を動かす書き込みの経路は存在しない。
 //
 // 経路は、仕様の2本（`SPEC.md` 13.7.1 / 13.7.2）と、GitHub App を作る導線の5本である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）。
 // **5本は `Options.GitHubApp` が nil なら張らない。全部 GET である。**
 // GitHub App の経路は資格情報のファイルを書くが、書く先は GitHub との往復の結果に限る。
 //
@@ -513,7 +513,7 @@ func (s *Server) allowedHost(host string) bool {
 }
 
 // 応答に付ける Content-Security-Policy である。**2本を並べて定義する**
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g「CSP を、この5本の経路だけ緩める」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g「CSP を、この5本の経路だけ緩める」）。
 // 片方だけを直すと、もう片方が `frame-ancestors 'none'` や `base-uri 'none'` を落としたまま残る。
 const (
 	// safetyCSP は全応答に `withSafetyHeaders` が付ける版である。

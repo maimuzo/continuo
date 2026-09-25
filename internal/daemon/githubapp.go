@@ -17,7 +17,7 @@ import (
 )
 
 // ProjectURL は GitHub App の manifest の `url` に書く、continuo のリポジトリの URL である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。ダッシュボードの `/github-app` へ渡す。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）。ダッシュボードの `/github-app` へ渡す。
 const ProjectURL = "https://github.com/maimuzo/continuo"
 
 // RefreshTokenCheckInterval は、走行中に更新用のトークンの残りを見る間隔である（3-82c）。

@@ -15,7 +15,7 @@
 //	                              **開けなくても起動は止めない**（任意の機能の失敗で
 //	                              引き継いだ pane を放置しない）
 //	4d 更新用のトークンの残りを見張る … `github_app_attribution` が真のときだけ。1日1回、読むだけ
-//	                              （docs/plans/impl/issue245_github_app_attribution.md の 3-82c）
+//	                              （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c）
 //	5 巡回を始める              … poll_interval_ms ごとに Tick を回す
 //
 // **巡回より先に復元を終える。**先に巡回を始めると、これから引き継ぐ run の worktree に
@@ -190,7 +190,7 @@ type Options struct {
 	// **0 なら DefaultTrackerTimeout を使う。**テストが短い期限を与えるための口である。
 	TrackerTimeout time.Duration
 	// GHLogin は「continuo が使う gh の持ち主」を取る関数である
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82f）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82f）。
 	//
 	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
 	// **起動時の検査（認可した人との突き合わせ）と orchestrator の両方へ、同じ1つを渡す。**

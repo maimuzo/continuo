@@ -36,7 +36,7 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	// **あのコマンドが「送られる文面」ではないものを見せることになる。**
 	//
 	// **`o.continuoPath` は包まずに渡す。**単一引用符に包むのは `RenderData` の中である
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
 	// hook のコマンド行（settings.go）に書いているものと同じ値なので、
 	// **エージェントが叩く `continuo github-app token` は、いま動いている本体と同じ実行ファイルを指す。**
 	data := prompt.RenderData(
@@ -119,7 +119,7 @@ func BuildContinuationPrompt(
 // 書き分けは [docs/upgrading.md:510-518](docs/upgrading.md#L510-L518) に揃える。
 //
 // **GitHub App の attribution も、ここで分ける**
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e の「7本目」）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e の「7本目」）。
 // **この文面はテンプレートを1度も通らない**ので、`{{if}}` と書くとその6文字がそのまま
 // エージェントへ届く。**だから Go の側で分ける。**組み込みの指示書の6本と同じく、
 // `gh issue comment` の行の前に `TOKEN=$(… github-app token) || exit 1` と

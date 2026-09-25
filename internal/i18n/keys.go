@@ -2557,7 +2557,7 @@ const (
 	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
-// GitHub App の attribution（docs/plans/impl/issue245_github_app_attribution.md）のうち、
+// GitHub App の attribution（docs/plans/impl/issue245_github_app_issue_writes.md）のうち、
 // 起動時の検査（internal/daemon。3-82c / 3-82f）・`continuo github-app token`（internal/cli。3-82d）・
 // `continuo doctor` の見出し語 `GitHub App`（internal/doctor。3-82c）に出る文言である。
 const (
@@ -2652,7 +2652,7 @@ const (
 )
 
 // GitHub App の資格情報の読み書きと、トークンの取得に出る文言である
-// （internal/githubapp。docs/plans/impl/issue245_github_app_attribution.md の 3-82b / 3-82d / 3-82g）。
+// （internal/githubapp。docs/plans/impl/issue245_github_app_issue_writes.md の 3-82b / 3-82d / 3-82g）。
 const (
 	// KeyGitHubAppCredentialsNotFound は番兵エラー `githubapp.ErrNotFound` の文言である。
 	KeyGitHubAppCredentialsNotFound Key = "githubapp.credentials.not_found"
@@ -2707,7 +2707,7 @@ const (
 )
 
 // ダッシュボードの GitHub App を作る導線（`/github-app` の4枚の画面と、そのハンドラのエラー文言。
-// internal/server/githubapp.go と githubapp_template.go。docs/plans/impl/issue245_github_app_attribution.md の 3-82g）に出る文言である。
+// internal/server/githubapp.go と githubapp_template.go。docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g）に出る文言である。
 const (
 	// KeyDashboardGitHubAppTitle は GitHub App の画面の題名である。
 	KeyDashboardGitHubAppTitle Key = "dashboard.github_app.title"

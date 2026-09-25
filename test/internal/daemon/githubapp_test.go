@@ -1,5 +1,5 @@
 // Package daemon_test のうち、このファイルは GitHub App の起動時の検査と、走行中の更新用のトークンの見張りを確かめる
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」・3-82f）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c「取れないときに止める」・3-82f）。
 //
 // **本物の GitHub は1回も叩かない。**トークンの回転は httptest.Server の偽の OAuth に向け、
 // カンバンはテスト用GitHub mock、herdr はテスト用herdr mock に向ける。

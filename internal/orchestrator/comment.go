@@ -259,7 +259,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 返らなければこの上限で切り上げて段8（コメントの読み直し）へ進む。
 	//
 	// **GitHub App の attribution を付けるかどうかと、continuo 自身の実行ファイルのパスも渡す**
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e の「7本目」）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e の「7本目」）。
 	// 渡さないと、書き忘れた run の成果報告だけが attribution 無しで残る。
 	if _, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
 		Target: name,

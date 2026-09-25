@@ -19,7 +19,7 @@ import (
 )
 
 // GitHub App を作る導線の経路である
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g。**5本とも GET である**）。
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82g。**5本とも GET である**）。
 //
 // **`Options.GitHubApp` が nil なら1本も張らない**（`newMux`）。
 const (

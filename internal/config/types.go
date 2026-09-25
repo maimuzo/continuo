@@ -76,7 +76,7 @@ type TrackerCommentsConfig struct {
 	// GitHubAppAttribution は、機械（continuo 本体と、continuo が起動したエージェント）が issue へ
 	// 新しく書くコメントを GitHub App のトークンで投稿し、GitHub の画面に attribution
 	// （`– with <GitHub App の表示名>`）を付けるかどうかである
-	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c）。
+	// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82c）。
 	//
 	// **既定は偽。**書かない利用者の continuo はいままでどおり動く。
 	// **真にすると、起動時に GitHub App のトークンが取れなければ起動しない。**
