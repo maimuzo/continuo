@@ -1457,7 +1457,7 @@ func TestAbandon_paneの作業ディレクトリがworktreeの内側でも拾う
 // 目的: 身元ファイルの issue_url が**置き場所のパスと食い違う** worktree を、
 // 候補にしないことを確認する（設計 3-4 の段2）。
 // **身元ファイルは worktree の直下にあり、そこでエージェントが
-// `--permission-mode dontAsk` で動く。**検算しなければ、worktree A のエージェントが
+// `--permission-mode auto`（既定）で動く。**検算しなければ、worktree A のエージェントが
 // 自分の issue_url を issue B に書き換えるだけで、**人間が B を取り消したとき A が消える。**
 // 与える情報: `octocat/another-repo` の下に用意した worktree に、
 // `octocat/hello-world#188` の issue_url を書いた身元ファイル。

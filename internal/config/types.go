@@ -357,8 +357,9 @@ type AgentConfig struct {
 
 // ClaudePermissionsConfig は Claude Code の許可リストである。
 // permission_mode が dontAsk のとき、許可リストの外は全部拒否される（3-11）。
-// auto のときは、保護対象パス以外の読み書きはこの一覧で決まり、シェルのコマンドは
-// 判定役（classifier）へ回る。**deny は auto でも効く**（実測。3-11）。
+// auto のときは、**この一覧のうち道具を丸ごと許す規則は落とされる**（3-11）。
+// シェルのコマンドは判定役（classifier）へ回り、保護対象パスへの書き込みは
+// **許可の規則に当たっていても判定役へ回る**。**deny は auto でも効く**（実測。3-11）。
 type ClaudePermissionsConfig struct {
 	// Allow は許可するツール・コマンドのパターンである。
 	Allow []string `yaml:"allow"`
@@ -366,12 +367,15 @@ type ClaudePermissionsConfig struct {
 	Deny []string `yaml:"deny"`
 }
 
-// ClaudePermissionModeAuto は permission_mode の「判定役に会話ごと見せて決めさせる」である。
+// ClaudePermissionModeAuto は permission_mode の「判定役が実行の前に確かめる」である。
 //
 // **保護対象パス**（`.claude` 配下と `.mcp.json`）**への書き込みと、シェルのコマンドが
 // 判定役へ回る**（公式の permission modes の表。2026-09-09 に取得）。
-// **会話の中で人間が出した許可を読む**ので、issue のコメントで許した操作が通る。
-// **`dontAsk` にはこの経路が無い**（権限は設定ファイルからしか来ない）。
+// **判定役は issue のコメントを読まない。**判定役への要求から道具の結果は取り除かれ
+// （公式の permission modes のページ。2026-09-18 に取得）、**issue のコメントは `gh` の出力、
+// つまり道具の結果として届く。**2026-09-18 に実測でも確かめた。
+// **`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされる。**
+// `Bash(npm test)` のような狭い規則は残る（同じページ）。
 const ClaudePermissionModeAuto = "auto"
 
 // ClaudePermissionModeDontAsk は permission_mode の「許可の一覧の外は確認せずに拒否する」である。
@@ -435,8 +439,9 @@ type ClaudeToolGateConfig struct {
 	//	on           … いつでも掛ける
 	//	public_only  … 公開リポジトリの issue にだけ掛ける
 	//
-	// **既定を off にする理由**（2026-09-09 の OWNER の判断。issue #259）。
-	// この判定は会話を読まないので、**人間が issue のコメントで許可を出しても通らない。**
+	// **既定を off にする理由。**
+	// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
+	// （`auto` の判定役も、issue のコメントは読まない。設計 3-11）。
 	// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 	// **公開リポジトリの issue が誰でも書けることは変わらない**ので、掛けたい人は
 	// public_only か on を書く（SECURITY.md の「使う前に減らせる危険」）。

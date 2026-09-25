@@ -817,7 +817,7 @@ workspace:
   root: %s
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
   read_timeout_ms: 3000
 rate_limit:
   source: none
@@ -1180,7 +1180,7 @@ func (fx *fixture) TrackerBuilds() int {
 // gitFileBreakage は worktree の `.git` の壊れ方である（issue #23）。
 //
 // **worktree の `.git` はディレクトリではなく `gitdir: …` と書かれただけのファイルである。**
-// そこでエージェントが `--permission-mode dontAsk` で動くので、**中身は書き換えられるし、
+// そこでエージェントが `--permission-mode auto`（既定）で動くので、**中身は書き換えられるし、
 // 消せる。**壊れると `git -C <worktree> …` が1つも通らなくなる。
 type gitFileBreakage string
 

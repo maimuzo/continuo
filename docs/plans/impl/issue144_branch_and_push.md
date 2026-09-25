@@ -387,7 +387,7 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 **「どの issue か」は、パスの最下層が既に持っている。新しいコマンドは作らない。**
 スラグは issue から作るので（`herdr.worktree.branch_template` の既定は
 `continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}`。
-[internal/config/default.go:164](../../../internal/config/default.go#L164)）、
+[internal/config/default.go:170](../../../internal/config/default.go#L170)）、
 `~/worktrees/github.com/myorg/project/continuo-myorg-internal-tasks-42` は
 **2・3階層目がコードのリポジトリ、最下層が issue** である。**両方が1本のパスに出ている。**
 
@@ -419,7 +419,7 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 | --- | --- |
 | [internal/abandon/abandon.go:517-531](../../../internal/abandon/abandon.go#L517-L531) | 消す相手の issue の `Owner` / `Repo` |
 | [internal/orchestrator/restore.go:278-295](../../../internal/orchestrator/restore.go#L278-L295) | 身元ファイルの `issue_url` から取り出した `<owner>/<repo>` |
-| [internal/orchestrator/restore.go:311-321](../../../internal/orchestrator/restore.go#L311-L321) の `issueAgreesWithPath` | **取り直した issue の `Owner` / `Repo`**（[:665](../../../internal/orchestrator/restore.go#L665) と [:845](../../../internal/orchestrator/restore.go#L845) から呼ばれる） |
+| [internal/orchestrator/restore.go:311-321](../../../internal/orchestrator/restore.go#L311-L321) の `issueAgreesWithPath` | **取り直した issue の `Owner` / `Repo`**（[:671](../../../internal/orchestrator/restore.go#L671) と [:878](../../../internal/orchestrator/restore.go#L878) から呼ばれる） |
 
 **変えかた。****照合を2段に分ける。**それぞれ、**その時点で手に入る材料だけ**を使う。
 
@@ -438,7 +438,7 @@ cross-repo の worktree は毎回そこで落ち、一度も引き継がれな�
 
 **そこで `pathAgrees` から owner/repo の比較を外し、スラグの比較に置き換える。**
 既定の `branch_template` は issue の owner・repo・番号の3つを含むので
-（[internal/config/default.go:164](../../../internal/config/default.go#L164)）、
+（[internal/config/default.go:170](../../../internal/config/default.go#L170)）、
 **`issue_url` を別の issue に差し替えると、作り直したスラグがディレクトリ名と合わなくなる。**
 `pathAgrees` が守っているのはそこである（restore.go:660-664 の「無関係の issue の pane を閉じる」）。
 **弱くなっていない。**同じ形が [internal/abandon/abandon.go:534-551](../../../internal/abandon/abandon.go#L534-L551) に既にあり、
@@ -510,7 +510,7 @@ issue がカンバンから外れていても動かなければならない。**
 **コードのリポジトリが issue のリポジトリと違うと、その組み立てが違う相手を指す。**
 **pane の label が残っていれば復元できる。無ければ復元しない（消しもしない）。**
 
-**いまの組み立て。**[internal/orchestrator/restore.go:1175-1200](../../../internal/orchestrator/restore.go#L1175-L1200)
+**いまの組み立て。**[internal/orchestrator/restore.go:1249-1274](../../../internal/orchestrator/restore.go#L1249-L1274)
 
 ```go
 identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
@@ -540,8 +540,8 @@ identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
 
 | 何を | どう変えるか |
 | --- | --- |
-| `issueNumberFromPaneLabel`（[restore.go:1340-1349](../../../internal/orchestrator/restore.go#L1340-L1349)） | **owner / repo / 番号の3つを返す形にする。**いまは4つに割った `parts[0]` / `parts[1]` を捨てて番号だけ返している。**新しい parse は要らない** |
-| `recoveryNumbers`（[restore.go:1290](../../../internal/orchestrator/restore.go#L1290)）と、それを使う `identifier` の組み立て（[restore.go:1188](../../../internal/orchestrator/restore.go#L1188) の `fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)`） | **返す型を「owner / repo / 番号」の組にし、`identifier` はその組から作る。**置き場所の2・3階層目はコードのリポジトリなので、**そこから組み立てると実在しない issue を引きに行く** |
+| `issueNumberFromPaneLabel`（[restore.go:1414-1423](../../../internal/orchestrator/restore.go#L1414-L1423)） | **owner / repo / 番号の3つを返す形にする。**いまは4つに割った `parts[0]` / `parts[1]` を捨てて番号だけ返している。**新しい parse は要らない** |
+| `recoveryNumbers`（[restore.go:1364](../../../internal/orchestrator/restore.go#L1364)）と、それを使う `identifier` の組み立て（[restore.go:1262](../../../internal/orchestrator/restore.go#L1262) の `fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)`） | **返す型を「owner / repo / 番号」の組にし、`identifier` はその組から作る。**置き場所の2・3階層目はコードのリポジトリなので、**そこから組み立てると実在しない issue を引きに行く** |
 | `issueNumberFromSlug` に渡す owner/repo | **pane の label から取った issue の owner/repo にする。**label が無ければ渡さず、`Number` は 0 のままにする |
 | `PathClue.IssueURL()` / `Identifier()`（[broken.go:73-90](../../../internal/workspace/broken.go#L73-L90)） | **置き場所の owner/repo が issue のものだと言えないときは空文字を返す。**コードのリポジトリで `<owner>/<repo>#<番号>` を組み立てると、**実在しない issue を名乗る** |
 
@@ -562,11 +562,11 @@ cross-repo では `found=false` で終わり、**一度も復元されない。*
 `Number <= 0` なら数えない）は変えない。**変えると起動が止まる。下の節で述べる。
 
 **pane も label も無いときは、復元を1回も試さない。**`recoveryNumbers` が空を返すので
-[restore.go:1187-1206](../../../internal/orchestrator/restore.go#L1187-L1206) のループが回らず、
+[restore.go:1261-1280](../../../internal/orchestrator/restore.go#L1261-L1280) のループが回らず、
 **最後の WARN（「手掛かりから issue を確かめられないので復元できません（消しません）」）だけが出る。**
 **worktree は残す。消さない。**
 
-**照合。**[internal/orchestrator/restore.go:1310-1330](../../../internal/orchestrator/restore.go#L1310-L1330) の
+**照合。**[internal/orchestrator/restore.go:1384-1404](../../../internal/orchestrator/restore.go#L1384-L1404) の
 `slugAgrees` が比べる相手を変える。
 
 ```text
@@ -587,7 +587,7 @@ continuo が起動しなくなる。**だから広げない。
 **`issueNumberFromSlug` は突き合わせに失敗して `Number` が 0 になる**（上）。
 pane が残っていればそちらから引けるが、**pane が無ければ手掛かりが1つも無い。**
 数える条件を広げると、その worktree が「壊れたもの」に積まれ、
-**復元できないまま [internal/orchestrator/restore.go:1043-1045](../../../internal/orchestrator/restore.go#L1043-L1045) が
+**復元できないまま [internal/orchestrator/restore.go:1079-1081](../../../internal/orchestrator/restore.go#L1079-L1081) が
 起動を止める**（[internal/config/default.go:92-94](../../../internal/config/default.go#L92-L94) の
 `OnBrokenWorktree: OnBrokenWorktreeStop`）。
 
@@ -607,7 +607,7 @@ pane が残っていればそちらから引けるが、**pane が無ければ�
 **この穴が開くのは「落ちたあとに人間が pane を閉じた」場合に限られる。**
 
 **`on_broken_worktree: skip` を選べば、この worktree があっても起動は続く**
-（[internal/config/types.go:249-252](../../../internal/config/types.go#L249-L252)）。
+（[internal/config/types.go:271-274](../../../internal/config/types.go#L271-L274)）。
 **既定を変えることは、この設計では提案しない。**
 
 ---
@@ -633,7 +633,7 @@ push 先を分けた worktree は永久に片付かない。**
 
 **どの段にも当たらない場合は無い。**段1が偽なら upstream の有無で段2・段3へ、
 そのどちらでもなければ段4へ落ちる。**段4を書かないと、base を復元できなかった worktree
-（[internal/orchestrator/restore.go:1216](../../../internal/orchestrator/restore.go#L1216) が
+（[internal/orchestrator/restore.go:1290](../../../internal/orchestrator/restore.go#L1290) が
 「`base` と `settings_path` は復元しない」と決めている）が、見送りの理由を1行も持たないまま
 片付けの対象になる。**
 
@@ -874,7 +874,7 @@ CodeDefaultBranch string
 **`NativeRef` には入れない。**あそこは「orchestrator が中身を解釈しない」場所であり、
 `default_branch` の1キーだけが例外だと 3-22 が明記している。**例外を増やさない。**
 
-**[internal/orchestrator/dispatch.go:1151-1161](../../../internal/orchestrator/dispatch.go#L1151-L1161) の
+**[internal/orchestrator/dispatch.go:1308-1318](../../../internal/orchestrator/dispatch.go#L1308-L1318) の
 `toIssueRef` が、`Issue` から上の5つを写す。**
 **`CodeOwner` と `CodeRepo` は、`Issue.CodeRepoNameWithOwner` を
 最初の `/` 1つだけで割って入れる**（`strings.Cut`）。割れなければ両方とも空にして
@@ -977,7 +977,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 [test/internal/scaffold/design_template_test.go:99-101](../../../test/internal/scaffold/design_template_test.go#L99-L101) の
 `TestTemplate_雛形の本文が設計5_3の本文と一致する` が突き合わせるのは、
 **5-3 の ```markdown ブロック（本文）だけ**である
-（[:237-240](../../../test/internal/scaffold/design_template_test.go#L237-L240) の
+（[:331-340](../../../test/internal/scaffold/design_template_test.go#L331-L340) の
 `readDesignBodyExample` がそのブロックを読む）。表は人間が読むためのものなので、忘れても落ちない。
 **だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
 
@@ -998,7 +998,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | 何 | どうする |
 | --- | --- |
-| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:299](../../../internal/orchestrator/orchestrator.go#L299)）と同じ形 |
+| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:308](../../../internal/orchestrator/orchestrator.go#L308)）と同じ形 |
 | 鍵 | **issue の identifier ＋ 理由の種類。**理由が変わったら数え直す |
 | いつ書くか | **同じ鍵で3回続けて落ち、かつ最初に落ちてから60秒以上たったとき**（3-68） |
 | 通ったら | **印を消す**（`clearUntrusted` と同じ）。直したあと再発したら、もう一度知らせる |
@@ -1008,15 +1008,15 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | なぜ読み返せないか | 実装 |
 | --- | --- |
-| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:373-375](../../../internal/orchestrator/comment.go#L373-L375) |
-| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1080-1082](../../../internal/tracker/adapter.go#L1080-L1082) の `continue` |
+| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:544](../../../internal/orchestrator/comment.go#L544) |
+| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1088-1090](../../../internal/tracker/adapter.go#L1088-L1090) の `continue` |
 
 **だから「既に書いてあるか」を issue のコメントからは確かめられない。**
 `cleanup_deferred_at` は身元ファイルに書く時刻であって、コメントを読み返す仕組みではない。
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:282](../../../internal/orchestrator/prompt.go#L282) が書いているとおり
+[internal/orchestrator/prompt.go:415](../../../internal/orchestrator/prompt.go#L415) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
@@ -1278,10 +1278,10 @@ push した branch の名前でも引いてください。
 | どこ | いま何を見ているか | どう変えるか |
 | --- | --- | --- |
 | [internal/tracker/query.go:1018](../../../internal/tracker/query.go#L1018) | `repoTrusted(owner, repo)`（**issue のリポジトリ**）が偽なら `Dispatchable` を偽にする | **コードのリポジトリで呼ぶ** |
-| [internal/orchestrator/dispatch.go:595](../../../internal/orchestrator/dispatch.go#L595) | `o.ws.CheckTrust(issue.Owner, issue.Repo)` | **コードのリポジトリで呼ぶ** |
-| [internal/orchestrator/dispatch.go:643](../../../internal/orchestrator/dispatch.go#L643) | `key := issue.Owner + "/" + issue.Repo`（重複を抑える鍵） | **コードのリポジトリで持つ。**issue のリポジトリで持つと、**同じ issue のリポジトリに属する別々の fork の未信頼が1つに潰れ、2つ目が通知されない** |
-| [internal/orchestrator/dispatch.go:670](../../../internal/orchestrator/dispatch.go#L670) | `buildUntrustedComment(issue.Owner, issue.Repo, reason)` | **コードのリポジトリを渡す。**渡さないと「issue のリポジトリが信頼登録されていません」という**間違った直し方**が人間に届く |
-| [internal/orchestrator/dispatch.go:605](../../../internal/orchestrator/dispatch.go#L605) | `o.clearUntrusted(issue.Owner, issue.Repo)`（印を消す） | **鍵と同じくコードのリポジトリで呼ぶ。**揃えないと印が二度と消えず、**信頼を付け直しても再通知できない** |
+| [internal/orchestrator/dispatch.go:699](../../../internal/orchestrator/dispatch.go#L699) | `o.ws.CheckTrust(issue.Owner, issue.Repo)` | **コードのリポジトリで呼ぶ** |
+| [internal/orchestrator/dispatch.go:763](../../../internal/orchestrator/dispatch.go#L763) | `key := issue.Owner + "/" + issue.Repo`（重複を抑える鍵） | **コードのリポジトリで持つ。**issue のリポジトリで持つと、**同じ issue のリポジトリに属する別々の fork の未信頼が1つに潰れ、2つ目が通知されない** |
+| [internal/orchestrator/dispatch.go:790](../../../internal/orchestrator/dispatch.go#L790) | `buildUntrustedComment(issue.Owner, issue.Repo, reason)` | **コードのリポジトリを渡す。**渡さないと「issue のリポジトリが信頼登録されていません」という**間違った直し方**が人間に届く |
+| [internal/orchestrator/dispatch.go:724](../../../internal/orchestrator/dispatch.go#L724) | `o.clearUntrusted(issue.Owner, issue.Repo)`（印を消す） | **鍵と同じくコードのリポジトリで呼ぶ。**揃えないと印が二度と消えず、**信頼を付け直しても再通知できない** |
 
 **トラッカー側を直さないと、`dispatch.go:595` へ到達しない。**
 `mapRawItemToIssue` はリンクを読んで `CodeRepoNameWithOwner` を決めたあとに
@@ -1298,7 +1298,7 @@ push した branch の名前でも引いてください。
 **issue のリポジトリは信頼登録されていなくてよい。**そこでは1行も実行しない。
 
 **受け入れ（塊ごとに実機で1件通す）。**
-[.claude/rules/release.md](../../../.claude/rules/release.md) が「実機で issue を1件通してから出す」と
+[.claude/rules/release.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/release.md) が「実機で issue を1件通してから出す」と
 決めている。**3つ目の塊は、開発者の環境の fork（`<ACCOUNT>/oss-project`）と
 テスト用のカンバン（project #10（実データを持たない検証用のカンバン））で通す。**
 **本番のカンバン（project #3（AI自動進行管理。実データが入っている））では試さない。**

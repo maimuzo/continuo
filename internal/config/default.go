@@ -177,8 +177,10 @@ func DefaultConfig() *Config {
 				// Bash は引数を限定せずツール名だけで許可する。
 				// Bash(gh:*) のように限定すると、許可リストに載らない書き込み系
 				// （touch / rm など）が dontAsk で拒否され、作業が途中で止まる（設計 3-11）。
-				// **既定の auto では、この一覧を消さない。**auto で個々のルールが
-				// どう扱われるかは測っていないが、**消すと dontAsk を選び直した人だけが壊れる。**
+				// **既定の auto では、この一覧はほとんど効かない。**"Bash" のように道具を丸ごと
+				// 許す規則は auto に入るときに落とされ、"Read" と "Glob" と "Grep" は元から確認が要らず、
+				// "Edit" と "Write" は作業ディレクトリの中なら元から通る（公式の permission modes の
+				// ページ。2026-09-18 に取得）。**それでも消さない。消すと dontAsk を選び直した人だけが壊れる。**
 				// subagent を起動する Agent ツールは、許可リストが空でも動いたため書かない。
 				Allow: []string{
 					"Bash",
@@ -206,8 +208,9 @@ func DefaultConfig() *Config {
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
 			},
-			// **既定では判定を掛けない**（2026-09-09 の OWNER の判断。issue #259）。
-			// この判定は会話を読まないので、**人間が issue のコメントで許可を出しても通らない。**
+			// **既定では判定を掛けない。**
+			// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
+			// （`auto` の判定役も、issue のコメントは読まない。設計 3-11）。
 			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 			// 掛けたい人は public_only か on を書く。
 			//
@@ -229,7 +232,7 @@ func DefaultConfig() *Config {
 			// 環境変数で切り替えたい利用者は WORKFLOW.md に ${HERDR_SOCKET_PATH} と書く。
 			// その場合、未定義なら起動を止める（既定値へは落ちない。設計 5-5）。
 			Socket:           "~/.config/herdr/herdr.sock",
-			Protocol:         20,
+			Protocol:         22,
 			ReadTimeoutMs:    5000,
 			StartupTimeoutMs: 60000,
 			Worktree: HerdrWorktreeConfig{

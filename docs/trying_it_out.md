@@ -863,7 +863,7 @@ cd ~/continuo-try
 
 > **`資格情報` の行は、段5b を通した macOS で `rate_limit.token_source: keychain` にして
 > 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
-> 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**件数の行はそれに合わせて数え直してある。**
+> 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**`herdr` の行は、herdr 0.9.1 を入れた環境で別に叩いて取ったものである**（2026-09-24）。**件数の行はそれに合わせて数え直してある。**
 > **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
 >
 > **このあとに出てくる `continuo doctor` の出力は、どれも見出し語が7つ足りない。**
@@ -877,7 +877,7 @@ cd ~/continuo-try
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✓ カンバン        <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
@@ -960,7 +960,7 @@ EROFS: read-only file system, mkdir '/home/<ACCOUNT>/.claude/session-env/<sessio
 | `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 
 **`status_field` に実在しない名前を書いたときの出力**（実際に `continuo Status` と書いて叩いた。
-hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
+hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr 0.9.1 の環境で別に叩いて取ったもの（2026-09-24）に差し替えてある）。
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
@@ -968,7 +968,7 @@ hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✗ カンバン        カンバンを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
@@ -1093,7 +1093,8 @@ continuo は知らない Status になった issue を、
 **「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
-**この状態では Claude Code は起動しないので、枠を消費しない**）。
+**この状態では Claude Code は起動しないので、枠を消費しない**。
+**herdr 0.8.0（protocol 19）のときに取ったものなので、herdr 0.9.1 では `protocol=22` と出る**）。
 
 ```text
 continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）

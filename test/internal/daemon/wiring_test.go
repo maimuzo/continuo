@@ -43,7 +43,7 @@ tracker:
   root: %s
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
 rate_limit:
   source: none
 %s---

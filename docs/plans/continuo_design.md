@@ -506,7 +506,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `worktree.list` | `cwd` / `workspace_id` | worktree の一覧 |
 | `workspace.rename` | **`workspace_id`** / **`label`** | herdr workspace に label を書く |
 | `workspace.list` | （なし） | herdr workspace の一覧 |
-| `workspace.close` | **`workspace_id`** | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10） |
+| `workspace.close` | **`workspace_id`** / `close_group`（herdr 0.9.0 から） | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10）。**`close_group` は送らない。**送ると配下の worktree の pane ごと閉じる。送らなければ、配下を持つ親は `workspace_group_close_required` で断られ、何も閉じない（3-9 の段3b） |
 | `agent.rename` | **`target`** / `name` | agent の名前を変える |
 | `session.snapshot` | （なし） | 現在の状態をまとめて取る |
 | `pane.report_agent` | **`pane_id`** / **`source`** / **`agent`** / **`state`** / `agent_session_id` ほか | **実プロセスを起動せずに「agent が居る pane」として登録する。**統合テストで使う。**`state` は4値で `done` を含まない** |
@@ -1668,7 +1668,7 @@ level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states に�
 | 条件 | どう確かめるか | 落とすと何が起きるか |
 | --- | --- | --- |
 | continuo が開かせたこと | `worktree.open` の**前**に `workspace.list` を引き、そのリポジトリの workspace が無かったことを見る。無ければ開いた**あと**にその ID を身元ファイルの `herdr_repo_workspace_id` へ書く（3-18） | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
-| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る | **親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる |
+| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る。**見てから閉じるまでの間に worktree が開いて、herdr 0.9.0 以降に `workspace_group_close_required` で断られたときは、親を残す。**引き継ぎは行わない（あとから開いた worktree の身元ファイルは段6 で初めて書かれ、書けても上書きで消える） | **herdr 0.8.x では親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる。0.9.0 以降は断られ、親が1つ残るだけで済む |
 
 **身元ファイルの値は現物と突き合わせてから使う。**そこはエージェントが書き換えられるので
 （3-18）、`herdr_repo_workspace_id` が指す workspace が**いま片付けたリポジトリ本体を
@@ -1787,10 +1787,10 @@ terminal_states: ["Done"]
 
 | 止まる箇所 | 打つ手 |
 | --- | --- |
-| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**会話の中で人間が出した許可を読んで判断される。**`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式の原文は `block` としか書いていない）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない** |
+| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**判定役が実行の前に確かめる。判定役へ渡る入力から道具の結果は取り除かれるので、issue のコメントで人間が出した許可は届かない**（下の実測）。`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式文書は、3回続けて、または通算20回遮断すると確認の画面へ戻ると書いている）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない。****判定役の呼び出しがトークン消費に数えられるプランで入札の判定にどれだけ効くかと、組み込みの指示書が述べる制約が compaction のあとも判定役に効くかは検証していない**（公式文書は、制約は判定のたびに会話から読み直され、compaction で消えうると書いている）。**`AskUserQuestion` は `deny` で禁じる**（外すと pane が止まることを実測した。雛形の `deny`） |
 | — **`--permission-mode` とは何か** | **`claude` コマンドの起動フラグである。**そのセッション全体で、ツールの実行に人間の許可を求めるかどうかを決める。**`dontAsk` は「許可リストに載っているものだけを確認なしで実行し、それ以外は拒否する」という意味である。**拒否であって、確認ではない |
 | — **止まらないことと、人間に判断を仰ぐことは別である** | **権限で拒否されたり、判断に迷ったりしたら、エージェントは `CONTINUO-STATUS: blocked` を出す**（3-25）。continuo はそれを受けて Status を `Blocked` へ動かし、**人間に渡す。**「絶対に止まらない」とは「**キー入力を待って固まらない**」という意味であって、「人間の判断を仰がない」という意味ではない |
-| — **`auto` を既定にした理由**（2026-09-09。issue #259） | **`dontAsk` では保護対象パス**（`.claude` 配下と `.mcp.json`）**へどうやっても書けない。**`permissions.allow` に書いても、`PreToolUse` hook が `allow` を返しても、`Bash` のリダイレクトでも拒否された（実測）。**人間が issue のコメントで許可を出しても、権限は設定ファイルからしか来ないので何も変わらない。**`auto` の判定役は会話の流れを読むので、そのコメントが効く。**代償は、遮断が続いたときに確認へ戻りうること**（この経路は観測できていない）。**そのときも固まらず、continuo が esc を送って `failure_state` へ落とす。**入力を待たないことを最優先するなら `dontAsk` を選ぶ |
+| — **`auto` を既定にした理由** | **`dontAsk` では保護対象パス**（`.claude` 配下と `.mcp.json`）**へどうやっても書けない。**`permissions.allow` に書いても、`PreToolUse` hook が `allow` を返しても、`Bash` のリダイレクトでも拒否された（実測）。**人間が issue のコメントで許可を出しても、どちらのモードでも効かない**（下の実測）。`dontAsk` は権限が設定ファイルからしか来ないためで、`auto` は判定役へ渡る入力から道具の結果が取り除かれ、`gh` の出力として届いたコメントを読まないためである。**代償は、遮断が続いたときに確認へ戻りうること**（この経路は観測できていない）。**そのときも固まらず、continuo が esc を送って `failure_state` へ落とす。**入力を待たないことを最優先するなら `dontAsk` を選ぶ。**起動直後に確認の画面で止まったときの引き渡しの文言は、issue のコメントに書く許可の文を持たず、公開かどうかも差し込まない。**この文言は公開かどうかを見ずに投稿され、何の確認だったかは continuo の側に残らないためである。案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。 |
 | — `dontAsk` で実行できるもの | **3つだけ。**(1) `permissions.allow` に一致する操作、(2) 組み込みの読み取り専用 Bash コマンド、(3) `PreToolUse` hook が allow を返した呼び出し。**`AskUserQuestion` ツールも拒否される**ので、エージェント側から人間に質問して止まる経路が塞がれる |
 | **フォルダの信頼確認** | **リポジトリごとに人間が1度だけ承認しておく。**continuo は **dispatch の直前に issue ごとに**「承認済みか」を `~/.claude.json` から**読み取って**検査し、未承認ならその issue を飛ばす。**起動そのものは止めない**（3-6）。**巡回のループは書き換えない**（4-3）。**登録は `continuo trust` を人間が叩いたときだけ行う**（3-33） |
 | **レートリミット** | **`CLAUDE_CODE_RETRY_WATCHDOG=1` を環境変数で渡す。**公式ドキュメントが「リセット時刻まで待って自動的に再開する」と書いている（3-27 に原文）。**これは turn の途中で `429` が返ったときの API リクエストのリトライである** |
@@ -1829,6 +1829,54 @@ terminal_states: ["Done"]
 **したがって、エージェントに投げるコマンドは「1コマンド1回」を原則にする。**
 `gh ... | jq ...` のような書き方は、`jq` が許可リストに無ければ**全体が拒否される。**
 
+**`auto` の判定役は、issue のコメントを読まない。**
+**広い許可の規則も、`auto` に入るときに落とされる。**
+**どちらも公式文書に書いてある**（`https://code.claude.com/docs/en/permission-modes` の
+「How the classifier evaluates actions」。2026-09-18 に取得）。
+
+> In the classifier requests sent by Claude Code itself, the classifier sees user messages,
+> tool calls other than read-only lookups such as file reads and searches, and your CLAUDE.md content.
+> Tool results are stripped from those requests, so hostile content in a file or web page
+> can't manipulate the classifier directly.
+>
+> **訳:** Claude Code 自身が送る判定役への要求では、**判定役が見るのは、利用者のメッセージ、
+> 読み取りだけの参照を除く道具の呼び出し、そして CLAUDE.md の中身である。**
+> **それらの要求から道具の結果は取り除かれる**ので、ファイルや web ページの中の敵対的な内容が、
+> 判定役を直に操ることはできない。
+
+> On entering auto mode, broad allow rules that grant arbitrary code execution are dropped:
+> Blanket `Bash(*)` or `PowerShell(*)`; Wildcarded interpreters like `Bash(python*)`;
+> Package-manager run commands; `Agent` allow rules; `Monitor` allow rules …
+> Narrow rules like `Bash(npm test)` stay in effect.
+>
+> **訳:** **auto に入るとき、任意のコード実行を許す広い許可の規則は落とされる。**
+> `Bash(*)` や `PowerShell(*)` の丸ごと、`Bash(python*)` のようなワイルドカード付きのインタプリタ、
+> パッケージマネージャの実行、`Agent` の規則、`Monitor` の規則である。…
+> **`Bash(npm test)` のような狭い規則はそのまま効く。**
+
+**この2つと合う実測を、2026-09-18 に取った。**
+
+| 確かめたこと | 結果 |
+| --- | --- |
+| **OWNER が issue のコメントで許可を出したあと、`gh pr comment` を叩いたとき** | **拒否された。**理由は `[CI Bypass]`。**同じ本文を `mktemp` のファイルへ書く操作も、`gh pr checks` も、同じ理由で拒否された。**そのとき渡っていた `allow` は `["Bash", "Read", "Glob", "Grep", "Edit", "Write"]` である |
+| **Write ツールで同じ本文を一時ディレクトリへ書いたとき** | **通った。**拒否は Bash の呼び出しに当たっている。**1回の観測である** |
+
+**測ったのは、この2件の呼び出しの可否までである。**判定役がコメントを読まないこと自体は、上の公式文書の記述による。
+
+**人間が許可を出す先は、設定ファイル（`permissions.allow`）である。**
+**そこへ足すのは狭い規則にする。**`"Bash"` のように道具を丸ごと許す規則は、`auto` では落とされる。
+
+**既定の許可の一覧は、`auto` ではほとんど効かない。**
+`"Bash"` は落とされ、`"Read"` `"Glob"` `"Grep"` は元から確認が要らず、
+`"Edit"` `"Write"` は、公式文書が「作業ディレクトリの中のファイルの編集は自動で承認される」と書いている
+（保護対象パスへの書き込みは除く）。**continuo で測ったのは、一時ディレクトリへの Write が1回通ったことだけである。**
+**保護対象パスへの書き込みは、許可の規則に当たっていても判定役へ回る**（同じ公式文書）。
+**それでも一覧は消さない。**`dontAsk` を選び直した人がそこで壊れる。
+
+**判定役へ文脈を渡す道が1つある。**`PostToolUse` hook の `classifierContext` の欄を、
+判定役は「アプリが与えた文脈」として読む（同じ公式文書の同じ節。Claude Code v2.1.236 以降と書かれている）。
+**動かして確かめてはいない。****continuo はこれを使っていない。**使うかどうかは決めていない。
+
 **`permissions.allow` の書式**（実測で確認）。
 
 | 書き方 | 意味 |
@@ -1838,7 +1886,14 @@ terminal_states: ["Done"]
 | `Bash(ls*)` | 空白なしだと `lsof` にも一致する |
 | `Read` / `Bash` | 括弧なしはそのツールの全用途 |
 
-**採る書き方。`"Bash"` とツール名だけを書く。**引数を限定して並べる案は採らない。
+**採る書き方は、モードで違う。**
+
+| モード | どう書くか |
+| --- | --- |
+| **`dontAsk`** | **`"Bash"` とツール名だけを書く。**引数を限定して並べる案は採らない（下の3つの理由） |
+| **`auto`（既定）** | **狭い規則を書く。**`"Bash"` のように道具を丸ごと許す規則は、このモードに入るときに落とされる（上の公式文書）。**既定の一覧をそのまま置いておくのは、`dontAsk` を選び直した人のためである** |
+
+**下の3つは `dontAsk` での実測である。**
 
 | なぜ | 内容 |
 | --- | --- |
@@ -1957,6 +2012,8 @@ agent_transcript_path  : …/00000000-0000-4000-8000-000000000007/subagents/agen
 **`dontAsk` では、許可の一覧に無いツールは確認を出さずにその場で拒否される。**
 **したがって確認の画面が出て止まったのなら、それは拒否とは別の原因のことがある。**
 `claude.permissions.allow` に足すのは、**記録を見て、許してよい操作だと分かったときだけ**である。
+**`auto` では狭い規則を足させる**（広い規則は落とされる）。**どちらのモードでも「continuo を再起動してください」まで書く。**
+走行中は `claude.permissions` を読み直さないので、足しただけでは同じところでまた止まる。
 
 **採らなかった案。**
 
@@ -2095,7 +2152,7 @@ sequenceDiagram
 
     Note over ORC: 段9
     ORC->>HERDR: agent.start（args に起動フラグ）
-    Note over HERDR,CC: --settings < そのパス ><br/>--session-id < UUID ><br/>--permission-mode dontAsk
+    Note over HERDR,CC: --settings < そのパス ><br/>--session-id < UUID ><br/>--permission-mode auto
     HERDR->>CC: 起動
     CC->>FS: 設定ファイルを読む
     Note over CC: hook が登録される
@@ -2323,7 +2380,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
    → pane.rename を呼び、label に `owner/repo/issues/N` を書く（3-3）
 9. その pane で Claude Code を起動する（agent.start）
    → 起動フラグは args に載せる（2-1）。
-     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode dontAsk
+     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode auto（既定）
    → **環境変数は設定ファイル（--settings）の env に書く。**pane にも agent.start にも渡さない
      （どちらにも env を渡す手段が無い。設定ファイル経由で届くことは実測で確認済み。3-12）
    → 起動直後は agent_pane_busy が返ることがあるのでリトライする（2-1）
@@ -2644,7 +2701,7 @@ herdr workspace の ID は段3で、設定ファイルのパスは段5で手に�
 これは**worktree という外部の副作用に、それが誰のものかという札を付けるもの**である。
 
 **読むときは上限を掛け、symlink は辿らない。**このファイルは worktree の直下にあり、
-そこでエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。
+そこでエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 **つまり中身も、ファイルそのものも書き換えられる。**
 
 | 何を | どうするか | 掛けないと何が起きるか |
@@ -3499,7 +3556,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
      **偽の herdr が自分で pane を1つ作っているだけである。**
      本物が0件を返すなら、9段は毎回ここで終わり、**段9 の7つの穴の1つに落ちて issue には1文字も残らない**
 5. その pane で agent.start を呼ぶ。args に次を載せる
-   --resume <UUID> --settings <設定ファイル> --permission-mode dontAsk
+   --resume <UUID> --settings <設定ファイル> --permission-mode auto（既定）
    → 起動経路は着手の段9 と同じである。continuo が claude を直接 exec することはない
 6. agent_status が idle または done になるのを待つ
 7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
@@ -3553,7 +3610,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | 何を | なぜ |
 | --- | --- |
 | **`--settings` を毎回渡し直す** | **復元されない。**`--mcp-config` / `--plugin-dir` / `--add-dir` も同じ。**渡し直さないと hook が1つも効かない** |
-| **`--permission-mode dontAsk` を毎回渡す** | 復帰したセッションは元のモードを引き継ぐが、**明示すれば確実に上書きできる** |
+| **`--permission-mode <設定値>` を毎回渡す** | 復帰したセッションは元のモードを引き継ぐが、**明示すれば確実に上書きできる** |
 | **`CLAUDE_CODE_CHILD_SESSION` を pane の env から取り除く** | **この変数があると transcript が保存されず、`--resume` が `No conversation found` で失敗する**（実測）。continuo を Claude Code の中から起動して動作確認するときに必ず当たる |
 
 **これは仕様から外れる。**`SPEC.md` 11.5 はチケットの変更をエージェントが行うモデルを前提にしている。**差分は第8節に載せた。**
@@ -4252,7 +4309,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 
 ```text
 $ continuo doctor
-✓ herdr           protocol 19（設定と一致）
+✓ herdr           protocol 22（設定と一致）
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
@@ -5383,8 +5440,8 @@ CI から呼ぶときに使う。
 
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
-| `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:83](../../internal/orchestrator/comment.go#L83)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:100-101](../../internal/orchestrator/reconcile.go#L100-L101)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:99](../../internal/orchestrator/comment.go#L99)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:196-277](../../internal/orchestrator/comment.go#L196-L277)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -5785,7 +5842,7 @@ text/template は受け付けるためである。
 別の issue の worktree を消せる。**スラグ（置き場所の4階層目）まで比べる。
 
 **何が起きるか。**issue 42 の worktree で動くエージェントが、自分の `.continuo.json` の
-`issue_url` を issue 99 に書き換える（worktree の直下にあり `--permission-mode dontAsk` で
+`issue_url` を issue 99 に書き換える（worktree の直下にあり `--permission-mode auto`（既定）で
 動くので書き換えられる）。issue 99 の worktree がまだ無ければ、
 `continuo abandon <issue 99 の URL>` は候補1件として **42 の worktree と branch を消す。**
 `--force` を付けた実行なら未コミットの成果ごと消える。
@@ -5934,7 +5991,7 @@ continuo が `In Progress` へ上書きし、その worktree で Claude Code を
 **攻撃の形。**引き渡し（`In Review` など）で run が終わり worktree が残っているとき、
 その worktree の `.continuo.json` の `project_item_id` を `active_states` の別 issue に、
 `herdr_workspace_id` を走行中の別 run の workspace ID にしておく。
-**エージェントは `--permission-mode dontAsk` で worktree の直下に書けるので、通常の道具だけでできる。**
+**エージェントは `--permission-mode auto`（既定）で worktree の直下に書けるので、通常の道具だけでできる。**
 
 ---
 
@@ -6963,7 +7020,7 @@ Post "https://api.github.com/graphql": tls: failed to verify certificate: x509: 
 ```yaml
 claude:
   tool_gate:
-    mode: off                               # off / on / public_only。既定は off
+    mode: "off"                             # off / on / public_only。既定は off
     model: ""                               # 判定させるモデル。既定は空（Claude Code の既定の速いモデルに任せる）
     tools: ["Bash"]                         # 判定に回す道具。空なら全部
 ```
@@ -6971,9 +7028,9 @@ claude:
 **3択にする理由。**判定は道具を1回叩くたびにモデルの呼び出しを1回増やす。
 **誰でも書ける issue が来ない非公開リポジトリでは、その待ち時間に見合う守りが無い。**
 
-**既定は `off` である**（2026-09-09 の OWNER の判断。issue #259）。**この判定は hook の入力の JSON だけを見て会話を読まない**ので、人間が issue のコメントで許可を出しても通らない。担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。**掛けたい人は `public_only` か `on` を書く**（案内は SECURITY.md の「使う前に減らせる危険」）。
+**既定は `off` である。****この判定は hook の入力の JSON だけを見る**ので、人間が issue のコメントで許可を出しても通らない（`auto` の判定役も同じく読まない。3-11）。担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。**掛けたい人は `public_only` か `on` を書く**（案内は SECURITY.md の「使う前に減らせる危険」）。
 **そのぶん、版を上げただけで挙動が変わる。**だから [docs/upgrading.md](../upgrading.md) と
-[docs/FAQ.md](../FAQ.md) の両方に、既定で有効になることと、元に戻す1行を書く。
+[docs/FAQ.md](../FAQ.md) の両方に、既定で判定が止まることと、掛け直す1行を書く。
 
 **公開かどうかを取れなかった issue には掛ける。**分からないものを「公開ではない」と決めない。
 draft issue はリポジトリを持たないので、いつも「取れなかった」側になる。
@@ -7297,7 +7354,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 **continuo はログをファイルに書かないので、pane を見ていない限り誰にも届かない。**
 **同じ検査の中に、望ましい形が既にある**（未信頼のリポジトリの経路）。
 
-**いまどうなっているか。**[internal/orchestrator/dispatch.go:483-489](../../internal/orchestrator/dispatch.go#L483-L489) は
+**いまどうなっているか。**[internal/orchestrator/dispatch.go:573-579](../../internal/orchestrator/dispatch.go#L573-L579) は
 `Warn` を出して `false` を返すだけである。**ダッシュボードにも出ない**（表示は印を持つ run だけから作られ、
 着手の検査は印を付ける前に落ちるため）。
 
@@ -7403,7 +7460,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 
 **訳。**teammate はリードの許可設定で始まる。
 
-**continuo は `--permission-mode dontAsk` で起動する。**継ぐなら確認の画面は出ないはずである。
+**continuo は既定で `--permission-mode auto` で起動する。**teammate がそれを継ぐなら、teammate の確認も判定役が受け持つはずである（公式文書は、判定役の遮断が続くと確認の画面へ戻ると書いている）。
 **だが報告された `meta.json` は3件とも `permissionMode: "default"` だった**（2026-08-27、外部の利用者の実測）。
 
 **`meta.json` の `permissionMode` が「継いだ実効値」か「spawn 時に明示した値」かは、
@@ -7882,7 +7939,7 @@ sequenceDiagram
 | **巡回** | **人間がカンバンで Status を手で動かした。**Status は既に動いているので、pane を閉じるだけでよい |
 
 **巡回に後片付けを寄せることはできない。**
-[internal/orchestrator/runstate.go:1566-1567](../../internal/orchestrator/runstate.go#L1566-L1567) が
+[internal/orchestrator/runstate.go:1595-1596](../../internal/orchestrator/runstate.go#L1595-L1596) が
 「終わらせる処理は `agent.prompt` を待ち受けつきで呼ぶことがあり、**既定では最大1時間返らない**」と書いている。
 **巡回のループがそこで止まると、dispatch も stall 検知も全部止まる。**
 
@@ -7933,7 +7990,7 @@ running_state・`status_signal_map` の遷移先・対応表の戻す先の3種�
 
 | 何 | 中身 | どこで控えているか |
 | --- | --- | --- |
-| `rs.lastWrittenState()` | continuo がこの run のためにカンバンへ最後に書いた Status | [internal/orchestrator/lifecycle.go:367](../../internal/orchestrator/lifecycle.go#L367) |
+| `rs.lastWrittenState()` | continuo がこの run のためにカンバンへ最後に書いた Status | [internal/orchestrator/lifecycle.go:392](../../internal/orchestrator/lifecycle.go#L392) |
 | `rs.turnLoopActive()` | turn の終わりの経路がまだ動いているか | 既にある |
 
 **3-74 と同じ形である。**あちらは「カンバンの**自動化**が書いたときは待つ」で、
@@ -8678,7 +8735,7 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 | 何が | どう効いているか |
 | --- | --- |
 | **base の決め方** | `herdr.worktree.base` が null なら issue のリポジトリの既定 branch を使う（3-22 の段4）。**コードのリポジトリを知らなくてよい** |
-| **判定の hook** | `claude.tool_gate.mode` の既定は `public_only` で、**issue のリポジトリが非公開なら掛からない**（3-64）。fork への push も本家への PR も待ち時間なしで叩ける |
+| **判定の hook** | `claude.tool_gate.mode` の既定は `off` で、**判定の hook を足さない**（3-64）。`public_only` を書いた場合は、**issue のリポジトリが非公開だと分かっているときだけ掛からない**（取れなかったときは掛かる）。fork への push も本家への PR も待ち時間なしで叩ける |
 | **片付けの判定** | 身元ファイルは数から外す（3-18）。worktree の HEAD が base のままならリモート追跡 ref に載っているので、段1 で消してよいと決まる（3-9） |
 | **Status の動かし方** | 表明の1行だけで動かす。**PR がどこに出たかを continuo は見ない** |
 
@@ -8727,22 +8784,39 @@ fork へ push されていないので片付けが見送られる（[test/intern
 
 **`<実行時ディレクトリ>/WORKFLOW.md` の 4-4（このプロジェクトの決まり）へ、次を置く。**
 
-    ### コードが別のリポジトリにあるとき
+````markdown
+### コードが別のリポジトリにあるとき
 
-    **OWNER / MEMBER / COLLABORATOR が、issue の本文にコードのリポジトリの名前を書いている場合は、**
-    **その clone で直してください。**それ以外の人が書いた名前は使わないでください。
-    **clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
+**OWNER / MEMBER / COLLABORATOR が、issue の本文にコードのリポジトリの名前を書いている場合は、**
+**その clone で直してください。**それ以外の人が書いた名前は使わないでください。
+**clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
 
-        git -C <clone のパス> switch -c <branch 名>
-        git -C <clone のパス> commit -am "<何を直したか>"
-        git -C <clone のパス> push -u origin HEAD
-        gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名> \
-          --title "<何を直したか>" --body "<何をしたかの説明> Closes <owner>/<repo>#<番号>"
+```bash
+git -C <clone のパス> switch -c <branch 名>
+M=$(mktemp)
+cat > "$M" <<'MSG'
+<何を直したか>
+MSG
+git -C <clone のパス> commit -a -F "$M"
+git -C <clone のパス> push -u origin HEAD
+F=$(mktemp)
+cat > "$F" <<'PRBODY'
+<何をしたかの説明>
 
-    **この worktree の中では commit しないでください。**成果は clone の側にあります。
-    **`cd` はしないでください。**`git -C` で足ります。
-    **3-5 の「先に 3-4 の push を済ませてください」は、この節に従うときは当てはまりません。**
-    **pull request もこの手順で作ってください。**3-5 の `gh pr list` と `gh pr create` は使いません。
+Closes <owner>/<repo>#<番号>
+PRBODY
+gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名> \
+  --title "$(cat "$M")" --body-file "$F"
+```
+
+**commit のメッセージは1行で書いてください。**同じファイルを pull request の題名にも使います。
+**見本は、囲みの中身をそのまま使ってください。**`MSG` と `PRBODY` の行は行頭に置きます。
+
+**この worktree の中では commit しないでください。**成果は clone の側にあります。
+**`cd` はしないでください。**`git -C` で足ります。
+**3-5 の「先に 3-4 の push を済ませてください」は、この節に従うときは当てはまりません。**
+**pull request もこの手順で作ってください。**3-5 の `gh pr list` と `gh pr create` は使いません。
+````
 
 **見本の `Closes` は、`<owner>/<repo>#<番号>` の形で書く**（組み込みの 7-3）。
 **`Closes #<番号>` と書くと、pull request を出したリポジトリの同じ番号の issue を指してしまう。**
@@ -8766,7 +8840,7 @@ fork へ push されていないので片付けが見送られる（[test/intern
 | `--add-dir` で外を足してから `cd` | **外になる。**continuo は `--add-dir` を渡さない |
 
 **崩れるのは、`--add-dir` を渡したときだけである。**既定の `auto` でも `Stop` の cwd は worktree のままで（上の実測）、`dontAsk` を選ぶ道も残っており
-（[internal/config/validate.go:232](../../internal/config/validate.go#L232) が起動時に弾く）、
+（[internal/config/validate.go:238](../../internal/config/validate.go#L238) が起動時に弾く）、
 **clone を worktree の外に置くこと自体は、崩れる条件にならない。**
 
 **だから雛形そのものは直さない。**上のサンプルで `cd` を止めてあるのは、
@@ -10442,13 +10516,15 @@ agent:
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
-  permission_mode: auto                     # auto か dontAsk。auto は判定役が会話の流れを読んで決めるので、
-                                            # issue のコメントで出した許可が通る。.claude/ と .mcp.json にも書ける。
+  permission_mode: auto                     # auto か dontAsk。auto は判定役が実行の前に確かめるので、.claude/ と .mcp.json にも書ける。
+                                            # 判定役は issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
+                                            # 許可を出すのはこのファイルで、足したら continuo を再起動する。
                                             # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
   permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
                                             # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される
+      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される。
+                                            # auto では、道具を丸ごと許すこの書き方は落とされる。auto で足すなら Bash(gh:*) のように狭く書く
       - "Read"
       - "Glob"
       - "Grep"
@@ -10473,7 +10549,7 @@ claude:
     mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
                                             # public_only なら公開リポジトリの issue にだけ掛ける。
                                             # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
-                                            # この判定は会話を読まないので、コメントで許可を出しても通らない。
+                                            # コメントで許可を出しても通らない（auto の判定役も、この検査も読まない）。
                                             # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
                                             # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。
@@ -10484,7 +10560,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20）
+  protocol: 22                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.9.1 と 0.9.0 が 22。0.8.2 は 20、0.8.0 は 19）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -10686,14 +10762,35 @@ issue の本文と全てのコメント、そして紐づく pull request、リ�
 
 ## 3-2. 計画を書き、レビューを受ける
 
+計画を書く前に、3つをこの順で問うてください。
+
+    1. そもそも対応するか。「対応しません」と文書に書くだけで済まないか
+    2. 利用者が自分で回避できるか。できるなら、その手順を文書に書くだけで足りないか
+    3. その仕組みを持つべきか。持つと何ファイル触るか
+
+**段3 で触るファイルが十数個に膨らんだら、上の段1（そもそも対応するか）へ戻ってください。**
+**計画を何版も書いてレビューを重ねたあとで「対応しない」となれば、それまでの計画は全部無駄になります。**
+**段1 を先に問えば、変えるファイルの数が桁で減ることがあります。**
+
+**「対応しない」と決めたときは、その理由を issue のコメントへ書いてから
+`CONTINUO-STATUS: blocked` を出して人間へ渡してください。**
+**あなたの判断だけで issue を閉じないでください。**
+
+そのうえで、4-3 で読んだ記録に、同じことが既に決まっていないかを探してください。
+触るファイルの名前・関数名・エラーの文面で検索します。
+**探さずに書くと、記録が既に決めていることと逆のことを計画に書きます。**
+
 計画を書いたら、そのまま実装に入らないでください。
+**実装してからの手戻りは、計画を直すより高くつきます。**
 
 手順。
 
     1. 計画を issue のコメントに書く（実装の前に）
-    2. 敵対的レビューの subagent に計画をレビューさせる
+    2. 敵対的レビューの subagent に計画をレビューさせる（走らせる数と渡し分けは 5-6、渡すものは 5-7）
     3. 指摘を全部直そうとせず、1件ずつ「直すのが妥当か」を判断する
     4. 判断票を issue のコメントに残してから、実装に入る
+
+**回し方は 5-6 にあります。**重さの付け方、誰に見せるか、直す前に何を書くか、何周回すかは、そちらに従ってください。
 
 計画に書くこと。
 
@@ -10707,9 +10804,12 @@ issue の本文と全てのコメント、そして紐づく pull request、リ�
 読む人は別の道具を要りません。**`flowchart` か `sequenceDiagram` のどちらかにしてください。**
 
 ```mermaid
-flowchart TD
-    A["設定を読む"] --> B["worktree を作る"]
-    B --> C["エージェントを起動する"]
+sequenceDiagram
+    participant C as continuo
+    participant H as herdr
+    C->>H: pane.list {"workspace_id": "w1"}
+    H-->>C: {"type": "pane_list", "panes": [{"pane_id": "w1:p1", …}]}
+    C->>H: agent.start {"name": "continuo-hello-world-42", "kind": "claude", "pane_id": "w1:p1"}
 ```
 
 **図に描くのは、変えたあとに何がどの順で起きるかです。**
@@ -10717,16 +10817,27 @@ flowchart TD
 
 計画のコメントの形。**ファイルへ書いてから渡してください。**
 
-    cat > plan.md <<'PLAN'
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    ## 計画
-    ここに上の4つを書く
-    PLAN
-    gh issue comment {{.issue.url}} --body-file plan.md
+```bash
+F=$(mktemp)
+cat > "$F" <<'PLAN'
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
+
+## <一言で中身が想像できる節の題名>
+
+ここに 5-5 の7つの見出しを置く
+（症状は「### 何が問題なのか」へ、原因（ファイル名と行番号つき）と
+ どのファイルをどう直すかと、決まっていないことと図は「### 詳細」へ書く）
+PLAN
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **`--body "…"` で渡さないでください。**計画にはファイル名と行番号を書くので、
 backtick とドルの記号が混ざります。**二重引用符の中では、それが実行されます。**
+**見本は、囲みの中身をそのまま使ってください。**`PLAN` の行は行頭に置きます。字下げすると、そこで終わりと読まれません。
+**本文の中に、終わりの語（`PLAN` など、`<<'…'` の中の語）だけの行を作らないでください。**見本を囲みごと引用すると入ります。入ると、そこで本文が切れ、後ろの行がシェルのコマンドとして実行されます。**入るなら、終わりの語を別のものに変えてください**（例: `PLAN` を `PLAN2` に）。
+`mktemp` で作ったファイルは、消さなくてかまいません。
 
 **2行目の `<!-- continuo:plan -->` を落とさないでください。**
 **落とすと、continuo が「この run は成果を書いた」と誤って数えます。**
@@ -10735,10 +10846,12 @@ turn が途中で終わったときに、何をしたかを書かせ直す経路
 計画のコメントに `<!-- design-review-result -->` を付けないでください。
 その目印は、レビューを受けたあとの判断票だけに付けます。
 
-**2回目以降の試行では、先に自分の計画のコメントがあるかを確かめてください。**
+**2回目以降の試行では、先に `<!-- continuo:plan -->` が付いた自分のコメントがあるかを確かめてください。**
 あれば書き足さず、続きから始めます。同じ計画が何件も並ぶと、issue が読めなくなります。
 
-レビューへ渡すもの。
+レビューへ渡すもの。**これに加えて、5-6 の「レビュワーへ何を求めるか」の4つも必ず渡してください。**
+**渡さないと、根拠も件数も分類も返ってきません。**
+**返ってこなかったものをどう扱うかは 5-6 が決めています。ここには写しません。**
 
     この issue と、紐づく pull request のコメントを、1件残らず、省略せずに読んでください。
     コマンドは、この指示書の 4-1 と 4-2 にあります。
@@ -10759,22 +10872,44 @@ turn が途中で終わったときに、何をしたかを書かせ直す経路
     切ると、当たりかどうかを判定できない行が「当たりではない」として通ります。
     ファイルの変更・削除・作成は一切しないでください。読むだけです。
 
-どの subagent へ頼むかは 4-4 を見てください。書いていなければ general-purpose へ頼みます。
+どの subagent へ頼むかは 4-4 を見てください。**名前が2つ並んでいれば、先に書いてあるほうを差分を読む役、後を関連処理まで見る役にします。**1つだけなら両方に同じものを使い、1つも無ければ general-purpose へ頼みます。
 
-Critical と High は原則すべて直します。直さない場合は理由を書いてください。
 指摘が1件も無かったときでも、判断票を書く必要があります。書かないとCIを通らなくなる可能性があります。
 
 判断票の形。**1行目と2行目の並びを変えないでください。**
+**題名のあと、空行を1つ空けて「<何周目か>周目」を必ず書いてください。**
+**書かないと、次の周が数えられません**（5-6 の「何周回すか」）。
 
-    <!-- continuo:agent -->
-    <!-- design-review-result -->
-    ## レビューの判断票（計画）
+```markdown
+<!-- continuo:agent -->
+<!-- design-review-result -->
+# レビューの判断票（計画）
 
-    | 指摘 | 深刻さ | 中身 | 直すか | 理由 |
-    | --- | --- | --- | --- | --- |
-    | 片付けの順序 | High | worktree を消す前に branch を消している | 直す | — |
-    | 変数名の揺れ | Low | repoDir と repoPath が混在 | 直さない | この issue の範囲外 |
+<何周目か>周目
 
+## <一言で中身が想像できる節の題名>
+
+> （その節が答えている原文だけを引く）
+
+### 三行まとめ
+
+### 前提
+
+### 単語の説明
+
+### 既存の構造がどうなっているか
+
+### 何が問題なのか
+
+### 詳細
+
+| 指摘 | 重さ | 中身 | 直すか | 理由 | 数えた結果 | 分類 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 片付けの順序 | high | worktree を消す前に branch を消している | 直す | branch を出している worktree が在ると、branch は消えない。順序を入れ替えないと、片付けが毎回途中で止まる | `git worktree remove` を `~/src/myproj` で2件 | 前の周に既に在った |
+| 変数名の揺れ | low | repoDir と repoPath が混在 | 直さない | 読む人が別物と取る、というレビュワーの根拠は成り立つ。ただし low で、直すと触る範囲がこの issue の外へ広がる | `repoDir` を `~/src/myproj` で5件 | 前の周に既に在った |
+```
+
+**表は `### 詳細` の中に置いてください。**
 1列目には番号ではなく内容が予想できる短い名前を書いてください。
 
 **この2行を、コメントの本文の先頭に、この順で置いてください。**前に1文字でも書くと数えられません。
@@ -10785,11 +10920,40 @@ Critical と High は原則すべて直します。直さない場合は理由�
 **入れ替えると、判断票だけを書いて turn を終えたときに、continuo が
 「成果が書かれていない」と判断して、この run を人間へ渡します。**
 
+**CI が数える条件は2つです。**2行目の `<!-- design-review-result -->` が、本文の先頭か、
+1行目の `<!-- continuo:agent -->` の直後に在ること（前後の空白文字と改行があってもかまいません）と、
+**投稿者がこのリポジトリの OWNER / MEMBER / COLLABORATOR のどれかであることです。**
+**上の順序のまま貼れば、両方とも満たします。目印を1行目へ動かさないでください。**
+**動かすと CI は緑になりますが、continuo がこの run を人間へ渡します**（すぐ上の理由）。
+誰でもコメントを書けるので、**外部の人が目印を貼れば通る、という形にはしていません。**
+**あなたのアカウントがこの3つのどれでもないときは、貼っても検査は緑になりません。**
+**自分がどの立場で数えられるかは、貼ったあとに 4-1 の1つ目のコマンドをもう一度叩き、
+自分が書いたコメントの `authorAssociation` を読めば分かります**（6-1 が見ているのと同じ値です）。
+**`OWNER` / `MEMBER` / `COLLABORATOR` のどれでもないときだけ、そのことを応答に書いて人間へ渡してください。**
+**検査が赤いときに、いつもこれが原因とは限りません。**先に目印の順序を確かめてください。
+
 **計画のコメントも判断票も、節の書き方は 5-5 にあります。**
 
 ## 3-3. 実装する
 
 continuo が用意した worktree と branch のまま作業します。詳しくは 7-1 にあります。
+
+**書き込む先をその場で空にしてから書くコードを、書かないでください。**
+**当たるのは、あなたが書くコードが、既にあるファイルを書き換えるときです。**
+**この節のうち、ここから4行はあなた自身の編集の話です。**その下が、あなたが書くコードの話に戻ります。
+**あなた自身が、既にあるファイルを編集するときは、リダイレクトで上書きせず、
+Claude Code の Edit や Write を使ってください。**直す前と後を、あなたも人間も確かめられます。
+**`sed -i` は、この危険には当たりません。**同じディレクトリへ新しいファイルを書いてから差し替えるので、途中で落ちても元の内容は残ります
+（macOS 15 で `sed -i ''` として実測。inode が変わり、hard link の相手は元の内容のまま残りました。**BSD の `sed` は `-i` の直後に拡張子を要求するので、`-i ''` の形でないと落ちます**）。**それでも Edit や Write を勧めるのは、直した範囲が見えるからです。**
+**この指示書が示している `cat > <新しいファイル> <<'EOF'` も、当たりません。**
+**そこで作るのは、コメントを渡すためのその場かぎりのファイルです。**失われる元の内容がありません。
+
+**ここから下は、あなたが書くコードの話です。**
+**書き込む先を空にしてから書くコードは、途中で落ちると元の内容を失います。**
+**同じディレクトリへ一時ファイルを作り、書き切ってから差し替える形にしてください。**
+**一時ファイルは必ず同じディレクトリに作ります。**差し替えが不可分なのは、同じファイルシステムの中だけです。
+**元の権限を復元することも忘れないでください。**新しく作ったファイルは既定の権限を持つので、実行ビットが落ちます。
+**揃えられない箇所があるなら、その理由をコードのコメントへ書いてください。**黙って例外にしないこと。
 
 ## 3-4. commit して push する
 
@@ -10832,7 +10996,21 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 
 `[]` が返ったときだけ、新しく作ります。
 
-    gh pr create --title "<何を直したか>" --body "<何をしたかの説明> Closes #{{.issue.number}}"
+```bash
+T=$(mktemp)
+cat > "$T" <<'TITLE'
+<何を直したか>
+TITLE
+F=$(mktemp)
+cat > "$F" <<'PRBODY'
+<何をしたかの説明>
+
+Closes #{{.issue.number}}
+PRBODY
+gh pr create --title "$(cat "$T")" --body-file "$F"
+```
+
+**題名も本文も、ファイルへ書いてから渡してください**（3-2 と同じ理由です）。**題名は1行で書いてください。**
 
 `Closes #{{.issue.number}}` を落とさないでください。
 **この1行が pull request と issue を結びつけます。**落とすと、次に起動されたときに 4-2 の一覧からこの pull request が出てこず、レビューの指摘を読む先が消えます。
@@ -10848,29 +11026,98 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 ## 3-6. pull request のレビューを受ける
 
 作ったら、そのまま人間へ渡さないでください。3-2 と同じように、敵対的レビューを受けて判断票を残し、直します。
+**回し方は 5-6 にあります。**計画のレビューと同じものが当てはまります。
 
 ただし継ぐのは「レビューさせて、判断票を残して、直す」の3つだけです。
 **計画のコメントは要りません。**3-2 の手順の1番目は、実装の前に計画を出すためのものです。
 **レビューへ渡す観点も、そのままでは使えません。**3-2 のものは計画に当てる言葉です。
 pull request のレビューでは、差分に当たる観点へ書き換えて渡してください。
+**5-6 の「レビュワーへ何を求めるか」の4つは、こちらでも必ず渡してください。**
 
 **貼る先は pull request のコメントです。**issue ではありません。**issue へ貼っても数えられません。**
 
+**CI が数える条件は、3-2 と同じ2つです。**目印の位置と、
+**投稿者がこのリポジトリの OWNER / MEMBER / COLLABORATOR のどれかであること。**
+**目印の位置だけが違います**（下のとおり、こちらは1行目に置きます）。
+**自分がどの立場で数えられるかは、貼ったあとに `gh pr view <PR番号> --json comments` で pull request のコメントを読み、`authorAssociation` を見れば分かります**（4-2 の2つ目のコマンドです）。**issue を読んでも、そこには出てきません。**
+
 **計画のコメントと同じく、ファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > review.md <<'REVIEW'
-    <!-- code-review-result -->
-    <!-- continuo:agent -->
-    ## レビューの判断票（実装）
+```bash
+F=$(mktemp)
+cat > "$F" <<'REVIEW'
+<!-- code-review-result -->
+<!-- continuo:agent -->
+# レビューの判断票（実装）
 
-    ここに 3-2 と同じ形の表を書く
-    REVIEW
-    gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file review.md
+<何周目か>周目
+
+ここに 3-2 の判断票と同じ形で書く（5-5 の7つの見出し。表は ### 詳細 の中）
+REVIEW
+gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **1行目の目印を変えないでください。**コメントの本文の先頭に無いと数えられません。
 
 **3-2 とは順序が逆です。**3-2 は1行目が `<!-- continuo:agent -->` でした。
 **こちらが目印を1行目に置けるのは、貼る先が pull request のコメントで、continuo がそこを読まないためです。**
+
+**レビュー機能で投稿しないでください。**数えられません。上のとおり `gh pr comment` で貼ります。
+
+### 貼ったら、検査を回し直す
+
+**貼っただけでは、検査は回り直しません。**
+レビュー結果を数える検査は、pull request の `opened` / `synchronize` / `reopened` / `ready_for_review` で走ります。
+**コメントを貼っても、そのどれも起きません。**結果を貼ったのに赤いまま、という状態になります。
+
+**この pull request を draft で作っていて、4-4 に「レビューを通したら draft を外す」と書いてあるときだけは、
+回し直しが要りません。**`gh pr ready` が `ready_for_review` を起こすので、そこで検査が回り直します。
+**4-4 に draft のことが1行も書いていないなら、この経路には入りません。**
+**それ以外は、貼ったあとに自分で回し直してください。**
+
+    gh run list --repo {{.issue.owner}}/{{.issue.repo}} --branch "$(git branch --show-current)" \
+      --limit 10 --json databaseId,workflowName,conclusion,createdAt
+
+**レビュー結果を数えている workflow のうち、`createdAt` がいちばん新しいものの `databaseId` を選びます。**
+**どれがそれかは、`.github/workflows/` の中を `code-review-result` で検索し、
+当たったファイルの字下げの無い `name:` の値で見分けます**（job や step の `- name:` ではありません。
+**ファイルの先頭とは限りません。**コメントのあとに来ることがあります）。
+**その名前が `workflowName` に出ます。**
+**`name:` が1行も無い workflow では、`workflowName` にファイルのパスが入ります。**そのときはパスで見分けてください。
+**`.github/workflows/` の検索で1件も当たらないときは、その検査をこのリポジトリが持っていません。**
+**回し直す相手が無いので、`gh run rerun` を叩かずに、そのことを応答に書いてください。**
+**その workflow が1行も返らないときは、この branch で1度も走っていません。**
+**回し直す相手が無いので、`gh run rerun` を叩かずに、そのことを応答に書いてください。**
+**別の workflow を代わりに選ばないでください。**
+
+    gh run rerun <databaseId> --repo {{.issue.owner}}/{{.issue.repo}}
+
+**その run がまだ走っている最中だと、403 で落ちます。**そのときは回し直さなくてかまいません。
+**走っているのが最新の結果だからです。**
+
+**待つのは run ではなく、pull request に付いた検査のほうです。**
+
+    gh pr checks <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --required --watch
+
+**run の `status` や `conclusion` を見て待たないでください。**`gh run rerun` の直後、
+その run はまだ**前回の attempt** の `completed` を返します。
+**前回が成功していたら、まだ走っているのに成功と出ます。**
+**`gh run watch` も同じものを読みます。**即座に成功として返ることがあるので、使わないでください。
+
+**`gh pr checks` に `--json` を付けないでください。**
+**付けると終了状態が常に 0 になり、赤でも通ったように見えます**（gh 2.97 で実測）。
+
+**`--required` は、必須の検査が1つも設定されていないリポジトリでは何も見つからずに落ちます。**
+**赤い検査があるときと終了状態が同じ（どちらも 1）なので、標準エラーの文面で見分けます。**
+`no required checks reported on the '<branch 名>' branch` と出たときだけ、
+**`--required` を外して、全部の検査を見てください**（gh 2.100.0 で実測）。
+
+**回し直した run が検査として登録される前に読むと、`--watch` が何も待たずに返ることがあります。**
+**返ってきた結果が回し直す前のものに見えるときは、もう一度叩いてください。**
+
+**`--watch` は、検査が全部終わるまで戻りません。**
+**叩く前に、進捗のコメントを1行書いてください**（5-3）。**待っている間は何も書けないので、待ちに入ることを先に知らせます。**
+**検査が {{.progress_interval_minutes}} 分より長くかかるリポジトリでは、`--watch` を付けずに叩き、間を空けて読み直してください。**
 
 ## 3-7. 終わりを書く
 
@@ -10883,17 +11130,22 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 この1行を読んで Status を動かすのは continuo です。あなたが `gh` を叩く必要はありません。
 
 **グループでまとめて直したときは、下のコメントを書く前に 7-2 を通してください。**
-7-2 は issue ごとの説明を書かせ、**その URL を、下のコメントの中に並べさせます。**
+7-2 は issue ごとの説明を書かせ、**その URL を、下のコメントの中（`### 詳細`）に並べさせます。**
 **先に下のコメントを投稿すると、並べる先が無くなります。**
 
 あわせて、何をしたかを issue のコメントに残します。
 **これもファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > done.md <<'DONE'
-    <!-- continuo:agent -->
-    ここに何をしたかを書く
-    DONE
-    gh issue comment {{.issue.url}} --body-file done.md
+```bash
+F=$(mktemp)
+cat > "$F" <<'DONE'
+<!-- continuo:agent -->
+# <何をしたかを一言で>
+
+ここに 5-5 の7つの見出しで、何をしたかを書く（印は上の1行だけ）
+DONE
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **新しく1件投稿してください。**5-3 の「コメントは増やさないでください」は途中経過の報告どうしの話で、
 この成果の報告には当てはまりません。
@@ -10967,7 +11219,7 @@ issue とコメントに出てくるプランファイル・設計文書・過�
 issue が求めていないものを実装しないでください。勝手に増やした仕様が原因でレビューが通らないことが多くあります。
 
 issue に書かれていない実装が要ると判断したときは、その必要性を合理的根拠としてまとめ、敵対的レビューの subagent に渡してください。
-**レビュワーに否定されたら、実装を変えてください。**根拠を通すために説得しないでください。
+**レビュワーに否定されたら、実装を変えてください。**判定のしかたは 5-6 にあります。
 
 ## 5-3. {{.progress_interval_minutes}}分以上黙らない
 
@@ -11001,18 +11253,26 @@ issue に書かれていない実装が要ると判断したときは、その�
 
 **段2a。数字が返ったときは、その1件に書き足します。**
 
-    ID=<段1が返した数字>
-    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-    case "$OLD" in
-      *"<!-- continuo:progress -->"*)
-        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-          -f body="$OLD
-    - $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
-        ;;
-      *)
-        echo "本文を読めませんでした。段2b で新しく1件投稿します"
-        ;;
-    esac
+```bash
+ADD=$(mktemp)
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ADD"
+cat >> "$ADD" <<'NOW'
+<何をしているか>
+NOW
+ID=<段1が返した数字>
+OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+case "$OLD" in
+  *"<!-- continuo:progress -->"*)
+    F=$(mktemp)
+    { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+    gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+      -F body=@"$F"
+    ;;
+  *)
+    echo "本文を読めませんでした。段2b で新しく1件投稿します"
+    ;;
+esac
+```
 
 **`case` で印そのものを確かめてから書き込みます。**
 **中身が空でないかを見るだけでは足りません。**`gh api` は、取得に失敗したとき
@@ -11028,12 +11288,22 @@ issue に書かれていない実装が要ると判断したときは、その�
 **印の2行は、行の先頭から書きます。**下の見本のとおり、字下げしないでください。
 
 ```bash
-gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
+F=$(mktemp)
+cat > "$F" <<'PROGRESS'
+<!-- continuo:agent -->
 <!-- continuo:progress -->
 まだ作業中です。
 
-- $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
+PROGRESS
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$F"
+cat >> "$F" <<'NOW'
+<何をしているか>
+NOW
+gh issue comment {{.issue.url}} --body-file "$F"
 ```
+
+**`<何をしているか>` は、`<<'NOW'` の下に書きます。**二重引用符の中へ書かないでください。
+backtick や `$` を書くと、シェルがそれを実行します（段2a も同じです）。
 
 **2行目の `<!-- continuo:progress -->` を落とさないでください。**
 **continuo が「進捗が書かれた」と数えるのは、この印が付いたコメントだけです。**
@@ -11069,55 +11339,450 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 
 ## 5-5. 人間へ質問・報告するコメントの書き方
 
-**当たるのは、人間に読ませるコメントです。**次の3つです。
+**7つの見出しの形が当たるのは、人間に読ませるコメントです。**次の4つです。
+**書いてはいけないものは、そのあとに書いたとおり、公開の場へ書く文字列すべてに当たります。**
 
     計画               3-2（issue へ）
     判断票             3-2（計画のレビュー。issue へ）と 3-6（実装のレビュー。pull request へ）
     何をしたかの報告   3-7（issue へ）。blocked で終えるときの理由も、ここに書きます
+    削除の記録         5-6（issue へ）。issue に無いものを削ったときに残します。印は `<!-- continuo:agent -->` の1行だけにします
+                       （計画の印を付けないこと。付けると、2回目の試行が「計画は既にある」と読んで 3-2 を飛ばします）
 
-**次の2つは当たりません。**どちらも形が別に決まっていて、4つを置く場所がありません。
+**どのコメントにも、次の3つを書かないでください。**
+
+    手元の絶対パス          ファイルはリポジトリの根からの相対パスで書きます（`src/app.ts` のように）。
+                            範囲や叩いた場所を書くときだけ、`~/` から書きます（5-6）
+    資格情報                API キー・アクセストークン
+    社内だけで引けるホスト名
+
+**叩いたコマンドの出力をそのまま貼るときは、そこに混ざっていないかを見てください。**
+**issue と pull request のコメントは編集履歴が残るので、書いてしまうと取り消せません。**
+**資格情報を書いてしまったときは、消す前にそれを無効化してください。**消せたかどうかに関わらず。
+
+**次の2つは当たりません。**どちらも形が別に決まっていて、7つを置く場所がありません。
 
     途中経過の報告             5-3。1行足すだけの決まりです
     まとめて直したときの報告   7-2。先頭の1文と足す行の形が決まっています
+
+**7つの見出しの形が当たらないだけです。**
+**上の「書かないでください」の3つは、この2つにも当たります。**
+**pull request の本文（3-5）にも当たります。**
+**つまり、あなたが公開の場へ書く文字列すべてに当たります。**
 
 **あなたと人間の1往復は高くつきます。**Claude Code を手で使うなら「詳しく説明して」と打てばすぐ返りますが、
 **この仕組みでは、その1往復に issue のコメント1件と、continuo が次に巡回するまでの待ちがかかります。**
 **最初のコメントに揃っていないものは、1往復を丸ごと使って聞き直されます。**
 
-**コメントの節ごとに、次の4つを `###` の見出しで置いてください。**
+**返信したい内容ごとに節を立ててください。**節の題名は、一言で中身が想像できるものにします。
+**引用をコメントの先頭へまとめないでください。**その節が答えている原文だけを、その節の中で引きます。
 
-| 見出し | 中身 |
-| --- | --- |
-| `### 何に対する返答か` | **引用で示します。**なんの話題なのか分かるように長めに引きます。**1文だけ引かないでください** |
-| `### 前提条件` | その話が成り立つために要る条件 |
-| `### 単語の説明` | そのコメントで使う語が何を指すか。**issue と pull request の番号には題名を添えます** |
-| `### 何が問題なのか` | 症状と、放っておくと何が起きるか |
+**節の中は、次の7つをこの順で書いてください。**
+**2つ目から7つ目は、`###` の見出しで置いてください。**1つ目の引用には見出しを付けません。
 
-**印の行より前には、1文字も置かないでください。**上の4つは、印の行の下に書きます。
+| 順 | 見出し | 中身 |
+| --- | --- | --- |
+| 1 | （見出しは付けません） | **引用。**その節が答えている原文だけを、行頭の `> ` で引きます。**1文だけ引かないでください** |
+| 2 | `### 三行まとめ` | 3行以内で結論 |
+| 3 | `### 前提` | その話が成り立つために要る条件 |
+| 4 | `### 単語の説明` | その節で使う語が何を指すか。**issue と pull request の番号には題名を添えます** |
+| 5 | `### 既存の構造がどうなっているか` | いまどう作られていて、何がどの順で起きるか |
+| 6 | `### 何が問題なのか` | 症状と、放っておくと何が起きるか |
+| 7 | `### 詳細` | 根拠・仕組み・データ |
+
+**判断票では、指摘をまとめた表を 1つ、その節の `### 詳細` の中に置きます。**
+**直す前に書く6つも、同じ `### 詳細` の中に、表の下へ置きます。**指摘ごとに小見出しを立ててください。
+
+**説明には図を多用してください。**`flowchart` か `sequenceDiagram` のどちらかです（3-2 と同じ）。
+**仕組みや順序を説明するときは `sequenceDiagram` を選びます。**
+**何を渡して何を受け取るかは、具体的な値で書いてください。**型名や変数名だけを書かないでください。
+**実際に流れる文字列をそのまま載せます**（`--permission-mode auto` や `author_association: "NONE"` のように）。
+**そうすると、書く側が具体を詰めることになり、そこで設計の穴が出ます。**読む側も、どの値がどこへ流れるかを追えます。
+
+**技術用語は英語のまま書いてください。**`worktree` / `pane` / `hook` / `branch` / `commit` を日本語へ訳さないでください。
+
+**人間に決めてほしいことを訊くときは、質問1つにつき1つの節を立て、上の7つで説明してから訊いてください。表で訊かないでください。**
+選べる案は段落を分けて並べ、案ごとに、選ぶと何が起きるかと選ばないと何が続くかを書き、最後に推奨とその理由を書きます。
+人間に操作を頼む案なら、そのまま貼れるコマンドを添えます。
+
+**印の行より前には、1文字も置かないでください。**上の7つは、印の行の下に書きます。
 **とくに1つ目が引用なので、コメントの冒頭へ置きたくなります。置くと印が先頭から外れます。**
 **外れると、continuo はそのコメントを数えず**（3-2 と 3-7）、**CI の検査も数えません**（3-2 と 3-6）。
 
 骨組み。**印の行は、そのコメントの節の見本のものをそのまま使ってください。**
 下の見本が置いているのは、3-2 の計画のコメントの印です。
 
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    ## 計画
+```markdown
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
 
-    ### 何に対する返答か
+## <一言で中身が想像できる節の題名>
 
-    > （長めに引いた引用）
+> （その節が答えている原文だけを引く）
 
-    ### 前提条件
+### 三行まとめ
 
-    ### 単語の説明
+### 前提
 
-    ### 何が問題なのか
+### 単語の説明
+
+### 既存の構造がどうなっているか
+
+### 何が問題なのか
+
+### 詳細
+```
+
+**話題が2つ以上あるときは、`## ` の節を並べてください。**節ごとに引用が付くので、
+**どの引用がどの説明に対応するかが、位置で分かります。**
 
 **引用には backtick とドルの記号が混ざります。**
 **`--body "…"` で渡さないでください。**ファイルへ書いて `--body-file` で渡します（3-2 と同じです）。
 
 **そのうえで、4-4 と、4-4 が読ませている文書がコメントの形を決めているなら、それにも従ってください。**
+
+## 5-6. レビューの回し方
+
+**この節が、3-2（計画のレビュー）と 3-6（pull request のレビュー）の両方に当てはまります。**
+
+**重さは、受け取った側が付け直してください。**レビュワーが付けた重さは、そのまま使いません。
+**根拠が成り立たないと判定した指摘は、この段で重さを外します。**外したものは、下の「収まっている」の数えに入りません。
+
+| 重さ | 中身 |
+| --- | --- |
+| critical | その機能の利用をやめる程度の害。あるいは、**あることで無いより危険になる** |
+| high | **直接の害か不利益がある。**回避手段が、書いた人の側に無い |
+| mid | **運用でカバーできる。**気づけば避けられる |
+| low | 些細なもの |
+
+**「収まっている」とは、critical と high が0件であることです。**mid と low が何件あっても収まっています。
+
+### 毎周やること
+
+    1. レビュワーを並列に走らせる（下の「誰に見せるか」）
+    2. 指摘1件ごとに判断票を書く（直すか / 直さないか / その合理的理由）
+    3. いま在るものと issue を突き合わせる（**毎周**。3-2 なら計画、3-6 なら実装。下の「issue に無いものを削る」）
+    4. 直す前の計画を、同じ判断票の中に書く（下の「直す前に書くこと」）
+    5. 判断票をコメントへ貼る
+    6. 自分で読み直してから、直す
+
+**貼るのは段5 です。**段4 まで書き終えてから貼ってください。
+**先に貼ると、5-3 の段2a の手順で書き足すことになります。**判断票は1周につき1つで、2つ目を貼ると、どれがその周の判断かが読めなくなります。
+
+**「直さない」と決めてよいのは、レビュワーの根拠を否定できたときだけです。**
+「この pull request の範囲外である」は、根拠を否定していません。critical と high では使えません。
+
+**「レビュワーが言ったから直す」は理由ではありません。**
+**「レビュワーが言ったが直さない」だけでも理由ではありません。**
+**根拠のどこをどう否定したかを、判断票へ書いてください。**
+
+**次の周のレビュワーには、前の周の判断票のうち「直さないと決めた指摘とその理由」だけを渡してください。**
+**否定した指摘は直っていないので、渡さないと同じものが必ずまた挙がり、周だけが増えます。**
+**直した箇所の一覧は渡さないでください。**渡すと、そこへ目が寄って、**まだ触っていない場所の欠陥が後ろの周へ押し出されます。**
+**例外は、下の「誰に見せるか」で足す3つ目の役だけです。**その役には、名指しした場所と、そこを直した理由を渡します。
+**判断票を渡せないレビュワーを使うときは、返ってきた指摘を、あなたが前の周の判断票と突き合わせてください。**
+**前の周で否定した指摘がまた挙がったら、同じ理由を書き直し、「前の周に既に在った」として扱います。**
+
+### 誰に見せるか
+
+**毎周、2つを並列に走らせてください。**片方だけでは足りません。
+**それぞれへ何を渡すかは 5-7 にあります。**渡し忘れたものは、レビュワーにとって無かったことになります。
+**ただし、見る範囲はこの表が決めます。**5-7 が「関連するファイルの絶対パスと行番号を渡せ」と言っているのは、
+**その役が見る範囲の中にあるものについてです。**差分を読む役へ、差分の外の場所を名指しして渡さないでください。
+
+| 何を見る役 | 何を渡すか |
+| --- | --- |
+| **差分を読む役** | 差分だけ（3-2 では差分がまだ無いので、計画の本文だけ） |
+| **関連処理まで見る役** | 差分に加えて、**そこから呼ばれる処理・そこを呼ぶ処理・同じ関数を使う他の箇所・対応する文書** |
+
+**差分を読む役は、どの周でも差分しか見ません。**周を重ねても、周辺のコードには届きません。
+**だから関連処理まで見る役は、毎周走らせます。**
+
+**心配な場所があるときは、3つ目を足してください。**その場所を名指しで渡し、重点的に見てもらいます。
+**その役にだけは、そこを直した理由も渡してください。**理由が無いと、前の周の直しが心配を解いたのかを判定できません。
+**名指しは、上の2つには渡さないでください。**渡すと、その2つの目もそこへ寄ります。
+実測（2026-09-20）: 名指しを渡さなかった役だけが、それまでの周で1度も出なかった critical を2件見つけました。
+
+### レビュワーへ何を求めるか
+
+**1回で全部挙げさせてください。**
+**同じものを別のレビュワーへ渡したら、まったく同じ結果になるくらい徹底的に洗い出せ、と書いて渡します。**
+**次の周で新しい指摘が増えるのは、前の周のレビューが足りなかったということです。**
+
+**指摘1件ごとに、次の4つを添えさせてください。**
+
+    1. ファイル名と行番号と、原文の引用。「無い」ことの主張には、検索パターンと対象のパス
+    2. なぜ直す必要があるのかの合理的根拠。「直さなかったときに誰が何を失うか」で書かせる
+    3. 同じ誤りが他に無いかを数えた結果。叩いた検索パターンと、数えた範囲と、当たった件数。**範囲は `~/` から書かせる**
+    4. 2周目以降は、その指摘が「前の周に既に在ったもの」か「前の周の直しが持ち込んだもの」か
+
+**3-2（計画のレビュー）では、段4 の根拠に commit を求めないでください。**
+**その周より前の計画は、同じコメントに書き足していくので、前の版が残りません。**
+**3-2 では、前の周の判断票のうち、あなたが渡した「直さないと決めた指摘」に同じものが在るかどうかで分けさせます。**在れば「前の周に既に在った」、無ければ**「分類できない」と書かせてください。**
+**「前の周の直しが持ち込んだ」と書かせてはいけません。**レビュワーの手元には、前の周に直した箇所が渡っていないので、判定できません。
+**commit を示させるのは 3-6（pull request のレビュー）だけです。**
+
+**段1 の「対象のパス」と段3 の「数えた範囲」は、`~/` から書かせてください。**
+**下の「直す前に書くこと」の段2 の「探し方」も同じです。**この判断票は公開の pull request のコメントへ貼るので、
+**手元の絶対パスをそのまま書かせると、利用者名とその機械の構成が公開されます**（5-5）。
+**ホームディレクトリの外で走っているときは、`<worktree>` のような置き換え語にさせてください。**`~/` を偽って付けさせないこと。
+
+**2周目以降は、前の周に作った前提の一覧を渡してください。**
+**「前提の一覧」とは、その差分が触れた処理・関数・設定と、それぞれが何を前提にしているかを1行ずつ並べたものです。**
+**関連処理まで見る役に、毎周これを作らせます。**1周目は空から作り、2周目以降は**渡した一覧へ、その周で増えた分だけを足させます。**
+**渡さないと、毎周ゼロから書き出し直すことになり、周ごとの費用が減りません。**
+**一覧と食い違っている箇所を挙げるのが、この役の仕事です。**直し方の文面は書かせないでください。
+
+**数えるときの道具も渡してください。**
+
+| 持っているもの | どう叩くか |
+| --- | --- |
+| **Bash** | **`git grep -n <文字列>`**（範囲を絞るなら `-- <パス>` を足す）。**`grep -rn` は使わせないこと。**`.gitignore` を見ないので、生成物や worktree の写しまで数えます |
+| **Grep ツールだけ** | **同じ文字列と同じ範囲を Grep へ渡させます。**Bash が無いことは、報告に書けば足ります |
+
+**段2 で「規約に反する」だけを書いてきたものは、根拠が無いものとして扱ってください。**
+**あなたが否定できる形で書かせてください。**前提・範囲・既に別の場所で担保されているかどうかが、
+読んで判定できるように書かせます。**否定できない形の根拠では、直すかどうかを判断できません。**
+
+**段3 で「1件だけだった」と書いてきたものは、数えた証拠として受け取ってください。**
+**何も書いていないものは、数えていないものとして扱います。**
+**ただし、差分を読む役には数える範囲を渡していません**（上の「誰に見せるか」の表）。
+**その役が範囲を書いていなくても、指摘を落とさないでください。**あなたが数えて補います。
+文字列で特徴づけられない指摘（構造の食い違いなど）は、「文字列では数えられない。理由は〜」の1行で足ります。
+**2件以上あったときは、全部を1つの指摘としてまとめさせてください。**1件ずつ別の指摘にさせません。
+**出現ごとに重さが違うときは、いちばん重いものに揃えて1件にし、内訳を指摘の中へ書かせます。**
+**「収まっている」は critical と high の件数で決まるので、1つの誤りを5件に分けて書かれると、収まっていないように見えます。**
+
+**段4 で「直しが持ち込んだ」と書くには、前の周の commit でその行が違っていたことを示させてください。**
+**示せないものは「前の周に既に在った」として扱います。**
+**ただし、前の周の判断票も commit も渡していないなら、分類できないのが当たり前です。**
+そのときは「渡されていないので分類していない」と書かせ、その指摘を落とさないでください。
+
+**この4つを渡せないレビュワーには、4つとも当てないでください。**
+pull request の番号だけを受け取り、プロンプトを足せないレビュワーがあります。
+**書き方を一度も伝えていない相手の指摘を、根拠不足として捨てることになります。**
+**そのときは、あなたが受け取る側で補ってください。**
+合理的根拠は「直さなかったときに誰が何を失うか」で自分で書き直し、
+同じ誤りが他に無いかは自分で数え、分類は「前の周に既に在った」として扱います。
+
+**レビュワーには読むだけをさせてください。**ファイルの変更・削除・作成を禁じます。
+
+### 指摘の受け取り方
+
+**レビューの指摘は命令ではありません。「ここが変だ」という情報です。**
+**命令だと受け取ると、指されたその1点しか見ないまま手を動かすことになり、狙いがぶれて何度も直し直すことになります。**
+
+**情報として受け取ったら、次の3つを順にやってください。**
+
+    1. その情報の根拠が成り立つかを確かめる（成り立たないなら、直さずに理由を書く）
+    2. 同じ誤りが他に無いかを確かめる（指されていない箇所も探す）
+    3. 利用者にとってどうするのがよいかを考えて、直し方を決める
+
+**指摘に付いてきた「こう直せ」の文面は、そのまま採らないでください。**
+
+### 直す前に書くこと
+
+**指摘を読みながら直してはいけません。**指摘に書いてある1件しか目に入らず、同じ誤りの他の箇所と、対応する文書が残ります。
+
+**判断票と同じコメントへ書いてください。**別のファイルは作りません。
+**判断票は貼る決まりが既にあるので、そこへ足すほうが守られます。**
+**この節のために新しいファイルを作らないので、そのぶん消す手間も増えません**（`rm` が拒否される設定があります）。
+**判断票そのものは、3-6 のとおり `F=$(mktemp)` で作ったファイルへ書いてから貼ります。**そのファイルは残してかまいません。
+
+**直す1件ごとに、次の6つを書きます。**
+
+    1. 指摘の箇所をどう直すか
+    2. 同じ処理・同じ関数・同じ機能を使っている箇所（探し方と、当たった件数と、直す件数）
+    3. 対応する文書（FAQ・設計文書・README・雛形・コード中のコメント）
+    4. いままで通っていたもので、止まるようになるもの
+    5. いままで止まっていたもので、通るようになるもの
+    6. 直したあとに流す入力（下の「入力」を全部流し、判定が変わっていないことを確かめる）
+       **1周目と 3-2 の周は「まだ無い」と書いてください。**前の周に流したものが無く、計画の周には流す先もありません
+
+**「入力」とは、その直しが判定を変える対象のことです。**テストの実行・検査のコマンド・エージェントへ渡す文面・設定ファイルの値など、
+**そのプロジェクトで「これを流すと結果が出る」と言えるものです。**
+**前の周までに流したものを、全部そのまま流してください。**1つでも飛ばすと、直しが持ち込んだ欠陥を、その周では見つけられません。
+
+**段2 は、文字列で探すだけでは足りません。**
+**直した文の「前提」を1文で言い直してから、その前提の上に立っている箇所を探してください。**
+実測（2026-09-04）: 検索で数える段を足した直後の周でも、同じ形が3件残りました。
+残っていたのは、**同じ文字列を1つも含まないのに、同じ前提の上に立っている**箇所です。
+**前提を1文にできないなら、まだ直す準備ができていません。**
+
+**1件ずつ直してはいけません。上の1〜3を全部並べてから、一気に直してください。**
+**1件直すたびにレビューへ戻ると、同じ処理を使っている箇所と文書が、そのつど取り残されます。**
+
+**仕組みを足さないと直らない指摘は、その場で入れないでください。**
+**判断票に「仕組みを足す直し」と書き、issue が求めることに入るかを先に判定します。**
+そうしないと、指摘のたびに仕組みが1つ増えます。
+**入るかどうかを決められないときは、5-4 のとおり止まって人間に訊いてください。**
+
+**4と5と6を空けたまま直してはいけません。**
+実測（2026-09-20）: この欄を書かずに25件を直したところ、**次の周の20件のうち10件が、その直しが持ち込んだものでした。**
+原因は4つで、**実物を測らずに決めた・片側だけ直した・同じファイルに書いてある方針を読まずに直した・自分の出力の形を想定に入れなかった**です。
+
+**4と5と6に「意図していない変化」が出たら、限界として文書へ書いてから入れてください。**黙って入れないこと。
+
+### issue に無いものを削る
+
+**毎周、実装した内容と issue を突き合わせてください。**
+**収まった周も、収まっていない周も、同じように突き合わせます。**指摘が1件も出なかった周こそ、**issue が頼んでいない機能が、誰にも見られないまま通ります。**
+**3-2 の周は、まだ実装がありません。**そこでは計画の本文と issue を突き合わせます。
+
+    1. issue の本文とコメントを、あなたが省略せずに読み直す
+    2. issue が求めていない内容が入っていないかを見る
+    3. 入っているなら、それが必要となる合理的理由をまとめる
+    4. その理由で敵対的レビュワーを説得する
+    5. 説得できなかった内容は削除し、削除した内容を issue のコメントへ残す
+
+**段1 を subagent へ渡さないでください。**別の文脈で走るので、**そこで読んだ経緯はあなたに残りません。**
+**判断するのはあなたなので、あなたが読むほうが強い。**
+**出来上がったものに引きずられる心配は、段4 の敵対的レビュワーが受け持ちます。**
+**その役は issue を自分で読み、落とすために読むので、実装に引きずられない目が1つ入ります。**
+
+**判定するのは敵対的レビュワーです。**人間へは経緯を報告し、返事は待ちません。
+**削除が起きた周だけ、設計から見直してください。**見るのは2点です。
+**削除して全体の釣り合いが崩れていないかと、残したものの採用理由が変わっていないかです。**
+**削ったものと組で要ると説明していたものは、その説明が成り立たなくなっています。**
+**見直した設計を、敵対的レビューへ通してから直し直してください。**通さないと、取り去ったあとの設計を誰も見ていないことになります。
+**3-2 の周では、直す先は計画の本文です。**まだ実装がありません。
+**削除が無かった周は、設計へ戻らずにそのまま直します。**
+
+**issue が直接求めていない内容を足したくなったら、先に自分を疑ってください。**
+
+    - 調べ漏れで、答えが既に計画や issue のコメントに書いてあるのではないか
+    - 経緯を把握できているか。前提を間違えていないか
+    - 分からないなら、読み直してから判定する。それでも分からないなら人間に訊く
+
+### 何周回すか
+
+| 状態 | 次に何をするか |
+| --- | --- |
+| **critical か high が1件以上** | 直して次の周を回す |
+| **収まった。mid と low を直さないと決めた** | **そこで終わりです** |
+| **収まった。mid か low を直した** | **最後に1回だけ回します** |
+| **その最後の周でも収まっている** | **もう直しません。**そこで終わりです |
+
+**10回目で収まったときは、上の「最後に1回だけ回します」を回しません。**連続10回の上限が優先します。
+**そのとき mid と low は直さず、そのまま残してください。**
+**連続10回で収まらなかったら、そこで完全に止まり、人間へ方針を確認してください。**
+**3-2（計画のレビュー）と 3-6（pull request のレビュー）は、別々に数えてください。**足して20回ではありません。**どちらか一方が10回に達した時点で止まります。**
+**止まるときは、応答の最後に `CONTINUO-STATUS: blocked` を書いてください**（5-4）。
+**書かずに黙ると、continuo からは「まだ喋っている最中」と区別が付きません。**待ち時間の上限まで枠を持ったままになります。
+**人間が方針を変えたら、そこから数え直します。**
+
+**回す回数を増やすほど、直しが新しい欠陥を持ち込む機会も増えます。**
+**この節は、周を減らすために書いてあります。**周を増やす言い訳に使わないでください。
+
+**収まらないこと自体が、「計画があやふやである」ことの証拠です。**
+**この節で「設計から見直す」と書いているのは、3-2 で書いた計画の本文へ戻ることです。**リポジトリの中の設計文書を書き換えることではありません。
+実測した3件では、レビューの回数と、直そうとしたものの大きさが比例しました。
+**1回目にログ1行・エラーの文面1本・文書だけだったものが、3回目には17ファイル・11ファイル・検査の仕組み付きになり、
+それでも critical がそれぞれ1件・2件・7件出ました。**
+
+**指摘は「守りが1箇所抜けている」という形で来ます。**素直に答えると、穴を埋めるものが1つ増えます。
+3回回せば3層になります。**層が増えても、抜けの元になった計画は変わっていません。**
+**より強いモデルへ直し方を訊いても、この向きは変わりません。**精密に答えるぶん、むしろ膨らみます。
+**効くのは「捨てられるものを挙げろ」と問うことです。**
+
+## 5-7. subagent へ渡すもの
+
+**この節は、あなたが subagent を立てるときに当たります。**5-6 のレビュワーもここに当たります。
+
+**subagent は、あなたが見ているものを1つも見ていません。**
+**渡さなかったものは、無かったことになります。**
+
+### 何のために呼ぶか
+
+    事実を集める   コードと記録を読んで、何がどうなっているかを返させる
+    レビューする   計画や差分の穴を挙げさせる（5-6）
+    実装する       決めた計画のとおりに直させる
+
+**呼ぶ前に、このうちどれかに決めてください。**1つの subagent へ2つを混ぜないでください。
+**レビューと実装を同じ subagent へ渡すと、自分が書いたものを自分でレビューすることになります。**
+
+### 何を渡すか
+
+| 何 | 渡さないと何が起きるか |
+| --- | --- |
+| **何を作っているのかの1段落** | subagent は前提知識を持ちません。何を作っているのか分からないまま手を動かします |
+| **目的** | 何のための作業かが分からず、頼んでいないものが返ります |
+| **経緯**（何周目か、前に何を試して何が駄目だったか） | 前に駄目だった案がまた出ます。**レビュワーへ渡すのは「何周目か」だけです**（5-6。前に直した箇所は渡しません） |
+| **人間が出した指示の原文** | **要約しないでください。**要約すると、人間が名指しで取り下げた案が復活します |
+| **決めた理由と、却下した案の却下理由** | 却下済みの案を出し直します |
+| **関連するファイルの絶対パスと行番号** | 「この文書の中にあります」は、渡していないのと同じです。**差分を読む役へは、差分の外の場所を名指しして渡しません**（5-6） |
+| **その材料を確かめてあるか / 確かめていないか** | 別の subagent の報告を確定した事実として扱い、その上に結論を積みます。間違いは積んだ結論の全部に伝わります |
+| **数える範囲**（絶対パス） | subagent が別の checkout を数え、同じ文字列が0件と1件に割れます。**差分を読む役へは、数える範囲を渡しません**（5-6） |
+| **前の周の判断票のうち、直さないと決めた指摘とその理由**（2周目以降のレビュー） | 否定した指摘が毎周また挙がります。**直した箇所の一覧は渡しません。例外は3つ目の役だけです**（5-6） |
+| **前の周に作った前提の一覧**（2周目以降のレビュー。関連処理まで見る役だけ） | その役が毎周ゼロから前提を書き出し直します（5-6） |
+| **その作業でだけ効く判断**（「この検証用の仕組みは開発中にしか使わないので、最低限でよい」など） | 使い捨てのものを、本番と同じ作りで作ります |
+
+**パスは絶対パスで渡してください。**
+**subagent は、あなたとは別のディレクトリで走ることがあります。**
+相対パスは向こうの居場所を起点に解決されるので、`Read` が「無い」で返り、誰も気づきません。
+
+### どうやって渡すか
+
+**長いものはファイルへ書いて、その絶対パスを渡してください。**
+**`gh issue view` のようなコマンドで読ませないでください。**
+**subagent は、道具が `Read` / `Grep` / `Glob` だけで Bash を持たないことがあります。**
+**コマンドで読ませると1文字も読めず、既に確定している事実を「未確認」として指摘してきます。**
+
+**前の周の commit を確かめる役**（5-6 の「レビュワーへ何を求めるか」の段4）**には、Bash を持つ subagent を立ててください。**
+`git` を叩けないと、その判定はできません。
+
+**読んだうえで答えさせる問いを添えてください。**読んだふりを防げます。
+
+    読んだうえで、次に自分で答えてから作業に入ってください。
+
+    1. この作業には、渡された制約のどれが当てはまりますか
+    2. 作業に効く場所をどうやって探し、何を読みましたか。読めなかったものは、その理由も書いてください
+    3. 公開してよくない情報を、成果物に書きうる場面はありますか
+
+    答えを、最初の報告に書いてください。
+
+**「ありません」だけの答えを受け取らないでください。**
+**どう探したか（叩いた検索と、開いたファイル）を書かせます。**
+**あなたは、自分が何を渡し忘れたかに気づけません。**
+**だから「本当に無かったか」をあなたが判定するのではなく、subagent に探した跡を出させます。**
+
+**subagent にも、指示に書かれたことだけで判断させないでください。**
+着手する前に、触るファイルの呼び出し元と、対応するテストと、関連する記録を自分で読ませます。
+**あなたが落とすのは、まさに「名前を出さなかったもの」です。**
+
+**読んだ結果、あなたの指示が「人間が却下した案」を復活させていると分かったときは、
+着手せずに止めて報告するよう、subagent へ書いてください。**
+**気づけるのは subagent だけです。**あなたは自分の取りこぼしに気づけません。
+
+**subagent がさらに subagent を立てるなら、受け取った人間の指示の原文を、そのまま下へ渡させてください。**
+**そこで止めると、2段目から下は人間の指示を1つも知らないまま走ります。**
+
+### 渡してはいけないもの
+
+    pull request のマージ
+    ファイルやディレクトリの削除
+    本番の環境への書き込み
+    release の作成
+
+**やり直せない操作を subagent へ渡さないでください。**
+**マージと release は、そもそもあなたの仕事でもありません。**あなたは 3-7 の表明を書いて終わります。
+**本番の環境へ書き込む必要があるときは、人間へ渡してください。**
+**あなたが自分で叩くのも、subagent へ渡すのも、どちらもしないでください。**
+**カンバンは、これに当たりません。**Status を動かすのは continuo です（3-7）。
+**あなたは 3-7 の表明を1行書くだけで、`gh` を叩く必要はありません。**人間へ渡す必要もありません。
+**ファイルやディレクトリを消す必要があるときは、あなたが自分で行ってください。**
+**continuo が用意した worktree は、これに当たりません**（7-1）。**あれを消すと、その run の成果が丸ごと失われます。**
+
+**検査するコマンドを渡すときは、自分で1回叩いてから渡してください。**
+**あなたが書いたコマンドの誤りは、subagent には見抜けません。**
+**通ってはいけないものが通らないことも確かめてください。**
+
+### 走っている subagent へ訂正を送らない
+
+**送っても、元の実行が止まっているとは限りません。**
+**同じ subagent が二重に走り、同じファイルを書き合います。**
+**どちらも「自分は書いていないのに、ファイルが増え続けている」と報告してきます。**
+**完了を待って、返ってきた結果を見てから次を投げてください。**
 
 # 6. セキュリティ
 
@@ -11210,6 +11875,24 @@ issue ごとに1行ずつ表明を書きます。
     CONTINUO-STATUS: #45 review      （同じグループの別の issue）
 
 pull request の本文にも、その issue の分を1行ずつ足します（`Closes #45` のように書きます）。
+**足し方は次のとおりです。**本文を読めなかったとき（`gh` が失敗したか、中身が空だったとき）は書き戻さず、そのことを応答に書いてください。
+
+```bash
+F=$(mktemp)
+if gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json body --jq .body > "$F" && [ -s "$F" ]; then
+  if grep -qx 'Closes #<その issue の番号>' "$F"; then
+    echo "もう入っています"
+  else
+    printf '\nCloses #%s\n' '<その issue の番号>' >> "$F"
+    gh pr edit <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+  fi
+else
+  echo "PR の本文を読めませんでした。書き換えていません"
+fi
+```
+
+**読めたことを確かめずに `gh pr edit` を叩かないでください。**読めないまま書き戻すと、
+本文が足した1行だけになり、`Closes #{{.issue.number}}` と説明が消えます。
 
 別のリポジトリの issue は、この worktree では直せません。直さずにこう書きます。
 
@@ -11226,9 +11909,8 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **`working` を出した issue も書きません。**まだ終わっていないので、書く成果がありません。
 **書かせ直しを頼まれたときも、下の段1〜段3 を通してください。**
 
-**どの段でも、手元の絶対パスを書かないでください。**ファイルはリポジトリの根からの相対パスで書きます
-（`src/app.ts` のように）。**利用者名は個人情報で、worktree の置き場所はその機械の構成を明かします。**
-**issue のコメントは編集履歴が残るので、書いてしまうと取り消せません。**
+**どの段でも、書いてはいけない3つは 5-5 にあります。**手元の絶対パス・資格情報・社内だけで引けるホスト名です。
+**利用者名は個人情報で、worktree の置き場所はその機械の構成を明かします。**
 **7-2 のコメントは、あなたが `gh` で直に書くので、continuo が縮める処理を通りません。**
 
 **段1。その issue に、自分の成果報告が既にあるかを見ます。**
@@ -11286,26 +11968,33 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 読み取りに失敗したまま書き換えると、
 **`<!-- continuo:group -->` の印ごと本文が消え、段1 がその成果報告を二度と見つけられなくなります。**
 
-    URL=<段1が返した URL>
-    ID=${URL##*#issuecomment-}
-    case "$ID" in
-      '' | *[!0-9]*)
-        echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+```bash
+ADD=$(mktemp)
+cat > "$ADD" <<'LINE'
+- <上の表で決めた行>
+LINE
+URL=<段1が返した URL>
+ID=${URL##*#issuecomment-}
+case "$ID" in
+  '' | *[!0-9]*)
+    echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+    ;;
+  *)
+    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+    case "$OLD" in
+      *"<!-- continuo:group -->"*)
+        F=$(mktemp)
+        { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+          -F body=@"$F"
         ;;
       *)
-        OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-        case "$OLD" in
-          *"<!-- continuo:group -->"*)
-            gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-              -f body="$OLD
-    - <上の表で決めた行>"
-            ;;
-          *)
-            echo "本文を読めませんでした。段2b で新しく1件投稿します"
-            ;;
-        esac
+        echo "本文を読めませんでした。段2b で新しく1件投稿します"
         ;;
     esac
+    ;;
+esac
+```
 
 **段2b。段1 が何も返さなかったとき、または段2a が「段2b で新しく1件投稿します」と出したときは、
 新しく1件投稿します。**
@@ -11323,24 +12012,40 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **あとから逆の表明で行を足したときに、先頭だけが嘘になります**（`blocked` で書いた issue が、人間の回答のあとに `review` になることがあります）。
 **直したかどうかは、下の行の中身で分かります。**
 
+**「そこを変えた理由」と「前に書いていない分」は自由に書く行です。**終わりの語（`GROUP` や `LINE`）だけの行を作らないでください（3-2 と同じ理由です）。
+
 **`review` を出した issue には、こう書きます。**
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
-    - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
-    - pull request: <PR の URL>"
+- 何を直したか: <この issue が書いている症状に対して、何を変えたか>
+- 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
+- pull request: <PR の URL>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
+
+**本文は、ファイルへ書いてから `--body-file` で渡してください。**二重引用符の中へ書くと、backtick と `$` をシェルが実行します。
 
 **`blocked` を出した issue には、直せていません。**
 **「まとめて直しました」と書かないでください。**無い pull request の URL も書かないでください。
 **直していない issue に、直したという記録が残ります。**代わりにこう書きます。
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - どこまで見たか: <調べたことと、分かったこと>
-    - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>"
+- どこまで見たか: <調べたことと、分かったこと>
+- なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **先頭の印は `<!-- continuo:group -->` です。**3-7 や 5-3 の `<!-- continuo:agent -->` を使わないでください。
 **その印は「いま担当している issue のエージェントが書いた」という意味で、continuo が
@@ -11483,14 +12188,14 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 | **`### テストの走らせ方`** | このリポジトリでテストを走らせるコマンド | **無し**（案内のコメントだけ） | エージェントが自分で探す |
 | **`### まとめて直してよい範囲`** | 同じグループの issue をまとめて直させるか | まとめて直す | **1つの turn で1つの issue だけを直す。ただし断定できない**（組み込みの 7-2 の手順は残り、グループの計画は代表の issue のコメント側にもある。**節を消したときの振る舞いは測っていない**） |
 | **`### pull request の決まり`** | draft にするか・base にする branch・付けるラベルのような project 固有の決まり。**「PR を作らない」は書けない** | **無し**（案内のコメントだけ） | **組み込みの指示のとおりに作られる**（5-3i） |
-| **`### レビューを頼む subagent`** | 3-2 と 3-6 が言う「敵対的レビューの subagent」の、このリポジトリでの名前 | **無し**（案内のコメントだけ） | エージェントが自分で選ぶ |
+| **`### レビューを頼む subagent`** | 5-6 が言う「差分を読む役」と「関連処理まで見る役」の、このリポジトリでの名前を、その順に2つ | **無し**（案内のコメントだけ） | general-purpose へ頼む（7-4） |
 
 **`### 書く言語` は `language` に連動させる**（issue #187。人間が issue のコメントで決めた）。
 **実装が引くのは、そのプロセスで選ばれている画面の言語である**（`i18n.T`）。
 **`continuo init` は front matter へ `language: auto` を書き、`auto` は環境変数から決まる**ので、
 書き出した時点では両者は同じ値になる。
 **`applyWriteLanguage` は front matter を読まない。**front matter の `language` を読むのは
-`useLanguageFromConfig`（[internal/cli/cli.go:868](../../internal/cli/cli.go#L868)）で、
+`useLanguageFromConfig`（[internal/cli/cli.go:882](../../internal/cli/cli.go#L882)）で、
 **そちらは画面に出す文言の言語を決める**（3-35。設定が主・環境変数 `LANG` が従）。
 **`continuo init` はその経路を通らない**ので、雛形へ差し込む1行は環境変数から決まる。
 **continuo は OSS として配る。**日本語を読み書きしない人も `continuo init` を叩く。
@@ -11751,7 +12456,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 | `design-review-result` | `<!-- design-review-result -->` | **紐づく issue のコメント** |
 | `code-review-result` | `<!-- code-review-result -->` | **その pull request のコメント** |
 
-**数える条件は、既存の3箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
+**数える条件は、既存の2箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
 **揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。**
 
 **4通りの組み合わせと終了コード。**
@@ -11808,11 +12513,11 @@ pull request の画面では「まだ走っていない」と見分けが付か�
 | **逃がし口の形** | 目印の行と、その次の行に理由 | 目印の中へ書かせると、閉じの `--` を理由と読んで `<!-- design-review-skipped: -->` が通る |
 | **エージェントに断りを書かせない** | 組み込みの 3-5 に明記する | 止めたい相手が自分で逃がし口を書けては、検査の意味が無い |
 
-**hook とリリース前の検査には足さない。**
-[.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) と
+**リリース前の検査には足さない。**
 [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) は、実装のレビューだけを見る。
-**CI を必須の検査に入れれば、そこが最後の門になる。**hook は AI の手元の先回りで、
-リリース前の検査は既にマージされたものを数えるものである。**どちらも門ではない。**
+**CI を必須の検査に入れれば、そこが最後の門になる。**
+リリース前の検査は既にマージされたものを数えるものである。**門ではない。**
+（AI の手元で先回りする hook も在ったが、2026-09-21 に廃止した。）
 
 **目印を設定から変えられる形にしない。**目印は、組み込みの指示書がエージェントに書かせる
 文字列と対でしか意味を持たない。**組み込みは実行ファイルの中にあり、利用者は変えられない**（5-3c）。
@@ -11885,7 +12590,7 @@ OWNER / MEMBER / COLLABORATOR の記述と、4-4 に書かれた出し方の両�
 | --- | --- | --- |
 | **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
 | **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
-| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:148](../../internal/config/default.go#L148)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
+| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:154](../../internal/config/default.go#L154)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
 
 **なぜ勝手に決めないか。**3つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
 **その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。
@@ -12088,7 +12793,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:219-252](../../internal/prompt/builtin.md#L219-L252) の
+**採る形。**[internal/prompt/builtin.md:332-379](../../internal/prompt/builtin.md#L332-L379) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。
@@ -12114,7 +12819,7 @@ push できる状態のときだけ**である。
 | **本文は前半と後半のあいだに挟まる**（5-3c） | **打ち消しを受け付けるかどうかは、組み込みの側が節ごとに決める。**3-5 は前半にあるが、**3-4 の例外を使ったときだけ 4-4 へ譲る口を1つ開けてある**（3-78b）。**手順そのものを差し替える口は、これ1つだけである。**7-4 が本文へ譲る4つは、**手順の中の値**（draft にするか・base にする branch・成果の出し方・分岐元）であって、手順の差し替えではない |
 
 **雛形に既定を置かない。**組み込みの 7-4 が本文へ譲るのは4つである（draft にするか・base にする branch・成果がこの worktree の外にあるときの出し方・この worktree の分岐元）。**どれも project ごとに違う。**付けるラベルのような project 固有の決まりも、本文に書く。
-[CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」は
+[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」は
 **このリポジトリの決まりであって、配るものではない。**
 
 **採らなかった案。**
@@ -12175,9 +12880,19 @@ push できる状態のときだけ**である。
 **組み込みの指示書へ、計画に図を書かせる段（3-2）と、人間へ質問・報告するときの形（5-5）を足す。**
 **雛形（`WORKFLOW.md` の本文）へは足さない。**
 
-**図を貼る先は、計画のコメントである**（5-3q が決めた `<!-- continuo:plan -->` のコメント）。
-**判断票ではない。**「実装しようとしている内容」を書くのは計画のほうで、
-**判断票はレビューを受けたあとの結果だからである。**
+**図を必ず入れるのは、計画のコメントである**（5-3q が決めた `<!-- continuo:plan -->` のコメント）。
+「実装しようとしている内容」を書くのは計画のほうだからである。
+**判断票と成果の報告にも、5-5 に従って図を多用する。**
+
+**判断票と成果の報告も、5-5 の7つの見出しで書く。**判断票の表は、その節の `### 詳細` の中に置く
+（組み込みの 3-2 と 3-6 の見本）。**成果の報告の見本（3-7）は、印の1行と題名だけを見せ、中身は 5-5 へ案内する。**
+5-5 の骨組みの印は計画のものなので、写させない。
+
+**7つの形を採った理由。**人間がこの形を指定した（issue #259 のコメント 5628567491）。
+節ごとに引用を置くと、どの説明がどの原文への返答かが位置で分かる。
+sequenceDiagram に具体的な値を載せると、書く側が具体を詰めることになり、そこで設計の穴が出る。
+技術用語は、日本語へ訳すより英語のままのほうが通じる。
+**人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊かない**（同じ issue のコメント 5708020098）。
 
 **この節でいう 5-5 は組み込みの節である**（[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の
 `## 5-5. 人間へ質問・報告するコメントの書き方`）。**下の 5-5（設定値の展開規則）ではない。**
@@ -12194,7 +12909,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | --- | --- | --- |
 | **図の書式** | **mermaid。種類は `flowchart` か `sequenceDiagram`** | **GitHub が issue のコメントの mermaid を、そのまま図として表示する。**読む人に別の道具が要らない。組み込みの `# 1. 概要` が既に mermaid を使っており、**同じ文書で2つの書式を使わない** |
 | **置き場所** | **組み込み**（[internal/prompt/builtin.md](../../internal/prompt/builtin.md)） | 下の表 |
-| **機械で検査するか** | **この issue の範囲では作らない** | 求められているのは「情報が揃うこと」であって、見出しが並ぶことではない。**CI で落とすと、内容の薄いコメントで pull request がマージできなくなる。**要ると分かったら、そのとき別の issue を立てる |
+| **機械で検査するか** | **この issue の範囲では作らない** | 求められているのは「情報が揃うこと」であって、見出しが並ぶことではない。**CI で落とすと、内容の薄いコメントで pull request がマージできなくなる。**要ると分かったら、そのとき人間に諮る |
 
 **置き場所を組み込みにした理由。**
 
@@ -12211,17 +12926,17 @@ Claude Code を手で使うときの1往復とは値段が違う。
 `TestTemplate_雛形の本文に組み込みの説明を書き写していない` も、
 **見出しの文字列が同じなら**落とす（別の見出し名で同じ趣旨を書けば素通りするので、これは補助である）。
 
-**5-5 の4つを、印の行より前に書かせてはならない。**
+**5-5 の7つを、印の行より前に書かせてはならない。**
 計画（3-2）・判断票（3-2 と 3-6）・成果の報告（3-7）は、
 **本文の先頭が HTML のコメントの印でなければ数えられない**
 （[internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `FetchComments` と、
 [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) の2つの検査）。
-**4つの1つ目が引用なので、そのままではコメントの冒頭へ置かれる。**
+**7つの1つ目が引用なので、そのままではコメントの冒頭へ置かれる。**
 **置かれると印が先頭から外れ、continuo は成果が書かれていないと判断して run を人間へ渡す。**
 だから組み込みの 5-5 は、末尾で「印の行より前には1文字も置かない」と明示している。
 
 **5-5 の対象に、途中経過の報告（5-3）を入れない。**
-5-3 が書かせるのは `- <日時> いま <何をしているか>` の1行だけで、**4つを置く場所が無い。**
+5-3 が書かせるのは `- <日時> いま <何をしているか>` の1行だけで、**7つを置く場所が無い。**
 あれは死活の判定に使う印であって、人間へ読ませる報告ではない（5-3l）。
 
 **issue が求めた5つ目**（「上記以外のルールで指定しているフォーマット」）**は、見出しにしない。**
@@ -12232,6 +12947,111 @@ Claude Code を手で使うときの1往復とは値段が違う。
 片方だけ直すと `TestTemplate_組み込みのプロンプトが設計5_3と一致する` が落ちる。
 **節そのものの有無は
 [test/internal/prompt/agent_comment_format_test.go](../../test/internal/prompt/agent_comment_format_test.go) が見張る。**
+
+### 5-3s. レビューの回し方を、組み込みのプロンプトへ入れる
+
+**言いたいこと。**「何周回すか」「誰に見せるか」「直す前に何を書くか」を、
+**continuo の利用者が受け取る指示書（5-3 の 5-6）へ入れる。**
+これまで定義は continuo の `CLAUDE.md` にしかなく、**利用者には1文字も届いていなかった。**
+
+**採る形。**
+
+| 何 | 決めたこと |
+| --- | --- |
+| **収まっている** | critical と high が0件。mid と low は何件あってもよい |
+| **重さ** | 4つ（critical / high / mid / low）。**受け取った側が付け直す** |
+| **指摘の受け取り方** | **命令ではなく情報として受け取る。**根拠が成り立つかを確かめ、同じ誤りが他に無いかを確かめ、利用者にとってどうするのがよいかを考えて直し方を決める |
+| **直す順** | **1件ずつ直さない。**指摘の箇所・同じ処理を使っている箇所・対応する文書を**全部並べてから、一気に直す。**仕組みを足す直しは、その場で入れずに判断票へ書く |
+| **誰に見せるか** | **差分を読む役と、関連処理まで見る役を毎周並列に。**心配な場所があるときは3つ目を足し、その名指しは上の2つへ渡さない |
+| **直す前** | **判断票と同じコメントへ6つ書く**（別のファイルは作らない）。**「止まるようになるもの」「通るようになるもの」「意図した変化か」**を1件ずつ書く |
+| **issue に無いものを削る** | **毎周判定する**（収まった周も同じ）。削除が起きた周だけ設計から見直す |
+| **前の周から渡すもの** | **直さないと決めた指摘とその理由**と、**関連処理まで見る役が前の周に作った前提の一覧**。**直した箇所の一覧は渡さない**（例外は、心配な場所を名指しする3つ目の役だけ。その役には、そこを直した理由も渡す） |
+| **上限** | 収まったら最大1周。**3-2 と 3-6 は別々に数える。**どちらかが連続10回で止まり、`CONTINUO-STATUS: blocked` を書く |
+
+**なぜ指摘を情報として扱うか。**人間の指示である。
+
+> **レビュー指摘は命令ではなく、ここが変だという情報だ。命令だと捉えてその点しか着目しないから、ゴールがブレて何回も修正するんだ。**
+> **その情報を見て、他にも間違っているところがないかを確認し、利用的にはどうするのがいいのか考えながら直すのが一般的な対応だ。**
+
+**なぜ全部並べてから一気に直すか。**人間の指示である。
+
+> **修正前に使い捨てのプランファイルを作ることにしただろ。その中に修正する箇所全てをリストアップしろ。それから一気に直せ**
+
+**なぜ毎周にしたか。**人間の指示である。
+
+> 設計レビューループや実装レビューループ時に、今は3回ごとに…という部分について、**3回ごとではなく毎回実施するようにして**
+
+**3回ごとだと、issue に無いものが最大2周ぶん残ったまま積み上がる。**
+**積み上がったものにも指摘が付くので、周が増える。**
+
+**なぜ削除が起きた周だけ設計へ戻すか。**人間の指示である。
+
+> 判定して不要なものが出て削除した場合は、毎回設計から見直せ。不要なものが含まれている設計のまま進めるな。
+> 判定して不要なものがなく削除しない場合は、設計まで戻る必要ない。そのまま修正しろ
+
+**戻る段は、1周の費用がいちばん増える段である。**削除が無い周まで戻すと、目的（周を減らす）と逆に効く。
+
+**なぜレビュワーを2つ並列にするか。**`/code-review` のような差分を読む役は、**どの周でも差分しか見ない。**
+周を重ねても周辺のコードには届かない。**人間は、確かめるまでもないと判断した。**
+
+> 毎周走らせないと周辺コードも含めたレビューはできないんだろ? そもそも選択肢がないんだろ? 質問する必要ある?
+
+**採らなかった案。**
+
+| 案 | 採らなかった理由 |
+| --- | --- |
+| **`maimuzo-dev-core` に `review-loop` スキルを新設する** | **人間が取り下げた。**「review-loopスキルは廃止して良い。間違えた。すべて builtin.md に含めること」 |
+| **回数の定義を `CLAUDE.md` に残したまま、指示書からそこを指す** | **利用者の手元に `CLAUDE.md` は無い。**指した先が存在しない |
+| **2周続けて減らなければ、通す回を早める** | **毎周通すので、通す回を選ぶ規則そのものが要らなくなった** |
+
+**この節の文面を直すときは、5-3 の組み込みのプロンプトも同時に直す。**
+片方だけ直すと `TestTemplate_組み込みのプロンプトが設計5_3と一致する` が落ちる。
+**節そのものの有無は
+[test/internal/prompt/agent_comment_format_test.go](../../test/internal/prompt/agent_comment_format_test.go) の
+`Test組み込みのプロンプトがレビューの回し方を持つ` が見張る。**
+
+### 5-3t. コメントと pull request の本文・題名を、シェルに実行させずに渡す
+
+**言いたいこと。**組み込みの指示書（5-3）は、本文も題名も一時ファイルへ書かせ、`--body-file` と `"$(cat "$T")"` で渡させる。
+**見本はコード囲みに入れ、中身を行頭から書く。**字下げした見本を写すと、ヒアドキュメントが閉じずに何も投稿されない。
+
+**採る形。**
+
+| 何を渡すか | 渡し方 | 見本の場所 |
+| --- | --- | --- |
+| **issue のコメント** | `cat > "$F" <<'DONE'` … `gh issue comment … --body-file "$F"` | 組み込みの 3-2・3-7・5-3 の段2b・7-2 の段2b |
+| **コメントへの書き足し** | 足す行を `ADD` へ書き、読めたことを `case` で確かめてから `{ printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"` と `gh api --method PATCH … -F body=@"$F"` | 組み込みの 5-3 と 7-2 の段2a |
+| **pull request の本文と題名** | 題名を `T` へ、本文を `F` へ書き、`gh pr create --title "$(cat "$T")" --body-file "$F"` | 組み込みの 3-5 |
+| **pull request の本文への1行** | `gh pr view … --jq .body > "$F"` が成功し中身が空でないときだけ、`printf '\nCloses #%s\n'` で足して `gh pr edit … --body-file "$F"` | 組み込みの 7-2 |
+| **別のリポジトリへの commit と pull request** | メッセージを `M` へ書き、`git commit -a -F "$M"` と `--title "$(cat "$M")"` | 3-78b（利用者が 4-4 へ置く） |
+| **書かせ直しの報告** | 3-7 と同じ | [internal/orchestrator/prompt.go](../../internal/orchestrator/prompt.go) の `buildCommentRequestPrompt` |
+
+**終わりの語だけの行を本文に作らせない。**本文に `PLAN` だけの行があると、そこで本文が切れ、後ろの行がシェルのコマンドになる。**指示書の 3-2・7-2・書かせ直しの文面に、その1文を置く**（3-5・3-6・3-7 は「3-2 と同じ理由」で 3-2 を指す）。5-3 の進捗報告は本文が1行なので置かない。**本文を Write ツールで作業ディレクトリの外へ書かせる案は採らない。**作業ディレクトリの外への書き込みは判定役へ回り、本文1件あたりの判定が1回から3回に増える（公式文書の「Allowed by default」は作業ディレクトリの中のファイル操作だけを挙げる）。**終わりの語をその回ごとに作らせる案も採らない。**その回限りの語を使ったかを機械で確かめられない。
+
+**なぜこの形か。**2026-09-17 に測った。
+
+- **二重引用符の中の `` `…` `` と `$( )` は、bash が実行した。**区切りを引用したヒアドキュメント（`<<'E'`）の中では実行しなかった。`"$(cat "$T")"` の中身を、シェルがもう一度実行することは無い。
+- **指示書は表示されず、文字列のまま届く。**4桁の字下げのまま写した見本を bash と zsh に渡すと、`case` を持たない見本は終わりの行が閉じず、後ろの `gh` まで本文に取り込まれて終了コード 0 で終わった。`case` の中にある見本は、構文の誤りで止まった。
+- **一時ファイルへの書き込みは、既定の `auto`（continuo が起動した Claude Code）でも、許可 `["Bash"]` の `dontAsk` でも拒否されなかった。**
+- **`gh pr view <番号> --json body --jq .body` は、読めないとき終了コード 1 で標準出力が空だった。**
+
+**採らなかった案。**
+
+| 案 | 採らない理由 |
+| --- | --- |
+| **`--body "…"` の二重引用符で渡す** | 報告に書いた backtick や、issue から引いた `$(…)` が worktree の中で実行される |
+| **本文や題名を一重引用符で渡す** | `don't` のような `'` で引用が切れ、その後ろがコマンドになる |
+| **見本を4桁の字下げのままにする** | 字下げを外して写すかは測っていない。外さないと、報告が1件も出ないまま終了コード 0 で終わる |
+| **`<<-'E'` にする** | `<<-` が外すのはタブだけで、markdown の字下げは空白である |
+| **本文を worktree の中の `plan.md` などへ書く** | 未追跡のファイルが残り、片付け（3-9 の `cleanup.require_clean_worktree`）が見送られる。`git add -A` で commit に混ざる |
+| **一時ファイルを `rm -f "$F"` で消させる** | 既定の `auto` で拒否された。公式文書（permission-modes の「Repeated blocks」）では、3回続けてか合わせて20回拒否されると auto mode が止まる |
+
+**成果の報告が印を途中で引用しても、報告として数える。**計画の印も進捗報告の印も、
+見るのは本文の先頭の印の並びだけである（[internal/handoff/assess.go](../../internal/handoff/assess.go) の `StartsAsPlan` と `StartsAsProgressReport`）。
+
+**見張るテスト。**[test/internal/prompt/heredoc_sample_test.go](../../test/internal/prompt/heredoc_sample_test.go) が、
+ヒアドキュメントが囲みの中で行頭の終わりの行で閉じること、題名を直に渡させないこと、
+本文のファイルを worktree の中に作らせないこと、計画の見本の2行目が計画の印であることを見る。
 
 ### 5-4. 2回目以降のプロンプト
 
@@ -12286,7 +13106,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | **枠回復で自動再開するか** | **レートリミットを使い切った状態でないと観測できない。**枠を意図的に使い切るのは「定額運用」の趣旨に反する | continuo が枠の回復を待って再 dispatch する。**3-27 に既に書いてある経路を使うだけ** |
 | **`settle_ms` を何秒にするか** | **上限を決める仕組みが分からない。**観測できた8件はいずれも 0.037 秒以内だったが、**何が上限を決めているのかを特定できていない。**運用のログで分布を取るしかない | **設定を伸ばすだけ。**実際の間隔を毎回ログに出すので、実データで決め直せる（3-2） |
 | **usage API がトークンを消費するか・課金されるか** | **`percent` が整数の百分率なので、少量の消費を判別できない。**課金の有無を突き合わせる手段（利用量の明細）を持っていない | **`rate_limit.source: none` にして、この API を叩かずに運用する。**枠待ちと固まりを区別できなくなるので、stall 検知だけに頼る（3-27） |
-| **Bash 以外の確認で herdr が `blocked` を返すか** | **`--permission-mode dontAsk` では権限の確認が出ない**（**既定が `auto` になった 2026-09-09 以降は、判定役の遮断で確認が出うる。ただしその経路は6回試して観測できていない**）（許可リストの外は確認せずに拒否される）。**確認を出すには権限モードを変える必要があり、それは continuo の運用と違う条件になる** | **`blocked` を拾えない確認があれば、確認の画面で画面が止まるので `claude.turn_timeout_ms` の打ち切りが拾い、`failure_state` へ落ちる**（3-21）。**止まったまま残ることはない** |
+| **Bash 以外の確認で herdr が `blocked` を返すか** | **`--permission-mode dontAsk` では権限の確認が出ない**（**既定の `auto` では、判定役の遮断で確認が出うる。ただしその経路は6回試して観測できていない**）（許可リストの外は確認せずに拒否される）。**確認を出すには権限モードを変える必要があり、それは continuo の運用と違う条件になる** | **`blocked` を拾えない確認があれば、確認の画面で画面が止まるので `claude.turn_timeout_ms` の打ち切りが拾い、`failure_state` へ落ちる**（3-21）。**止まったまま残ることはない** |
 
 **確かめた3件は、この節から外して本文へ移した。**
 
@@ -12294,7 +13114,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | --- | --- |
 | turn の終わりをどう判定するか | 1-3 / 3-2 |
 | 表明の1行をどこから読むか | 3-25 |
-| `--permission-mode dontAsk` と subagent の関係 | 3-11 |
+| `--permission-mode` と subagent の関係 | 3-11 |
 
 ### 6-1. 運用に入ったら記録すること
 
@@ -12799,7 +13619,7 @@ pane / workspace には手を出さない。
 | `cwd` を省く | `worktree_not_found: worktree path not found` |
 | `cwd` に worktree のパスを渡す | `linked_worktree_source: New and open worktree actions start from the repo parent workspace.` |
 | `worktree.remove` | 親は閉じない（**放置すると issue 1件につき1つ溜まる**） |
-| 親を `workspace.close` する | **配下の worktree の workspace と pane も一緒に消える** |
+| 親を `workspace.close` する | **herdr 0.8.x では、配下の worktree の workspace と pane も一緒に消える。**herdr 0.9.0 以降は `workspace_group_close_required` で断られ、何も閉じない（実測: 2026-09-24、herdr 0.9.1） |
 
 ---
 
@@ -13341,7 +14161,7 @@ releasePrompt()
 ### 6-23. 公開 issue から実行させられる経路を、どう塞ぐか
 
 **言いたいこと。**この1件が片付くまで、**continuo をこのリポジトリのカンバンで動かさない**（2026-08-28、人間の判断）。
-**外部の第三者が書いた issue とコメントが、`dontAsk` で `Bash` を持つエージェントへ確認なしで届く。**
+**外部の第三者が書いた issue とコメントが、`Bash` を持つエージェントへ届く。**既定の `auto` では、allow の規則に当たらず読み取りだけでもないシェルのコマンドが判定役へ回る（公式文書 permission-modes の「How the classifier evaluates actions」）。判定役がそこで止めるかは測っていない。
 **「読ませない」では解けない。**外部のバグ報告は情報源として要る（2026-08-28、人間の判断）。
 
 **塞がっているところ。**カンバンは非公開なので、外部から Status は動かせない。
@@ -13355,9 +14175,9 @@ releasePrompt()
 
 **採る形は3層である。**どれか1つでは足りない。
 
-**ただし2層目は、2026-09-09 から既定で外してある**（`claude.tool_gate.mode` の既定が `off`。issue #259）。
+**ただし2層目は、既定では張らない**（`claude.tool_gate.mode` の既定が `off`）。
 **何も書かずに使い始めた人には2層で走る。**掛けたい人は `public_only` か `on` を書く。
-**外した理由。**この判定は hook の入力の JSON だけを見て会話を読まないので、
+**外した理由。**この判定は hook の入力の JSON だけを見るので、
 **人間が issue のコメントで許可を出しても通らず、担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。**
 **そのぶん、公開の issue へ第三者が書いた文が `Bash` になる経路は、既定では1層目だけで受ける。**
 **その1層目はエージェントへの指示であって、判定役への指示ではない。**下の表が
@@ -13418,7 +14238,7 @@ sequenceDiagram
     end
 
     rect rgba(230, 130, 60, 0.1)
-    Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）<br/>2026-09-09 から既定では張らない。掛けるには tool_gate.mode を書く
+    Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）<br/>既定では張らない。掛けるには tool_gate.mode を書く
     A->>J: PreToolUse。危ないコマンドを判定役へ渡す
     J-->>A: deny（理由つき）。turn は続く
     Note over C: continuo は判定を仲介しない。<br/>着手の段で張った settings.json だけが効く
@@ -13444,7 +14264,7 @@ sequenceDiagram
 | 守り | どの段で効くか | 破られたら何が起きるか |
 | --- | --- | --- |
 | **立場の札**（3-72） | **エージェントがコメントを読む瞬間** | 外部の指示を仕様だと思い込む |
-| **道具の判定**（3-64） | **危ないコマンドを実行する直前。**2026-09-09 から**既定では掛からない**（6-23 の冒頭） | そのコマンドが走る |
+| **道具の判定**（3-64） | **危ないコマンドを実行する直前。****既定では掛からない**（6-23 の冒頭） | そのコマンドが走る |
 | **印の照合**（3-65） | **turn が終わったあと** | **エージェントが報告を書いていないのに「書いた」と誤認し、書き直させるのをやめる** |
 
 **守り1と守り2の破られ方。**
@@ -13456,16 +14276,16 @@ sequenceDiagram
 
 **この3つで塞ぎ切れないものは、6-25 のとおり機械では塞げない。**
 
-### 6-24. 採らなかった塞ぎ方と、その理由
+### 6-24. 検討した塞ぎ方と、採らなかった理由
 
-**言いたいこと。**6-23 を決めるまでに5つ検討して落とした。**同じ案が再び出たときのために残す。**
+**言いたいこと。**6-23 を決めるまでに7つ検討した。`auto` モードは既定として採り、残りは落とした。**同じ案が再び出たときのために残す。**
 
-| 案 | 落とした理由 |
+| 案 | 採ったか・落とした理由 |
 | --- | --- |
 | **外部のコメントを読ませない** | **外部のバグ報告は情報源である。**読めないと修正できない（2026-08-28、人間の判断） |
 | **private な task 用リポジトリに指示を置く** | worktree も branch も「その issue のリポジトリ」に作られるので、**直したいコードがそこに無い。**PR のレビューコメントも塞がらない |
 | **docker で囲う** | **continuo にも herdr にも pane をコンテナの中に作る経路が無い。**turn の終わりの検知は Unix socket 1本に賭かっており、macOS で host の socket を渡すには Docker Desktop 4.87 と VMM が要る。**clone の `.git` を書き込み可で mount した時点で隔離が破れる** |
-| **`auto` モードにする** | **2026-09-09 に採った**（issue #259）。**既定はこちらである。**採らない案として残していたのは、3回連続または累計20回の遮断で一時停止して確認を出すという公式の記述による。**その経路は実機で観測できていない**（3-11） |
+| **`auto` モードにする** | **採った。既定である**（3-11）。**これだけでは、公開 issue の文がコマンドになる経路は塞がらない。**公式文書は、判定役が3回続けて、または通算20回遮断すると確認の画面へ戻ると書いているが、**その経路は実機で観測できていない** |
 | **allowlist（これだけ通す）** | **この脅威に効かない。**加害の手段が仕事に必ず要るコマンドそのものである。`git` と `gh` を許さないと1件も回せず、許した瞬間に force push も PR の merge も通る |
 | **専用の OS ユーザー** | **使いづらい。**こんな構造を強いられると誰も使わない（2026-08-28、人間の判断） |
 | **Claude Code の Bash sandbox** | **守れないものの側に、止めたいものが全部入っている**（3-63）。`gh` を外へ出さざるを得ず、出した瞬間に持ち出しが素通りする（2026-08-28、人間の判断） |
@@ -13524,7 +14344,7 @@ sequenceDiagram
 | 雛形の `owner` と `project_number` の例 | [internal/scaffold/template.go:27-28](../../internal/scaffold/template.go#L27-L28) |
 | 値を埋めたあとに残すコメント | [internal/scaffold/fill.go:30-33](../../internal/scaffold/fill.go#L30-L33) |
 | `owner` を引けなかったときの案内 | [internal/scaffold/detect.go:377-381](../../internal/scaffold/detect.go#L377-L381) |
-| `trust.repositories` の形が違うときのエラー | [internal/config/validate.go:722-726](../../internal/config/validate.go#L722-L726) |
+| `trust.repositories` の形が違うときのエラー | [internal/config/validate.go:778-782](../../internal/config/validate.go#L778-L782) |
 | 表明の書き方を示す GoDoc | [internal/orchestrator/signal.go:9-13](../../internal/orchestrator/signal.go#L9-L13) |
 
 **触らないもの。**module のパス・`LICENSE` の著作権者・`install.sh` の配布 URL・
@@ -13970,7 +14790,7 @@ orchestrator はそれとは別に受け取ったイベントの間隔を測る�
 （検索パターン `hook_bridge`、対象パス `internal/` `test/` `cmd/`）、
 [internal/config/expand.go:16](../../internal/config/expand.go#L16) の展開のキー名、
 [internal/socketpath/socketpath.go:114-147](../../internal/socketpath/socketpath.go#L114-L147) の探索順の説明、
-[internal/i18n/messages/ja.json:380](../../internal/i18n/messages/ja.json#L380) の画面に出す文言まで書き換えることになる。
+[internal/i18n/messages/ja.json:383](../../internal/i18n/messages/ja.json#L383) の画面に出す文言まで書き換えることになる。
 **入れ子のままなら、そのどれも触らずに済む。**
 
 ### 8-5. 名前を変えた設定キー

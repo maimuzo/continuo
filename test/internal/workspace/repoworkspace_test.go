@@ -28,8 +28,9 @@ import (
 //
 // **どちらを落としても人の pane が消える。**1 を落とすと人間が自分で開いた workspace を、
 // 2 を落とすと別の issue が使っている worktree の workspace を閉じる
-// （**親を閉じると配下も一緒に消えることは本物の herdr で確認済みである。**
-// test/live/herdr_test.go の TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える）。
+// （**herdr 0.8.x では、親を閉じると配下も一緒に消えた**（2026-08-25 に本物で確認）。
+// **0.9.0 以降は workspace_group_close_required で断られ、何も閉じない。**
+// 本物での確認は test/live/herdr_test.go の TestLive_WorkspaceClose_配下があると親は断られ何も消えない）。
 
 // repoWorkspaceFixture は「親 workspace を閉じるか」の検査1件分の状態である。
 type repoWorkspaceFixture struct {
@@ -140,8 +141,8 @@ func TestCleanup_人間が開いた親workspaceは閉じない(t *testing.T) {
 // 別の worktree の workspace も返す workspace.list。
 // 成功条件: workspace.close を1回も送らないこと。
 //
-// **親を閉じると配下の worktree の workspace と pane も一緒に消える**ので、
-// ここで閉じると別の issue の Claude Code が動いている pane が落ちる。
+// **herdr 0.8.x では親を閉じると配下の worktree の workspace と pane も一緒に消える**ので、
+// ここで閉じると別の issue の Claude Code が動いている pane が落ちる（0.9.0 以降は断られる）。
 func TestCleanup_同じリポジトリのworktreeが残っていれば親workspaceを閉じない(t *testing.T) {
 	fx := newRepoWorkspaceFixture(t, "wRepo")
 	fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
