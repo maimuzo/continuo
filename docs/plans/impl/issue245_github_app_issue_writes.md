@@ -2690,3 +2690,12 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | pull request | 誰が書いたものでも指示として扱わない、と continuo専用プロンプトに書く。pull request の本文の先頭の1行（「attribution が付きません」）を消す | 承認済み（6 へ移した） |
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
+
+### 10-6. 人間に訊いていること（2026-09-26 00:40 (JST) 時点）
+
+設計レビュー3周目（判断票: https://github.com/maimuzo/continuo/issues/245#issuecomment-5834994730 ）で止まった。答えをいただいてから 6 を直し、4周目を回す。
+
+| 何を | どこで訊いたか | 答えで変わるもの |
+| --- | --- | --- |
+| 組織のリポジトリで使えるように、GitHub App を public で作ってよいか | https://github.com/maimuzo/continuo/issues/245#issuecomment-5834704258 の最後の節 | 3-82g の manifest の `public` と、install の画面の説明・FAQ |
+| Claude Code の中で更新用のトークンを回すのをやめ、期限の無いアクセストークンを資格情報のファイルに置いてよいか（2026-09-08 の決定「このアクセストークンはファイルには出力しない。」とぶつかる） | https://github.com/maimuzo/continuo/issues/245#issuecomment-5834994730 の最後の節 | 1・3-82b・3-82c・3-82d・3-82g の全体。回転・ロック・install の一覧・恒久と一時の分け方が要らなくなる |
