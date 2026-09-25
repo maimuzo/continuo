@@ -506,7 +506,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `worktree.list` | `cwd` / `workspace_id` | worktree の一覧 |
 | `workspace.rename` | **`workspace_id`** / **`label`** | herdr workspace に label を書く |
 | `workspace.list` | （なし） | herdr workspace の一覧 |
-| `workspace.close` | **`workspace_id`** | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10） |
+| `workspace.close` | **`workspace_id`** / `close_group`（herdr 0.9.0 から） | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10）。**`close_group` は送らない。**送ると配下の worktree の pane ごと閉じる。送らなければ、配下を持つ親は `workspace_group_close_required` で断られ、何も閉じない（3-9 の段3b） |
 | `agent.rename` | **`target`** / `name` | agent の名前を変える |
 | `session.snapshot` | （なし） | 現在の状態をまとめて取る |
 | `pane.report_agent` | **`pane_id`** / **`source`** / **`agent`** / **`state`** / `agent_session_id` ほか | **実プロセスを起動せずに「agent が居る pane」として登録する。**統合テストで使う。**`state` は4値で `done` を含まない** |
@@ -1664,7 +1664,7 @@ level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states に�
 | 条件 | どう確かめるか | 落とすと何が起きるか |
 | --- | --- | --- |
 | continuo が開かせたこと | `worktree.open` の**前**に `workspace.list` を引き、そのリポジトリの workspace が無かったことを見る。無ければ開いた**あと**にその ID を身元ファイルの `herdr_repo_workspace_id` へ書く（3-18） | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
-| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る | **親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる |
+| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る。**見てから閉じるまでの間に worktree が開いて、herdr 0.9.0 以降に `workspace_group_close_required` で断られたときは、親を残す。**引き継ぎは行わない（あとから開いた worktree の身元ファイルは段6 で初めて書かれ、書けても上書きで消える） | **herdr 0.8.x では親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる。0.9.0 以降は断られ、親が1つ残るだけで済む |
 
 **身元ファイルの値は現物と突き合わせてから使う。**そこはエージェントが書き換えられるので
 （3-18）、`herdr_repo_workspace_id` が指す workspace が**いま片付けたリポジトリ本体を
@@ -4305,7 +4305,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 
 ```text
 $ continuo doctor
-✓ herdr           protocol 19（設定と一致）
+✓ herdr           protocol 22（設定と一致）
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
@@ -9565,7 +9565,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20）
+  protocol: 22                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.9.1 と 0.9.0 が 22。0.8.2 は 20、0.8.0 は 19）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -12599,7 +12599,7 @@ pane / workspace には手を出さない。
 | `cwd` を省く | `worktree_not_found: worktree path not found` |
 | `cwd` に worktree のパスを渡す | `linked_worktree_source: New and open worktree actions start from the repo parent workspace.` |
 | `worktree.remove` | 親は閉じない（**放置すると issue 1件につき1つ溜まる**） |
-| 親を `workspace.close` する | **配下の worktree の workspace と pane も一緒に消える** |
+| 親を `workspace.close` する | **herdr 0.8.x では、配下の worktree の workspace と pane も一緒に消える。**herdr 0.9.0 以降は `workspace_group_close_required` で断られ、何も閉じない（実測: 2026-09-24、herdr 0.9.1） |
 
 ---
 

@@ -10,6 +10,9 @@ import (
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
 // 確認済みである（docs/plans/continuo_design.md 2-1 の
 // 「socket API の実在するメソッドと引数」。protocol=19 / herdr 0.8.0）。
+// 2026-09-24 に herdr 0.9.1（protocol=22）の `herdr api schema --json` と照合し、continuo が使う
+// メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
+// （continuo は送らない。workspace.go）。
 
 // MethodWorkspaceList は herdr の workspace の一覧を取るメソッド名である。
 //
@@ -22,7 +25,7 @@ const MethodWorkspaceList = "workspace.list"
 // worktree.open に cwd を渡すと、herdr は「その worktree の workspace」に加えて
 // 「cwd のリポジトリの workspace」も開く（実測: 2026-08-24。test/live で確認した）。
 // worktree.remove は前者しか閉じないので、後者はこれで閉じる。
-// 引数は `schemas.request.$defs.WorkspaceTarget`（workspace_id のみ。必須）である。
+// 引数は workspace_id（必須）と close_group（任意。herdr 0.9.0 から）である。
 const MethodWorkspaceClose = "workspace.close"
 
 // WorkspaceListResult は workspace.list の result である。
@@ -53,7 +56,13 @@ func (c *Client) WorkspaceList(ctx context.Context) (*WorkspaceListResult, error
 }
 
 // WorkspaceCloseParams は workspace.close の params である
-// （`schemas.request.$defs.WorkspaceTarget`。**引数は workspace_id だけで、必須である**）。
+// （`schemas.request.$defs.WorkspaceCloseParams`。必須は workspace_id だけである）。
+//
+// **herdr 0.9.0 から任意の `close_group` が増えたが、continuo は送らない。**
+// 送らないと、配下に worktree の workspace を持つ親は閉じず、
+// `workspace_group_close_required` で断られる（ErrCodeWorkspaceGroupCloseRequired）。
+// **送ると、配下の worktree の pane ごと閉じる。**continuo は配下が残っていないことを
+// 確かめてから親を閉じるので、断られるのは主に、その間に別の worktree が開いたときである。
 type WorkspaceCloseParams struct {
 	// WorkspaceID は閉じる workspace の ID である。
 	WorkspaceID string `json:"workspace_id"`
