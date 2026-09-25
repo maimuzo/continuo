@@ -122,13 +122,13 @@ func BuildContinuationPrompt(
 // （docs/plans/impl/issue245_github_app_attribution.md の 3-82e の「7本目」）。
 // **この文面はテンプレートを1度も通らない**ので、`{{if}}` と書くとその6文字がそのまま
 // エージェントへ届く。**だから Go の側で分ける。**組み込みの指示書の6本と同じく、
-// `gh issue comment` の行の前に `TOKEN=$(… github-app token) || exit 1` を足し、
-// 頭へ `GH_TOKEN="$TOKEN" ` を付ける。**`gh issue comment` から後ろの並びは変えない。**
+// `gh issue comment` の行の前に `TOKEN=$(… github-app token) || exit 1` と
+// `export GH_TOKEN="$TOKEN"` の2行を足す。**`gh issue comment` の行そのものは変えない。**
 // **枝は1つだけである。**「GitHub App のトークンが取れなかった run」を見分ける手段は無く、
 // その状態を持ち回す関数を作るとこの設計の外へ広がる。真の利用者でトークンが死んだ run は、
-// 組み込みの 5-6 と同じ2文に従って `GH_TOKEN` を外して投稿し直し、断りを1行入れる。
+// 組み込みの 5-8 と同じ2文に従って、足した2行を外して投稿し直し、断りを1行入れる。
 // **書かせ直しは成果を書かせる最後の経路なので、窓に当たったときの落ち方が最も重い。**
-// だから 5-6 の2文をここにも付ける。
+// だから 5-8 の2文をここにも付ける。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
@@ -144,29 +144,42 @@ func BuildContinuationPrompt(
 // 戻り値: 送る本文。
 func buildCommentRequestPrompt(issueURL, marker string, useAppToken bool, continuoPath string) string {
 	var b strings.Builder
-	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	// **真の枝は2行になる。**1行（`GH_TOKEN=$(…)`）にすると、トークンを取るコマンドが
+	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n")
+	// **本文は二重引用符の中へ書かせない。**シェルは二重引用符の中の backtick と `$( )` を展開するので、
+	// 報告に書いた `auto` のような語や、引用した第三者の `$(…)` が worktree の中で実行される。
+	// 組み込みの指示書の 3-2 と 5-5 と同じく、ファイルへ書いてから `--body-file` で渡させる。
+	b.WriteString("本文は、ファイルへ書いてから `--body-file` で渡してください。" +
+		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n")
+	// **見本は囲みに入れ、中身を行頭から書く。**この文面は表示されず、文字列のまま届く。
+	// 字下げした見本をそのまま写すと、`DONE` の行が終わりと読まれず、後ろの `gh` まで本文に取り込まれて
+	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。
+	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n")
+	// **本文に `DONE` だけの行があると、そこで本文が切れ、後ろの行がシェルのコマンドになる**（設計 5-3t）。
+	// 書かせ直しは単独で届き、組み込みの 3-2 を読み直すとは限らないので、ここにも書く。
+	b.WriteString("本文の中に `DONE` だけの行を作らないでください。入るなら、終わりの語を別のものに変えてください（例: `DONE2`）。\n\n")
+	b.WriteString("```bash\nF=$(mktemp)\n")
+	fmt.Fprintf(&b, "cat > \"$F\" <<'DONE'\n%s\nここに何をしたかを書く\nDONE\n", marker)
+	// **真の枝は2行を足す。**1行（`GH_TOKEN=$(…)`）にすると、トークンを取るコマンドが
 	// 落ちてもシェルは空文字を渡し、`gh` が手元の認証でそのまま投稿する。
 	// **落ちたことに誰も気づけない。**`|| exit 1` で塊ごと止める（同 3-82d）。
-	// **4字下げに揃える。**下の `gh issue comment` の行と同じ塊として読ませるためである。
 	if useAppToken {
-		fmt.Fprintf(&b, "    TOKEN=$(%s github-app token) || exit 1\n", shellquote.Quote(continuoPath))
-		b.WriteString(`    GH_TOKEN="$TOKEN" `)
-	} else {
-		b.WriteString("    ")
+		fmt.Fprintf(&b, "TOKEN=$(%s github-app token) || exit 1\n", shellquote.Quote(continuoPath))
+		// **`gh issue comment` の行は、偽の枝と1文字も変えない。**組み込みの指示書の6本と同じく、
+		// トークンは前の行の `export` で渡す（写した見本の `gh` の行を、どちらの枝でも同じにするため）。
+		b.WriteString("export GH_TOKEN=\"$TOKEN\"\n")
 	}
-	fmt.Fprintf(&b, "gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	fmt.Fprintf(&b, "gh issue comment %s --body-file \"$F\"\n```\n\n", issueURL)
 	if useAppToken {
-		// **組み込みの指示書の 5-6 と同じ2文である。**文面を変えるときは両方を直す。
+		// **組み込みの指示書の 5-8 と同じ2文である。**文面を変えるときは両方を直す。
 		// 断りの1行は `tracker.AppTokenFallbackNote`（Adapter が本体の投稿へ足すものと同じ定数。1文字も違えない）。
 		b.WriteString("**`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回だけやり直してください。**\n" +
 			"**`TOKEN=$(…)` が 0 以外で塊が止まったとき、それ以外で投稿が失敗したとき、または2回目も落ちたときは、" +
-			"`GH_TOKEN=\"$TOKEN\"` を外して投稿し、本文の先頭に並ぶ印（`<!--` で始まる行）を全部通したあとの行に、" +
+			"`TOKEN=$(…)` と `export GH_TOKEN=\"$TOKEN\"` の2行を外して投稿し、本文の先頭に並ぶ marker の行（`<!--` で始まる行）を全部通したあとの行に、" +
 			"次の1行を入れてください。**作業は止めないでください。\n\n" +
 			"    " + tracker.AppTokenFallbackNote + "\n\n" +
-			"**`--body \"…\"` で渡す本文は、二重引用符の中に1行足してください。**\n" +
+			"**`--body-file` で渡すので、先に `$F` のファイルへその1行を足してから、同じコマンドを叩き直してください。**\n" +
 			"**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**" +
-			"必ず `TOKEN=$(…)` で変数へ受けてから `GH_TOKEN=\"$TOKEN\"` で `gh` へ渡してください。\n\n")
+			"必ず `TOKEN=$(…)` で変数へ受けてから `export GH_TOKEN=\"$TOKEN\"` で `gh` へ渡してください。\n\n")
 	}
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`

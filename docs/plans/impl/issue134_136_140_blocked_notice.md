@@ -8,7 +8,7 @@
 
 **3-68 は残す。置き換えない。**あちらは着手の検査の4つの経路（worktree・信頼・枠・担当者）をまとめて扱い、
 **「重複を抑える鍵は、飛ばす原因の広がりより細かくしない。worktree の経路だけが issue 単位で、残る3つはリポジトリ単位である」**
-という決めごとを持っている（[docs/plans/continuo_design.md:7165-7167](../continuo_design.md#L7165-L7167)）。
+という決めごとを持っている（[docs/plans/continuo_design.md:7222-7224](../continuo_design.md#L7222-L7224)）。
 **置き換えると、この文書が扱わない3つの経路の決定が、文書のどこにも残らなくなる。**
 **3-68 へ足すのは1行だけである。**「担当者の経路は [docs/plans/impl/issue134_136_140_blocked_notice.md](issue134_136_140_blocked_notice.md) が正」（14 節）。
 
@@ -57,7 +57,7 @@
 | **理由の種類を見分けられない**（v2） | **担当者の経路は 3-66（番兵エラーの新設）に依存しない。**`handoff.Action` が既に種類を持っている |
 
 **`FetchIssuesByStates` は途中で切れない。**ページ数が上限を超えたら
-`CategoryPagination` の `*Error` を返す（[internal/tracker/adapter.go:608-617](../../../internal/tracker/adapter.go#L608-L617)）。
+`CategoryPagination` の `*Error` を返す（[internal/tracker/adapter.go:655-664](../../../internal/tracker/adapter.go#L655-L664)）。
 **したがって「エラーなしで返った候補一覧」は必ず全件である。**掃除の土台に使ってよい。
 
 ---
@@ -577,7 +577,7 @@ func (o *Orchestrator) markGateNoticeSkipped(issueID string, reason GateReason, 
 1ページ100件（[internal/tracker/query.go:318](../../../internal/tracker/query.go#L318) の `maxCommentsPerFetch`）で
 20ページ（[internal/tracker/query.go:266](../../../internal/tracker/query.go#L266) の `maxCommentPages`）が上限である。
 **取り方は新しい順（`orderBy: { field: UPDATED_AT, direction: DESC }`）なので、
-上限に達すると落ちるのは古い側である**（[internal/tracker/adapter.go:1232-1264](../../../internal/tracker/adapter.go#L1232-L1264)）。
+上限に達すると落ちるのは古い側である**（[internal/tracker/adapter.go:1438-1470](../../../internal/tracker/adapter.go#L1438-L1470)）。
 **前の起動で書いた案内は古い側にあるので、いちばん落ちやすい。**
 **書けないことより、同じ案内を2件書くことのほうが困る。**消す手段が無いからである（8-1）。
 
@@ -590,7 +590,7 @@ func (o *Orchestrator) markGateNoticeSkipped(issueID string, reason GateReason, 
 
 **そこで、打ち切ったかどうかをアダプタが返す。**
 **いま WARN を出している条件と同じものを、真偽値にして返すだけである**
-（[internal/tracker/adapter.go:1261-1264](../../../internal/tracker/adapter.go#L1261-L1264)。
+（[internal/tracker/adapter.go:1467-1470](../../../internal/tracker/adapter.go#L1467-L1470)。
 続きの cursor がありながら `maxCommentPages` を使い切ったとき）。
 
 ```go
@@ -612,14 +612,14 @@ func (a *Adapter) FetchAllComments(
 
 | どこ | どうするか |
 | --- | --- |
-| [internal/tracker/adapter.go:1222](../../../internal/tracker/adapter.go#L1222) の `fetchCommentNodes` | 戻り値に `truncated bool` を足す。**`keep` で抜けたときは偽**（狙って止めたので、切れていない） |
-| [internal/tracker/adapter.go:1061](../../../internal/tracker/adapter.go#L1061) の `FetchComments` | `_` で捨てる（`keep` で止める経路である） |
-| [internal/tracker/adapter.go:1150](../../../internal/tracker/adapter.go#L1150) の `FetchAllComments` | そのまま返す |
+| [internal/tracker/adapter.go:1428](../../../internal/tracker/adapter.go#L1428) の `fetchCommentNodes` | 戻り値に `truncated bool` を足す。**`keep` で抜けたときは偽**（狙って止めたので、切れていない） |
+| [internal/tracker/adapter.go:1108](../../../internal/tracker/adapter.go#L1108) の `FetchComments` | `_` で捨てる（`keep` で止める経路である） |
+| [internal/tracker/adapter.go:1197](../../../internal/tracker/adapter.go#L1197) の `FetchAllComments` | そのまま返す |
 | [internal/orchestrator/orchestrator.go:123](../../../internal/orchestrator/orchestrator.go#L123) の `Tracker` interface | 署名を揃える |
-| [internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108) と [:716](../../../internal/orchestrator/handoff.go#L720) | 111 は `truncated` を使う。716（担当を確かめ直す経路）は `_` で捨てる |
+| [internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108) と [:720](../../../internal/orchestrator/handoff.go#L720) | 111 は `truncated` を使う。716（担当を確かめ直す経路）は `_` で捨てる |
 
 **continuo 自身が書いたコメントも、切れていなければそのまま返る**（`keep` に0を渡すので
-[internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158) は途中で打ち切らない）。
+[internal/tracker/adapter.go:1197-1205](../../../internal/tracker/adapter.go#L1197-L1205) は途中で打ち切らない）。
 
 ---
 
@@ -772,11 +772,11 @@ GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったとき
 **`buildGatedComment` は知らない理由に空文字を返し、`postGateNotice` はそれを投稿せずに
 `no_body` の印を立てる。**理由を足して本文を書き忘れても、中身の無い案内が issue へ残らない。
 
-**本文は `postComment` を通る。**[internal/orchestrator/comment.go:402-412](../../../internal/orchestrator/comment.go#L402-L412) の `postCommentWithMarker` が
+**本文は `postComment` を通る。**[internal/orchestrator/comment.go:405-415](../../../internal/orchestrator/comment.go#L405-L415) の `postCommentWithMarker` が
 手元の絶対パスを `~` へ縮める唯一の場所である。**この案内はパスを1つも載せないが、経路は揃える。**
 
 **`buildGatedComment` が返すのは2行目からである。**1行目の `<!-- continuo:self -->` は
-[internal/tracker/adapter.go:1110-1113](../../../internal/tracker/adapter.go#L1110-L1113) が `selfMarker + "\n" + body` で付ける。
+[internal/tracker/adapter.go:1157-1160](../../../internal/tracker/adapter.go#L1157-L1160) が `selfMarker + "\n" + body` で付ける。
 
 ---
 
@@ -1018,7 +1018,7 @@ type Gated struct {
 | **対処の1行は `.` を付ける**（日本語に `。` が無くても） | 同上 | `gate_remedy_*` の3件 |
 | **`please` は書かない。命令形にする** | 訳語集の「〜してください」 | `gate_remedy_*` の3件 |
 | **全角の記号は ASCII に直す** | 同上 | `（%s）` → `(%s)` |
-| **assignee** | [internal/i18n/messages/en.json:445](../../../internal/i18n/messages/en.json#L445) が既に `assignee` を使っている | 理由と直し方の6件 |
+| **assignee** | [internal/i18n/messages/en.json:515](../../../internal/i18n/messages/en.json#L515) が既に `assignee` を使っている | 理由と直し方の6件 |
 
 **訳語集に無い語を使ったので、同じ PR で訳語集へ足す。**「着手できずに止まっているもの」＝
 `what cannot be started`、「案内」＝ `notice`、「印（ダッシュボードの badge）」＝ `badge` の3語である
@@ -1095,7 +1095,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 **どれもファイルの末尾ではなく、中ほどである**
 （`dashboard.*` は [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)、
 `KeyDashboard*` は [internal/i18n/keys.go:1021-1074](../../../internal/i18n/keys.go#L1021-L1074)、
-`allKeys` の該当箇所は [internal/i18n/keys.go:2671](../../../internal/i18n/keys.go#L2671) 付近）。
+`allKeys` の該当箇所は [internal/i18n/keys.go:2981](../../../internal/i18n/keys.go#L2981) 付近）。
 **後から main へ入るほうが衝突を解く。先に入ったほうへ rebase してから段3を書くこと。**
 
 ---
@@ -1121,7 +1121,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [internal/config/default.go](../../../internal/config/default.go) | 既定値 `"warn_and_comment"` を1行 |
 | [internal/config/validate.go](../../../internal/config/validate.go) | `validateHandoff`（[internal/config/validate.go:664-686](../../../internal/config/validate.go#L664-L686)）に `on_assignee_gate` の switch を1つ足す。`"warn_and_comment"` と `"warn_only"` だけを通す |
 | [internal/scaffold/template.go](../../../internal/scaffold/template.go) | WORKFLOW.md の雛形に1行 |
-| [internal/server/server.go](../../../internal/server/server.go) | `RunSource` に `GateViews()`。**`snapshot()`（[internal/server/server.go:374](../../../internal/server/server.go#L374)）が `NewSnapshot` へ第2引数を渡す** |
+| [internal/server/server.go](../../../internal/server/server.go) | `RunSource` に `GateViews()`。**`snapshot()`（[internal/server/server.go:447](../../../internal/server/server.go#L447)）が `NewSnapshot` へ第2引数を渡す** |
 | [internal/server/view.go](../../../internal/server/view.go) | `Snapshot.Gated` と `Gated` 型、理由→文言の表、`NewSnapshot` の引数と詰め替え、**並べ替え（`Since` の古い順、同じなら `Identifier` の昇順。10 節）** |
 | [internal/server/template.go](../../../internal/server/template.go) | 表を1つ増やす |
 | [internal/i18n/keys.go](../../../internal/i18n/keys.go) | キー19件（ダッシュボード18件と `KeyConfigValidateHandoffOnAssigneeGate`）と `allKeys` |
@@ -1146,7 +1146,7 @@ func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, no
 
 | 呼んでいる場所 | どうするか |
 | --- | --- |
-| [internal/server/server.go:374](../../../internal/server/server.go#L374) の `snapshot()` | `s.source.GateViews()` を渡す |
+| [internal/server/server.go:447](../../../internal/server/server.go#L447) の `snapshot()` | `s.source.GateViews()` を渡す |
 | [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 | 3箇所とも `nil` か、確かめたい `GateView` を渡す |
 
 **署名を変えずに `snapshot()` が後から `snap.Gated` を詰める形にはしない。**
@@ -1201,10 +1201,10 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 
 | 主張 | 根拠 |
 | --- | --- |
-| **`FetchAllComments` は2000件までは落とさない** | [internal/tracker/adapter.go:1155](../../../internal/tracker/adapter.go#L1155) が `fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)` を呼ぶ。`keep` が0なら `keep` では打ち切らない（[internal/tracker/adapter.go:1250](../../../internal/tracker/adapter.go#L1250) の `if keep > 0 && unmarked >= keep`）。**ページ数では打ち切る**（[internal/tracker/adapter.go:1232](../../../internal/tracker/adapter.go#L1232) の `for page := 0; page < maxCommentPages; page++`。`maxCommentPages` は20、`maxCommentsPerFetch` は100） |
-| **上限で落ちるのは古い側である** | [internal/tracker/query.go:253](../../../internal/tracker/query.go#L253) が `orderBy: { field: UPDATED_AT, direction: DESC }` で取り、[internal/tracker/adapter.go:1267-1270](../../../internal/tracker/adapter.go#L1267-L1270) が最後に反転して古い順へ戻す。**打ち切りは新しい側を読み終えた時点で起きる** |
-| **上限に達したことはログに出るが、戻り値からは分からない** | [internal/tracker/adapter.go:1261-1264](../../../internal/tracker/adapter.go#L1261-L1264) が `Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）", …)` を出すだけで、`FetchAllComments` の戻り値は `([]Comment, error)` のままである（[internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158)）。**だから戻り値に真偽値を1つ足す**（7-1） |
-| **件数では切れを当てられない** | 打ち切りは [internal/tracker/adapter.go:1232](../../../internal/tracker/adapter.go#L1232) の `for page := 0; page < maxCommentPages; page++` を、続きの cursor を持ったまま抜けたかどうかで決まる。**`len(nodes)` は1ページの件数が100に満たなくても増えないので、2000未満のまま切れることがある** |
+| **`FetchAllComments` は2000件までは落とさない** | [internal/tracker/adapter.go:1202](../../../internal/tracker/adapter.go#L1202) が `fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)` を呼ぶ。`keep` が0なら `keep` では打ち切らない（[internal/tracker/adapter.go:1456](../../../internal/tracker/adapter.go#L1456) の `if keep > 0 && unmarked >= keep`）。**ページ数では打ち切る**（[internal/tracker/adapter.go:1438](../../../internal/tracker/adapter.go#L1438) の `for page := 0; page < maxCommentPages; page++`。`maxCommentPages` は20、`maxCommentsPerFetch` は100） |
+| **上限で落ちるのは古い側である** | [internal/tracker/query.go:253](../../../internal/tracker/query.go#L253) が `orderBy: { field: UPDATED_AT, direction: DESC }` で取り、[internal/tracker/adapter.go:1473-1476](../../../internal/tracker/adapter.go#L1473-L1476) が最後に反転して古い順へ戻す。**打ち切りは新しい側を読み終えた時点で起きる** |
+| **上限に達したことはログに出るが、戻り値からは分からない** | [internal/tracker/adapter.go:1467-1470](../../../internal/tracker/adapter.go#L1467-L1470) が `Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）", …)` を出すだけで、`FetchAllComments` の戻り値は `([]Comment, error)` のままである（[internal/tracker/adapter.go:1197-1205](../../../internal/tracker/adapter.go#L1197-L1205)）。**だから戻り値に真偽値を1つ足す**（7-1） |
+| **件数では切れを当てられない** | 打ち切りは [internal/tracker/adapter.go:1438](../../../internal/tracker/adapter.go#L1438) の `for page := 0; page < maxCommentPages; page++` を、続きの cursor を持ったまま抜けたかどうかで決まる。**`len(nodes)` は1ページの件数が100に満たなくても増えないので、2000未満のまま切れることがある** |
 | **`FetchAllComments` の呼び出し元は2つだけである** | `grep -rn "FetchAllComments" --include="*.go" .`（`.claude/worktrees/` を除く）で、実装以外は [internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108) と [internal/orchestrator/handoff.go:720](../../../internal/orchestrator/handoff.go#L720)、interface が [internal/orchestrator/orchestrator.go:123](../../../internal/orchestrator/orchestrator.go#L123)、fake が [test/internal/orchestrator/helpers_test.go:1323](../../../test/internal/orchestrator/helpers_test.go#L1323) |
 | **担当者が2人以上の分岐は `viewerIdentity` より前にある** | [internal/orchestrator/handoff.go:78](../../../internal/orchestrator/handoff.go#L78) の `if len(logins) >= 2` に対し、[internal/orchestrator/handoff.go:95](../../../internal/orchestrator/handoff.go#L95) が `viewer, ok := o.viewerIdentity(ctx)` である。**だから 8-3 はこの分岐の中で自分で引く** |
 | **担当者が0人になっても、走っている run は止まらない** | [internal/orchestrator/handoff.go:703-715](../../../internal/orchestrator/handoff.go#L703-L715) が `if len(logins) == 0 { … return false, "" }` で「担当者が1人もいないだけでは止めない」と決めている |
@@ -1212,14 +1212,14 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 | **handoff の設定の検査は `validateHandoff` が持っている** | [internal/config/validate.go:664-686](../../../internal/config/validate.go#L664-L686) に5件あり、すべて `i18n.T(i18n.KeyConfigValidateHandoff*)` を引く。`trust.on_untrusted` の検査は [internal/config/validate.go:345-349](../../../internal/config/validate.go#L345-L349) にあり、**日本語を直に書いている**（形が違う） |
 | **`sort.Slice` は安定ではない** | [internal/server/view.go:142](../../../internal/server/view.go#L142) の `sort.Slice(runs, func(i, j int) bool { return runs[i].Identifier < runs[j].Identifier })` は鍵が一意なので成立している。**`Since` は一意ではない** |
 | **`polling.interval_ms` の既定は30000ミリ秒** | [internal/config/default.go:87](../../../internal/config/default.go#L87) の `IntervalMs: 30000`。**3回目の巡回はちょうど60秒後になり、`noticeMinAge` と同値である** |
-| **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)（ファイルは843行）、[internal/i18n/keys.go:1021-1074](../../../internal/i18n/keys.go#L1021-L1074) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2671](../../../internal/i18n/keys.go#L2671) 付近 |
+| **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)（ファイルは843行）、[internal/i18n/keys.go:1021-1074](../../../internal/i18n/keys.go#L1021-L1074) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2981](../../../internal/i18n/keys.go#L2981) 付近 |
 | **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:929](../../../internal/orchestrator/lifecycle.go#L929) の `func containsFold(states []string, target string) bool` |
 | **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1134-1168](../../../internal/orchestrator/orchestrator.go#L1134-L1168) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1173-1196](../../../internal/orchestrator/orchestrator.go#L1173-L1196) の代入だけで写しが成立している** |
 | **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:67-70](../../../internal/orchestrator/handoff.go#L67-L70) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
-| **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:374](../../../internal/server/server.go#L374) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
+| **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:447](../../../internal/server/server.go#L447) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
 | **コメントを書き換える経路も消す経路も無い** | 検索パターン `updateIssueComment` `deleteIssueComment` `minimizeComment` `UpdateComment` `DeleteComment` の5本を `grep -rniE` で束ね、対象 `internal/` と `cmd/`、commit 73fb41ae で `wc -l` が `0` |
-| **`FetchIssuesByStates` は途中で切れない** | [internal/tracker/adapter.go:609-617](../../../internal/tracker/adapter.go#L609-L617) が上限超過で `CategoryPagination` の `*Error` を返す |
-| **`PostComment` が `self_marker` を先頭に付ける** | [internal/tracker/adapter.go:1110-1113](../../../internal/tracker/adapter.go#L1110-L1113) の `full = selfMarker + "\n" + body` |
+| **`FetchIssuesByStates` は途中で切れない** | [internal/tracker/adapter.go:656-664](../../../internal/tracker/adapter.go#L656-L664) が上限超過で `CategoryPagination` の `*Error` を返す |
+| **`PostComment` が `self_marker` を先頭に付ける** | [internal/tracker/adapter.go:1157-1160](../../../internal/tracker/adapter.go#L1157-L1160) の `full = selfMarker + "\n" + body` |
 | **担当者が2人以上の経路にコメントは無い** | [internal/orchestrator/handoff.go:78-83](../../../internal/orchestrator/handoff.go#L78-L83) の `return` は、`FetchAllComments`（[internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108)）より25行前にある |
 | **`o.failures` は着手できた run しか持たない** | `noteFailure` の呼び出しは [internal/orchestrator/lifecycle.go:551](../../../internal/orchestrator/lifecycle.go#L551) と [internal/orchestrator/lifecycle.go:625](../../../internal/orchestrator/lifecycle.go#L625) の2箇所だけで、どちらも `rs *runState` を持つ |
 | **`_source_sha256` の入れ直しは規則である** | [CONTRIBUTING.md:100](../../../CONTRIBUTING.md#L100) が「`ja.json` の文言を直したときは、`en.json` の先頭の `_source_sha256` を入れ直してください」と決めている |

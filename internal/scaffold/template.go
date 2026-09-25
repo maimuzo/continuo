@@ -131,14 +131,15 @@ agent:
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
-  permission_mode: auto                     # auto か dontAsk。auto は判定役が会話の流れを読んで決めるので、
-                                            # issue のコメントで出した許可が通る。.claude/ と .mcp.json にも書ける。
-                                            # 公開リポジトリの issue では、同じことを第三者も書ける（SECURITY.md の危険の表）。
+  permission_mode: auto                     # auto か dontAsk。auto は判定役が実行の前に確かめるので、.claude/ と .mcp.json にも書ける。
+                                            # 判定役は issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
+                                            # 許可を出すのはこのファイルで、足したら continuo を再起動する。
                                             # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
   permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
                                             # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される
+      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される。
+                                            # auto では、道具を丸ごと許すこの書き方は落とされる。auto で足すなら Bash(gh:*) のように狭く書く
       - "Read"
       - "Glob"
       - "Grep"
@@ -163,7 +164,7 @@ claude:
     mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
                                             # public_only なら公開リポジトリの issue にだけ掛ける。
                                             # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
-                                            # この判定は会話を読まないので、コメントで許可を出しても通らない。
+                                            # コメントで許可を出しても通らない（auto の判定役も、この検査も読まない）。
                                             # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
                                             # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。
@@ -282,10 +283,11 @@ language: auto                              # 画面に出す文言の言語。a
 
 ### レビューを頼む subagent
 
-<!-- 組み込みの 3-2 と 3-6 が「敵対的レビューの subagent」と言っています。 -->
-<!-- このリポジトリで使う名前を書いてください。例: code-reviewer と security-reviewer。 -->
+<!-- 組み込みの 5-6 が「差分を読む役」と「関連処理まで見る役」を毎周並列に走らせろと言っています。 -->
+<!-- 差分を読む役・関連処理まで見る役 の順に、使う名前を2つ書いてください。 -->
 <!-- subagent を起動する道具の名前は Claude Code の版によって変わります。 -->
-<!-- 起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
+<!-- dontAsk で起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
 <!-- claude.permissions.allow に足してください。 -->
+<!-- permission_mode: auto（既定）では Agent の規則は落とされ、Agent の呼び出しも判定役が確かめるので、allow に足す話ではありません。 -->
 
 `

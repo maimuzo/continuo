@@ -74,7 +74,7 @@ type AgentStartParams struct {
 	PaneID string `json:"pane_id"`
 	// Args は Claude Code へ渡す起動フラグである
 	// （例: ["--settings", "<設定ファイル>", "--session-id", "<UUID>",
-	// "--permission-mode", "dontAsk"]。3-9 の段9）。
+	// "--permission-mode", "auto"]。3-9 の段9）。
 	// **これが Claude Code への起動フラグを渡す経路である**（2-1）。
 	Args []string `json:"args,omitempty"`
 	// TimeoutMs は herdr 側で agent の検知を待つ上限（ミリ秒）である。

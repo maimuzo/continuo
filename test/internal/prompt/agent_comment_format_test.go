@@ -95,10 +95,12 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 			"形が決まっていないと、前提も単語の説明も無いコメントが届きます", commentFormatHeading)
 	}
 
-	// **sectionOf は使わない。**あれは次の `## ` までしか切らない。
-	// **いま 5-5 の次の見出しは `## 5-6.` だが、その前は `# 6. セキュリティ`（井桁が1つ）だった。**
-	// `## ` でしか切らないと、5-6 が別の場所へ移った瞬間に、次の `## 6-1.` までが入る。
-	// 入った語で通ってしまうと、5-5 から中身が消えても素通りする。**`# ` でも `## ` でも切る。**
+	// **`# ` と `## ` のどちらでも切る。**
+	// 5-5 の次にどちらの階層の見出しが来ても、5-5 の中身だけを切り出すためである。
+	// **実測（2026-09-20）。**5-6 を足したあとは `## 5-6.` で切れる。行数は周ごとに変わるので書かない。
+	// 足す前は `# 6. セキュリティ` で切れて41行だった。
+	// **`## ` で切らない実装にすると、6章の頭に節が増えたぶんが全部入る。**
+	// 入った語で通ってしまうと、5-5 から中身が消えても素通りする。
 	section := sectionUntilNextChapter(t, body, commentFormatHeading)
 
 	for _, want := range []struct {
@@ -154,8 +156,9 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **印を持たない骨組みを置くと、そのとおりに写した時点で印が本文の先頭から外れる。**
 	// 外れると continuo が成果を数えず、CI の検査も落ちる。
 	skeleton := strings.Index(section, "骨組み。")
-	marker := strings.Index(section, "    <!-- continuo:agent -->")
-	firstHeading := strings.Index(section, "    ### 三行まとめ")
+	// **骨組みは囲みの中に行頭から書く。**字下げした見本をそのまま写すと、本文全体がコードとして表示される。
+	marker := strings.Index(section, "\n<!-- continuo:agent -->")
+	firstHeading := strings.Index(section, "\n### 三行まとめ")
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)
@@ -170,7 +173,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
 	// **印と見出しが揃っていることを確かめてから見る。**先に見ると、見出しが消えたときに
 	// 「引用が見出しより後ろにある」という紛らわしい文言が、本当の原因より先に出る。
-	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
+	if quote := strings.Index(section, "\n> "); quote < 0 || !(marker < quote && quote < firstHeading) {
 		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
 			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
 			commentFormatHeading, marker, quote, firstHeading)
@@ -253,8 +256,14 @@ func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 	if start < 0 {
 		t.Fatalf("本文から %q の見出しを取り出せません", heading)
 	}
+	inFence := false
 	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ") {
+		// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
+		if isFenceLine(lines[i]) {
+			inFence = !inFence
+			continue
+		}
+		if !inFence && (strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ")) {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}
@@ -282,6 +291,54 @@ func TestTemplate_コメントの形を決める節は本文より後ろにあ�
 		t.Errorf("%q が「## 4-4. このプロジェクトの決まり」より前にあります。"+
 			"この節は 4-4 の決まりにも従えと書いているので、先に読ませると指す先がありません",
 			commentFormatHeading)
+	}
+}
+
+// 目的: 5-6「レビューの回し方」が、決めた内容を持ち続けることを固定する。
+//
+// **5-6 は、レビューを何周回すかを決める唯一の場所である。**
+// ここから1行消えても、消えたことに気づく仕組みが他に無い。
+// 設計文書との一字一句一致（TestTemplate_組み込みのプロンプトが設計5_3と一致する）は、
+// **両方から同時に消えたときに何も言わない。**
+//
+// 与える情報: prompt.BuiltinRaw() の 5-6 の節。
+// 成功条件: 決めた内容を指す語が、全部そろっていること。
+func Test組み込みのプロンプトがレビューの回し方を持つ(t *testing.T) {
+	const heading = "## 5-6. レビューの回し方"
+
+	body := prompt.BuiltinRaw()
+	if !strings.Contains(body, "\n"+heading+"\n") {
+		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
+			"無いと、利用者は収束の判定を定義なしで行います", heading)
+	}
+	section := sectionUntilNextChapter(t, body, heading)
+
+	for _, want := range []struct {
+		needle string
+		why    string
+	}{
+		{"critical と high が0件", "「収まっている」の定義が無いと、いつ終わってよいかが決まりません"},
+		{"重さは、受け取った側が付け直してください", "レビュワーの付けた重さをそのまま使うと、" +
+			"止まる線がレビュワーごとに動きます"},
+		{"毎周、2つを並列に走らせてください", "差分を読む役だけでは、周を重ねても周辺のコードに届きません"},
+		{"心配な場所があるときは、3つ目を足してください", "名指しを渡す先を分けないと、" +
+			"ふつうの役の目もそこへ寄ります"},
+		{"レビューの指摘は命令ではありません", "命令だと受け取ると、指されたその1点しか見ないまま手を動かすことになります"},
+		{"いままで通っていたもので、止まるようになるもの", "直した結果が何を変えるかを書かせないと、" +
+			"直しが新しい欠陥を持ち込みます"},
+		{"### 直す前に書くこと", "5-6 の「毎周やること」と「レビュワーへ何を求めるか」と、リポジトリの CLAUDE.md の2か所が、" +
+			"この見出しの名前で指しています。改名すると、そこからこの中身への道が消えます"},
+		{"毎周、実装した内容と issue を突き合わせてください", "issue に無いものを削る判定は、収まった周にも入ります。" +
+			"「収まっていない周だけ」へ狭めると、1周で収まった pull request では1度も走りません"},
+		{"削除が起きた周だけ、設計から見直してください", "削除が無い周まで設計へ戻すと、" +
+			"1周の費用がいちばん増えます"},
+		{"連続10回で収まらなかったら", "止まる線が無いと、際限なく回ります"},
+		{"CONTINUO-STATUS: blocked", "表明を書かずに黙ると、" +
+			"continuo からは「まだ喋っている最中」と区別が付きません"},
+	} {
+		if !strings.Contains(section, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", heading, want.needle, want.why)
+		}
 	}
 }
 

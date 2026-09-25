@@ -1229,11 +1229,12 @@ func (a *Adapter) FetchComments(
 // （internal/orchestrator の `postCommentWithMarker` が通す `redact.Paths`）を通らないためである。
 //
 // **backtick・`$`・二重引用符を入れない。**エージェントの投稿（internal/prompt/builtin.md の
-// 5-6）は同じ1文を `--body "…"` の二重引用符で bash へ渡すので、backtick は command
+// 5-8）は同じ1文を本文へ書き写す。本文は `--body-file` で渡させているが、写した先が
+// `--body "…"` や `-f body="…"` の二重引用符になると、backtick は command
 // substitution として実行され、`$` は展開される。`continuo doctor` を backtick で囲むと、
 // 断りが消えて doctor の出力（手元のパスを含む）が公開の issue に入る。
 //
-// **internal/prompt/builtin.md の 5-6 に書く文言と、1文字も違えてはならない。**
+// **internal/prompt/builtin.md の 5-8 に書く文言と、1文字も違えてはならない。**
 // 本体の投稿とエージェントの投稿で断りが揃っていないと、指示書が「この1行があるコメントは
 // 印が無くても機械が書いたものです」と照合させる手掛かりが2通りになり、片方に当たらない。
 // test/internal/tracker がこの定数の中身（文言そのものと、上の3文字が無いこと）を検査している。

@@ -394,7 +394,7 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 // 組み立ててはならない（`workspace.root` や `branch_template` を変えている環境で空振りする）。
 //
 // **照合した結果はパスで検算する。**身元ファイルは worktree の直下にあり、そこで
-// エージェントが `--permission-mode dontAsk` で動くので、`issue_url` は書き換えられる。
+// エージェントが `--permission-mode auto`（既定）で動くので、`issue_url` は書き換えられる。
 // 検算しなければ、worktree A のエージェントが自分の `issue_url` を issue B に書き換えるだけで、
 // **人間が B を取り消したとき A が消える。**置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>`
 // の固定4階層で、パスは封じ込め検査（3-20）を通っているので書き換えられない（3-22）。

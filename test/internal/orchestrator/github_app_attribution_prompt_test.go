@@ -45,8 +45,8 @@ func attributionFixture(t *testing.T, attribution bool) *fixture {
 // その worktree を片付けると、走っている run の投稿だけが `command not found` で落ちる。
 //
 // 与える情報: 設定が真の fixture と偽の fixture。実行ファイルのパスには空白を入れる。
-// 成功条件: 真なら、単一引用符で包んだパスでトークンを取る行と `GH_TOKEN` 付きの投稿が本文にあること。
-// 偽なら、コマンドの形ではどちらも無いこと。
+// 成功条件: 真なら、単一引用符で包んだパスでトークンを取る行・`export GH_TOKEN` の行・計画の
+// `gh issue comment` の行が、この順で続いて本文にあること。偽なら、コマンドの形では前の2行が無いこと。
 func TestPrompt_1回目の本文はattributionの設定と実行ファイルのパスで分岐する(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -66,19 +66,23 @@ func TestPrompt_1回目の本文はattributionの設定と実行ファイルの�
 			})
 			got := prompts()[0]
 
-			const post = `GH_TOKEN="$TOKEN" gh issue comment https://github.com/octocat/hello-world/issues/188 --body-file plan.md`
+			// **`gh issue comment` の行は、真でも偽でも同じである。**トークンは前の行の `export` で渡す。
+			const post = `gh issue comment https://github.com/octocat/hello-world/issues/188 --body-file "$F"`
+			if !strings.Contains(got, "\n"+post+"\n") {
+				t.Errorf("計画の投稿の行 %q が本文にありません", post)
+			}
 			if tc.attribution {
 				if !strings.Contains(got, attributionTokenLine) {
 					t.Errorf("トークンを取る行 %q が本文にありません（実行ファイルのパスが包まれていないか、渡っていない）", attributionTokenLine)
 				}
-				if !strings.Contains(got, post) {
-					t.Errorf("GH_TOKEN 付きの投稿 %q が本文にありません", post)
+				if want := attributionTokenLine + "\nexport GH_TOKEN=\"$TOKEN\"\n" + post; !strings.Contains(got, want) {
+					t.Errorf("トークンを取る行・export の行・投稿の行が、この順で続いていません（%q）", want)
 				}
 				return
 			}
-			// **見るのはコマンドの形だけである。**5-6 の節は `{{if}}` で囲んでいないので、
+			// **見るのはコマンドの形だけである。**5-8 の節は `{{if}}` で囲んでいないので、
 			// 散文には `GH_TOKEN` の語が偽でも残る。
-			for _, notWant := range []string{"github-app token) || exit 1", `GH_TOKEN="$TOKEN" gh `} {
+			for _, notWant := range []string{"github-app token) || exit 1", "\nexport GH_TOKEN=\"$TOKEN\"\n"} {
 				if strings.Contains(got, notWant) {
 					t.Errorf("設定が偽なのに %q が本文にあります。資格情報を持たない利用者の投稿が落ちます", notWant)
 				}
@@ -97,11 +101,11 @@ func TestPrompt_1回目の本文はattributionの設定と実行ファイルの�
 // attribution の付かないコメントが1件できる。**
 //
 // **書かせ直しは成果を書かせる最後の経路である。**トークンが取れなかったときの落ち方が最も重いので、
-// 組み込みの 5-6 と同じ2文（`HTTP 401` なら1回だけやり直す。それ以外は `GH_TOKEN` を外して投稿し、断りを1行）も付ける。
+// 組み込みの 5-8 と同じ2文（`HTTP 401` なら1回だけやり直す。それ以外は足した2行を外して投稿し、断りを1行）も付ける。
 //
 // 与える情報: 進捗報告しか書かずに終えた run（`TestComment_書き直しの文面は囲み付きの印を名指しで禁じる` と同じ）。
-// 成功条件: 真なら、トークンを取る行・`GH_TOKEN` 付きの `gh issue comment`・5-6 と同じ2文が送った文面にあること。
-// 偽なら、素の `gh issue comment` だけで、トークンの話が無いこと。
+// 成功条件: 真なら、トークンを取る行・`export GH_TOKEN` の行・`gh issue comment` の行がこの順で続き、
+// 5-8 と同じ2文が送った文面にあること。偽なら、`gh issue comment` の行だけで、トークンの話が無いこと。
 func TestComment_書き直しの文面はattributionの設定で分岐する(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -150,12 +154,12 @@ func TestComment_書き直しの文面はattributionの設定で分岐する(t *
 				return false
 			})
 
-			const bare = `    gh issue comment https://github.com/octocat/hello-world/issues/188 --body "<!-- continuo:agent -->`
-			const withToken = `    GH_TOKEN="$TOKEN" gh issue comment https://github.com/octocat/hello-world/issues/188 --body "<!-- continuo:agent -->`
+			// **`gh issue comment` の行は、真でも偽でも同じである。**見本は囲みの中に行頭から書く。
+			const post = `gh issue comment https://github.com/octocat/hello-world/issues/188 --body-file "$F"`
+			if !strings.Contains(sent, "\n"+post+"\n") {
+				t.Errorf("`gh issue comment` の行がありません:\n%s", sent)
+			}
 			if !tc.attribution {
-				if !strings.Contains(sent, bare) {
-					t.Errorf("素の `gh issue comment` の行がありません:\n%s", sent)
-				}
 				for _, notWant := range []string{"github-app token", "GH_TOKEN", "HTTP 401"} {
 					if strings.Contains(sent, notWant) {
 						t.Errorf("設定が偽なのに %q が文面にあります:\n%s", notWant, sent)
@@ -163,20 +167,17 @@ func TestComment_書き直しの文面はattributionの設定で分岐する(t *
 				}
 				return
 			}
-			// **真の枝は2行。**トークンを取る行の直後に、GH_TOKEN 付きの投稿が同じ字下げで来る。
-			if !strings.Contains(sent, "    "+attributionTokenLine+"\n"+withToken) {
-				t.Errorf("トークンを取る行と GH_TOKEN 付きの投稿が、4字下げの2行になっていません:\n%s", sent)
-			}
-			if strings.Contains(sent, bare) {
-				t.Errorf("GH_TOKEN の無い `gh issue comment` の行が残っています:\n%s", sent)
+			// **真の枝は2行を足す。**トークンを取る行・export の行・投稿の行が、この順で続く。
+			if want := attributionTokenLine + "\nexport GH_TOKEN=\"$TOKEN\"\n" + post; !strings.Contains(sent, want) {
+				t.Errorf("トークンを取る行・export の行・投稿の行が、この順で続いていません:\n%s", sent)
 			}
 			for _, want := range []string{
-				// 5-6 と同じ2文。
+				// 5-8 と同じ2文。
 				"`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回だけやり直してください",
-				"`GH_TOKEN=\"$TOKEN\"` を外して投稿し、本文の先頭に並ぶ印（`<!--` で始まる行）を全部通したあとの行に",
+				"`TOKEN=$(…)` と `export GH_TOKEN=\"$TOKEN\"` の2行を外して投稿し、本文の先頭に並ぶ marker の行（`<!--` で始まる行）を全部通したあとの行に",
 				// 断りの1行。本体が足すものと1文字も違えない。
 				"GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。continuo のログと continuo doctor を確かめてください",
-				"`--body \"…\"` で渡す本文は、二重引用符の中に1行足してください",
+				"`--body-file` で渡すので、先に `$F` のファイルへその1行を足してから、同じコマンドを叩き直してください",
 				// **`{{if}}` をそのまま送っていないこと。**
 			} {
 				if !strings.Contains(sent, want) {
