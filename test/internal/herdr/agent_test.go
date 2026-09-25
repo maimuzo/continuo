@@ -524,7 +524,7 @@ func TestAgentRead_sourceはアンダースコアの綴りで送られる(t *tes
 
 // 目的: agent.start に Claude Code の起動フラグを args として載せて送れることを確認する
 // （設計 2-1: 「args が Claude Code への起動フラグを渡す経路である」。3-9 の段9で
-// --settings / --session-id / --permission-mode dontAsk を渡す）。
+// --settings / --session-id / --permission-mode auto（既定）を渡す）。
 // 与える情報: Args に3組のフラグを入れた AgentStartParams。
 // 成功条件: 偽サーバが受け取った params の args がそのままの並びで届き、pane の指定が
 // pane_id という名前で届くこと。**env という引数を送っていないこと**

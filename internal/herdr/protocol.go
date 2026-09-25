@@ -15,7 +15,8 @@ const MethodPing = "ping"
 
 // PingResult は ping の応答である。
 //
-// 実測値（原文）は次のとおりである（2-1）。
+// 実測値（原文。2026-08-18、herdr 0.8.0）は次のとおりである（2-1）。
+// herdr 0.9.1 は version に "0.9.1"、protocol に 22 を返す（実測: 2026-09-24、test/live の ping）。
 //
 //	{"id": "probe", "result": {"type": "pong", "version": "0.8.0", "protocol": 19,
 //	 "capabilities": {"live_handoff": true, "detached_server_daemon": false}}}

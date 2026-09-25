@@ -69,12 +69,12 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 ## 始める前に知っておくこと
 
-**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を「人間に確認を出さないモード」で起動し、引数を制限せずに `Bash` を許可します。**確認のダイアログは出ません。**
+**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を `--permission-mode auto`（既定）で起動します。**確認のダイアログを出さずに進む作りです。**ただし、判定役が遮断を続けたときに確認へ戻るかは検証していません（[docs/upgrading.md](docs/upgrading.md) の `permission_mode: auto` の表）。シェルのコマンドは、Claude Code の中の判定役が実行の前に確かめます（`dontAsk` を選ぶと、許可の一覧の外は確認せずに拒否されます）。
 
 **issue の本文とコメントは、そのままエージェントへの指示になります。**既定の指示書には、
 本文とコメントを **JSON で**読むように書いてあります。GitHub が付けた投稿者の立場（`authorAssociation`）が、本文と混ざらずに届きます。
 **命令として従うのは `OWNER` / `MEMBER` / `COLLABORATOR` が書いたものだけ**で、それ以外は報告として読みます。
-**これは穴を狭めるだけで、塞ぎはしません。**エージェントは確認なしで `Bash` を実行できます。
+**これは穴を狭めるだけで、塞ぎはしません。**判定役は issue のコメントを読まないので、第三者の文で判定役が説得されることはありませんが、**エージェントが何を実行しようとするかは、その文で動かせます。**
 
 **public なリポジトリを載せるときは、その文を書いたのが他人であることを忘れないでください。**
 issue もコメントも第三者が書けます。**「このリポジトリを消せ」と書かれていたら、そのとおりに動きます。**
@@ -96,8 +96,8 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 | | |
 | --- | --- |
 | OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
-| [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.8.0 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない） |
-| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.233 で動作を確認 |
+| [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.9.1 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない。`WORKFLOW.md` の `herdr.protocol` は `22`） |
+| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.266 で動作を確認 |
 | [`gh`](https://cli.github.com/) | `gh auth login -s project` でログイン済みであること。2.97.0 で動作を確認 |
 | [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と、clone の場所の解決に使う |
 | [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |

@@ -166,11 +166,15 @@ func DefaultConfig() *Config {
 		},
 		Claude: ClaudeConfig{
 			Kind:           "claude",
-			PermissionMode: "dontAsk",
+			PermissionMode: ClaudePermissionModeAuto,
 			Permissions: ClaudePermissionsConfig{
 				// Bash は引数を限定せずツール名だけで許可する。
 				// Bash(gh:*) のように限定すると、許可リストに載らない書き込み系
 				// （touch / rm など）が dontAsk で拒否され、作業が途中で止まる（設計 3-11）。
+				// **既定の auto では、この一覧はほとんど効かない。**"Bash" のように道具を丸ごと
+				// 許す規則は auto に入るときに落とされ、"Read" と "Glob" と "Grep" は元から確認が要らず、
+				// "Edit" と "Write" は作業ディレクトリの中なら元から通る（公式の permission modes の
+				// ページ。2026-09-18 に取得）。**それでも消さない。消すと dontAsk を選び直した人だけが壊れる。**
 				// subagent を起動する Agent ツールは、許可リストが空でも動いたため書かない。
 				Allow: []string{
 					"Bash",
@@ -180,7 +184,12 @@ func DefaultConfig() *Config {
 					"Edit",
 					"Write",
 				},
-				Deny: []string{},
+				// **AskUserQuestion を既定で禁じる**（設計 3-11。issue #259）。
+				// これはエージェント自身が人間に選択肢を出す道具で、判定役とは関係が無い。
+				// **dontAsk は元から拒否するが、auto にすると拒否が外れる。**
+				// 外れたまま走らせると、スキルなどから呼ばれた瞬間に質問の画面が出て
+				// pane が止まる（実測。次の指示が回答として消費される）。
+				Deny: []string{"AskUserQuestion"},
 			},
 			Env: map[string]string{
 				"CLAUDE_CODE_RETRY_WATCHDOG": "1",
@@ -193,7 +202,12 @@ func DefaultConfig() *Config {
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
 			},
-			// **既定で公開リポジトリの issue にだけ判定を掛ける**（設計 3-64）。
+			// **既定では判定を掛けない。**
+			// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
+			// （`auto` の判定役も、issue のコメントは読まない。設計 3-11）。
+			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
+			// 掛けたい人は public_only か on を書く。
+			//
 			// 判定に回すのは Bash だけにしてある。読み書きの道具まで回すと、
 			// 道具1回ごとにモデルの呼び出しが乗る。
 			//
@@ -202,7 +216,7 @@ func DefaultConfig() *Config {
 			// 書かれていない）、**通らない名前を書いたときにどう倒れるかを確かめていない。**
 			// 空なら settings.json へ `model` を書かず、Claude Code の既定に任せる。
 			ToolGate: ClaudeToolGateConfig{
-				Mode:  ClaudeToolGateModePublicOnly,
+				Mode:  ClaudeToolGateModeOff,
 				Model: "",
 				Tools: []string{"Bash"},
 			},
@@ -212,7 +226,7 @@ func DefaultConfig() *Config {
 			// 環境変数で切り替えたい利用者は WORKFLOW.md に ${HERDR_SOCKET_PATH} と書く。
 			// その場合、未定義なら起動を止める（既定値へは落ちない。設計 5-5）。
 			Socket:           "~/.config/herdr/herdr.sock",
-			Protocol:         20,
+			Protocol:         22,
 			ReadTimeoutMs:    5000,
 			StartupTimeoutMs: 60000,
 			Worktree: HerdrWorktreeConfig{

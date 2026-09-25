@@ -52,7 +52,7 @@ var wantLabels = []i18n.Key{
 // TestDoctor_前提が揃っていれば全項目すべて通る は、揃っている状態の基準線を作る。
 //
 // 目的: 全項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
-// 与える情報: テスト用herdr mock（protocol 19）・偽カンバン（Ready の issue が1件）・
+// 与える情報: テスト用herdr mock（protocol は設定の既定値と同じ値を返す）・偽カンバン（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
 func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T) {

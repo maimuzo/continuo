@@ -69,9 +69,9 @@ How many issues run at once is a setting (two by default).
 
 ## Before you start
 
-**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with permission prompts turned off and allows `Bash` without argument restrictions. Nothing will stop and ask you.
+**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default), which is meant to run without asking you. Whether it falls back to a prompt after repeated classifier blocks has not been verified yet (see the `permission_mode: auto` table in [docs/upgrading.md](docs/upgrading.md)). Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
 
-**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The agent still runs `Bash` with no prompt, so whatever it decides to run, runs.
+**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The classifier does not read issue comments, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
 
 **On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
 
@@ -91,8 +91,8 @@ How many issues run at once is a setting (two by default).
 | | |
 | --- | --- |
 | OS | macOS or Linux. **No native Windows** — use WSL2 |
-| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.8.0** (it refuses to start on a socket protocol mismatch) |
-| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.233 |
+| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.9.1** (it refuses to start on a socket protocol mismatch; set `herdr.protocol: 22` in `WORKFLOW.md`) |
+| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.266 |
 | [`gh`](https://cli.github.com/) | Signed in with `gh auth login -s project`. Verified against 2.97.0 |
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |

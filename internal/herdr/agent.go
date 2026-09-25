@@ -13,6 +13,9 @@ import (
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
 // 確認済みである（docs/plans/continuo_design.md 2-1 の
 // 「socket API の実在するメソッドと引数」。protocol=19 / herdr 0.8.0）。
+// 2026-09-24 に herdr 0.9.1（protocol=22）の `herdr api schema --json` と照合し、continuo が使う
+// メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
+// （continuo は送らない。workspace.go）。
 // result に出てくる値の形は types.go を参照すること。
 const (
 	// MethodAgentStart は agent を起動するメソッド名である。
@@ -70,11 +73,11 @@ type AgentStartParams struct {
 	Name normalize.SafeName `json:"name"`
 	// Kind は herdr に渡す agent の種別である（設定の claude.kind。例: "claude"）。
 	Kind string `json:"kind"`
-	// PaneID は agent を起動する pane の ID である（pane.split の結果から得る）。
+	// PaneID は agent を起動する pane の ID である（pane.list の結果から得る）。
 	PaneID string `json:"pane_id"`
 	// Args は Claude Code へ渡す起動フラグである
 	// （例: ["--settings", "<設定ファイル>", "--session-id", "<UUID>",
-	// "--permission-mode", "dontAsk"]。3-9 の段9）。
+	// "--permission-mode", "auto"]。3-9 の段9）。
 	// **これが Claude Code への起動フラグを渡す経路である**（2-1）。
 	Args []string `json:"args,omitempty"`
 	// TimeoutMs は herdr 側で agent の検知を待つ上限（ミリ秒）である。

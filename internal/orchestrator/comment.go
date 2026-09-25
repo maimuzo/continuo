@@ -3,10 +3,8 @@ package orchestrator
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
@@ -36,7 +34,8 @@ const commentRecheckWait = 2 * time.Second
 //  3. 身元ファイルからセッション UUID と設定ファイルのパスを読む
 //  4. worktree を herdr の workspace として開き直し（着手の段3 と同じ Prepare を通す）、
 //     その中の pane を pane.list で引く
-//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル> --permission-mode dontAsk）
+//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル>
+//     --permission-mode <claude.permission_mode の値。既定は auto>）
 //  6. agent_status が idle または done になるのを待つ
 //  7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
 //     → **この送信は turn 数に数えない**（max_dispatch_turns の判定に影響させない）
@@ -408,8 +407,10 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			// **除かないと、turn が途中で終わった run で書かせ直しが飛ぶ。**
 			// とくに計画は run の最初に書かれるので、判定はほぼ必ず外れる。
 			// 「何をしたか」が1行も残らないまま、issue が次へ進む。
-			if strings.Contains(c.Body, config.PlanMarker) ||
-				strings.Contains(c.Body, config.ProgressMarker) {
+			//
+			// **見るのは先頭の印の並びだけである**（進捗報告は上の `StartsAsProgressReport` で除いた）。
+			// 本文のどこかに印が在るかで見ると、計画の印について書いた成果の報告が捨てられる。
+			if handoff.StartsAsPlan(c.Body) {
 				continue
 			}
 			found = true

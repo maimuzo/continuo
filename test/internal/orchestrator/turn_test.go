@@ -576,7 +576,14 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 		"agent-a1f9f743.jsonl",
 		"サブエージェントの記録の置き場所",
 		"下記の【調べるところ】に挙げた記録",
-		"dontAsk",
+		// **既定は auto である**（設計 3-11。issue #259）。
+		// **auto では、足す規則を狭く書かせる。**道具を丸ごと許す規則は、
+		// このモードに入るときに落とされる（公式の permission modes のページ）。
+		// **再起動まで案内する。**`claude.permissions` は走行中に読み直さないので、
+		// 足しただけでは同じところでまた止まる。
+		"auto",
+		"WORKFLOW.md の `claude.permissions.allow` に狭い規則を足してください",
+		"continuo を再起動してください",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
@@ -585,6 +592,11 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 	// **原因を断定してはならない。**何が確認の画面を出したかは continuo の側に残らない。
 	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
 		t.Errorf("確かめていない原因を断定している:\n%s", body)
+	}
+	// **コメントで許可を出す案内を書かない**（issue #259）。
+	// 判定役への要求から道具の結果は取り除かれるので、issue のコメントは判定役へ届かない。
+	if strings.Contains(body, "コメントに「その操作を許可します」と書いてください") {
+		t.Errorf("引き渡しに、コメントで許可を出す案内が入っている:\n%s", body)
 	}
 }
 

@@ -1228,21 +1228,25 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 					if o.now().After(deadline) {
 						return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 							i18n.KeyOrchestratorConfirmStartupNotInteractive,
-							rs.agentName(), got.Agent.AgentStatus, rs.agentName()))
+							rs.agentName(), got.Agent.AgentStatus))
 					}
 					break
 				}
 				return nil
 			case herdr.AgentStatusBlocked:
 				o.sendEscape(ctx, rs)
+				// **起動直後の文言は、issue のコメントに書く許可の文を持たない**（設計 3-11。issue #259）。
+				// この文言は、公開かどうかを見ずに issue のコメントとして投稿される。
+				// **何の確認だったかは continuo の側に残らない**ので、許可の出し方を案内しても合っているか分からない。
+				// 案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。
 				return i18n.Errorf(
 					i18n.KeyOrchestratorConfirmStartupBlocked,
-					rs.agentName(), rs.agentName())
+					rs.agentName())
 			case herdr.AgentStatusWorking:
 				if o.now().After(deadline) {
 					return i18n.Errorf(
 						i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
-						o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
+						o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
 				}
 			default:
 				// **`unknown` は「まだ見分けられていない」であって「壊れている」ではない。**
@@ -1257,7 +1261,7 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 				if o.now().After(deadline) {
 					return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 						i18n.KeyOrchestratorConfirmStartupUnknownStatus,
-						rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName()))
+						rs.agentName(), got.Agent.AgentStatus))
 				}
 			}
 		}

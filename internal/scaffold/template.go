@@ -129,16 +129,23 @@ agent:
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
-  permission_mode: dontAsk                  # 人間に確認を出さない唯一のモード。無人で回すので必ずこれにする
-  permissions:                              # dontAsk のとき、allow に書いていないツールは全部拒否される
+  permission_mode: auto                     # auto か dontAsk。auto は判定役が実行の前に確かめるので、.claude/ と .mcp.json にも書ける。
+                                            # 判定役は issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
+                                            # 許可を出すのはこのファイルで、足したら continuo を再起動する。
+                                            # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
+  permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
+                                            # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけを書く。引数まで絞ると書き込み系の操作が拒否される
+      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される。
+                                            # auto では、道具を丸ごと許すこの書き方は落とされる。auto で足すなら Bash(gh:*) のように狭く書く
       - "Read"
       - "Glob"
       - "Grep"
       - "Edit"
       - "Write"
-    deny: []                                # 明示的に禁じるツール。subagent を起動するツールは allow に書かなくても動く
+    deny: ["AskUserQuestion"]               # 明示的に禁じるツール。AskUserQuestion はエージェントが人間に選択肢を出す道具で、
+                                            # 外すと無人運転中に質問の画面が出て pane が止まる（次の指示が回答として食われる）。
+                                            # subagent を起動するツールは allow に書かなくても動く
   env:                                      # Claude Code に渡す環境変数
     CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
@@ -152,8 +159,12 @@ claude:
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
   tool_gate:                                # 危ない道具の呼び出しを、Claude Code の中のモデルに実行の前に断らせる仕掛け
-    mode: public_only                       # off なら掛けない。on ならいつでも掛ける。public_only なら公開リポジトリの issue にだけ掛ける。
-                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）
+    mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
+                                            # public_only なら公開リポジトリの issue にだけ掛ける。
+                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
+                                            # コメントで許可を出しても通らない（auto の判定役も、この検査も読まない）。
+                                            # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
+                                            # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。
                                             # 書ける名前の一覧は公式文書に無いので、書くなら自分の手元で1件通してから
     tools: ["Bash"]                         # 判定に回す道具の名前。空なら全部の道具に掛かり、道具1回ごとに判定の待ち時間が乗る
@@ -162,7 +173,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20。0.8.0 は 19）
+  protocol: 22                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.9.1 と 0.9.0 が 22。0.8.2 は 20、0.8.0 は 19）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -270,10 +281,11 @@ language: auto                              # 画面に出す文言の言語。a
 
 ### レビューを頼む subagent
 
-<!-- 組み込みの 3-2 と 3-6 が「敵対的レビューの subagent」と言っています。 -->
-<!-- このリポジトリで使う名前を書いてください。例: code-reviewer と security-reviewer。 -->
+<!-- 組み込みの 5-6 が「差分を読む役」と「関連処理まで見る役」を毎周並列に走らせろと言っています。 -->
+<!-- 差分を読む役・関連処理まで見る役 の順に、使う名前を2つ書いてください。 -->
 <!-- subagent を起動する道具の名前は Claude Code の版によって変わります。 -->
-<!-- 起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
+<!-- dontAsk で起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
 <!-- claude.permissions.allow に足してください。 -->
+<!-- permission_mode: auto（既定）では Agent の規則は落とされ、Agent の呼び出しも判定役が確かめるので、allow に足す話ではありません。 -->
 
 `

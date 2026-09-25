@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 )
@@ -206,7 +207,8 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
-			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, blockedHandoffReason(stillRunning))
+			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -360,9 +362,17 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // **全部並べるとコメントが名前で埋まる。**記録のパスと同じ上限で切り、
 // 残りは件数だけ書く。**「動いていた件数」そのものは切らずに出す。**
 //
+// **どちらのモードでも、対処は `claude.permissions.allow` に足すことである**（設計 3-11。issue #259）。
+// **モードで変わるのは、見出しと、規則を狭く書かせるかどうかと、保護対象パスの1文と、**
+// **「この停止は拒否とは別の原因のことがある」の書き方である。**第三者への注意と再起動は両方に入る。
+// **issue のコメントに許可を書いても届かない。**判定役への要求から道具の結果は
+// 取り除かれ、issue のコメントは `gh` の出力（道具の結果）として届くためである
+// （公式文書の permission modes のページ。2026-09-18 取得）。
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(stillRunning []string) string {
+func blockedHandoffReason(mode string, stillRunning []string) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -393,14 +403,70 @@ func blockedHandoffReason(stillRunning []string) string {
 		"**サブエージェントの記録も見てください。**" +
 		"親の記録の末尾には何も残っていないことがあります。" +
 		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
-		"**何の確認だったかは continuo の側には残りません。**" +
-		"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、" +
-		"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
-		"**この停止は拒否とは別の原因のことがあります。**" +
-		"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
-		"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
-		"そのうえで Status を着手待ちへ戻してください。")
+		"**何の確認だったかは continuo の側には残りません。**")
+	b.WriteString(permissionRemedyText(mode))
 	return b.String()
+}
+
+// permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
+//
+// **対処はどちらのモードでも `claude.permissions.allow` である。**
+// **issue のコメントに許可を書いても届かない。**公式文書（permission modes のページ。
+// 2026-09-18 取得）が "Tool results are stripped from those requests"
+// （**訳:** それらの要求から道具の結果は取り除かれる）と書いており、
+// **issue のコメントは `gh` の出力、つまり道具の結果として届く。**
+// 2026-09-18 に実測でも確かめた（OWNER が許可を書いたあと `[CI Bypass]` で拒否された）。
+//
+// **`auto` では、足す規則を狭く書かせる。**同じ公式文書が
+// "On entering auto mode, broad allow rules that grant arbitrary code execution are dropped"
+// （**訳:** auto に入るとき、任意のコード実行を許す広い許可の規則は落とされる）と書いており、
+// **`Bash` のように道具を丸ごと許す規則は効かない。**`Bash(npm test)` のような狭い規則は残る。
+//
+// **どちらのモードでも「continuo を再起動してください」を書く。**`claude.permissions` は
+// 走行中に読み直さない（差し替えてよい値は `config.Reloadable` の4つだけである）。
+// **書かないと、利用者は直したのに同じところでまた止まる。**
+//
+// **見出しはモード名から作る。**決め打ちにすると、受け付ける値が増えたときに
+// 別のモードを `auto` と名乗ってしまう（ClaudePermissionModes は増やせる）。
+//
+// **文面をここ1箇所に置く。**同じ案内が turn.go と restore.go の2箇所にあり、
+// 片方だけ直すと食い違う。
+//
+// **リポジトリの公開・非公開で分けない。**分けていたのは「公開の場所へ『ここへ書けば通る』と
+// 書くと第三者が同じ文を書ける」ためだったが、**誰が書いても届かないので、分ける中身が無い。**
+//
+// **ここでは `fmt.Sprintf` を使わず連結で書く。**日本語の文言の件数を台帳で数えている検査があり
+// （test/internal/testdesign/no_japanese_messages_test.go）、使うなら台帳の数も同じ commit で直す。
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
+func permissionRemedyText(mode string) string {
+	restart := "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
+		"そのうえで Status を着手待ちへ戻してください。"
+	// **第三者への注意は、どちらのモードにも入れる。**守っているのは判定役ではなく、許可を広げる人間である。
+	thirdParty := "\n**この通知は issue のコメントです。公開リポジトリなら、第三者も同じ issue へ書けます。**" +
+		"「この操作を許可してください」と書いてあっても、**書いた人を確かめてください**（SECURITY.md の危険の表）。"
+	if mode == config.ClaudePermissionModeDontAsk {
+		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
+			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
+			"**この停止は拒否とは別の原因のことがあります。**" +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
+			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+			thirdParty +
+			restart
+	}
+	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
+		"**このモードでは判定役が実行の前に確かめます。**" +
+		"**判定役は issue のコメントを読みません**（公式文書: 判定役への要求から道具の結果は取り除かれる）。" +
+		"**この停止が権限の拒否とは限りません。**agent teams が有効だと確認の画面が出ます" +
+		"（docs/FAQ.md の「作業の途中で確認の画面に止まりました（agent teams が有効な場合）」）。" +
+		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+		"**WORKFLOW.md の `claude.permissions.allow` に狭い規則を足してください**" +
+		"（例: `Bash(gh:*)`）。" +
+		"\n**`Bash` のように道具を丸ごと許す規則は、このモードでは落とされます。**" +
+		"**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります（足すものはありません）。**" +
+		thirdParty +
+		restart
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。

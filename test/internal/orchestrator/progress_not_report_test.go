@@ -75,11 +75,34 @@ func TestComment_進捗報告は成果の報告として数えない(t *testing.
 // 与える情報: run が始まったあとに付いた、進捗報告の印を持たないエージェントのコメント。
 // 成功条件: セッションの復元（`--resume`）が走らないこと。
 func TestComment_印の無い成果の報告はいままでどおり数える(t *testing.T) {
+	assertReportCounted(t, "<!-- continuo:agent -->\nこの run でやったことを書きました")
+}
+
+// 目的: 計画の印を本文の途中で引用した成果の報告も、成果の報告として数えることを固定する
+// （設計 5-3q。`handoff.StartsAsPlan`）。
+//
+// **なぜ要るか。**計画のコメントを外す判定が「印が本文のどこかに在るか」だと、
+// 計画の印について書いた成果の報告まで外れる。continuo はセッションを復元して書かせ直し、
+// **2度目も同じなら `failure_state` へ落とす。**書いてあるのに、書かなかったことにされる。
+// 組み込みの指示書の 5-3 は「本文の途中で引用するのはかまいません」と書いている。
+//
+// 与える情報: 先頭の印の並びはエージェントの印だけで、本文の途中に計画の印を含む報告。
+// 成功条件: セッションの復元（`--resume`）が走らないこと。
+func TestComment_計画の印を途中で引用した成果の報告も数える(t *testing.T) {
+	assertReportCounted(t, "<!-- continuo:agent -->\n"+
+		"計画のコメントの2行目（<!-- continuo:plan -->）を落とさないよう、見本を直しました")
+}
+
+// assertReportCounted は、run が始まったあとに body のコメントがあるとき、
+// continuo がセッションを復元しない（成果の報告として数える）ことを確かめる。
+//
+// t: テストコンテキスト。
+// body: エージェントが書いたことにするコメントの本文。
+func assertReportCounted(t *testing.T, body string) {
+	t.Helper()
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	fx.Tracker.AddComment("I_node188",
-		"<!-- continuo:agent -->\nこの run でやったことを書きました",
-		true, time.Now().Add(1*time.Hour))
+	fx.Tracker.AddComment("I_node188", body, true, time.Now().Add(1*time.Hour))
 
 	transcriptDir := t.TempDir()
 	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
@@ -182,6 +205,22 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 		return false
 	})
 
+	// **見本は囲みに入れ、中身を行頭から書く**（設計 5-3t）。この文面は文字列のまま届くので、
+	// 字下げした見本をそのまま写すと `DONE` の行が終わりと読まれず、何も投稿されずに終わる。
+	if !strings.Contains(sent, "```bash\n") {
+		t.Errorf("見本がコード囲みに入っていません:\n%s", sent)
+	}
+	if !strings.Contains(sent, "\nDONE\n") {
+		t.Errorf("ヒアドキュメントの終わりの行が、行頭に `DONE` だけで書かれていません:\n%s", sent)
+	}
+	if !strings.Contains(sent, `--body-file "$F"`) || strings.Contains(sent, `--body "`) {
+		t.Errorf("本文をファイルから渡させていません。二重引用符の中の backtick と `$` はシェルが実行します:\n%s", sent)
+	}
+	// **本文に `DONE` だけの行を作らせない**（設計 5-3t）。作ると、そこで本文が切れ、後ろの行がコマンドになる。
+	// 書かせ直しは単独で届き、組み込みの 3-2 を読み直すとは限らない。
+	if !strings.Contains(sent, "終わりの語を別のものに変えてください") {
+		t.Errorf("本文に終わりの語だけの行を作るなという注意がありません:\n%s", sent)
+	}
 	if !strings.Contains(sent, "囲み付きの") {
 		t.Errorf("禁じる印を「囲み付き」と名指ししていません:\n%s", sent)
 	}
