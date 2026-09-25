@@ -13,6 +13,11 @@ import (
 
 // pingResultJSON は 2026-08-18 に実機の herdr（0.8.0）から得た ping の応答の原文である
 // （設計 2-1）。テストではこの原文をそのまま返させ、フィールドの読み取りを検証する。
+//
+// **herdr 0.9.1（protocol 22）に上げたあとも、この原文は差し替えずに記録として残す**（issue #281）。
+// このファイルのテストは値を固定したまま解析と照合の処理を確かめるもので、既定値にも実機の版にも
+// 依存しない。0.9.1 の実際の応答（capabilities に整数の endpoint_protocol_generation が入る）を
+// 解析できることは、test/live/herdr_test.go が本物の herdr を相手に確かめる。
 const pingResultJSON = `{"type": "pong", "version": "0.8.0", "protocol": 19,
 	"capabilities": {"live_handoff": true, "detached_server_daemon": false}}`
 

@@ -1086,7 +1086,8 @@ continuo は知らない Status になった issue を、
 **「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
-**この状態では Claude Code は起動しないので、枠を消費しない**）。
+**この状態では Claude Code は起動しないので、枠を消費しない**。
+**herdr 0.8.0（protocol 19）のときに取ったものなので、herdr 0.9.1 では `protocol=22` と出る**）。
 
 ```text
 continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）

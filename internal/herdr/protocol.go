@@ -16,7 +16,12 @@ const MethodPing = "ping"
 // PingResult は ping の応答である。
 //
 // 実測値（原文。2026-08-18、herdr 0.8.0）は次のとおりである（2-1）。
-// herdr 0.9.1 は version に "0.9.1"、protocol に 22 を返す（実測: 2026-09-24、test/live の ping）。
+// herdr 0.9.1 の応答（原文。2026-09-25 に herdr の socket へ ping を送って取った）は次のとおりである。
+//
+//	{"type":"pong","version":"0.9.1","protocol":22,"capabilities":{"live_handoff":true,
+//	 "detached_server_daemon":true,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true}}
+//
+// herdr 0.8.0 の応答（原文）は次のとおりである。
 //
 //	{"id": "probe", "result": {"type": "pong", "version": "0.8.0", "protocol": 19,
 //	 "capabilities": {"live_handoff": true, "detached_server_daemon": false}}}
@@ -39,9 +44,9 @@ type PingResult struct {
 	// health_check / live_handoff / surface_interest の5つを定義している（2026-09-24 に確認）。
 	//
 	// 【それでも map[string]any で受ける】
-	// キーの顔ぶれと値の型は herdr の版によって増減しうる。将来これ以外の型の値が
-	// 増えても解析が失敗しないようにするためである。continuo はいまのところ内容で
-	// 分岐せず、人間へのログに出すだけである。
+	// キーの顔ぶれと値の型は herdr の版によって増減する。**herdr 0.9.1 は既に真偽値でない値を
+	// 返す**（`endpoint_protocol_generation: 1`）。そうした値が来ても解析が失敗しないようにする
+	// ためである。continuo はいまのところ内容を読まない。
 	Capabilities map[string]any `json:"capabilities,omitempty"`
 }
 

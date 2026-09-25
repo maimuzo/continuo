@@ -512,7 +512,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `pane.report_agent` | **`pane_id`** / **`source`** / **`agent`** / **`state`** / `agent_session_id` ほか | **実プロセスを起動せずに「agent が居る pane」として登録する。**統合テストで使う。**`state` は4値で `done` を含まない** |
 | **`ping`** | （なし） | **protocol の版を取る。**応答は `{"type":"pong","version":"0.8.0","protocol":19,"capabilities":{…}}`（実測） |
 
-**protocol の版は `ping` で取る**（実測で 19。herdr は 0.8.0。herdr 0.9.1 は 22 を返す（2026-09-24 に test/live の ping で実測））。起動時にこれを呼び、設定の `herdr.protocol` と照合する。**test/internal/herdr/protocol_test.go が固定している応答の原文は、0.8.0 のまま記録として残す**（版の照合ではなく、応答の読み取りの形を確かめるテストのため）。
+**protocol の版は `ping` で取る**（実測で 19。herdr は 0.8.0）。起動時にこれを呼び、設定の `herdr.protocol` と照合する。
 
 **応答のスキーマも実在する。**`herdr api schema --json` の `schemas` は
 `error_response` / `event` / `request` / `subscription_event` / **`success_response`** の5つを持つ。
