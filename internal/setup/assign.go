@@ -45,7 +45,9 @@ var (
 	ErrLineTooLong = errors.New("1行が長すぎます")
 )
 
-// Assignment は5つの役割へ割り当てた Status の選択肢名である。
+// Assignment は役割へ割り当てた Status の選択肢名である。
+//
+// **飛ばせる役割は空文字のままになりうる**（設計 3-82 の `direct_chat_state`）。
 type Assignment struct {
 	// names は役割ごとに割り当てた選択肢名である。添字は Role の値。
 	names [RoleCount]string
@@ -67,11 +69,12 @@ func (a Assignment) Name(r Role) string {
 // 戻り値: scaffold.UpdateStatuses に渡す値。
 func (a Assignment) Statuses() scaffold.Statuses {
 	return scaffold.Statuses{
-		Dispatch: a.names[RoleDispatch],
-		Running:  a.names[RoleRunning],
-		Review:   a.names[RoleReview],
-		Blocked:  a.names[RoleBlocked],
-		Done:     a.names[RoleDone],
+		Dispatch:   a.names[RoleDispatch],
+		Running:    a.names[RoleRunning],
+		Review:     a.names[RoleReview],
+		Blocked:    a.names[RoleBlocked],
+		Done:       a.names[RoleDone],
+		DirectChat: a.names[RoleDirectChat],
 	}
 }
 
@@ -119,8 +122,11 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 
 	// **尋ねる前に選択肢の数を確かめる**（RUCM の基本フロー5）。足りないまま尋ねると、
 	// 何回か答えさせたあとで必ず行き止まる。利用者に無駄な入力をさせない。
-	if len(opts.Options) < RoleCount {
-		fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortTooFew, fieldName, len(opts.Options), RoleCount, RoleCount))
+	// **数えるのは `RequiredRoleCount` である**（設計 3-82）。`RoleCount` で数えると、
+	// **選択肢がちょうど5つのカンバンで1問も尋ねずに終わる。**飛ばせる役割の選択肢が
+	// 無くても、残りは割り当てきれる。
+	if len(opts.Options) < RequiredRoleCount {
+		fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortTooFew, fieldName, len(opts.Options), RequiredRoleCount, RequiredRoleCount))
 		writeAddOptionRemedy(out)
 		return Assignment{}, ErrTooFewOptions
 	}
@@ -141,6 +147,9 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 		for {
 			fmt.Fprintln(out)
 			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAsk, turn+1, RoleCount, role.ConfigKey(), role.Description()))
+			if role.IsOptional() {
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupSkipOptional))
+			}
 			fmt.Fprint(out, i18n.T(i18n.KeySetupPromptInput))
 
 			line, err := reader.read(ctx)
@@ -176,8 +185,16 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 				continue
 			}
 			if n == noOptionInput {
+				if role.IsOptional() {
+					// **飛ばせる役割では、0 は「飛ばす」である**（設計 3-82）。
+					// **打ち切ってはならない。**選択肢が無くても continuo は起動するので、
+					// **ここで打ち切ると、この機能を使わない利用者から
+					// `continuo setup` そのものを奪うことになる。**
+					fmt.Fprintln(out, i18n.T(i18n.KeySetupSkippedOptional, role.ConfigKey()))
+					break
+				}
 				fmt.Fprintln(out)
-				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.ConfigKey(), RoleCount))
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.ConfigKey(), RequiredRoleCount))
 				writeAddOptionRemedy(out)
 				return Assignment{}, ErrNoSuitableOption
 			}
@@ -223,6 +240,12 @@ func writeSummary(out io.Writer, a Assignment) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryHeader, RoleCount))
 	for _, role := range roleOrder {
+		if a.names[role] == "" {
+			// **飛ばした役割は、飛ばしたと書く**（設計 3-82）。
+			// 空の引用符だけを出すと、割り当て損ねたのか飛ばしたのかが読めない。
+			fmt.Fprintln(out, i18n.T(i18n.KeySetupSummarySkipped, role.ConfigKey()))
+			continue
+		}
 		fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryLine, role.ConfigKey(), a.names[role]))
 	}
 }

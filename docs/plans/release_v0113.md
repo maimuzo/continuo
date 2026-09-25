@@ -322,8 +322,8 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 
 | 止まりそうな場所 | 実際にどうなっているか |
 | --- | --- |
-| 権限 | [internal/config/default.go:113-129](../../internal/config/default.go#L113-L129)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
-| 雛形の禁止事項 | [internal/scaffold/template.go:216-225](../../internal/scaffold/template.go#L216-L225) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
+| 権限 | [internal/config/default.go:113-135](../../internal/config/default.go#L113-L135)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
+| 雛形の禁止事項 | [internal/scaffold/template.go:227-236](../../internal/scaffold/template.go#L227-L236) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
 | tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:299-306](../../internal/orchestrator/settings.go#L299-L306)） |
 
 ### 作らない理由（3つ）

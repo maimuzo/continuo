@@ -170,12 +170,20 @@ func NewAdapter(
 
 // requiredStatesForBootstrap は「カンバンに実在しなければ起動を止める」Status 名を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
-// failure_state・status_signal_map の遷移先を含める
+// failure_state・direct_chat_state・status_signal_map の遷移先を含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
+// **`direct_chat_state` だけは入らない**（設計 3-82）。既定が `"Direct Chat"` なので、
+// 入れると**その選択肢をまだ作っていない全利用者の continuo が起動しなくなる。**
+// **止めてよい理由が、この Status には当てはまらない。**止めるのは
+// 「GraphQL がエラーを出さずに0件を返し続ける」ためだが、選択肢が無ければ
+// **そこへ遷移できる issue が存在しない。**黙って壊れる経路が無い。
+// **差し引くのは `config.RequiredBoardStates` の中である。**ここで自前に落とさない。
+//
+// **集めるのは `config` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
 // **実行時に「知っている Status か」を判定する一覧**（orchestrator の `knownStates`）
-// **とぴったり同じにする。**ずれると、起動時に通した設定が実行時には別の意味になる。
+// **とは、`direct_chat_state` の1件だけが違う。**それ以外がずれると、
+// 起動時に通した設定が実行時には別の意味になる。
 //
 // **`automated_state_rewrite` のキーは入れない**（設計 3-57）。
 // キーは定義上「continuo が知らない Status」であり、**カンバンに実在しなくてよい。**
@@ -187,7 +195,7 @@ func NewAdapter(
 // **戻す先（値）も足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
 // 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	return config.KnownStates(cfg)
+	return config.RequiredBoardStates(cfg)
 }
 
 // missingRewriteKeys は `tracker.automated_state_rewrite` のキーのうち、カンバンの Status の

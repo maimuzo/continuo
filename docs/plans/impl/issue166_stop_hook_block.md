@@ -100,10 +100,10 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 | --- | --- |
 | **`<task-notification>` のあと** | 窓の中で `<task-notification>` を受けて待ち直したあと、その処理の応答が差し戻される。`awaitStop` が空の `Stop` を掴み、`settle_ms` の窓が開く |
 | **走行中の `Stop` のあと** | 同上。`background_tasks` が空でない `Stop` で待ち直したあと |
-| **引き継いだ run** | [internal/orchestrator/turn.go:128](../../../internal/orchestrator/turn.go#L128)。`agent.prompt` を送らずに `confirmTurnEnd` から入る（3-4 の段5a2） |
+| **引き継いだ run** | [internal/orchestrator/turn.go:151](../../../internal/orchestrator/turn.go#L151)。`agent.prompt` を送らずに `confirmTurnEnd` から入る（3-4 の段5a2） |
 
 **そのときの時刻。**continuo は **2.0 秒**で窓を閉じ、**2.5 秒**で transcript を読む
-（`settle_ms` の既定 2000ms は [internal/config/default.go:134](../../../internal/config/default.go#L134)、
+（`settle_ms` の既定 2000ms は [internal/config/default.go:140](../../../internal/config/default.go#L140)、
 `transcriptFirstWait` の 500ms は [internal/orchestrator/orchestrator.go:65](../../../internal/orchestrator/orchestrator.go#L65)）。
 **書き直しの中央値は 21.1 秒である**（8 節）。**間に合っていない。**
 
@@ -116,9 +116,9 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 
 | 何が壊れるか | どこで |
 | --- | --- |
-| **差し戻された側の応答Aで Status が動き、書き直し中の pane を閉じる** | [internal/orchestrator/lifecycle.go:37-39](../../../internal/orchestrator/lifecycle.go#L37-L39) が応答Aから表明を読み、[internal/orchestrator/lifecycle.go:91-93](../../../internal/orchestrator/lifecycle.go#L91-L93) の default の枝が `finishRun` へ進む |
+| **差し戻された側の応答Aで Status が動き、書き直し中の pane を閉じる** | [internal/orchestrator/lifecycle.go:49-51](../../../internal/orchestrator/lifecycle.go#L49-L51) が応答Aから表明を読み、[internal/orchestrator/lifecycle.go:116-118](../../../internal/orchestrator/lifecycle.go#L116-L118) の default の枝が `finishRun` へ進む |
 | **書き直した応答Bが、どこからも読まれない** | 読み取り範囲は「`typed` の user 行から次の `typed` の user 行まで」（[internal/orchestrator/transcript.go:521-546](../../../internal/orchestrator/transcript.go#L521-L546)）。差し戻しの行は `typed` ではないので応答Bは応答Aと同じ範囲に入り、**その範囲は読み終わっている** |
-| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:542](../../../internal/orchestrator/runstate.go#L542) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:130-140](../../../internal/orchestrator/turn.go#L130-L140) が `failure_state` へ落とす |
+| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:571](../../../internal/orchestrator/runstate.go#L571) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:153-163](../../../internal/orchestrator/turn.go#L153-L163) が `failure_state` へ落とす |
 
 **3つ目がいちばん見えにくい。**issue に残る理由は
 **「作業が終わったという表明を出しませんでした」**になり、実際に起きたこととは別の話になる。
@@ -203,7 +203,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **どちらも「新しい `Stop` は二度と来ない」。**出口を置かないと、ループの先頭 → `awaitStop` が
 空振り → 枠待ちでない → `blocked` でもない → `continue` を延々と繰り返し、
 **巡回の stall 検知が拾うまで run が空転する。**そのときの上限は
-`turn_timeout_ms`（既定 3600000ms。[internal/config/default.go:137](../../../internal/config/default.go#L137)）で、
+`turn_timeout_ms`（既定 3600000ms。[internal/config/default.go:143](../../../internal/config/default.go#L143)）で、
 **最大1時間である。**打ち切られると `RetryCount` を1消費し、issue に打ち切りのコメントが残る。
 
 **だから出口を置く。**待ち直している間は `settle_ms` ごとに `agent.get` を1回読み、
@@ -281,7 +281,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 
 **案：`settle_ms` を伸ばすだけ。**
 **否定する。**8 節のとおり **290 件中 232 件（80.0%）しか 30 秒に収まらない。**
-`settle_ms` は `poll_wait_ms` 以下でなければならず（[internal/config/validate.go:270-274](../../../internal/config/validate.go#L270-L274)）、
+`settle_ms` は `poll_wait_ms` 以下でなければならず（[internal/config/validate.go:276-280](../../../internal/config/validate.go#L276-L280)）、
 その既定の 30 秒まで伸ばしてもそこまでである。
 **95% を拾うには 48 秒、最大を拾うには 84 秒が要る。**
 **その待ちは、差し戻す hook を1本も入れていない利用者の全 turn にも掛かる。**
@@ -304,7 +304,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **案：`UserPromptSubmit` を `<task-notification>` 以外も「turn が続いている」と見る。**
 **採らない。****差し戻しが `UserPromptSubmit` を出すかどうかを確かめられていない。**
 出さないなら1件も拾えず、出すなら
-[internal/orchestrator/orchestrator.go:1068-1076](../../../internal/orchestrator/orchestrator.go#L1068-L1076) の
+[internal/orchestrator/orchestrator.go:1153-1161](../../../internal/orchestrator/orchestrator.go#L1153-L1161) の
 `isTurnBoundaryHook` が広がって、**人間が pane へ直接打った入力まで turn の判定に混ざる。**
 
 ---
@@ -348,7 +348,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **足す1節。**`### 3-79. 空の Stop は「止まってよいか尋ねた」であって「終わった」ではない`。
 中身はこの文書の 1 節・6 節・7 節を縮めたもので、**測定値の細かい内訳は入れずにこの文書を参照させる。**
 
-**[docs/plans/continuo_design.md:3682](../continuo_design.md#L3682) の周辺は残す。**
+**[docs/plans/continuo_design.md:3686](../continuo_design.md#L3686) の周辺は残す。**
 あちらは「**continuo 自身は差し戻しを使わない**」を決めているだけで、
 **「他人の hook が差し戻してきたときにどうするか」は決めていない。**3-79 がそこを埋める。
 

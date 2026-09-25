@@ -51,7 +51,7 @@ func runAssign(t *testing.T, options []string, input []string) (setup.Assignment
 // 成功条件: エラーにならず、5つの役割の割り当てが番号のとおりであること。
 // 画面には役割の名前より先に「continuo が何をするか」の説明が出ていること。
 func TestAssign_5つの役割それぞれに選択肢が1つ割り当てられる(t *testing.T) {
-	a, err, out := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6"})
+	a, err, out := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("割り当てが最後まで進まなかった: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestAssign_5つの役割それぞれに選択肢が1つ割り当てられ�
 // 与える情報: 本番と同じ6個の選択肢と、通る5つの番号。
 // 成功条件: 6個すべてが「番号  名前」の形で画面に出ていること。
 func TestAssign_選択肢を番号付きで並べる(t *testing.T) {
-	_, err, out := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6"})
+	_, err, out := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("割り当てが最後まで進まなかった: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestAssign_選択肢を番号付きで並べる(t *testing.T) {
 // 成功条件: 打ち切らずに最後まで進み、着手待ちが Ready、作業中が In Progress になること。
 // 画面には「既に 着手待ち に割り当て済み」と出ており、作業中の説明が2回出ていること。
 func TestAssign_同じ選択肢を2つの役割へ割り当てようとしたら拒否して尋ね直す(t *testing.T) {
-	a, err, out := runAssign(t, boardOptions, []string{"2", "2", "3", "5", "4", "6"})
+	a, err, out := runAssign(t, boardOptions, []string{"2", "2", "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("二重割り当てで打ち切ってしまった: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestAssign_番号0が入ったら打ち切る(t *testing.T) {
 // 成功条件: 打ち切らずに最後まで進み、着手待ちが Ready になること。
 // 画面には選べる番号の範囲が出ていること。
 func TestAssign_範囲外の番号と数値でない入力を拒否して尋ね直す(t *testing.T) {
-	a, err, out := runAssign(t, boardOptions, []string{"7", "abc", "2", "3", "5", "4", "6"})
+	a, err, out := runAssign(t, boardOptions, []string{"7", "abc", "2", "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("範囲外の入力で打ち切ってしまった: %v", err)
 	}
@@ -257,5 +257,64 @@ func TestAssign_番号を待つ間に入力が終わったら保存せずに終�
 	}
 	if !strings.Contains(out, "割り当ては保存していません") {
 		t.Errorf("割り当てを保存しないことを応答していない:\n%s", out)
+	}
+}
+
+// 目的: direct chat の役割だけは番号 0 で飛ばせて、対話が打ち切られないことを確認する（設計 3-82）。
+//
+// **他の5つで 0 を入れると打ち切る。**そこは変えていない。
+// **direct chat だけを飛ばせるようにしたのは、カンバンにその選択肢が無くても
+// continuo は起動するからである。**打ち切ると、この機能を使わない人から
+// `continuo setup` そのものを奪うことになる。
+//
+// 与える情報: 本番と同じ6個の選択肢と、5つの番号のあとに 0。
+// 成功条件: エラーにならず、5つの役割が埋まり、direct_chat_state だけが空であること。
+// 画面に「飛ばしました」が出ていること。
+func TestAssign_directChatの役割は0で飛ばせる(t *testing.T) {
+	a, err, out := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6", "0"})
+	if err != nil {
+		t.Fatalf("0 を入れたら打ち切られた: %v", err)
+	}
+	st := a.Statuses()
+	if !st.Complete() {
+		t.Fatalf("必ず要る5つの役割が埋まっていない: %+v", st)
+	}
+	if st.DirectChat != "" {
+		t.Errorf("飛ばしたのに direct_chat_state に値が入っている: %q", st.DirectChat)
+	}
+	if !strings.Contains(out, "飛ばしました") {
+		t.Errorf("飛ばしたことが画面に出ていない:\n%s", out)
+	}
+}
+
+// 目的: direct chat の役割へ選択肢を割り当てられることを確認する（設計 3-82）。
+//
+// 与える情報: 本番と同じ6個の選択肢と、6つの番号（最後は Ice Box を direct chat に当てる）。
+// 成功条件: エラーにならず、direct_chat_state に選択肢名が入ること。
+func TestAssign_directChatの役割へ選択肢を割り当てられる(t *testing.T) {
+	a, err, _ := runAssign(t, boardOptions, []string{"2", "3", "5", "4", "6", "1"})
+	if err != nil {
+		t.Fatalf("割り当てが最後まで進まなかった: %v", err)
+	}
+	if got, want := a.Statuses().DirectChat, "Ice Box"; got != want {
+		t.Errorf("direct_chat_state の割り当てが違う: %q（期待 %q）", got, want)
+	}
+}
+
+// 目的: direct chat の選択肢が無いカンバン（選択肢ちょうど5個）でも、対話が最後まで通ることを確認する（設計 3-82）。
+//
+// **必要な選択肢の数を6にすると、ここで1問も尋ねずに終わる。**
+// いま5つちょうどで運用している人から `continuo setup` を奪わないための検査である。
+//
+// 与える情報: 選択肢を5個だけ渡し、5つの番号のあとに 0。
+// 成功条件: エラーにならず、必ず要る5つの役割が埋まること。
+func TestAssign_選択肢が5個ちょうどでも最後まで通る(t *testing.T) {
+	five := []string{"Ready", "In Progress", "In Review", "Blocked", "Done"}
+	a, err, _ := runAssign(t, five, []string{"1", "2", "3", "4", "5", "0"})
+	if err != nil {
+		t.Fatalf("選択肢5個で打ち切られた: %v", err)
+	}
+	if st := a.Statuses(); !st.Complete() {
+		t.Fatalf("5つの役割が埋まっていない: %+v", st)
 	}
 }

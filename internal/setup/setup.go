@@ -33,17 +33,36 @@ const (
 	RoleBlocked
 	// RoleDone は完了である。人間がここへ動かすと continuo が worktree と branch を片付ける。
 	RoleDone
+	// RoleDirectChat は direct chat である。人間が pane で直接エージェントと話すあいだ、
+	// continuo は指示を送らず、pane も worktree も閉じない（設計 3-82）。
+	//
+	// **この役割だけは飛ばせる**（`OptionalRoles`）。カンバンに選択肢が無くても
+	// continuo は起動するので、割り当てを強いる理由が無い。
+	RoleDirectChat
 )
 
-// RoleCount は割り当てる役割の数である。
+// RoleCount は尋ねる役割の数である。
+const RoleCount = 6
+
+// RequiredRoleCount は「選択肢がこれだけ無いと対話を始めない」数である。
 //
-// **選択肢はこの数だけ要る。**1つの選択肢を2つの役割へ割り当てないので、
-// 選択肢がこれより少ないカンバンでは対話が必ず途中で行き止まる。
-const RoleCount = 5
+// **RoleCount より1つ少ない。**`RoleDirectChat` は飛ばせるので、その選択肢が無くても
+// 残り5つは割り当てきれる。**ここを RoleCount にすると、選択肢がちょうど5つの
+// カンバンで `continuo setup` が1問も尋ねずに終わる**（設計 3-82）。
+const RequiredRoleCount = 5
+
+// IsOptional は、その役割を飛ばせるかどうかを返す。
+//
+// **飛ばせるのは `RoleDirectChat` だけである。**残り5つは、割り当てないと continuo が
+// 動かない（着手待ちが無ければ issue を取れず、完了が無ければ片付けられない）。
+//
+// r: 役割。
+// 戻り値: 飛ばせるなら true。
+func (r Role) IsOptional() bool { return r == RoleDirectChat }
 
 // roleOrder は尋ねる順序である。**issue が実際に通る順に並べてある。**
 // カンバン上の並びと同じ順に尋ねると、利用者は一覧を上から順に消化できる。
-var roleOrder = [RoleCount]Role{RoleDispatch, RoleRunning, RoleReview, RoleBlocked, RoleDone}
+var roleOrder = [RoleCount]Role{RoleDispatch, RoleRunning, RoleReview, RoleBlocked, RoleDone, RoleDirectChat}
 
 // roleConfigKeys は、その役割が WORKFLOW.md のどのキーに書かれるかである。添字は Role の値。
 //
@@ -56,8 +75,9 @@ var roleConfigKeys = [RoleCount]string{
 	RoleReview:   "status_signal_map.review",
 	// **保留だけは2つのキーに同じ値が入る。**両方書かないと、答えたあとに
 	// WORKFLOW.md を見た利用者が「もう1つはどこから来たのか」を追えない。
-	RoleBlocked: "status_signal_map.blocked / failure_state",
-	RoleDone:    "terminal_states",
+	RoleBlocked:    "status_signal_map.blocked / failure_state",
+	RoleDone:       "terminal_states",
+	RoleDirectChat: "direct_chat_state",
 }
 
 // roleDescKeys は役割の説明の文言のキーである。添字は Role の値。
@@ -66,18 +86,19 @@ var roleConfigKeys = [RoleCount]string{
 // 「どの Status がどの役割か」を知らないので、Status 名を先に見せると、名前の似た
 // 選択肢を役割の意味と無関係に選ぶ。
 var roleDescKeys = [RoleCount]i18n.Key{
-	RoleDispatch: i18n.KeySetupRoleDispatchDesc,
-	RoleRunning:  i18n.KeySetupRoleRunningDesc,
-	RoleReview:   i18n.KeySetupRoleReviewDesc,
-	RoleBlocked:  i18n.KeySetupRoleBlockedDesc,
-	RoleDone:     i18n.KeySetupRoleDoneDesc,
+	RoleDispatch:   i18n.KeySetupRoleDispatchDesc,
+	RoleRunning:    i18n.KeySetupRoleRunningDesc,
+	RoleReview:     i18n.KeySetupRoleReviewDesc,
+	RoleBlocked:    i18n.KeySetupRoleBlockedDesc,
+	RoleDone:       i18n.KeySetupRoleDoneDesc,
+	RoleDirectChat: i18n.KeySetupRoleDirectChatDesc,
 }
 
 // Roles は割り当てる役割を、尋ねる順に返す。
 //
 // 戻り値: dispatch_state・running_state・status_signal_map.review・
-// status_signal_map.blocked / failure_state・terminal_states の順に並んだ役割
-// （呼び出し側が書き換えても内部には影響しない）。
+// status_signal_map.blocked / failure_state・terminal_states・direct_chat_state の
+// 順に並んだ役割（呼び出し側が書き換えても内部には影響しない）。
 func Roles() []Role {
 	out := make([]Role, RoleCount)
 	copy(out, roleOrder[:])

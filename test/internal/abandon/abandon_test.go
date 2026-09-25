@@ -1574,6 +1574,36 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 	}
 }
 
+// 目的: `--park` にdirect chat の状態（tracker.direct_chat_state の値）を渡したとき、
+// **ボードへ1文字も書かずに**止まることを確認する（設計 3-82）。
+// **direct chat の Status は `tracker.active_states` に入っていないので、
+// 1つ上の検査を素通りする。**だが動かした先で continuo は `pane.close` を1回も呼ばないので、
+// **pane が閉じるのを待つ段（3-37 の段1 の後半）が待ち切れず、結局何も消せない。**
+// 待つ前に、はっきりした理由で断る。
+// 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
+// issue 188 の worktree、`tracker.direct_chat_state` を設定したうえで `--park` にその値。
+// 成功条件: 終了コードが 1、ボードへの書き込みが0件、worktree が残っている、
+// herdr へ worktree.remove を送っていないこと。
+func TestAbandon_parkがdirectChatの状態なら書く前に止まる(t *testing.T) {
+	fx := newFixture(t)
+	// **`newFixtureWithConfig` の extra は最上位のキーしか足せない**ので、
+	// `tracker:` の中へは書けない。WORKFLOW.md を直接1行足す。
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ParkState = "Human" })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrParkDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
 // {"RUCM-PATH": "P028"}
 //
 // 目的: 片付ける worktree が無いとき、`--to` の指定を黙って捨てないことを確認する

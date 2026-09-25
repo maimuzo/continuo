@@ -18,12 +18,16 @@ import (
 // 偽のカンバンの Status の選択肢は `Ice Box, Ready, In Progress, Blocked, In Review, Done`
 // の6つなので、手順書の段4 と同じ答えになる。
 //
-//	[1/5] 着手待ち    → 2（Ready）
-//	[2/5] 作業中      → 3（In Progress）
-//	[3/5] レビュー待ち → 5（In Review）
-//	[4/5] 保留        → 4（Blocked）
-//	[5/5] 完了        → 6（Done）
-const setupAnswers = "2\n3\n5\n4\n6\n"
+//	[1/6] 着手待ち     → 2（Ready）
+//	[2/6] 作業中       → 3（In Progress）
+//	[3/6] レビュー待ち  → 5（In Review）
+//	[4/6] 保留         → 4（Blocked）
+//	[5/6] 完了         → 6（Done）
+//	[6/6] direct chat  → 0（飛ばす）
+//
+// **6問目は 0 で飛ばす。**偽のカンバンに `Direct Chat` の選択肢が無いためである（設計 3-82）。
+// **飛ばせないと、選択肢を足していない利用者が手順書の段4 を通れない。**
+const setupAnswers = "2\n3\n5\n4\n6\n0\n"
 
 // TestE2E_手順書の段1から段9までをmockだけで通す は、docs/trying_it_out.md の全段を
 // **被害ゼロで**最初から最後まで通す。

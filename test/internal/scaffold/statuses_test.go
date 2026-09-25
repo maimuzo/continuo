@@ -389,12 +389,16 @@ func TestUpdateStatuses_役割が欠けていたら止まる(t *testing.T) {
 // TemplateWithValues は見つからなかったキーを報告しないので、ここで雛形の側を押さえる。
 //
 // 与える情報: 雛形をそのまま書き出したファイル。
-// 成功条件: StatusKeyNames が8件返り、そこに cleanup.on_states が入っていて、
+// 成功条件: StatusKeyNames が9件返り、そこに cleanup.on_states が入っていて、
 // UpdateStatuses がエラー無しで通ること。
-func TestStatusKeyNames_雛形に8つのキーが全部ある(t *testing.T) {
+//
+// **9件目は `tracker.direct_chat_state` である**（設計 3-82）。
+// **このキーだけは、既にある WORKFLOW.md に無くても書き込みを止めない**が、
+// **雛形には必ずある。**無いと `continuo init` が書き出したファイルへ書き込めない。
+func TestStatusKeyNames_雛形に9つのキーが全部ある(t *testing.T) {
 	names := scaffold.StatusKeyNames()
-	if len(names) != 8 {
-		t.Fatalf("書き換えるキーが %d 件（期待 8 件）: %v", len(names), names)
+	if len(names) != 9 {
+		t.Fatalf("書き換えるキーが %d 件（期待 9 件）: %v", len(names), names)
 	}
 	found := false
 	for _, n := range names {

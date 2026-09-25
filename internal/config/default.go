@@ -118,11 +118,17 @@ func DefaultConfig() *Config {
 			},
 			RequiredLabels: []string{},
 			// In Progress を必ず含める（3-10）。ここで欠かすと dispatch 直後に自分の worker を殺す。
-			ActiveStates:      []string{"Ready", "In Progress"},
-			TerminalStates:    []string{"Done"},
-			RunningState:      "In Progress",
-			DispatchState:     "Ready",
-			FailureState:      "Blocked",
+			ActiveStates:   []string{"Ready", "In Progress"},
+			TerminalStates: []string{"Done"},
+			RunningState:   "In Progress",
+			DispatchState:  "Ready",
+			FailureState:   "Blocked",
+			// 人間が pane で直接 Claude Code と話している間だけ置く Status（設計 3-82）。
+			// **標準機能なので、既定に名前が入っている。**
+			// **この名前だけは、カンバンに実在することを起動時に要求しない**
+			// （`config.RequiredBoardStates`）。選択肢をまだ作っていない利用者の continuo を
+			// 起動できなくしないためである。**空にすれば、この機能は一切効かない。**
+			DirectChatState:   "Direct Chat",
 			VerifyStatesEvery: 20,
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。

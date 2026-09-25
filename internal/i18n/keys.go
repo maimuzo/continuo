@@ -608,6 +608,21 @@ const (
 	KeySetupRoleBlockedDesc Key = "setup.role.blocked_desc"
 	// KeySetupRoleDoneDesc は完了の役割の説明に出る。
 	KeySetupRoleDoneDesc Key = "setup.role.done_desc"
+	// KeySetupRoleDirectChatDesc は direct chat の役割の説明に出る（設計 3-82）。
+	KeySetupRoleDirectChatDesc Key = "setup.role.direct_chat_desc"
+	// KeySetupSkipOptional は、飛ばせる役割で番号 0 を入力できることを案内する（設計 3-82）。
+	KeySetupSkipOptional Key = "setup.prompt.skip_optional"
+	// KeySetupSkippedOptional は、飛ばせる役割を飛ばしたときに出る（設計 3-82）。
+	KeySetupSkippedOptional Key = "setup.skipped_optional"
+	// KeySetupSummarySkipped は、まとめで飛ばした役割の行に出る（設計 3-82）。
+	KeySetupSummarySkipped Key = "setup.summary.skipped"
+	// KeyDoctorStatusNamesDirectChatMissing は tracker.direct_chat_state の Status が
+	// カンバンに無いときに出る（設計 3-82）。
+	KeyDoctorStatusNamesDirectChatMissing Key = "doctor.status_names.direct_chat_missing"
+	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-82）。
+	KeyDoctorStatusNamesRemedyDirectChat Key = "doctor.status_names.remedy_direct_chat"
+	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-82）。
+	KeyCLISetupKeyNotWritten Key = "cli.setup.key_not_written"
 )
 
 // `continuo setup` の対話の文言。
@@ -908,6 +923,9 @@ const (
 	// KeyAbandonErrParkActive は `--park` に作業中の状態（tracker.active_states の値）が
 	// 指定されたときに出る。**そこへ動かしても継続監視は手を離さない。**
 	KeyAbandonErrParkActive Key = "abandon.err_park_active"
+	// KeyAbandonErrParkDirectChat は `--park` にdirect chat の状態（tracker.direct_chat_state の値）が
+	// 指定されたときに出る。**そこへ動かすと継続監視は pane を1回も閉じない。**
+	KeyAbandonErrParkDirectChat Key = "abandon.err_park_direct_chat"
 	// KeyAbandonErrUnknownState は `--to` や `--park` の値がカンバンの Status の
 	// 選択肢に無いときに出る。**worktree を消す前に出す。**
 	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
@@ -1359,6 +1377,9 @@ const (
 	// KeyConfigValidateHandoffIdleTimeoutRange は
 	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
 	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
+	// KeyConfigValidateDirectChatStateConflict は `tracker.direct_chat_state` が他の役割の Status と
+	// 重なっているときに出る（設計 3-82）。**重なった相手のキー名を埋める。**
+	KeyConfigValidateDirectChatStateConflict Key = "config.validate.direct_chat_state_conflict"
 	// KeyConfigValidateHandoffProgressIntervalRange は
 	// tracker.provider.handoff.progress_interval_ms が 0 以下のときの理由である。
 	KeyConfigValidateHandoffProgressIntervalRange Key = "config.validate.handoff_progress_interval_range"
@@ -2785,6 +2806,13 @@ var allKeys = []Key{
 	KeySetupRoleReviewDesc,
 	KeySetupRoleBlockedDesc,
 	KeySetupRoleDoneDesc,
+	KeySetupRoleDirectChatDesc,
+	KeySetupSkipOptional,
+	KeySetupSkippedOptional,
+	KeySetupSummarySkipped,
+	KeyDoctorStatusNamesDirectChatMissing,
+	KeyDoctorStatusNamesRemedyDirectChat,
+	KeyCLISetupKeyNotWritten,
 	KeySetupPromptOptionsHeader,
 	KeySetupPromptOptionLine,
 	KeySetupPromptIntroCount,
@@ -2912,6 +2940,7 @@ var allKeys = []Key{
 	KeyAbandonParkNotActive,
 	KeyAbandonParkMoved,
 	KeyAbandonErrParkActive,
+	KeyAbandonErrParkDirectChat,
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
@@ -3077,6 +3106,7 @@ var allKeys = []Key{
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
 	KeyConfigValidateHandoffBidWindowRange,
 	KeyConfigValidateHandoffIdleTimeoutRange,
+	KeyConfigValidateDirectChatStateConflict,
 	KeyConfigValidateHandoffProgressIntervalRange,
 	KeyConfigValidateHandoffProgressIntervalTooLong,
 	KeyConfigValidateHandoffRecheckIntervalRange,

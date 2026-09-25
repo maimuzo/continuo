@@ -26,7 +26,7 @@ import (
 // 成功条件: エラーにならず5つとも割り当たり、画面に「読み捨てました」が出ること。
 func TestAssign_長すぎる1行は捨てて同じ役割を尋ね直す(t *testing.T) {
 	long := strings.Repeat("x", 5000)
-	a, err, out := runAssign(t, boardOptions, []string{long, "2", "3", "5", "4", "6"})
+	a, err, out := runAssign(t, boardOptions, []string{long, "2", "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("長い1行で打ち切られた: %v（画面: %s）", err, out)
 	}
@@ -55,7 +55,7 @@ func TestAssign_長すぎる1行は捨てて同じ役割を尋ね直す(t *testi
 // 成功条件: エラーにならず、5つとも割り当たること。
 func TestAssign_長すぎる1行が続いても答え終えられる(t *testing.T) {
 	long := strings.Repeat("y", 9000)
-	a, err, out := runAssign(t, boardOptions, []string{long, "2", long, "3", "5", "4", "6"})
+	a, err, out := runAssign(t, boardOptions, []string{long, "2", long, "3", "5", "4", "6", "0"})
 	if err != nil {
 		t.Fatalf("長い1行で打ち切られた: %v（画面: %s）", err, out)
 	}

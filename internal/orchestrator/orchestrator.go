@@ -132,6 +132,15 @@ type Tracker interface {
 	RemoveAssignees(ctx context.Context, issueNodeID string, assigneeIDs []string) ([]tracker.Assignee, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
+	// StatusOptionNames はカンバン側の Status の選択肢名を全部返す（設計 3-82）。
+	//
+	// **`tracker.direct_chat_state` がカンバンに在るかを、候補を取りに行く前に見るために要る。**
+	// **在らない名前を `FetchIssuesByStates` へ渡すと、その巡回の dispatch が丸ごと落ちる**
+	// （カンバンに無い Status 名は0件ではなくエラーとして返るため）。
+	//
+	// **Bootstrap を通す前は nil が返る。**そのときは「まだ分からない」として扱い、
+	// 候補の一覧へは足さない。
+	StatusOptionNames() []string
 }
 
 // HerdrClient は orchestrator が使う herdr の socket API の部分集合である。
@@ -393,6 +402,10 @@ type Orchestrator struct {
 	tokenLedger map[string]tokenLedgerEntry
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
+	// directChatMissingNoted は「tracker.direct_chat_state の選択肢がカンバンに無い」を
+	// 既に知らせたかどうかである（設計 3-82）。**1回だけ出す。**
+	// 選択肢は人間がカンバンを触ったときにしか増えないので、毎巡回で言い直す意味が無い。
+	directChatMissingNoted bool
 	// quota は最後に読んだ枠の状態である。nil なら読めていない。
 	quota *ratelimit.Snapshot
 	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
@@ -459,7 +472,13 @@ func New(opts Options) (*Orchestrator, error) {
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
 	knownStateNames := config.KnownStates(opts.Config.Tracker)
-	if len(knownStateNames) == 0 {
+	// **門は `RequiredBoardStates` で数える**（設計 3-82）。
+	//
+	// **`KnownStates` で数えてはならない。**`tracker.direct_chat_state` の既定は
+	// `"Direct Chat"` なので、他の Status を全部空にした設定でも1件返ってしまい、
+	// **この門が二度と発火しない。**`RequiredBoardStates` はそこから direct chat だけを
+	// 差し引くので、「continuo が実際に動かす Status」の件数になる。
+	if len(config.RequiredBoardStates(opts.Config.Tracker)) == 0 {
 		return nil, errors.New(
 			"continuo が扱う Status が1つも設定されていません（Config）" +
 				"（WORKFLOW.md の tracker.active_states / terminal_states / running_state / " +
@@ -659,7 +678,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	o.resumeBackoff(ctx, dispatchAllowed)
 	o.pollQuota(ctx)
 
-	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.cfg.Tracker.ActiveStates)
+	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.candidateStates())
 	if err != nil {
 		o.logger.Warn("候補の取得に失敗しました（この巡回の dispatch は行いません）", "error", err)
 		dispatchAllowed = false
@@ -680,6 +699,63 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	}
 
 	o.wakeRuns(ctx)
+}
+
+// candidateStates は、この巡回で候補として取りに行く Status 名を返す（設計 3-82）。
+//
+//	tracker.active_states                    … 常に入る
+//	tracker.direct_chat_state                … **カンバンに選択肢が実在するときだけ入る**
+//
+// **実在を確かめずに足してはならない。**`FetchIssuesByStates` は、カンバンに無い Status 名を
+// 渡されると0件ではなくエラーを返す（`tracker.verifyKnownStates`）。**そのエラーは
+// 候補の取得そのものを失敗させ、その巡回の dispatch を丸ごと飛ばす。**
+// 既定が `"Direct Chat"` である以上、選択肢をまだ作っていない利用者は
+// **起動はできるのに1件も着手されない continuo を手に入れることになる。**
+//
+// **選択肢がまだ読めていないとき（`Bootstrap` の前）も足さない。**
+// 分からないものを足すのは、無いものを足すのと同じ結果になる。
+//
+// **足せなかったことは1回だけ知らせる。**毎巡回で出すと、この機能を使わない利用者の
+// ログが30秒ごとに1行ずつ埋まる。
+//
+// 戻り値: `FetchIssuesByStates` へ渡す Status 名の一覧。
+func (o *Orchestrator) candidateStates() []string {
+	want := strings.TrimSpace(o.cfg.Tracker.DirectChatState)
+	if want == "" {
+		return o.cfg.Tracker.ActiveStates
+	}
+	options := o.tracker.StatusOptionNames()
+	if !containsFold(options, want) {
+		// **選択肢がまだ読めていないのか、本当に無いのかは、ここでは区別しない。**
+		// どちらでも「足さない」が正しい。
+		if len(options) > 0 && o.noteDirectChatMissing() {
+			o.logger.Warn("tracker.direct_chat_state の Status がカンバンにありません（direct chat は使えません。"+
+				"使うなら GitHub の画面で Status の選択肢を1つ足してください。API で足すと設定済みの Status が全部消えます）",
+				"direct_chat_state", want,
+				"カンバンの選択肢", strings.Join(options, ", "))
+		}
+		return o.cfg.Tracker.ActiveStates
+	}
+	out := make([]string, 0, len(o.cfg.Tracker.ActiveStates)+1)
+	out = append(out, o.cfg.Tracker.ActiveStates...)
+	out = append(out, want)
+	return out
+}
+
+// noteDirectChatMissing は「direct chat の選択肢が無い」の警告を、まだ出していなければ真を返す。
+//
+// **1回だけ出すためだけのものである。**選択肢は人間がカンバンを触ったときにしか増えないので、
+// 増えたかどうかを毎巡回で言い直す必要が無い。
+//
+// 戻り値: この呼び出しで初めて印を立てたなら true。
+func (o *Orchestrator) noteDirectChatMissing() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.directChatMissingNoted {
+		return false
+	}
+	o.directChatMissingNoted = true
+	return true
 }
 
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
@@ -910,6 +986,15 @@ func (o *Orchestrator) dispatchPaused() bool {
 func (o *Orchestrator) wakeRuns(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		if rs.isFinished() {
+			continue
+		}
+		// **人間が引き取っている run は起こさない**（設計 3-82）。
+		//
+		// **担当の確認より前に置くことが要である。**あとに置くと、
+		// `handoffLostOnResume` が「担当が自分でない」と判定した瞬間に
+		// `stopBecauseHandoffLost` が走る。**人間がチャットしながら自分を
+		// 担当者に付けるのは普通の操作であり、そこで画面が消える。**
+		if rs.inDirectChatMode() {
 			continue
 		}
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
@@ -1166,6 +1251,13 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
+	// **direct chat の run は、印に入れたその場で direct chat へ入れる**（設計 3-82）。
+	// **入れないと、`reconcileWorktrees` が「取り残された worktree」として
+	// 人間の pane を閉じる隙間ができる**（巡回は `reconcileRunning` より先に
+	// この印を見る保証が無い）。
+	if state.DirectChat {
+		rs.enterDirectChatMode()
+	}
 	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
 	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
 	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
@@ -1209,6 +1301,11 @@ type AdoptedRun struct {
 	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
 	// 起きず、その run の `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	AwaitTurnEnd bool
+	// DirectChat は「direct chat の run として引き継ぐ」ことを表す（設計 3-82）。
+	//
+	// **真なら turn を1つも送らず、pane も閉じない。**`NeedsPrompt` とも
+	// `AwaitTurnEnd` とも同時に立てない。**指示を送るのは人間である。**
+	DirectChat bool
 }
 
 // OnHook は hookserver から hook を1件受け取る（hookserver.HookSink の実装）。
@@ -1260,6 +1357,20 @@ func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 	}
 
 	if !isTurnBoundaryHook(ev) {
+		return true
+	}
+	// **direct chat では受け口へ流さない**（設計 3-82）。
+	//
+	// **読む者が居ない。**turn ループはdirect chat では走らないので、流しても溜まるだけである。
+	// 受け口は256件で埋まり、**人間が話しかけるたびに「あふれたので捨てました」の WARN が
+	// 1行ずつ出てログが埋まる。**
+	//
+	// **捨てても turn の終わりの判定は壊れない。**`beginTurn` は turn を送る直前に
+	// `stopSeenAt` と `hookSeenThisTurn` を消し、受け口も空にする。**戻したあとの
+	// 1回目の判定は、人間が話していた間の hook を1件も見ない。**
+	if rs.inDirectChatMode() {
+		o.logger.Debug("人間が引き取っているので、turn の終わりの判定に使う hook は流しません",
+			"identifier", rs.issue().Identifier, "hook", ev.HookEventName)
 		return true
 	}
 	select {

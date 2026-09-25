@@ -82,7 +82,7 @@ func CheckUpdatable(dir string) (Result, error) {
 	// 5問すべて答えさせたあとで「キーが無い」と落とすと、入力が全部捨てられる。
 	// 置き換える値はここでは使わないので、Complete() を満たすだけのダミーを渡す。
 	probe := Statuses{Dispatch: "x", Running: "x", Review: "x", Blocked: "x", Done: "x"}
-	_, missing, blocked := applyStatuses(string(raw), probe)
+	_, missing, blocked, _ := applyStatuses(string(raw), probe)
 	if len(missing) > 0 {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
 	}
@@ -138,7 +138,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileReadFailed, path, err)
 	}
 
-	updated, missing, blocked := applyStatuses(string(raw), st)
+	updated, missing, blocked, skipped := applyStatuses(string(raw), st)
 	if len(missing) > 0 {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
 	}
@@ -159,7 +159,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 	if err := atomicfile.Write(path, []byte(updated), info.Mode().Perm()); err != nil {
 		return Result{Path: path}, err
 	}
-	return Result{Path: path, Overwritten: true}, nil
+	return Result{Path: path, Overwritten: true, SkippedKeys: skipped}, nil
 }
 
 // statTarget は書き換える WORKFLOW.md のパスを決め、それが書き換えてよいものかを確かめる。

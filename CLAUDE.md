@@ -131,7 +131,7 @@ os.Rename(tmp.Name(), path)
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1755-1775](internal/cli/cli.go#L1755-L1775) が
+（[internal/cli/cli.go:1769-1789](internal/cli/cli.go#L1769-L1789) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
@@ -177,7 +177,7 @@ exit status 2
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1730-1731](internal/cli/cli.go#L1730-L1731) と
+（[internal/cli/cli.go:1744-1745](internal/cli/cli.go#L1744-L1745) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -230,10 +230,10 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1585-1590](internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
+| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1599-1604](internal/cli/cli.go#L1599-L1604) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1213-1217](internal/orchestrator/orchestrator.go#L1213-L1217) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1448-1452](internal/orchestrator/orchestrator.go#L1448-L1452) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 | [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
@@ -389,7 +389,7 @@ git worktree remove "$ROLLBACK"
 - **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときだけ）
 - **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
 - **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9151](docs/plans/continuo_design.md#L9151) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:10132](docs/plans/continuo_design.md#L10132) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
 
   > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、

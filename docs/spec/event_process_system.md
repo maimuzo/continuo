@@ -118,8 +118,8 @@ sequenceDiagram
 
 | カンバンの Status | 巡回が呼ぶもの | 後片付けをするか |
 | --- | --- | --- |
-| **終端**（`Done`） | `finishRunAsync`（[internal/orchestrator/lifecycle.go:539](../../internal/orchestrator/lifecycle.go#L539)） | **する。4つとも** |
-| **引き渡し**（`In Review` / `Blocked`） | `stopAndReleaseAsync`（[internal/orchestrator/lifecycle.go:716](../../internal/orchestrator/lifecycle.go#L716)） | **しない** |
+| **終端**（`Done`） | `finishRunAsync`（[internal/orchestrator/lifecycle.go:564](../../internal/orchestrator/lifecycle.go#L564)） | **する。4つとも** |
+| **引き渡し**（`In Review` / `Blocked`） | `stopAndReleaseAsync`（[internal/orchestrator/lifecycle.go:810](../../internal/orchestrator/lifecycle.go#L810)） | **しない** |
 
 **どちらも `go func()` で別のスレッドへ逃がしている。**巡回のループは止まらない。
 
@@ -135,7 +135,7 @@ sequenceDiagram
 
 ## 5. 後片付けとは何か
 
-**`finishRunClaimed`（[internal/orchestrator/lifecycle.go:556-582](../../internal/orchestrator/lifecycle.go#L556-L582)）が8つやる。**
+**`finishRunClaimed`（[internal/orchestrator/lifecycle.go:581-607](../../internal/orchestrator/lifecycle.go#L581-L607)）が8つやる。**
 **巡回の `stopAndReleaseAsync` は、そのうち3つしかやらない。**
 
 | 順 | 何をするか | 巡回はやるか |
@@ -151,7 +151,7 @@ sequenceDiagram
 
 **3 が最大1時間かかることがある。**
 エージェントがコメントを書き忘れていたら、セッションを復元して書かせるためである
-（[internal/orchestrator/comment.go:183-186](../../internal/orchestrator/comment.go#L183-L186)。
+（[internal/orchestrator/comment.go:198-201](../../internal/orchestrator/comment.go#L198-L201)。
 `claude.turn_timeout_ms` の既定は1時間）。
 
 **だから同期では呼べない。**ただし `finishRunAsync` は別スレッドへ逃がしているので、**巡回のループは止まらない。**
