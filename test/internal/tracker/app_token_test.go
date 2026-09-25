@@ -26,7 +26,7 @@ const (
 	// attTokenA / attTokenB は、トークンを取る関数が順に返す GitHub App のトークンである。
 	attTokenA = "ghu_A"
 	attTokenB = "ghu_B"
-	// attSelfMarker は本体の投稿に付ける印である（tracker.comments.self_marker の既定）。
+	// attSelfMarker は本体の投稿に付ける marker である（tracker.comments.self_marker の既定）。
 	attSelfMarker = "<!-- continuo:self -->"
 	// attBody は素の本文である。**改行で終わらない**（末尾の行を壊さないことも同時に見る）。
 	attBody = "止まった理由の本文"
@@ -148,7 +148,7 @@ func attAuthorizations(fs *fakeGraphQLServer) []string {
 	return out
 }
 
-// attFallbackBody は、書き直しの本文の期待値（印 → 断り → 素の本文）を組み立てる。
+// attFallbackBody は、書き直しの本文の期待値（marker → 断り → 素の本文）を組み立てる。
 func attFallbackBody(body string) string {
 	return attSelfMarker + "\n" + tracker.AppTokenFallbackNote + "\n" + body
 }
@@ -206,14 +206,14 @@ func TestPostComment_appTokenが取れればそのトークンで投稿する(t 
 		t.Fatalf("GitHub App のトークンで1回だけ投稿されていない: Authorization=%q", got)
 	}
 	if got := attPostedBodies(fs)[0]; got != attSelfMarker+"\n"+attBody {
-		t.Fatalf("本文が想定と違う（断りが入っているか、印が崩れている）: got %q", got)
+		t.Fatalf("本文が想定と違う（断りが入っているか、marker が崩れている）: got %q", got)
 	}
 	if *calls != 1 {
 		t.Fatalf("トークンを取る関数の呼び出し回数が想定と違う: got %d, want 1", *calls)
 	}
 }
 
-// 目的: トークンが取れなければ、人間の認証で書き直し、印の直後に断りの1行を挟み、Warn を1行出す
+// 目的: トークンが取れなければ、人間の認証で書き直し、marker の直後に断りの1行を挟み、Warn を1行出す
 // ことを確認する（3-82c「走行中に取れなければ、人間の認証で書き直す。黙らない」）。
 // 与える情報: 常にエラーを返す関数。偽サーバは人間のトークンに 200 を返す。
 // 成功条件: リクエストが1件で、Authorization が `Bearer human-token`。本文が
@@ -356,7 +356,7 @@ func TestPostComment_403なら取り直さずに人間の認証で書き直す(t
 }
 
 // 目的: selfMarker が空（持ち回りの4件。入札・hold・released）なら、書き直しても断りを入れない
-// ことを確認する（3-82c「`Adapter` は `selfMarker` が空なら断りを入れない」。印の直後に JSON の
+// ことを確認する（3-82c「`Adapter` は `selfMarker` が空なら断りを入れない」。marker の直後に JSON の
 // 取り決めが続くので、行を挟むと他の機械が読めなくなる）。
 // 与える情報: 常にエラーを返す関数。`<!-- continuo:bid -->` で始まり JSON が続く本文。selfMarker は空。
 // 成功条件: 人間の認証で1回投稿され、本文が渡したものと1文字も違わない（断りが無い）。
@@ -381,14 +381,14 @@ func TestPostComment_selfMarkerが空なら書き直しても断りを入れな�
 	}
 }
 
-// 目的: 印が2行並ぶ本文（`<!-- continuo:self -->` の次に `<!-- continuo:gated:assignee -->`）では、
-// 断りが2行目の印の次の行に入ることを確認する（3-82c「先頭に並ぶ印を全部通したあとの行」。
-// 「先頭の印の次の行」ではない。印の並びの途中に挟むと、印を HasPrefix で切る判定が外れる）。
+// 目的: marker が2行並ぶ本文（`<!-- continuo:self -->` の次に `<!-- continuo:gated:assignee -->`）では、
+// 断りが2行目の marker の次の行に入ることを確認する（3-82c「先頭に並ぶ marker を全部通したあとの行」。
+// 「先頭の marker の次の行」ではない。marker の並びの途中に挟むと、marker を HasPrefix で切る判定が外れる）。
 // 与える情報: 常にエラーを返す関数。`<!-- continuo:gated:assignee -->\n案内の本文\n` という本文
 // （改行で終わる）と self_marker。
 // 成功条件: 書き直した本文が `<self_marker>\n<!-- continuo:gated:assignee -->\n<断り>\n案内の本文\n`
 // そのもの。
-func TestPostComment_印が2行並ぶときは断りを2行目の印の次に入れる(t *testing.T) {
+func TestPostComment_markerが2行並ぶときは断りを2行目のmarkerの次に入れる(t *testing.T) {
 	const gatedBody = "<!-- continuo:gated:assignee -->\n案内の本文\n"
 	fs := newFakeGraphQLServer(t, attStatusByToken(map[string]int{attHumanToken: http.StatusOK}))
 	tokenFn, _ := attFailingToken(errors.New("資格情報のファイルが無い"))

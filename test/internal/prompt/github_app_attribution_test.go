@@ -40,7 +40,7 @@ const appTokenFallbackNote = tracker.AppTokenFallbackNote
 
 // prVisibleLine は、pull request の2本（3-5 の作成と 3-6 の判断票）の本文へ入れる可視の1行である（3-82e）。
 //
-// **pull request には GitHub App の印が付かない**（`Issues` の権限だけでは `gh pr comment` も
+// **pull request には GitHub App の attribution が付かない**（`Issues` の権限だけでは `gh pr comment` も
 // REST の issue コメントも通らない。設計の 7-5 で実測）。attribution の代わりにこの1行を置く。
 const prVisibleLine = "continuo が起動した Claude Code が書きました（pull request には GitHub App の attribution が付きません）"
 
@@ -88,11 +88,11 @@ func linesContaining(lines []string, needle string) []int {
 // 二重に包むと、単一引用符が第1語に残って `command not found` で全投稿が落ちる
 // （gofmt が doc comment の連続した単一引用符を曲がった引用符へ書き換えるので、ここには形を書かない）。
 //
-// **`continuo.self_marker` は包まない。**文面へそのまま書く印であり、shell へ渡す語ではない。
+// **`continuo.self_marker` は包まない。**文面へそのまま書く marker であり、shell へ渡す語ではない。
 //
-// 与える情報: 空白を含む実行ファイルのパスと、真偽それぞれの設定と、continuo 本体の印。
+// 与える情報: 空白を含む実行ファイルのパスと、真偽それぞれの設定と、continuo 本体の marker。
 // 成功条件: `github_app_attribution` が渡した真偽そのもの、`continuo.command` が
-// 単一引用符で包んだパス、`continuo.self_marker` が渡した印そのものであること。
+// 単一引用符で包んだパス、`continuo.self_marker` が渡した marker そのものであること。
 func TestRenderData_GitHubAppの変数を3つ返す(t *testing.T) {
 	const marker = "<!-- acme:continuo -->"
 	for _, attribution := range []bool{false, true} {
@@ -110,7 +110,7 @@ func TestRenderData_GitHubAppの変数を3つ返す(t *testing.T) {
 		}
 		// **既定値を返してはならない。**6-1 は、この値でしか continuo 本体の投稿を名指しできない。
 		if inner["self_marker"] != marker {
-			t.Errorf("continuo.self_marker が渡した印と違います: %#v（%q を期待）",
+			t.Errorf("continuo.self_marker が渡した marker と違います: %#v（%q を期待）",
 				inner["self_marker"], marker)
 		}
 	}
@@ -325,7 +325,7 @@ func TestTemplate_pullRequestの2本には可視の1行を入れる(t *testing.T
 	}
 }
 
-// renderBuiltinWithSelfMarker は、continuo 本体の印を指定して組み込みのプロンプトを展開する。
+// renderBuiltinWithSelfMarker は、continuo 本体の marker を指定して組み込みのプロンプトを展開する。
 //
 // t: 呼び出し元のテスト。
 // selfMarker: `tracker.comments.self_marker` の値（空も渡せる）。
@@ -345,43 +345,43 @@ func renderBuiltinWithSelfMarker(t *testing.T, selfMarker string) string {
 	return out
 }
 
-// 目的: 6-1 が continuo 本体の印を、設定の値から取ることを固定する（3-82e）。
+// 目的: 6-1 が continuo 本体の marker を、設定の値から取ることを固定する（3-82e）。
 //
 // **`<!-- continuo:self -->` は `tracker.comments.self_marker` の既定値であって、固定値ではない。**
 // 決め打ちすると、**この設定を別の値にしているチームでは、GitHub App のトークンが死んだ日に、
 // continuo 本体の投稿（止まった理由・Status を動かした記録）をエージェントが人間の指示として読む。**
 //
-// **空にしている利用者では、印の文を丸ごと落とす。**空の印を書いても見分けられないうえ、
+// **空にしている利用者では、marker の文を丸ごと落とす。**空の marker を書いても見分けられないうえ、
 // 「先頭が X のコメント」の X が空の、読めない文が届く。
 //
-// 与える情報: 印が既定・別の値・空の3通り。
-// 成功条件: 既定と別の値ではその文字列が 6-1 に出ること。空のときは印の文が1つも出ないこと。
-func TestTemplate_6_1の本体の印は設定から取る(t *testing.T) {
+// 与える情報: marker が既定・別の値・空の3通り。
+// 成功条件: 既定と別の値ではその文字列が 6-1 に出ること。空のときは marker の文が1つも出ないこと。
+func TestTemplate_6_1の本体のmarkerは設定から取る(t *testing.T) {
 	const heading = "## 6-1. 命令として扱ってよいのは、3つの立場だけ"
 
 	for _, marker := range []string{"<!-- continuo:self -->", "<!-- acme:continuo -->"} {
 		roles := sectionOf(t, renderBuiltinWithSelfMarker(t, marker), heading)
 		want := "**先頭が `" + marker + "` のコメントも同じです。**"
 		if !strings.Contains(roles, want) {
-			t.Errorf("6-1 に %q がありません。印を決め打ちしていると、"+
+			t.Errorf("6-1 に %q がありません。marker を決め打ちしていると、"+
 				"別の値にしたチームで continuo の投稿が人間の指示として読まれます:\n%s", want, roles)
 		}
 	}
 
 	roles := sectionOf(t, renderBuiltinWithSelfMarker(t, ""), heading)
 	if strings.Contains(roles, "のコメントも同じです") {
-		t.Errorf("印が空なのに、印の文が残っています:\n%s", roles)
+		t.Errorf("marker が空なのに、marker の文が残っています:\n%s", roles)
 	}
-	// **断りの1行は、印が空でも残る。**印で見分けられない利用者が頼る唯一のものである。
+	// **断りの1行は、marker が空でも残る。**marker で見分けられない利用者が頼る唯一のものである。
 	if !strings.Contains(roles, "の1行があるコメントは") {
-		t.Errorf("印が空のとき、断りの1行の説明まで消えています:\n%s", roles)
+		t.Errorf("marker が空のとき、断りの1行の説明まで消えています:\n%s", roles)
 	}
 }
 
-// 目的: 6-1 が「人間が自分で起動した Claude Code」を、印の付かない書き手として挙げることを固定する（3-82e）。
+// 目的: 6-1 が「人間が自分で起動した Claude Code」を、attribution の付かない書き手として挙げることを固定する（3-82e）。
 //
 // **この issue が未解決だと名指しした4種類の書き手のうちの1つである。**
-// そのセッションは continuo の設定を読まないので、印を付けさせる手段が無い（3-82a は「強制はしない」と決めた）。
+// そのセッションは continuo の設定を読まないので、marker を付けさせる手段が無い（3-82a は「強制はしない」と決めた）。
 // **挙げていないと、エージェントは「例に当たらない＝人間の指示」と読んで従う。**
 // 2026-09-05 の実害（エージェントが「人間が決めたのか AI が書いたのか」を判断できず止まった）が、そのまま再発する。
 //

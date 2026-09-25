@@ -307,7 +307,7 @@ func TestRun_GitHubApp_往復が時間切れなら作り直しを案内しない
 		t.Fatal("往復が時間切れなのに起動できてしまった")
 	}
 	if !errors.Is(err, daemon.ErrStartup) {
-		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+		t.Fatalf("起動の段の失敗として分類されていない: %v", err)
 	}
 	msg := err.Error()
 	for _, want := range []string{
@@ -359,7 +359,7 @@ func TestRun_GitHubApp_trueで資格情報が無ければ起動しない(t *test
 				t.Fatal("資格情報が無いのに起動できてしまった")
 			}
 			if !errors.Is(err, daemon.ErrStartup) {
-				t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+				t.Fatalf("起動の段の失敗として分類されていない: %v", err)
 			}
 			msg := err.Error()
 			for _, want := range []string{
@@ -402,7 +402,7 @@ func TestRun_GitHubApp_回転を断られたら認可をやり直す文面で起
 		t.Fatal("回転を断られたのに起動できてしまった")
 	}
 	if !errors.Is(err, daemon.ErrStartup) {
-		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+		t.Fatalf("起動の段の失敗として分類されていない: %v", err)
 	}
 	msg := err.Error()
 	for _, want := range []string{
@@ -440,7 +440,7 @@ func TestRun_GitHubApp_認可した人がghの持ち主と違えば起動しな�
 		t.Fatal("認可した人が違うのに起動できてしまった")
 	}
 	if !errors.Is(err, daemon.ErrStartup) {
-		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+		t.Fatalf("起動の段の失敗として分類されていない: %v", err)
 	}
 	msg := err.Error()
 	for _, want := range []string{

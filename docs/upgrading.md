@@ -123,7 +123,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **continuo 本体**（Status を動かした記録・止まった理由・着手の門の案内など） | **付く** |
 | **continuo が起動した Claude Code**（計画・判断票・進捗・成果） | **付く** |
 | **人間** | 付かない |
-| **pull request の本文とコメント** | **付かない。**代わりに「continuo が起動した Claude Code が書きました（pull request には GitHub App の印が付きません）」の1行が入ります（下の「権限は `Issues` だけです」） |
+| **pull request の本文とコメント** | **付かない。**代わりに「continuo が起動した Claude Code が書きました（pull request には GitHub App の attribution が付きません）」の1行が入ります（下の「権限は `Issues` だけです」） |
 
 **足す設定は1つです。**`tracker.comments` の下に足します
 （`tracker.provider.comments` ではありません。`comments:` という名前の節が2つあります）。

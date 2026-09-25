@@ -172,7 +172,7 @@ func TestValidate_attemptの中の誤りも見つかる(t *testing.T) {
 //
 // 与える情報: 空の枝と非空の枝のそれぞれにだけ、知らない変数を書いた本文。
 // 成功条件: どちらの本文でも、検査が誤りを返すこと。
-func TestValidate_本体の印の空と非空の両方を見る(t *testing.T) {
+func TestValidate_本体のmarkerの空と非空の両方を見る(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		body string
