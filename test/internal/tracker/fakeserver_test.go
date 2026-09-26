@@ -18,6 +18,10 @@ import (
 type capturedRequest struct {
 	Query     string         `json:"query"`
 	Variables map[string]any `json:"variables"`
+	// Authorization はリクエストの Authorization ヘッダの値そのもの（`Bearer <トークン>`）である。
+	// 本文ではなくヘッダから写すので JSON の解析には関わらない。**どのトークンで叩いたか**
+	// （人間の認証か GitHub App のトークンか）を見分けるテストが読む。
+	Authorization string `json:"-"`
 }
 
 // fakeGraphQLResponse は偽サーバが1回の呼び出しに対して返す応答である。
@@ -77,6 +81,7 @@ func (fs *fakeGraphQLServer) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	req.Authorization = r.Header.Get("Authorization")
 
 	fs.mu.Lock()
 	fs.requests = append(fs.requests, req)

@@ -125,13 +125,13 @@ os.Rename(tmp.Name(), path)
 **何が起きるか。**continuo は常駐プロセスである。`go build -o ~/.local/bin/continuo ./cmd/continuo` は
 **rename で実行ファイルを差し替える**ので inode が変わり、**動いている continuo は、開いたままの古い実体で最後まで走り切る。**
 **ところが Claude Code の hook は、turn ごとにそのパスを exec する**
-（[internal/orchestrator/settings.go:352](internal/orchestrator/settings.go#L352) が
+（[internal/orchestrator/settings.go:361](internal/orchestrator/settings.go#L361) が
 `<continuo のパス> hook --socket <パス> --pending-dir <パス>` を組み立て、issue ごとの設定ファイルへ書く）。
 **つまり「本体は古い・hook は新しい」という混ざった状態が、ビルドするたびに必ず起きる。**
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1755-1775](internal/cli/cli.go#L1755-L1775) が
+（[internal/cli/cli.go:1847-1867](internal/cli/cli.go#L1847-L1867) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
@@ -177,7 +177,7 @@ exit status 2
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1730-1731](internal/cli/cli.go#L1730-L1731) と
+（[internal/cli/cli.go:1822-1823](internal/cli/cli.go#L1822-L1823) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -230,7 +230,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1585-1590](internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
+| [internal/cli/cli.go:199-222](internal/cli/cli.go#L199-L222) の `switch args[0]` と [internal/cli/cli.go:1671-1676](internal/cli/cli.go#L1671-L1676) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
 | [internal/orchestrator/orchestrator.go:1213-1217](internal/orchestrator/orchestrator.go#L1213-L1217) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
@@ -373,6 +373,7 @@ git worktree remove "$ROLLBACK"
   - **確認を待たずに着手してよい例外で直すときも、issue は `Ice Box` のまま直す。**`In Progress` へ動かすと、continuo が同じ issue にもう1つ Claude Code を起動する（`In Progress` は `tracker.active_states` の既定に入っている）
   - **`Ready` と `In Progress` の item の並び順を動かさない。**走っている continuo が次に dispatch する issue が変わる
 - **AI が独断で issue を作らない。**人間の依頼か許可があるときだけ作る（`general-claude-md` の「bug-reporter で issue に登録する」より、こちらが勝つ）
+- **このプロジェクトの開発のやりとりに書く時刻は、特別な理由が無い限り JST で書く。**issue と pull request のコメント・チャットの返答・計画ファイルが当たる。GitHub の API が返す時刻（`2026-09-25T05:14:21Z` のように末尾が `Z` のもの）と `date -u` の値は UTC なので、9時間足して `2026-09-25 14:14 (JST)` の形に直してから書く。**ただし continuo 本体が利用者へ出す時刻（ログ・continuo が issue へ書くコメント・ダッシュボード）は JST に固定しない。**continuo は世界中の人が使う
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
 - **レビュワーの割り当て。**組み込みの指示書の 5-6「誰に見せるか」の2つの役に、次を当てる

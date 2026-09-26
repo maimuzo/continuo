@@ -147,7 +147,7 @@ return nil, i18n.Errorf(
 指す「上の節」がずれないようにするためである。**前に差し込むと、この案内が新しい節を指してしまう。**
 
 **[docs/upgrading.md](../../upgrading.md) にも節を足す。**
-detached HEAD のときは [docs/upgrading.md:77-108](../../upgrading.md#L77-L108) に
+detached HEAD のときは [docs/upgrading.md:77-273](../../upgrading.md#L77-L273) に
 「detached HEAD の worktree で出るメッセージが変わりました」の節が立っている。**同じ形で1つ足す。**
 
 **detached HEAD と1つにまとめない**（#142 の5-3 の案は採らない）。
@@ -212,7 +212,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:9650-11082](../continuo_design.md#L9650-L11082) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:9652-11164](../continuo_design.md#L9652-L11164) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**
@@ -422,7 +422,7 @@ LinkedBranches []string
 **14 の1つ目が「分けてよい」で決まったときに足す。**
 **`data` に鍵を足しても既存の WORKFLOW.md は壊れない**
 （`missingkey=error` は参照した鍵が無いときだけ落ちる。
-[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）ので、後から足せる。
+[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）ので、後から足せる。
 
 **雛形に `gh issue develop --list <番号>` を書く案は採らない。**
 **出力の形が未検証である。**#144 の投稿者自身が「1本以上あるときの出力の形は確かめられていない」と書いている。

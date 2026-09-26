@@ -163,6 +163,32 @@ func TestValidate_attemptの中の誤りも見つかる(t *testing.T) {
 	}
 }
 
+// 目的: `{{if .continuo.self_marker}}` の両方の枝が、起動の時点で解釈されることを固定する（設計 3-82e）。
+//
+// **`.continuo.self_marker` は `tracker.comments.self_marker` の値で、空にできる。**
+// 非空だけで変数展開すると、空にした利用者が書いた `{{else}}` の側は一度も解釈されず、
+// **`continuo doctor` の `prompt vars` が緑のまま、最初の dispatch で落ちる。**
+// 組み込みの 6-1 がこの分岐を持っているので、利用者の本文にも同じ形が書ける。
+//
+// 与える情報: 空の枝と非空の枝のそれぞれにだけ、知らない変数を書いた本文。
+// 成功条件: どちらの本文でも、検査が誤りを返すこと。
+func TestValidate_本体のmarkerの空と非空の両方を見る(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		body string
+	}{
+		{"空の側", "{{if .continuo.self_marker}}{{else}}{{.issue.nope}}{{end}}\n"},
+		{"非空の側", "{{if .continuo.self_marker}}{{.issue.nope}}{{end}}\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			frag := prompt.Build(c.body, "/tmp/WORKFLOW.md")
+			if err := frag.Validate(); err == nil {
+				t.Fatalf("%s の誤りを見逃しました（その枝が一度も解釈されていません）", c.name)
+			}
+		})
+	}
+}
+
 // 目的: 組み込みそのものが、決められた変数だけで変数展開できることを固定する（設計 5-3c）。
 //
 // **壊れた組み込みを配ると、利用者の側では直しようが無い。**
@@ -413,6 +439,10 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		"push_branch":               true,
 		"attempt":                   true,
 		"progress_interval_minutes": true,
+		// **GitHub App の attribution**（docs/plans/impl/issue245_github_app_issue_writes.md の 3-82e）。
+		// `github_app_attribution` は `{{if}}` の条件、`continuo` は `{{.continuo.command}}` の入れ子。
+		"github_app_attribution": true,
+		"continuo":               true,
 	}
 	got := prompt.SampleData()
 

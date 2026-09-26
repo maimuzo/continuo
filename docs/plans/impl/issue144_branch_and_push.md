@@ -392,7 +392,7 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 **2・3階層目がコードのリポジトリ、最下層が issue** である。**両方が1本のパスに出ている。**
 
 **`continuo status` は作らない。**存在しないコマンドである。
-[internal/cli/cli.go:172-186](../../../internal/cli/cli.go#L172-L186) の subcommand は
+[internal/cli/cli.go:187-201](../../../internal/cli/cli.go#L187-L201) の subcommand は
 `hook` / `init` / `setup` / `doctor` / `trust` / `abandon` / `allow-keychain-access` / `version` の
 8つだけであり、**13 / 13b の触るものの表にも `internal/cli` は1行も無い。**
 **走っている run の一覧は、ダッシュボードが identifier の昇順で既に出している**
@@ -607,7 +607,7 @@ pane が残っていればそちらから引けるが、**pane が無ければ�
 **この穴が開くのは「落ちたあとに人間が pane を閉じた」場合に限られる。**
 
 **`on_broken_worktree: skip` を選べば、この worktree があっても起動は続く**
-（[internal/config/types.go:249-252](../../../internal/config/types.go#L249-L252)）。
+（[internal/config/types.go:259-262](../../../internal/config/types.go#L259-L262)）。
 **既定を変えることは、この設計では提案しない。**
 
 ---
@@ -956,7 +956,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **プロンプトからしか知れない。**その4つを変数で渡す。
 **リンクが0本なら、4つとも今までと同じ値になる。**
 
-[internal/orchestrator/prompt.go:39-51](../../../internal/orchestrator/prompt.go#L39-L51) の `data`。
+[internal/orchestrator/prompt.go:48-60](../../../internal/orchestrator/prompt.go#L48-L60) の `data`。
 
 | 変数 | 中身 | リンクが0本のとき |
 | --- | --- | --- |
@@ -982,7 +982,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
 
 **`missingkey=error` を理由に挙げない。**この設定
-（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）が落とすのは
+（[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）が落とすのは
 **テンプレートが `data` に無いキーを参照したとき**であり、**`data` にキーを足すこと自体は
 既存のテンプレートを1つも壊さない。**危ないのは逆で、**本文に `{{.push_branch}}` を入れて
 `data` に足さない側である**（13 の塊1）。
@@ -1008,15 +1008,15 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | なぜ読み返せないか | 実装 |
 | --- | --- |
-| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:529](../../../internal/orchestrator/comment.go#L529) |
-| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1080-1082](../../../internal/tracker/adapter.go#L1080-L1082) の `continue` |
+| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:534](../../../internal/orchestrator/comment.go#L534) |
+| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1127-1129](../../../internal/tracker/adapter.go#L1127-L1129) の `continue` |
 
 **だから「既に書いてあるか」を issue のコメントからは確かめられない。**
 `cleanup_deferred_at` は身元ファイルに書く時刻であって、コメントを読み返す仕組みではない。
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:415](../../../internal/orchestrator/prompt.go#L415) が書いているとおり
+[internal/orchestrator/prompt.go:466](../../../internal/orchestrator/prompt.go#L466) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
@@ -1169,7 +1169,7 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
 **別のリポジトリの PR は `closingIssuesReferences` で issue に紐づかない**ので、
 **push した branch の名前で引く口を1つ足す。**
 
-**足す段落**（節の先頭。[internal/scaffold/template.go:292](../../../internal/scaffold/template.go#L292) の直後）。
+**足す段落**（節の先頭。[internal/scaffold/template.go:296](../../../internal/scaffold/template.go#L296) の直後）。
 
 ```text
 **PR を探す相手は {{.pr_target}} です。**この issue のリポジトリとは限りません。
@@ -1223,7 +1223,7 @@ push した branch の名前でも引いてください。
 ```
 
 **`{{if .push_branch}}` を入れて `prompt.go` の `data` にキーが無い状態にすると、
-`missingkey=error`（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）で
+`missingkey=error`（[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）で
 全 issue の1回目のプロンプトの変数展開が失敗する。**
 **変数化は塊3で、`prompt.go` に `.push_branch` を足すのと同じ PR で行う**（12 の末尾の形へ差し替える）。
 
@@ -1290,7 +1290,7 @@ push した branch の名前でも引いてください。
 
 **`RepoTrustFunc` の型（[internal/tracker/tracker.go:36](../../../internal/tracker/tracker.go#L36)）は変えない。**
 渡す引数を替えるだけである。
-[internal/daemon/daemon.go:666-671](../../../internal/daemon/daemon.go#L666-L671) が
+[internal/daemon/daemon.go:749-754](../../../internal/daemon/daemon.go#L749-L754) が
 `trust.require_repo_trusted` が偽のときに nil を渡す形も変えない。
 
 **理由は [internal/workspace/trust.go:69-85](../../../internal/workspace/trust.go#L69-L85) にある。**

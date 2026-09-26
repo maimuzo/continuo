@@ -6,8 +6,11 @@
 package lock
 
 import (
+	"context"
+	"errors"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -88,4 +91,60 @@ func (l *Lock) Release() error {
 		return i18n.Errorf(i18n.KeyLockReleaseCloseFailed, err)
 	}
 	return nil
+}
+
+// acquireWaitInterval は AcquireWait がロックを取り直す間隔である。
+//
+// **flock(2) には「空くまで待つ」形（LOCK_EX だけ）があるが、それを使うと期限を切れない。**
+// 期限が要るのは、資格情報のロックを掴んだまま落ちた相手を待ち続けないためである。
+const acquireWaitInterval = 100 * time.Millisecond
+
+// AcquireWait は Acquire と同じロックを、別のプロセスが放すまで timeout を上限に待って取る
+// （docs/plans/impl/issue245_github_app_issue_writes.md の 3-82d「同時に叩かれたとき」）。
+//
+// **二重起動を止めるロックには使わない。**あちらは待たずに即座に終了する（Acquire）。
+// **使うのは GitHub App の資格情報のロック**（`~/.continuo/github-app-credentials.lock`）だけである。
+// 更新用のトークンは1回使うと無効になるので、本体・`continuo github-app token`・ダッシュボードが
+// 「読む → 回す → 書き戻す」を同時に走らせると、片方の資格情報が死ぬ。だから待つ形が要る。
+//
+// **hook の挙動は変えない。**足したのは新しい関数で、Acquire の取り方は1バイトも変えていない
+// （CLAUDE.md の「hook の挙動が変化する変更」の門には当たらない）。
+//
+// **待っている最中も ctx を見る。**見ないと、呼び出し側が期限を切っていても待ち切ってしまう。
+// 起動時の検査は全体で60秒しか持たないので、そこでロックを待ち切ると、
+// **期限切れのあとに「ロックを取れません」の文言で落ちる**（本当の理由が文面に出ない）。
+// 終了の後始末で走る投稿も、同じだけ止まる。
+//
+// ctx: 待ちを打ち切るコンテキスト。**期限を持つものを渡すこと。**
+// path: ロックファイルの絶対パス。親ディレクトリは呼び出し側が事前に作成しておくこと。
+// timeout: 待つ上限。0 以下なら1回だけ試す（Acquire と同じ）。
+// 戻り値: ロックを獲得できれば *Lock を返す。上限まで待っても別のプロセスが放さなければ
+// ErrAlreadyRunning を包んだエラーを返す。**ctx が先に終わったら、その理由
+// （`context.DeadlineExceeded` など）を包んで返す**（`errors.Is` で切り分けられる）。
+// ファイルを開けない場合は待たずにそのエラーを返す（Acquire と同じく ErrAlreadyRunning を包まない）。
+func AcquireWait(ctx context.Context, path string, timeout time.Duration) (*Lock, error) {
+	deadline := time.Now().Add(timeout)
+	timer := time.NewTimer(acquireWaitInterval)
+	defer timer.Stop()
+	for {
+		l, err := Acquire(path)
+		if err == nil {
+			return l, nil
+		}
+		if !errors.Is(err, ErrAlreadyRunning) {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitCanceled, path, ctx.Err())
+		}
+		if !time.Now().Before(deadline) {
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitTimeout, ErrAlreadyRunning, path, timeout)
+		}
+		timer.Reset(acquireWaitInterval)
+		select {
+		case <-ctx.Done():
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitCanceled, path, ctx.Err())
+		case <-timer.C:
+		}
+	}
 }

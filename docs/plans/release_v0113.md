@@ -200,7 +200,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 を要求しており、[docs/plans/continuo_design.md:598](continuo_design.md#L598) がそれを根拠に採っている。
 **だから「起動を止める」のは変えず、`continuo doctor` で起動前に気づける道を足す。**
 
-**いま使える変数は9つ**（[internal/orchestrator/prompt.go:36-48](../../internal/orchestrator/prompt.go#L36-L48)）。
+**いま使える変数は9つ**（[internal/orchestrator/prompt.go:42-56](../../internal/orchestrator/prompt.go#L42-L56)）。
 
 | 変数 | 中身 |
 | --- | --- |
@@ -323,8 +323,8 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 | 止まりそうな場所 | 実際にどうなっているか |
 | --- | --- |
 | 権限 | [internal/config/default.go:113-129](../../internal/config/default.go#L113-L129)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
-| 雛形の禁止事項 | [internal/scaffold/template.go:216-225](../../internal/scaffold/template.go#L216-L225) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
-| tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:299-306](../../internal/orchestrator/settings.go#L299-L306)） |
+| 雛形の禁止事項 | [internal/scaffold/template.go:218-227](../../internal/scaffold/template.go#L218-L227) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
+| tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:300-307](../../internal/orchestrator/settings.go#L300-L307)） |
 
 ### 作らない理由（3つ）
 

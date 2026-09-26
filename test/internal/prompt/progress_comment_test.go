@@ -244,6 +244,10 @@ func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *test
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
 	}
 
+	// **`gh issue comment` は複数箇所にある**（3-2 の計画と判断票、3-7 の成果の報告、5-3 の進捗報告、
+	// 7-2 の2つの書式）。**件数を書かない。**`prompt.Builtin()` は展開前を返すので、
+	// `{{if .github_app_attribution}}` の両方の枝がそのまま数えられ、展開後と行数が合わない。
+	// **進捗報告の見本は、次の行に進捗報告のマーカーが来るほうである。**
 	lines := strings.Split(body, "\n")
 	found := false
 	for i, line := range lines {

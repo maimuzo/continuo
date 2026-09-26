@@ -46,7 +46,7 @@ func fetchOneIssueLog(t *testing.T, opts testIssueItemOpts) (tracker.Issue, stri
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	nodes := []map[string]any{issueItemJSON(opts)}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

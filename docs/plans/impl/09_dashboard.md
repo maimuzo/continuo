@@ -44,7 +44,7 @@
 | --- | --- |
 | 待ち受け先は `127.0.0.1` 固定（`server.LoopbackHost`）。設定から変えられない | 認証を持たない。issue の URL・worktree のパス・トークンの消費を外へ出さない |
 | **`Host` がループバック（`127.0.0.1` / `localhost` / `::1`）でなければ 421 で断る** | **bind だけでは DNS rebinding を塞げない。**攻撃者のドメインを 127.0.0.1 に解決させると、そのページから見て同一オリジンになり CORS が効かない |
-| 受けるのは `GET /` と `GET /api/v1/state` の2本だけ | 書き込みの経路を作らない。`net/http` の ServeMux がメソッド違いに 405 を返す |
+| 受けるのは `GET` だけ（`GET /` と `GET /api/v1/state` に、GitHub App を作る `/github-app` の5本が足された。issue #245） | run を動かす書き込みの経路を作らない。`net/http` の ServeMux がメソッド違いに 405 を返す。`/github-app` の5本は資格情報のファイルを書くが、書く先は GitHub との往復の結果に限る |
 | CSP に `frame-ancestors 'none'` を必ず書く | この指令は `default-src` に落ちてこない。書かないと他のページの iframe に埋め込める |
 | トークンは `runState` に控え、ダッシュボードは写しを読む | HTTP の要求ごとに transcript（数 MB）を開くと、応答が run の I/O に引きずられる |
 | ポート番号は `New` の時点で値として写し取る | 設定への参照を持たなければ、読み直しでも待ち受け先は動かない（3-24） |

@@ -62,7 +62,7 @@ func checkConfig(path string) (Result, loadedConfig) {
 // **`✗` にする。**この誤りがあると **issue が1件も着手できない。**
 // `未記入の項目` と違い、既定値で代わりが利かない。
 //
-// **言い切らない。**検査は作り物の issue で2回変数展開するだけなので、
+// **言い切らない。**検査は作り物の issue で8回変数展開するだけなので、
 // `{{if eq .issue.state "Done"}}` のように値そのもので分かれる枝の中までは届かない。
 // 文言も「検査に使った作り物の issue では」と範囲を書く。
 //
@@ -671,7 +671,7 @@ func checkBoard(
 	}
 
 	adapter, err := tracker.NewAdapter(
-		cfg.Config.Tracker, opts.GraphQLEndpoint, token, opts.HTTPClient, opts.Logger, nil)
+		cfg.Config.Tracker, opts.GraphQLEndpoint, token, opts.HTTPClient, opts.Logger, nil, nil)
 	if err != nil {
 		return Result{
 			Label:    LabelBoard,

@@ -24,7 +24,7 @@ func TestBootstrap_カンバンにあって設定に無いStatusを起動時に�
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestVerifyStatusOptions_知らないStatusの知らせを巡回ごとに繰
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
