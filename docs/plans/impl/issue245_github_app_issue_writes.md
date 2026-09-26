@@ -2691,25 +2691,13 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-26 23:05 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-27 00:20 (JST) 時点）
 
-2026-09-26 22:49 (JST) に、前提の整理と「GitHub App は本当に必須か」の追加検討を求められた。調べた結果と質問を1件のコメントにまとめた（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846820031 ）。**答えをいただくまで、6 の書き直しにもレビューにも進まない。**
+2026-09-27 00:08 (JST) に、GitHub App も AI 専用のアカウントもやめて、本文の先頭の HTML コメントで見分ける案を比較するよう求められた。比べた結果と2つの質問を1件のコメントにまとめた（https://github.com/maimuzo/continuo/issues/245#issuecomment-5847363267 ）。**答えをいただくまで、6 の書き直しにもレビューにも進まない。**
 
-**調べて確かめたこと（2026-09-26 22:50〜23:00 (JST)）。**
-
-| 何 | 結果 | 確かめた手段 |
-| --- | --- | --- |
-| REST でコメントを書く・書き換える API が受け取る項目 | `body` だけ | GitHub の OpenAPI |
-| GraphQL の `addComment` が受け取る項目 | `subjectId`・`body`・`clientMutationId` | GraphQL の introspection |
-| コメントの欄のうち書き手の種類に関わるもの | REST は `user` と `performed_via_github_app`、GraphQL（37個）は `author` だけ（`createdViaEmail` は API から立てられない） | 同上 |
-| machine user | GitHub の文書（Managing deploy keys）が認めている。利用規約（B.3）は、無料のアカウントとは別に machine account を持つことを認めている | 文書の原文 |
-| `gh auth token --user <アカウント>` | 複数のアカウントのうち1つのトークンを取り出せる | `gh` v2.100.0 の使い方の表示 |
-| fine-grained PAT と collaborator | 外部の、またはリポジトリの collaborator として書くリポジトリには使えない | GitHub の文書 Managing your personal access tokens の制限の一覧 |
+**確かめたこと（2026-09-27 00:10 (JST)）。**main の continuo専用プロンプトで、continuo が起動した Claude Code が issue へ書く5つの見本（計画・成果・途中経過・まとめて直したとき×2）は、どれも本文の1行目に `<!-- continuo:agent -->` か `<!-- continuo:group -->` を持つ。Go のコードに、`<!-- continuo:` の前置きだけで判定している箇所は無い（`leadingMarkersInclude` は特定の印があるかだけを見る）。
 
 | 何を | 提案 | 状態 |
 | --- | --- | --- |
-| 1. GitHub App のままか、AI 専用のアカウント（machine user）か | 推奨は GitHub App のまま。AI 専用のアカウントは「どのアカウントが AI か」の一覧から漏れると AI の書き込みが人間の指示に化ける向きに壊れ、個人のリポジトリでは権限を issue だけに絞れない | 答え待ち |
-| 2. 組織名義の GitHub App の client secret の渡し方（GitHub App のままなら） | 推奨は owner が continuo の外の秘密の手段でメンバーへ直接渡し、各自の PC に `0600` で置く。もう1つの道は各自の public の GitHub App を owner が組織へ install する | 答え待ち |
-| 3. テスト用の組織（GitHub App のままなら） | GitHub Free for organizations で無料。作るのは人間にお願いした | 答え待ち |
-| device flow | 使わない | 前回の答えのまま |
-| 回転 | 続ける。sandbox では回す前に止まる・時間の上限を Bash の2分より十分短く・書き戻すまで SIGINT と SIGTERM を捕まえて捨てる | 1 の答え待ち |
+| 1. 本文の先頭の HTML コメントで見分ける案に切り替え、GitHub App の仕組みを消すか | 推奨は切り替える。忘れが起きうるのは人間が自分で起動した Claude Code だけで、悪意のある AI にはどの案も強くない。人間が画面で見分けられない・書き換えで印が消えうる、は受ける | 答え待ち |
+| 2. 人間が自分で起動した Claude Code の印の付け方 | 推奨は、利用者の CLAUDE.md へ決まりを1つ写してもらう（FAQ に例文）。印は `<!-- continuo:ai -->`（`<!-- continuo:agent -->` は continuo の成果の判定に使うので流用しない）。もう1つの道は gh wrapper で自動で差し込む | 答え待ち |
