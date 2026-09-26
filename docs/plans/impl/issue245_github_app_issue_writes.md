@@ -2691,16 +2691,25 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-26 22:45 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-26 23:05 (JST) 時点）
 
-2026-09-26 22:01 (JST) に「だめだ。もっとちゃんと設計しろ」と差し戻された。チームで使う場合を含むユースケース17通りと、それに耐える設計を書き、確認と2つの質問をお願いした（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846511857 ）。**確認をいただくまで、6 の書き直しにもレビューにも進まない。**
+2026-09-26 22:49 (JST) に、前提の整理と「GitHub App は本当に必須か」の追加検討を求められた。調べた結果と質問を1件のコメントにまとめた（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846820031 ）。**答えをいただくまで、6 の書き直しにもレビューにも進まない。**
+
+**調べて確かめたこと（2026-09-26 22:50〜23:00 (JST)）。**
+
+| 何 | 結果 | 確かめた手段 |
+| --- | --- | --- |
+| REST でコメントを書く・書き換える API が受け取る項目 | `body` だけ | GitHub の OpenAPI |
+| GraphQL の `addComment` が受け取る項目 | `subjectId`・`body`・`clientMutationId` | GraphQL の introspection |
+| コメントの欄のうち書き手の種類に関わるもの | REST は `user` と `performed_via_github_app`、GraphQL（37個）は `author` だけ（`createdViaEmail` は API から立てられない） | 同上 |
+| machine user | GitHub の文書（Managing deploy keys）が認めている。利用規約（B.3）は、無料のアカウントとは別に machine account を持つことを認めている | 文書の原文 |
+| `gh auth token --user <アカウント>` | 複数のアカウントのうち1つのトークンを取り出せる | `gh` v2.100.0 の使い方の表示 |
+| fine-grained PAT と collaborator | 外部の、またはリポジトリの collaborator として書くリポジトリには使えない | GitHub の文書 Managing your personal access tokens の制限の一覧 |
 
 | 何を | 提案 | 状態 |
 | --- | --- | --- |
-| device flow | **使わない。**GitHub の文書（Best practices for creating a GitHub App）が「制約のある環境でない限り有効にするな」と書く。device code phishing に使えるため | 確認待ち |
-| チームの GitHub App | 組織名義の private の GitHub App を1つ。owner がダッシュボードで作り（manifest の送り先 `https://github.com/organizations/<組織>/settings/apps/new`）、メンバーが各自の PC で認可する | 確認待ち |
-| 認可のしかた | web application flow に PKCE（`code_challenge` の `S256`）を足す。GitHub の文書が public client に勧める形 | 確認待ち |
-| 質問1: 組織名義の GitHub App の client ID と client secret の渡し方 | **WORKFLOW.md に書く推奨は取り下げた**（2026-09-26 22:32 (JST) の差し戻し。client secret は、更新用のトークンだけが漏れたときにトークンを作らせないための2つ目の鍵で、公開してはいけない。PKCE が守るのは code だけ）。推奨し直し: owner が continuo の外の秘密の手段でメンバーへ直接渡し、各自の PC に `0600` で置く。もう1つの道: 各自の個人名義の GitHub App を public で作り、owner が組織へ install する（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846702118 ） | 答え待ち |
-| 質問2: 実機で測るためのテスト用の組織 | GitHub Free for organizations で無料。ただし組織はアカウントの一種で、作るのは人間にお願いした。テスト用の GitHub App を作ることは許された（2026-09-26 22:32 (JST)）。owner でないメンバーの役は、利用規約（1人1つの無料のアカウント）により2つ目のアカウントでは試せないので、別の人に試していただくか、限界として残す | 答え待ち |
-| 回転 | 続ける。sandbox では回す前に止まる・時間の上限を Bash の2分より十分短く・書き戻すまで SIGINT と SIGTERM を捕まえて捨てる | 確認待ち |
-| GitHub App を2つ持つとき（組織と個人のリポジトリを1枚のカンバンに載せる） | 資格情報のファイルに GitHub App を複数持ち、書く先のリポジトリに install してある組を使う | 確認待ち |
+| 1. GitHub App のままか、AI 専用のアカウント（machine user）か | 推奨は GitHub App のまま。AI 専用のアカウントは「どのアカウントが AI か」の一覧から漏れると AI の書き込みが人間の指示に化ける向きに壊れ、個人のリポジトリでは権限を issue だけに絞れない | 答え待ち |
+| 2. 組織名義の GitHub App の client secret の渡し方（GitHub App のままなら） | 推奨は owner が continuo の外の秘密の手段でメンバーへ直接渡し、各自の PC に `0600` で置く。もう1つの道は各自の public の GitHub App を owner が組織へ install する | 答え待ち |
+| 3. テスト用の組織（GitHub App のままなら） | GitHub Free for organizations で無料。作るのは人間にお願いした | 答え待ち |
+| device flow | 使わない | 前回の答えのまま |
+| 回転 | 続ける。sandbox では回す前に止まる・時間の上限を Bash の2分より十分短く・書き戻すまで SIGINT と SIGTERM を捕まえて捨てる | 1 の答え待ち |
