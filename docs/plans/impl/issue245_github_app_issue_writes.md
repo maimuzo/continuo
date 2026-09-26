@@ -2691,7 +2691,7 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-26 22:20 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-26 22:45 (JST) 時点）
 
 2026-09-26 22:01 (JST) に「だめだ。もっとちゃんと設計しろ」と差し戻された。チームで使う場合を含むユースケース17通りと、それに耐える設計を書き、確認と2つの質問をお願いした（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846511857 ）。**確認をいただくまで、6 の書き直しにもレビューにも進まない。**
 
@@ -2700,7 +2700,7 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | device flow | **使わない。**GitHub の文書（Best practices for creating a GitHub App）が「制約のある環境でない限り有効にするな」と書く。device code phishing に使えるため | 確認待ち |
 | チームの GitHub App | 組織名義の private の GitHub App を1つ。owner がダッシュボードで作り（manifest の送り先 `https://github.com/organizations/<組織>/settings/apps/new`）、メンバーが各自の PC で認可する | 確認待ち |
 | 認可のしかた | web application flow に PKCE（`code_challenge` の `S256`）を足す。GitHub の文書が public client に勧める形 | 確認待ち |
-| 質問1: 組織名義の GitHub App の client ID と client secret の渡し方 | 推奨は WORKFLOW.md に書いて commit する（GitHub の文書は public client では client secret を守れない前提。攻撃者はそれだけではトークンを作れない） | 答え待ち |
-| 質問2: 実機で測るためのテスト用の組織と GitHub App を作ってよいか | 推奨は作ってよい（Claude in Chrome で作る。owner でないメンバーの役のアカウントは人間に用意してもらう） | 答え待ち |
+| 質問1: 組織名義の GitHub App の client ID と client secret の渡し方 | **WORKFLOW.md に書く推奨は取り下げた**（2026-09-26 22:32 (JST) の差し戻し。client secret は、更新用のトークンだけが漏れたときにトークンを作らせないための2つ目の鍵で、公開してはいけない。PKCE が守るのは code だけ）。推奨し直し: owner が continuo の外の秘密の手段でメンバーへ直接渡し、各自の PC に `0600` で置く。もう1つの道: 各自の個人名義の GitHub App を public で作り、owner が組織へ install する（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846702118 ） | 答え待ち |
+| 質問2: 実機で測るためのテスト用の組織 | GitHub Free for organizations で無料。ただし組織はアカウントの一種で、作るのは人間にお願いした。テスト用の GitHub App を作ることは許された（2026-09-26 22:32 (JST)）。owner でないメンバーの役は、利用規約（1人1つの無料のアカウント）により2つ目のアカウントでは試せないので、別の人に試していただくか、限界として残す | 答え待ち |
 | 回転 | 続ける。sandbox では回す前に止まる・時間の上限を Bash の2分より十分短く・書き戻すまで SIGINT と SIGTERM を捕まえて捨てる | 確認待ち |
 | GitHub App を2つ持つとき（組織と個人のリポジトリを1枚のカンバンに載せる） | 資格情報のファイルに GitHub App を複数持ち、書く先のリポジトリに install してある組を使う | 確認待ち |
