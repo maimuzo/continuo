@@ -2691,13 +2691,16 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-26 21:50 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-26 22:20 (JST) 時点）
 
-設計レビュー3周目（判断票: https://github.com/maimuzo/continuo/issues/245#issuecomment-5834994730 ）で止まった。2026-09-26 21:37 (JST) の人間の問いに答え、設計の直し方の確認をお願いした（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846353382 ）。**確認をいただくまで、6 の書き直しにもレビューにも進まない。**
+2026-09-26 22:01 (JST) に「だめだ。もっとちゃんと設計しろ」と差し戻された。チームで使う場合を含むユースケース17通りと、それに耐える設計を書き、確認と2つの質問をお願いした（https://github.com/maimuzo/continuo/issues/245#issuecomment-5846511857 ）。**確認をいただくまで、6 の書き直しにもレビューにも進まない。**
 
-| 何を | 私の答え・提案 | 状態 |
+| 何を | 提案 | 状態 |
 | --- | --- | --- |
-| 組織のリポジトリ | public にする提案は取り下げる。本質は「ダッシュボードが個人名義でしか作れない」ことと「web application flow ではメンバー全員に client secret が要る」こと。device flow なら client secret が要らない（GitHub の文書: 回転の `client_secret` は「Required unless the user access token was generated using the device flow」）ので、組織名義の GitHub App を1つ作り、メンバーは client_id だけで各自認可する形にする | 人間の確認待ち |
-| 期限の無いアクセストークン | 取り下げる。GitHub App の良さの1つ（アクセストークンが8時間で切れる）を捨てる案で、漏れ方の違いを無視した比べ方だった。PAT は判別するマーカーが付かないので目的に合わない。回転を続け、sandbox（回す前に止まる）・Bash の2分（上限を十分短く）・signal（捕まえて捨てる）を塞ぐ形を推奨する | 人間の確認待ち |
-
-**実装の前に測るもの（確認をいただけたら）。**private の組織名義の GitHub App を、owner でないメンバーが device flow で認可できるか。device flow で受け取った更新用のトークンを、client secret 無しで回せるか。
+| device flow | **使わない。**GitHub の文書（Best practices for creating a GitHub App）が「制約のある環境でない限り有効にするな」と書く。device code phishing に使えるため | 確認待ち |
+| チームの GitHub App | 組織名義の private の GitHub App を1つ。owner がダッシュボードで作り（manifest の送り先 `https://github.com/organizations/<組織>/settings/apps/new`）、メンバーが各自の PC で認可する | 確認待ち |
+| 認可のしかた | web application flow に PKCE（`code_challenge` の `S256`）を足す。GitHub の文書が public client に勧める形 | 確認待ち |
+| 質問1: 組織名義の GitHub App の client ID と client secret の渡し方 | 推奨は WORKFLOW.md に書いて commit する（GitHub の文書は public client では client secret を守れない前提。攻撃者はそれだけではトークンを作れない） | 答え待ち |
+| 質問2: 実機で測るためのテスト用の組織と GitHub App を作ってよいか | 推奨は作ってよい（Claude in Chrome で作る。owner でないメンバーの役のアカウントは人間に用意してもらう） | 答え待ち |
+| 回転 | 続ける。sandbox では回す前に止まる・時間の上限を Bash の2分より十分短く・書き戻すまで SIGINT と SIGTERM を捕まえて捨てる | 確認待ち |
+| GitHub App を2つ持つとき（組織と個人のリポジトリを1枚のカンバンに載せる） | 資格情報のファイルに GitHub App を複数持ち、書く先のリポジトリに install してある組を使う | 確認待ち |
