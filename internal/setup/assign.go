@@ -90,7 +90,8 @@ type AssignOptions struct {
 	Out io.Writer
 }
 
-// Assign は5つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる。
+// Assign は6つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる
+// （6つ目の direct chat は番号 0 で飛ばせる。設計 3-82）。
 //
 // **役割の名前より先に「continuo がその Status で何をするか」を出してから番号を待つ。**
 // 初見の利用者は、どの Status がどの役割かを知らないためである。
@@ -107,7 +108,7 @@ type AssignOptions struct {
 // ctx: 中断を受け取るコンテキスト。**Ctrl+C はこれを取り消して伝える**
 // （呼び出し側が signal.NotifyContext で作る）。
 // opts: 選択肢と入出力。
-// 戻り値の1つ目: 5つの役割すべてが埋まった割り当て。エラーのときはゼロ値。
+// 戻り値の1つ目: 必ず要る5つの役割が埋まった割り当て（direct chat は飛ばしたなら空）。エラーのときはゼロ値。
 // 戻り値の2つ目: ErrTooFewOptions / ErrNoSuitableOption / ErrInterrupted / ErrInputClosed、
 // または入力を読めなかった理由。**なぜ止まったかの説明は Out へ出し終えている。**
 func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
@@ -235,7 +236,7 @@ func writeOptionList(out io.Writer, fieldName string, options []string) {
 // writeSummary は決まった割り当てを役割ごとに並べる。
 //
 // out: 出力先。
-// a: 5つの役割が全部埋まった割り当て。
+// a: 必ず要る5つの役割が埋まった割り当て（direct chat は飛ばしたなら空）。
 func writeSummary(out io.Writer, a Assignment) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryHeader, RoleCount))

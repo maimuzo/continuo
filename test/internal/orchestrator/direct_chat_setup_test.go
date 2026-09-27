@@ -6,6 +6,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // readyCommentMarker は、direct chat の pane を用意したときに issue へ書く案内にだけ出る文字列である（設計 3-82d）。
@@ -188,15 +190,16 @@ func TestDirectChat_用意中に担当者が替わったら自分で開いたpan
 	}
 }
 
-// TestDirectChat_用意の失敗が上限に達したらfailure_stateへ動かして理由を書く は、設計 3-82d の用意の段2 を確かめる。
+// TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く は、設計 3-82d の用意の段2 を確かめる。
 //
 // 目的: 用意が落ちたら、カンバンへは書かず、自分で開いた pane を閉じ、印を外す。
-// **通常の着手と同じ回数の上限（`agent.max_retries`）に達したら、書く経路で `failure_state` を書き、
+// **通常の着手と同じ回数の上限（`agent.max_retries`）を超えたら、書く経路で `failure_state` を書き、
 // 落ちた理由をコメントする**（人間が了承した形）。担当者を直せとは書かない。
-// 与える情報: `agent.max_retries` を1にし、`agent.start` が必ず失敗する用意。
+// **比べ方は通常の着手と同じ「超えたら」なので、`agent.max_retries: 0` なら1回目の失敗で書く。**
+// 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。
 // 成功条件: pane を閉じ、印を外し、Status が `failure_state` になり、「用意できませんでした」が1件。
-func TestDirectChat_用意の失敗が上限に達したらfailure_stateへ動かして理由を書く(t *testing.T) {
-	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 1 })
+func TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
 	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません")
 	fx.Herdr.Handle(herdr.MethodAgentStart, func(map[string]any) (any, *rpcErr) {
 		return nil, &rpcErr{Code: "agent_start_failed", Message: "起動できませんでした"}
@@ -205,7 +208,7 @@ func TestDirectChat_用意の失敗が上限に達したらfailure_stateへ動�
 
 	fx.Orc.Tick(context.Background())
 
-	waitFor(t, 15*time.Second, "上限に達して failure_state へ動かす", func() bool {
+	waitFor(t, 15*time.Second, "上限を超えて failure_state へ動かす", func() bool {
 		return fx.Tracker.StateOf(id) == fx.Config.Tracker.FailureState
 	})
 	waitFor(t, 5*time.Second, "理由のコメントを書く", func() bool {
@@ -726,3 +729,155 @@ type errString string
 
 // Error はエラーの文面を返す。
 func (e errString) Error() string { return string(e) }
+
+// TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す は、設計 3-82c の門7 を確かめる。
+//
+// 目的: 用意の失敗が上限を超えた回の `failure_state` の書き込みが失敗しても、**次の巡回で書き直す。**
+// **書き直すまで用意はやり直さない**（やり直すと、上限を超えたあとも pane を開いては閉じる）。
+// 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。1回目の巡回では `UpdateStatus` が失敗する。
+// 成功条件: 2回目の巡回で Status が `failure_state` になり、理由のコメントが1件で、`agent.start` は1回のまま。
+func TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
+	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません",
+		"direct chat のカードへ failure_state を書けませんでした")
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(map[string]any) (any, *rpcErr) {
+		return nil, &rpcErr{Code: "agent_start_failed", Message: "起動できませんでした"}
+	})
+	id, node := addOwnDirectChatIssue(fx, 351)
+	fx.Tracker.SetUpdateError(errors.New("GraphQL が一時的に失敗しました"))
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "上限を超えた回の書き込みが失敗する", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat のカードへ failure_state を書けませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	if got := fx.Tracker.StateOf(id); got != humanState {
+		t.Fatalf("書き込みが失敗したのにカードが動いた: %q", got)
+	}
+	starts := fx.Herdr.CountMethod(herdr.MethodAgentStart)
+
+	fx.Tracker.SetUpdateError(nil)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "次の巡回で failure_state を書き直す", func() bool {
+		return fx.Tracker.StateOf(id) == fx.Config.Tracker.FailureState
+	})
+	waitFor(t, 5*time.Second, "理由のコメントを書く", func() bool {
+		return commentsContaining(fx.Tracker, node, "用意できませんでした") == 1
+	})
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != starts {
+		t.Fatalf("上限を超えたあとに用意をやり直した: agent.start が %d 回から %d 回へ", starts, n)
+	}
+}
+
+// turnEndSeesDirectChat は、1回目の turn の終わりがカードを direct chat と読むところまで進める。
+//
+// **巡回は回さない。**`decideAfterTurn` の direct chat の枝が送る印を立て、控えの Status を
+// direct chat にしたところで止める（巡回の段1 はまだ印を立てていない）。
+//
+// fx: fixture。
+// number: issue の番号。
+// 戻り値: 対象の issue。
+func turnEndSeesDirectChat(t *testing.T, fx *fixture, number int) tracker.Issue {
+	t.Helper()
+	issue := sampleIssue(number, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	releasePrompt := blockFirstPrompt(t, fx)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	fx.Tracker.SetState(issue.ID, humanState)
+	path := writeTranscript(t, t.TempDir(), "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "途中まで進めました。\n\nCONTINUO-STATUS: working", false),
+	})
+	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	releasePrompt()
+	waitFor(t, 20*time.Second, "turn の終わりが引き取りを見る", func() bool {
+		return strings.Contains(fx.Logs.String(), "この turn の後始末をせずに戻ります")
+	})
+	return issue
+}
+
+// assertNoPromptFor は、しばらく待っても `agent.prompt` の回数が増えないことを確かめる。
+//
+// **送らないことは、待つ以外に確かめようがない。**送る側は巡回の中で turn ループを起こすだけなので、
+// 起こされたなら数十ミリ秒で届く。
+//
+// fx: fixture。
+// want: 増えていてはならない回数。
+// message: 増えていたときに出す文。
+func assertNoPromptFor(t *testing.T, fx *fixture, want int, message string) {
+	t.Helper()
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if n := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); n != want {
+			t.Fatalf("%s: agent.prompt が %d 回から %d 回へ", message, want, n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestDirectChat_turnの終わりに引き取りを見たあと取り直しに失敗した巡回では指示を送らない は、
+// 設計 3-82f の `wakeRuns` と turn ループの先頭の行を確かめる。
+//
+// 目的: turn の終わりがカードを direct chat と読んで送る印を立てたあと、**巡回の取り直しが失敗すると
+// direct chat の印は立たない。**送る側が印しか見ないと、カンバンでは Direct Chat のまま
+// 人間の pane へ続きの指示が届く。**控えの Status でも見るので送らない。**
+// 作業中へ戻したあとは送る（送る印を下ろしていない）。
+// 与える情報: 1回目の turn の終わりにカードが direct chat だった run。次の巡回では ID 指定の取り直しが失敗する。
+// 成功条件: 取り直しに失敗した巡回で `agent.prompt` が増えないこと。取り直せる巡回でも増えないこと。
+// 作業中へ戻した巡回で2回目の指示が届くこと。pane を閉じないこと。
+func TestDirectChat_turnの終わりに引き取りを見たあと取り直しに失敗した巡回では指示を送らない(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	fx.AllowLog("実行中の issue を取り直せません", "worktree の照合で issue を取り直せません")
+	issue := turnEndSeesDirectChat(t, fx, 352)
+	sent := fx.Herdr.CountMethod(herdr.MethodAgentPrompt)
+
+	fx.Tracker.SetIDsError(errors.New("GraphQL が一時的に失敗しました"))
+	fx.Orc.Tick(context.Background())
+	assertNoPromptFor(t, fx, sent, "取り直しに失敗した巡回で人間の pane へ指示を送った")
+
+	fx.Tracker.SetIDsError(nil)
+	fx.Orc.Tick(context.Background())
+	assertNoPromptFor(t, fx, sent, "direct chat へ入れた巡回で指示を送った")
+
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+	waitFor(t, 20*time.Second, "戻した run へ2回目の指示を送る", func() bool {
+		fx.Orc.Tick(context.Background())
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > sent
+	})
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
+		t.Errorf("pane を閉じた: %d 回", n)
+	}
+}
+
+// TestDirectChat_turnの終わりに引き取りを見たあと手を離す巡回では指示を送らない は、
+// 設計 3-82h の「手を離す経路」と 3-82f の `wakeRuns` の行を確かめる。
+//
+// 目的: turn の終わりが送る印を立てたあと、次の巡回で担当者が別の1人に替わっていたら手を離す。
+// **手を離す途中（印を外すまで）に、人間の pane へ続きの指示を送らない。**
+// 与える情報: 1回目の turn の終わりにカードが direct chat だった run。次の巡回の前に担当者を別の1人に替える。
+// 成功条件: `agent.prompt` が増えず、pane を閉じ、印を外すこと。Status を書かないこと。
+func TestDirectChat_turnの終わりに引き取りを見たあと手を離す巡回では指示を送らない(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	fx.AllowLog("この PC の continuo は手を離します")
+	issue := turnEndSeesDirectChat(t, fx, 353)
+	sent := fx.Herdr.CountMethod(herdr.MethodAgentPrompt)
+	state := fx.Tracker.StateOf(issue.ID)
+
+	fx.Tracker.SetAssignees(issue.ID, "someone-else")
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "手を離して印を外す", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	assertNoPromptFor(t, fx, sent, "手を離す途中で人間の pane へ指示を送った")
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n == 0 {
+		t.Error("手を離したのに pane を閉じていない")
+	}
+	if got := fx.Tracker.StateOf(issue.ID); got != state {
+		t.Errorf("手を離すときにカードを動かした: %q から %q へ", state, got)
+	}
+}

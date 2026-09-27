@@ -597,7 +597,7 @@ const (
 	KeyCLIInitDetectPlaceholderNote Key = "cli.init.detect_placeholder_note"
 )
 
-// `continuo setup` が5つの役割を説明するときの文言。
+// `continuo setup` が6つの役割を説明するときの文言（6つ目の direct chat は飛ばせる）。
 //
 // **役割の名前より説明が先に出る。**初見の利用者は「どの Status がどの役割か」を
 // 知らないので、Status の名前で尋ねても選べない（RUCM の判断11）。

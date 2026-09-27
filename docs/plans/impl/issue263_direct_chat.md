@@ -157,7 +157,7 @@
 | --- | --- | --- |
 | 書く経路で「未設定（空）なら書かない」をどう表すか | 拒否リストへ空文字を1つ足す | `UpdateStatus` は取り直した値と拒否リストを同じ正規化で比べる（`foldStatus("")` 同士が一致する）。取り直しを1本増やさずに済む |
 | 閉じる集合の鍵 | project item の ID（値は worktree のパス） | 通常の候補のループ・用意の段1・`reconcileWorktrees`・復元の4箇所がどれも持っている値であり、パスの正規化の差を気にしなくてよい |
-| 用意の失敗の上限の「達したら」 | `回数 >= agent.max_retries` | 「上限に達したら」の文言どおり |
+| 用意の失敗の上限 | `回数 > agent.max_retries`（実装レビュー2周目で `>=` から直した） | 通常の着手の `skipByFailure` と同じ比べ方。`>=` だと `agent.max_retries: 0` で一度も書かれない |
 | 門7 の間隔 | `retryBackoff(回数-1, agent.max_retry_backoff_ms)` | 通常の着手の `abandonRunClaimed` が1回目の失敗で `retryBackoff(0, …)` を使うのと揃える |
 | 送る直前の `agent.get` の置き場所 | turn ループが送る直前（`busyCheckBeforeSend` の印） | 3-82g の図は「次の巡回で、送る直前に1本」。巡回のループの中で待たない |
 
@@ -256,3 +256,52 @@ turn の終わりの判定・hook の受け口・送る内容は変えない。
 
 `sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
 `go vet ./...`: 終了コード 0。`sh scripts/check-rucm.sh --strict`: 終了コード 0（[W1] の警告は前から在るもの）。
+
+## 実装レビュー2周目で直すもの
+
+**言いたいこと。**判断票（PR #267 の実装レビュー2周目）で「直す」と決めた6件を、直す前に全部並べる。
+
+| # | 指摘 | 直す場所 | 影響範囲と確かめたこと |
+| --- | --- | --- | --- |
+| s1 | 控えの Status が Direct Chat のまま送る印で送る（high） | `internal/orchestrator/orchestrator.go` の `wakeRuns`、`internal/orchestrator/turn.go` の turn ループの先頭、`internal/orchestrator/directchat.go` の `letGoOfDirectChatAsync` と `finishDirectChatSetup` の戻った枝、設計 3-82f の表と「印で見る」の段落 | **送る印を見て送る場所**（`takeNeedsPrompt` の呼び出し元）は `wakeRuns` と `updateDirectChatMode` の2つで、送るのは `wakeRuns` だけ。turn ループは起こされたあと先頭で送るかを決める。この2か所で「印」に加えて「控えの Status（`rs.issue().State`）が `direct_chat_state`」でも送らない。**送る印は下ろさない**（残せば、作業中へ戻した巡回で `reconcileRunning` が控えを上書きしたあと送る。1周目で守った経路）。turn ループの先頭で控えだけが当たったときは送る印を立て直して抜ける（起こされたときに `wakeRuns` が下ろしているため）。`letGoOfDirectChatAsync` は `leaveDirectChatMode` の前に `takeNeedsPrompt` で下ろす。用意の段3 の戻った枝は、控えが用意の段1 の Direct Chat のままなので、送る印を立てる前に控えを戻った先の Status へ書き換える（書き換えないと次の巡回まで送られない） |
+| s2 | 用意の失敗の上限で `failure_state` を書けないと続く（mid） | `internal/orchestrator/directchat.go` の `failDirectChatSetup` と門7、設計 3-82c の門7 と 3-82d の用意の段2 | 判定を通常の着手の `skipByFailure` と同じ「回数が `agent.max_retries` を超えたら」にそろえる（`agent.max_retries: 0` なら1回目で書く）。門7 で上限を超えた issue は用意せず、書く経路だけを巡回のループの外でやり直す。記録は候補から外れた巡回で消える（`forgetDirectChatSetupFailuresNotIn`）ので、書けたあとはやり直さない |
+| s3 | 戻したときの `running_state` の書き込みが拒否リストだけ（low） | `internal/orchestrator/directchat.go` の `writeRunningStateOnReturn`、設計 3-82g の表 | 書く経路（`writeDirectChatFailure`）と同じく、拒否リストを「選択肢のうち `dispatch_state` 以外の全部と空」にして、`UpdateStatus` が書く直前に取り直した値が `dispatch_state` のときだけ書く。GraphQL は増やさない |
+| s4 | ずれた行番号のリンク（low） | `docs/plans/impl/issue144_branch_and_push.md`・`docs/plans/impl/issue134_136_140_blocked_notice.md`・`CLAUDE.md` の `settings.go#L352` | コードを直し終えてから、着地先の中身で1本ずつ確かめる |
+| s5 | 「5つの役割」の数え残し（low） | `internal/setup/assign.go`（3件）・`internal/setup/setup.go`・`internal/cli/cli.go` のコメント、ほか setup が尋ねる数を言っている行 | 必須の5つを指す行（`Complete`・README の5行の表を指す行・テストの失敗文）は残す |
+| s6 | 書き戻しを断られた理由のコメントが direct chat を知らない（low） | `internal/orchestrator/unknownstate.go` の2件 | コメントの文だけ |
+
+**hook の規則（CLAUDE.md の6）との当たり。**検知の網に掛かるのは `turn.go`・`orchestrator.go`・`internal/cli/cli.go`。
+`turn.go` は turn ループの先頭で「送るか」を決める条件を1つ足すだけで、turn の終わりの判定（`confirmTurnEnd`・`awaitStop`・`awaitHook`）・hook の受け口・送る内容は変えない。
+`orchestrator.go` は `wakeRuns` だけ、`cli.go` はコメントだけ。4つの定義のどれにも当たらない。
+
+### 直した場所（実装レビュー2周目）
+
+| # | どこ |
+| --- | --- |
+| s1 | `internal/orchestrator/directchat.go` の `cardInDirectChat`（新設）・`letGoOfDirectChatAsync`（`leaveDirectChatMode` の前に `takeNeedsPrompt`）・`finishDirectChatSetup` の戻った枝（`setIssueState`）。`internal/orchestrator/orchestrator.go` の `wakeRuns`。`internal/orchestrator/turn.go` の turn ループの先頭。設計 3-82f の表の2行と、その下の「印で見る」の段落 |
+| s2 | `internal/orchestrator/directchat.go` の `directChatSetupLimitBody`（新設。`回数 > agent.max_retries`）・`failDirectChatSetup`・門7。設計 3-82c の門7 の行と 3-82d の用意の段2 |
+| s3 | `internal/orchestrator/directchat.go` の `statusesOtherThan`（新設。`writeDirectChatFailure` の拒否リストの作り方を切り出した）・`writeRunningStateOnReturn`。設計 3-82g の `dispatch_state` の行 |
+| s4 | `docs/plans/impl/issue144_branch_and_push.md` の 421・422・428・429・432・435・455・636・1077 行、`docs/plans/impl/issue134_136_140_blocked_notice.md` の 298〜303・830・1211・1217 行、`CLAUDE.md` の `settings.go` のリンク（`358-359`）。あわせて、この周のコードの変更でずれた `CLAUDE.md` の `pendingDir`・`issue134_136_140_blocked_notice.md` の `RunView`・`issue166_stop_hook_block.md` の3本を、差分の行の対応で振り直した |
+| s5 | `internal/setup/assign.go`（93・110・238 行付近）・`internal/setup/setup.go`・`internal/cli/cli.go` のコメント。setup が尋ねる数を言っている `README.md`（2行）・`README.ja.md`（2行）・`install.sh`・`internal/i18n/messages/ja.json` と `en.json` の使い方の setup の行・`internal/scaffold/fill.go` の `Statuses` の説明2行・`internal/i18n/keys.go` の setup の文言の説明 |
+| s6 | `internal/orchestrator/unknownstate.go` の2件。同じ誤りの `internal/orchestrator/lifecycle.go` の `rewriteAndDecide` のコメントも直した |
+
+**残したもの（s5）。**README の「5つの役割に一度だけ対応づけます」（すぐ上の5行の表を指す）・`Complete` と必須の5つを言うコメント・
+テストの失敗文・設計 3-32 の見出しと本文（setup の設計の節。見出しは巻き込まない）・RUCM（1周目と同じ理由）。
+
+**残したもの（s4）。**`docs/plans/impl/issue134_136_140_blocked_notice.md` の `handoff.go` へのリンク（204・462・698・703・1209・1210・1223 行）は main の時点から外れているが、
+レビュワーの一覧に無いので触っていない。
+
+### 足したテスト（実装レビュー2周目）
+
+| テスト | 何を確かめるか | 直しを外すと |
+| --- | --- | --- |
+| `TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く`（既存の「達したら」を置き換えた） | s2。`agent.max_retries: 0` で1回目の失敗から書く | 比べ方を戻すと落ちる（確かめた） |
+| `TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す` | s2。書き込みの失敗を門7 が次の巡回で書き直し、用意はやり直さない | 門7 の書き直しを外すと落ちる（確かめた） |
+| `TestDirectChat_turnの終わりに引き取りを見たあと取り直しに失敗した巡回では指示を送らない` | s1。取り直しの失敗の入口。作業中へ戻したら送る | `wakeRuns` と turn ループの先頭の判定を外すと落ちる（確かめた） |
+| `TestDirectChat_turnの終わりに引き取りを見たあと手を離す巡回では指示を送らない` | s1。手を離す入口 | 外しても通る。控えの Status の判定が同じ巡回の `wakeRuns` を止めるので、`letGoOfDirectChatAsync` の `takeNeedsPrompt` は二重の守りである |
+
+### テストの結果（実装レビュー2周目）
+
+`sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
+`go vet ./...`: 終了コード 0。
+**使い方の文言（`messages/ja.json`）を直したので、`messages/en.json` の `_source_sha256` を入れ直した**（入れ直す前の1回目は `TestMessages_英語の資源が正の資源の版に追いついている` が落ちた）。

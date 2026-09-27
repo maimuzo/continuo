@@ -21,7 +21,7 @@ Go で書いており、OpenAI の symphony の仕様を実装しています。
 - **1枚のカンバンを複数の機械で分担できます。**残っている枠を入札し、いちばん余裕のある機械がその issue を取ります
 - **他人の指示は、指示書で絞ります。**従うのは `OWNER` / `MEMBER` / `COLLABORATOR` だけです。[始める前に知っておくこと](#始める前に知っておくこと)を先に読んでください
 - **画面に出す文言は英語と日本語を選べます。**`continuo doctor`・コマンドの出力・ダッシュボードが、1つの設定で切り替わります
-- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、5つの役割へ対応づけます
+- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、6つの役割へ対応づけます（6つ目の direct chat は飛ばせます）
 - **[openai/symphony](https://github.com/openai/symphony) の仕様を実装しています。**公開されたオーケストレーターの仕様であり、独自の取り決めではありません
 
 ## 想定しているカンバンの運用方法
@@ -161,7 +161,7 @@ continuo init      # WORKFLOW.md と continuo-ci.yaml を置く。owner とカ�
 **ここで一度 `WORKFLOW.md` を開いてください。**`trust.repositories` に、カンバンに載っていたリポジトリが全部並んでいます。**要らない行を消さないと、無関係なリポジトリまで Claude Code に信頼登録されます。**
 
 ```bash
-continuo setup                    # カンバンの Status を continuo の5つの役割に対応づける（対話）
+continuo setup                    # カンバンの Status を continuo の6つの役割に対応づける（対話。6つ目は飛ばせる）
 continuo trust --dry-run          # 何を信頼登録するかを、実行せずに表示する
 continuo trust                    # 対象リポジトリを信頼登録する。clone が無ければ取ってくる
 continuo allow-keychain-access    # macOS だけ。定額プランの枠を読むために1回

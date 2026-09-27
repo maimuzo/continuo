@@ -1023,7 +1023,13 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		// `handoffLostOnResume` が「担当が自分でない」と判定した瞬間に
 		// `stopBecauseHandoffLost` が走る。**人間がチャットしながら自分を
 		// 担当者に付けるのは普通の操作であり、そこで画面が消える。**
-		if rs.inDirectChatMode() {
+		//
+		// **印だけでなく、控えの Status でも見る**（`cardInDirectChat`）。印を立てるのは巡回の段1 なので、
+		// turn の終わりが控えを `direct_chat_state` にしたあと、段1 が印を立てる前に送る印を読むと、
+		// **カンバンでは Direct Chat のまま人間の pane へ続きの指示が届く**（巡回の取り直しが失敗した・
+		// 巡回の途中で turn が終わった）。**送る印は下ろさない。**作業中へ戻した巡回で
+		// `reconcileRunning` が控えを上書きすれば、ここで送られる。
+		if rs.inDirectChatMode() || o.cardInDirectChat(rs) {
 			continue
 		}
 		// **direct chat の pane を用意している最中の run も起こさない**（設計 3-82d の用意の段2）。

@@ -21,7 +21,7 @@ type directChatSetupFailure struct {
 	Count int
 	// LastAt は最後に落ちた時刻である（次に試すまでの間隔の起点。設計 3-82c の門7）。
 	LastAt time.Time
-	// Reason は最後に落ちた理由の要約である（上限に達したときのコメントに載せる）。
+	// Reason は最後に落ちた理由の要約である（上限を超えたときのコメントに載せる）。
 	Reason string
 }
 
@@ -200,6 +200,20 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
+		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけをやり直す**（設計 3-82d の用意の段2）。
+		// 上限に届いた回の書き込み（`failDirectChatSetup`）が失敗しても、ここで次の巡回ごとに書き直す。
+		// 書けたらカードは direct chat から外れ、記録は候補から外れた巡回で消える。
+		if body, over := o.directChatSetupLimitBody(issue.ID); over {
+			o.logger.Debug("direct chat の用意の失敗が上限を超えているので、用意せず failure_state を書き直します",
+				"identifier", issue.Identifier, "上限", o.cfg.Agent.MaxRetries)
+			o.clearGate(issue.ID)
+			o.wg.Add(1)
+			go func(issue tracker.Issue) {
+				defer o.wg.Done()
+				o.writeDirectChatFailure(ctx, issue, body)
+			}(issue)
+			continue
+		}
 		// 門7: 用意が直前に落ちてから、間隔が空いていない。
 		if wait, ok := o.directChatSetupBackoff(issue.ID); ok {
 			o.logger.Debug("direct chat の用意が直前に落ちたので、間隔を空けます",
@@ -357,6 +371,9 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 			"identifier", issue.Identifier, "状態", decided)
 		returned := current
 		returned.State = decided
+		// **控えの Status を戻った先へ書き換える。**控えは用意の段1 の `direct_chat_state` のままなので、
+		// 残すと `wakeRuns` がカードは direct chat だと読んで、次の巡回が取り直すまで送らない。
+		rs.setIssueState(decided)
 		o.writeRunningStateOnReturn(ctx, rs, returned)
 		o.postDirectChatHold(ctx, returned)
 		rs.setNeedsPrompt()
@@ -383,8 +400,8 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 // 1枚も無かった」場合だけなので（門4）、**閉じる相手は continuo がたったいま開いたものである。**
 //
 // **落ちたことを専用の記録へ数え、次に試すまで間隔を空ける**（門7）。
-// **通常の着手と同じ回数の上限（`agent.max_retries`）に達したら、書く経路で `failure_state` を書き、
-// 落ちた理由をコメントする**（人間が了承した形）。
+// **通常の着手と同じ回数の上限（`agent.max_retries`）を超えたら、書く経路で `failure_state` を書き、
+// 落ちた理由をコメントする**（人間が了承した形）。書けなかったら、門7 が次の巡回で書き直す。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 用意に失敗した run。
@@ -398,11 +415,33 @@ func (o *Orchestrator) failDirectChatSetup(ctx context.Context, rs *runState, is
 	rs.finishPreparing()
 	o.mu.Unlock()
 	o.abandonDirectChatSetup(ctx, rs)
-	if o.cfg.Agent.MaxRetries > 0 && count >= o.cfg.Agent.MaxRetries {
-		body := i18n.T(i18n.KeyOrchestratorDirectChatSetupLimit,
-			count, summaryLine(err.Error()), o.cfg.Tracker.DirectChatState, o.cfg.Tracker.FailureState)
+	if body, over := o.directChatSetupLimitBody(issue.ID); over {
 		o.writeDirectChatFailure(ctx, issue, body)
 	}
+}
+
+// directChatSetupLimitBody は、用意の失敗が上限を超えているかと、書く経路で issue へ書く文を返す（設計 3-82d）。
+//
+// **比べ方は通常の着手（`skipByFailure`）と同じ「回数が `agent.max_retries` を超えたら」である。**
+// `agent.max_retries: 0` なら1回目の失敗で超える。「達したら」にすると、0 のときに一度も書かれない。
+//
+// issueID: project item の ID。
+// 戻り値の1つ目: 書く経路で issue へ書くコメント。
+// 戻り値の2つ目: 上限を超えていれば true。
+func (o *Orchestrator) directChatSetupLimitBody(issueID string) (string, bool) {
+	o.mu.Lock()
+	note, ok := o.directChatSetupFailures[issueID]
+	var count int
+	var reason string
+	if ok {
+		count, reason = note.Count, note.Reason
+	}
+	o.mu.Unlock()
+	if !ok || count <= o.cfg.Agent.MaxRetries {
+		return "", false
+	}
+	return i18n.T(i18n.KeyOrchestratorDirectChatSetupLimit,
+		count, reason, o.cfg.Tracker.DirectChatState, o.cfg.Tracker.FailureState), true
 }
 
 // abandonDirectChatSetup は、用意した run の自分で開いた pane を閉じ、印を外す（設計 3-82d）。
@@ -578,22 +617,13 @@ func (o *Orchestrator) writeDirectChatAssigneeFailureAsync(ctx context.Context, 
 // issue: 対象の issue。
 // body: 書けたときに issue へ書くコメント（`<!-- continuo:self -->` は `postComment` が足す）。
 func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker.Issue, body string) {
-	options := o.tracker.StatusOptionNames()
-	if len(options) == 0 {
+	blocked, ok := o.statusesOtherThan(o.cfg.Tracker.DirectChatState)
+	if !ok {
 		o.logger.Warn("カンバンの Status の選択肢をまだ読めていないので、direct chat のカードへ failure_state を書けません"+
 			"（次の巡回でやり直します）",
 			"identifier", issue.Identifier)
 		return
 	}
-	blocked := make([]string, 0, len(options)+1)
-	for _, opt := range options {
-		if config.IsDirectChatState(o.cfg.Tracker, opt) {
-			continue
-		}
-		blocked = append(blocked, opt)
-	}
-	// **未設定（空）の Status へは書かない**（上の説明）。
-	blocked = append(blocked, "")
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.FailureState, blocked)
 	if err != nil {
 		o.logger.Warn("direct chat のカードへ failure_state を書けませんでした（次の巡回でやり直します）",
@@ -617,6 +647,33 @@ func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker
 	}
 }
 
+// statusesOtherThan は、`UpdateStatus` を許可リストとして使うための拒否リストを返す
+// （設計 3-82h の「書く経路」と 3-82g の `running_state` の書き込み）。
+//
+// **中身は、カンバンの選択肢のうち allowed 以外の全部と、空文字である。**`UpdateStatus` は書く直前に
+// 取り直した値と拒否リストを同じ正規化で比べるので、取り直した値が allowed のときだけ書く。
+// **空文字を足すのは、未設定（空）の Status へ書かないためである**（選択肢の一覧では表せない）。
+// 取り直しを1本増やさずに済む。
+//
+// allowed: 書いてよい、取り直した値。
+// 戻り値の1つ目: 拒否リスト。
+// 戻り値の2つ目: 選択肢の写しが空なら false（**呼び出し側は書かない**。起動直後に写しが取れていないとき）。
+func (o *Orchestrator) statusesOtherThan(allowed string) ([]string, bool) {
+	options := o.tracker.StatusOptionNames()
+	if len(options) == 0 {
+		return nil, false
+	}
+	want := strings.TrimSpace(allowed)
+	blocked := make([]string, 0, len(options)+1)
+	for _, opt := range options {
+		if strings.EqualFold(strings.TrimSpace(opt), want) {
+			continue
+		}
+		blocked = append(blocked, opt)
+	}
+	return append(blocked, ""), true
+}
+
 // letGoOfDirectChatAsync は、担当者が別の1人に替わった direct chat の run から手を離す
 // （設計 3-82h の「手を離す経路」）。
 //
@@ -632,6 +689,9 @@ func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker
 // rs: 対象の run（用意中ではないもの）。
 // issue: 取り直した issue。
 func (o *Orchestrator) letGoOfDirectChatAsync(ctx context.Context, rs *runState, issue tracker.Issue) {
+	// **送る印を先に下ろす**（turn の終わりが立てたもの。`decideAfterTurn` の direct chat の枝）。
+	// 残したまま印を下ろすと、`release` までの間に `wakeRuns` が人間の pane へ続きの指示を送る。
+	rs.takeNeedsPrompt()
 	// 段1。
 	rs.leaveDirectChatMode()
 	rs.resetStallClock(o.now())
@@ -783,7 +843,16 @@ func (o *Orchestrator) writeRunningStateOnReturn(ctx context.Context, rs *runSta
 	if !need {
 		return
 	}
-	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
+	// **書く直前に取り直した値が `dispatch_state` のときだけ書く（許可リスト）。**
+	// 拒否リスト（`protectedStates`）だけだと、書くまでの短い間に人間が `Blocked` などへ動かしたカードを
+	// `running_state` で上書きする（通常の着手の段2 が許可リストで守るのと同じ理由）。
+	blocked, ok := o.statusesOtherThan(o.cfg.Tracker.DispatchState)
+	if !ok {
+		o.logger.Warn("カンバンの Status の選択肢をまだ読めていないので、direct chat から戻った issue の Status を書けません（指示は送ります）",
+			"identifier", issue.Identifier, "書こうとした Status", target)
+		return
+	}
+	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, blocked)
 	switch {
 	case err != nil:
 		o.logger.Warn("direct chat から戻った issue の Status を書けませんでした（指示は送ります）",
@@ -908,6 +977,20 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 	rs.endTerminal()
 	o.release(rs)
 	return true
+}
+
+// cardInDirectChat は、run の控えの Status（最後に取り直したカードの Status）が `direct_chat_state` かを返す
+// （設計 3-82f）。
+//
+// **送る側（`wakeRuns` と turn ループの先頭）は、印（`inDirectChatMode`）とこれの両方で見る。**
+// 印を立てるのは巡回の段1 だけなので、turn の終わりが控えを `direct_chat_state` にしてから
+// 段1 が印を立てるまでの間（巡回の取り直しが失敗した・巡回の途中で turn が終わった）は、印だけでは当たらない。
+// **控えは作業中へ戻した巡回で `reconcileRunning` が上書きする**ので、戻したあとの送る道は塞がない。
+//
+// rs: 対象の run。
+// 戻り値: 控えの Status が `direct_chat_state` なら true。
+func (o *Orchestrator) cardInDirectChat(rs *runState) bool {
+	return config.IsDirectChatState(o.cfg.Tracker, rs.issue().State)
 }
 
 // addToCloseSet は、worktree を「agent 名を問わず閉じる worktree の集合」へ入れる（設計 3-82f）。

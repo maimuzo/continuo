@@ -295,12 +295,12 @@ const noticeMinAge = 60 * time.Second
 
 | どこ | 何が起きたか |
 | --- | --- |
-| [internal/orchestrator/dispatch.go:204](../../../internal/orchestrator/dispatch.go#L204) の `lookupRunByID` | 既に着手している |
-| [internal/orchestrator/dispatch.go:198](../../../internal/orchestrator/dispatch.go#L198) の `!containsFold(active_states, State)` | 人間が Status を動かした。**索引の反映が追いつくまでここへ落ち続ける** |
-| [internal/orchestrator/dispatch.go:225](../../../internal/orchestrator/dispatch.go#L225) の `skipByFailure` | 同じ理由で失敗し続けている |
-| [internal/orchestrator/dispatch.go:228](../../../internal/orchestrator/dispatch.go#L228) の `!issue.Dispatchable` | 未信頼のリポジトリである |
-| [internal/orchestrator/dispatch.go:245](../../../internal/orchestrator/dispatch.go#L245) の `missingRequiredLabels` | 必須のラベルが足りない |
-| [internal/orchestrator/dispatch.go:300](../../../internal/orchestrator/dispatch.go#L300) の `preflight` が偽 | 段0 で落ちた |
+| [internal/orchestrator/dispatch.go:251](../../../internal/orchestrator/dispatch.go#L251) の `lookupRunByID` | 既に着手している |
+| [internal/orchestrator/dispatch.go:269](../../../internal/orchestrator/dispatch.go#L269) の `!containsFold(active_states, State)` | 人間が Status を動かした。**索引の反映が追いつくまでここへ落ち続ける** |
+| [internal/orchestrator/dispatch.go:281](../../../internal/orchestrator/dispatch.go#L281) の `skipByFailure` | 同じ理由で失敗し続けている |
+| [internal/orchestrator/dispatch.go:285](../../../internal/orchestrator/dispatch.go#L285) の `!issue.Dispatchable` | 未信頼のリポジトリである |
+| [internal/orchestrator/dispatch.go:297](../../../internal/orchestrator/dispatch.go#L297) の `missingRequiredLabels` | 必須のラベルが足りない |
+| [internal/orchestrator/dispatch.go:345](../../../internal/orchestrator/dispatch.go#L345) の `preflight` が偽 | 段0 で落ちた |
 
 **それぞれの `continue` の直前に `o.clearGate(issue.ID)` を1行足す。**
 **`break`（空きスロット切れ）と `ctx.Err()` には足さない。**足すと v1 の穴が開く。
@@ -825,9 +825,9 @@ func (o *Orchestrator) GateViews() []GateView
 		})
 ```
 
-**先例の `RunView`（[internal/orchestrator/orchestrator.go:1513-1547](../../../internal/orchestrator/orchestrator.go#L1513-L1547)）は
+**先例の `RunView`（[internal/orchestrator/orchestrator.go:1519-1553](../../../internal/orchestrator/orchestrator.go#L1519-L1553)）は
 フィールドが全部値型で、スライスを1つも持っていない。**だから
-[internal/orchestrator/orchestrator.go:1413-1436](../../../internal/orchestrator/orchestrator.go#L1413-L1436) の `RunViews` は
+[internal/orchestrator/orchestrator.go:1558-1581](../../../internal/orchestrator/orchestrator.go#L1558-L1581) の `RunViews` は
 そのまま代入していて安全に成立している。**ここで初めてスライスが入る。**
 
 **`noteGate` の側も、受け取った `assignees` を写して持つ。**
@@ -1208,13 +1208,13 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 | **`FetchAllComments` の呼び出し元は2つだけである** | `grep -rn "FetchAllComments" --include="*.go" .`（`.claude/worktrees/` を除く）で、実装以外は [internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108) と [internal/orchestrator/handoff.go:759](../../../internal/orchestrator/handoff.go#L759)、interface が [internal/orchestrator/orchestrator.go:123](../../../internal/orchestrator/orchestrator.go#L123)、fake が [test/internal/orchestrator/helpers_test.go:1334](../../../test/internal/orchestrator/helpers_test.go#L1334) |
 | **担当者が2人以上の分岐は `viewerIdentity` より前にある** | [internal/orchestrator/handoff.go:78](../../../internal/orchestrator/handoff.go#L78) の `if len(logins) >= 2` に対し、[internal/orchestrator/handoff.go:95](../../../internal/orchestrator/handoff.go#L95) が `viewer, ok := o.viewerIdentity(ctx)` である。**だから 8-3 はこの分岐の中で自分で引く** |
 | **担当者が0人になっても、走っている run は止まらない** | [internal/orchestrator/handoff.go:742-754](../../../internal/orchestrator/handoff.go#L742-L754) が `if len(logins) == 0 { … return false, "" }` で「担当者が1人もいないだけでは止めない」と決めている |
-| **`handoffGate` へ届かない `continue` が5つある** | [internal/orchestrator/dispatch.go:307](../../../internal/orchestrator/dispatch.go#L307) の `decision := o.handoffGate(ctx, issue)` より前に、[:204](../../../internal/orchestrator/dispatch.go#L204)（`lookupRunByID`）・[:225](../../../internal/orchestrator/dispatch.go#L225)（`skipByFailure`）・[:228](../../../internal/orchestrator/dispatch.go#L228)（`!issue.Dispatchable`）・[:245](../../../internal/orchestrator/dispatch.go#L245)（`missingRequiredLabels`）・[:300](../../../internal/orchestrator/dispatch.go#L300)（`preflight`）がある |
+| **`handoffGate` へ届かない `continue` が5つある** | [internal/orchestrator/dispatch.go:353](../../../internal/orchestrator/dispatch.go#L353) の `decision := o.handoffGate(ctx, issue)` より前に、[:251](../../../internal/orchestrator/dispatch.go#L251)（`lookupRunByID`）・[:281](../../../internal/orchestrator/dispatch.go#L281)（`skipByFailure`）・[:285](../../../internal/orchestrator/dispatch.go#L285)（`!issue.Dispatchable`）・[:297](../../../internal/orchestrator/dispatch.go#L297)（`missingRequiredLabels`）・[:345](../../../internal/orchestrator/dispatch.go#L345)（`preflight`）がある |
 | **handoff の設定の検査は `validateHandoff` が持っている** | [internal/config/validate.go:720-742](../../../internal/config/validate.go#L720-L742) に5件あり、すべて `i18n.T(i18n.KeyConfigValidateHandoff*)` を引く。`trust.on_untrusted` の検査は [internal/config/validate.go:351-355](../../../internal/config/validate.go#L351-L355) にあり、**日本語を直に書いている**（形が違う） |
 | **`sort.Slice` は安定ではない** | [internal/server/view.go:142](../../../internal/server/view.go#L142) の `sort.Slice(runs, func(i, j int) bool { return runs[i].Identifier < runs[j].Identifier })` は鍵が一意なので成立している。**`Since` は一意ではない** |
 | **`polling.interval_ms` の既定は30000ミリ秒** | [internal/config/default.go:87](../../../internal/config/default.go#L87) の `IntervalMs: 30000`。**3回目の巡回はちょうど60秒後になり、`noticeMinAge` と同値である** |
 | **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:254-281](../../../internal/i18n/messages/ja.json#L254-L281)（ファイルは843行）、[internal/i18n/keys.go:1039-1092](../../../internal/i18n/keys.go#L1039-L1092) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2692](../../../internal/i18n/keys.go#L2692) 付近 |
 | **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:1055](../../../internal/orchestrator/lifecycle.go#L1055) の `func containsFold(states []string, target string) bool` |
-| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1513-1547](../../../internal/orchestrator/orchestrator.go#L1513-L1547) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1413-1436](../../../internal/orchestrator/orchestrator.go#L1413-L1436) の代入だけで写しが成立している** |
+| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1519-1553](../../../internal/orchestrator/orchestrator.go#L1519-L1553) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1558-1581](../../../internal/orchestrator/orchestrator.go#L1558-L1581) の代入だけで写しが成立している** |
 | **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:67-70](../../../internal/orchestrator/handoff.go#L67-L70) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
 | **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:374](../../../internal/server/server.go#L374) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
 | **コメントを書き換える経路も消す経路も無い** | 検索パターン `updateIssueComment` `deleteIssueComment` `minimizeComment` `UpdateComment` `DeleteComment` の5本を `grep -rniE` で束ね、対象 `internal/` と `cmd/`、commit 73fb41ae で `wc -l` が `0` |

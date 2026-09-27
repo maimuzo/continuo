@@ -418,21 +418,21 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 | どこ | いま何と比べているか |
 | --- | --- |
 | [internal/abandon/abandon.go:517-531](../../../internal/abandon/abandon.go#L517-L531) | 消す相手の issue の `Owner` / `Repo` |
-| [internal/orchestrator/restore.go:278-295](../../../internal/orchestrator/restore.go#L278-L295) | 身元ファイルの `issue_url` から取り出した `<owner>/<repo>` |
-| [internal/orchestrator/restore.go:311-321](../../../internal/orchestrator/restore.go#L311-L321) の `issueAgreesWithPath` | **取り直した issue の `Owner` / `Repo`**（[:671](../../../internal/orchestrator/restore.go#L671) と [:878](../../../internal/orchestrator/restore.go#L878) から呼ばれる） |
+| [internal/orchestrator/restore.go:282-302](../../../internal/orchestrator/restore.go#L282-L302) | 身元ファイルの `issue_url` から取り出した `<owner>/<repo>` |
+| [internal/orchestrator/restore.go:315-325](../../../internal/orchestrator/restore.go#L315-L325) の `issueAgreesWithPath` | **取り直した issue の `Owner` / `Repo`**（[:753](../../../internal/orchestrator/restore.go#L753) と [:975](../../../internal/orchestrator/restore.go#L975) から呼ばれる） |
 
 **変えかた。****照合を2段に分ける。**それぞれ、**その時点で手に入る材料だけ**を使う。
 
 | どこで | 何と何を比べるか |
 | --- | --- |
-| `pathAgrees`（[restore.go:277](../../../internal/orchestrator/restore.go#L277)。**段2**） | **パスの最下層のディレクトリ名**と、**身元ファイルが名乗る issue から作り直したスラグ** |
-| `issueAgreesWithPath`（[restore.go:311](../../../internal/orchestrator/restore.go#L311)。**段3のあと**） | **パスの2・3階層目**と、**トラッカーが答えたコードのリポジトリ** |
+| `pathAgrees`（[restore.go:281](../../../internal/orchestrator/restore.go#L281)。**段2**） | **パスの最下層のディレクトリ名**と、**身元ファイルが名乗る issue から作り直したスラグ** |
+| `issueAgreesWithPath`（[restore.go:315](../../../internal/orchestrator/restore.go#L315)。**段3のあと**） | **パスの2・3階層目**と、**トラッカーが答えたコードのリポジトリ** |
 
 **段2 でトラッカーを引くことはできない。**`pathAgrees` は `scanIdentities` の中で呼ばれ
-（[restore.go:221](../../../internal/orchestrator/restore.go#L221) の
+（[restore.go:225](../../../internal/orchestrator/restore.go#L225) の
 `owner, repo, ok := o.pathAgrees(w.Path, w.Identity)`）、
 **トラッカーの取り直し（段3 の `refetchByIdentities`）はその結果を入力に取る**
-（[restore.go:121-124](../../../internal/orchestrator/restore.go#L121-L124)）。
+（[restore.go:123-126](../../../internal/orchestrator/restore.go#L123-L126)）。
 **段2 で「トラッカーが答えたコードのリポジトリと比べる」と書くと、答えが1件も無いので
 cross-repo の worktree は毎回そこで落ち、一度も引き継がれない。**
 
@@ -452,7 +452,7 @@ cross-repo の worktree は毎回そこで落ち、一度も引き継がれな�
 **毎回「置き場所と違うリポジトリ」の WARN が出るだけで、一度も引き継がれない。**
 
 **取り直せなかった issue には、新しい落とし方を作らない。**段3 で取れなければ
-[restore.go:124](../../../internal/orchestrator/restore.go#L124) の `fetchFailed` が立ち、
+[restore.go:126](../../../internal/orchestrator/restore.go#L126) の `fetchFailed` が立ち、
 **いまも引き継ぎの判断へ進まない。**`issueAgreesWithPath` は呼ばれない。
 
 **身元ファイルの `code_repo`（11c）は照合に使わない。**エージェントが書き換えられるからである。
@@ -633,7 +633,7 @@ push 先を分けた worktree は永久に片付かない。**
 
 **どの段にも当たらない場合は無い。**段1が偽なら upstream の有無で段2・段3へ、
 そのどちらでもなければ段4へ落ちる。**段4を書かないと、base を復元できなかった worktree
-（[internal/orchestrator/restore.go:1290](../../../internal/orchestrator/restore.go#L1290) が
+（[internal/orchestrator/restore.go:1387](../../../internal/orchestrator/restore.go#L1387) が
 「`base` と `settings_path` は復元しない」と決めている）が、見送りの理由を1行も持たないまま
 片付けの対象になる。**
 
@@ -1074,7 +1074,7 @@ Development のリンクを1本にしてから、Status を Ready に戻して�
 鍵は identifier ＋ 理由、3回・60秒、メモリだけ）。
 **ここで3回・60秒を待つ意味は大きい。**カンバンの候補一覧は GitHub のサーバ側の検索結果であり、
 **索引の反映が遅れて1巡回だけ答えが揺れることがある**（3-34。
-[internal/orchestrator/dispatch.go:198-200](../../../internal/orchestrator/dispatch.go#L198-L200) が
+[internal/orchestrator/dispatch.go:266-267](../../../internal/orchestrator/dispatch.go#L266-L267) が
 「直前に書いた値が索引へ反映される前に取り直すと」と書いて、同じ揺れに守りを置いている）。
 **1回目で書くと、揺れただけの issue に誤った案内が付く。**
 

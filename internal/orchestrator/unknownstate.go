@@ -441,8 +441,9 @@ func (o *Orchestrator) rewriteAutomatedState(
 	if by == "" {
 		by = "(ログイン名を取れませんでした)"
 	}
-	// **`terminal_states` は渡す。**その issue を人間が「終わった」にしていたら、
+	// **`protectedStates()` を渡す。**その issue を人間が「終わった」にしていたら、
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
+	// **人間が `direct_chat_state` へ動かしていたときも書かない**（設計 3-82e の不変条件2）。
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
 	if err != nil {
 		// **枠を返す。**カンバンは動いていない（押し合いは起きていない）。
@@ -469,11 +470,13 @@ func (o *Orchestrator) rewriteAutomatedState(
 			"戻す先", target, "取り直した状態", moved.Previous)
 		if !moved.Reached {
 			if moved.Previous != "" {
-				// **人間が `terminal_states` へ動かしていたので断られた。**
+				// **人間が `terminal_states` か `direct_chat_state` へ動かしていたので断られた。**
 				// **これは「戻せなかった」に数えない。**数えると、
 				// 「カンバンから戻す先の選択肢が消えている」という的外れな案内が人間へ出る
 				// （`automatedStateHint` はその文面を出す前提でこの経路を除いている）。
-				// **終わった issue は、このあと終端の判定が拾う**（`rewriteAndDecide`）。
+				// **turn の終わりから来たときは、`rewriteAndDecide` が取り直した値で判定し直す。**
+				// 終わった issue は終端の判定が拾い、direct chat のカードは `decideAfterTurn` の direct chat の枝へ入る。
+				// 巡回から来たときは、次の巡回が取り直して同じ判定をする（direct chat なら段1 が引き取る）。
 				return moved, nil
 			}
 			// **item がもう見えない。**これは「戻せなかった」として数える。

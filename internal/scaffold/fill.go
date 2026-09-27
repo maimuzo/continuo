@@ -93,7 +93,7 @@ type Values struct {
 	// **空なら雛形の `repositories: []` をそのまま残す。**空の一覧を書き下すより、
 	// 何も拾えなかったことが見て取れる形のほうがよい。
 	Repositories []string
-	// Statuses は continuo の5つの役割へ割り当てたカンバンの Status の選択肢名である。
+	// Statuses は continuo の6つの役割へ割り当てたカンバンの Status の選択肢名である（direct chat は空でよい）。
 	//
 	// **決めるのは `continuo setup` だけである。**`continuo init` は空のまま渡すので、
 	// 雛形の既定値（`Ready` / `In Progress` / `In Review` / `Blocked` / `Done`）が残る。
@@ -440,7 +440,7 @@ func StatusKeyLine(key string, st Statuses) string {
 	return ""
 }
 
-// Statuses は continuo の5つの役割へ割り当てたカンバンの Status の選択肢名である。
+// Statuses は continuo の6つの役割へ割り当てたカンバンの Status の選択肢名である。
 //
 // **決めるのは `continuo setup` である**（利用者に番号で選ばせる）。
 // ここに値が揃っていると、TemplateWithValues が雛形の既定値

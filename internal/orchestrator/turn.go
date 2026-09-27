@@ -124,6 +124,15 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", rs.issue().Identifier)
 			return
 		}
+		// **控えの Status が `direct_chat_state` でも送らない**（`wakeRuns` と同じ理由。設計 3-82f）。
+		// 印はまだ立っていないので、**送る印を立て直してから抜ける。**起こされたときに `wakeRuns` が
+		// 下ろしているので、立て直さないと、作業中へ戻したときに指示が1つも届かない。
+		if o.cardInDirectChat(rs) {
+			o.logger.Info("カードが direct chat にあるので turn を送りません（作業中へ戻したら送ります）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+			return
+		}
 		// **待ちを打ち切るコンテキストが既に死んでいる**（direct chat へ入って、また抜けたあと）。
 		// **`leaveDirectChatMode` は新しいものを張るが、走っている turn ループはそれを読まない**
 		// （読むのは起動時の1回だけである）。このまま送ると、送る前に打ち切られて

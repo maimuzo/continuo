@@ -204,8 +204,8 @@ func (o *Orchestrator) rewriteAndDecide(
 		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
-		// **書きに行く直前のカンバンは `terminal_states` に入っていた。**
-		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
+		// **書きに行く直前のカンバンは `terminal_states` か `direct_chat_state` に入っていた**（`protectedStates`）。
+		// 人間が「終わった」にしたか、引き取ったということなので、**その値で判定し直す。**
 		next = moved.Previous
 	}
 

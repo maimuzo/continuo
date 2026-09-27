@@ -21,7 +21,7 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 - **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
 - **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR` — read [Before you start](#before-you-start)
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
-- **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
+- **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to six roles (the sixth, direct chat, can be skipped)
 - **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
 
 ## How the kanban board drives it
@@ -154,7 +154,7 @@ continuo init      # writes WORKFLOW.md and continuo-ci.yaml; owner and kanban b
 **Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the kanban board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
 
 ```bash
-continuo setup                    # map your Status options to the five roles (interactive)
+continuo setup                    # map your Status options to six roles (interactive; the sixth can be skipped)
 continuo trust --dry-run          # show what would be trusted, without doing it
 continuo trust                    # trust those repositories; clone them if needed
 continuo allow-keychain-access    # macOS only, once — lets continuo read your plan's usage
