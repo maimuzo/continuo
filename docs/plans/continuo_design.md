@@ -1256,7 +1256,7 @@ UUID が無ければ採番）。`人間に判断を渡す` の段2 と段3 も�
 5b. **引き継いだ回数の上限を見る。**turn を送る前に判定する
    → 上限（agent.max_takeover。既定5）に達していれば、failure_state へ落として pane を閉じる（Status が direct_chat_state なら、落とさず閉じない。3-82j）。
      worktree は残し、印からも外す。**NeedsPrompt を立てない**（無駄な turn を1回も送らない）
-   → 達していなければ回数を1つ増やして身元ファイルへ書き戻す（**Status が direct_chat_state の run は、判定も増やすこともしない。**turn を送らないので引き継ぎを数える理由が無く、数えると長く direct chat に置いて再起動を重ねた run が、戻したあとの再起動で failure_state へ落ちる）
+   → 達していなければ回数を1つ増やして身元ファイルへ書き戻す
    → **回数を増やすのは、引き継いだときと再 dispatch したときの両方である**（3-18）
 5c. 引き継ぐと決めた run の runState を組み立てる。**turn は送らない**
    → **復元の手順の中で `agent.prompt` を呼んではならない。**wait つきの呼び出しは
@@ -8621,7 +8621,7 @@ GraphQL の答えで埋めると、**その取り直しが黙って止まる。*
 | いつ | どうするか |
 | --- | --- |
 | **dispatch の直前の検査**（信頼していないリポジトリ・worktree が使えない） | **持ち回りより先に行う。**担当者を1バイトも書かずに飛ばす |
-| **Status を書かなかった**（`ErrStatusNotWritten`） | 担当者を消し、released のコメントを1件書く。**取り直した Status が `tracker.direct_chat_state` なら消さない**（人間がこの機械の担当のまま引き取った。3-82c の門1 の表の下） |
+| **Status を書かなかった**（`ErrStatusNotWritten`） | 担当者を消し、released のコメントを1件書く。**バックオフを挟んだやり直し（`redispatch`）で、取り直した Status が `tracker.direct_chat_state` なら消さない**（人間がこの機械の担当のまま引き取った。3-82c の門1 の表の下）。入札した直後の着手では消す |
 | **hold のコメントを書けなかった**（`bidForIssue`。設計 3-77b） | 担当者を消し、released のコメントを1件書く。**着手しない** |
 
 **消し戻さないと、その issue は18時間塞がる。**担当者と hold だけが残った issue を、
@@ -9257,10 +9257,10 @@ candidates = FetchIssuesByStates(active_states ＋（実在すれば）direct_ch
 
 | 順 | 何をするか | 落とすと何が起きるか |
 | --- | --- | --- |
-| **1** | 取り直した Status が `direct_chat_state` なら、**担当者を 3-82h の判定の表で判定する。**表の順1（0人か2人以上）なら `failure_state` を書く。**印を持っていれば、あわせて direct chat の印も立てる**（書けるまでの巡回で turn を送らないため）。順2（ログイン名が取れない）と順4（自分1人）なら印を立てて戻る（用意の最中でも立てる）。順3（1人で自分ではない）なら手を離す。**書き込みと pane.close は巡回のループの外で行い、ここで決めるのは行と印の出入りだけである** | 巡回の `default` が pane を閉じ、印まで外す。**担当者を見ないと、複数台で見張っているときに、戻した瞬間に全台が同じ issue を進め始める** |
+| **1** | 取り直した Status が `direct_chat_state` なら、**担当者を 3-82h の判定の表で判定する。**表の順1（0人か2人以上）なら `failure_state` を書く。**印を持っていれば、あわせて direct chat の印も立てる**（書けるまでの巡回で turn を送らないため）。順2（ログイン名が取れない）と順4（自分1人）なら印を立てて戻る（用意の最中でも立てる）。順3（1人で自分ではない）なら手を離す（**用意中の run では印を下ろすだけにし、後始末は用意の段3 に任せる**。用意の段2 が使っている pane を閉じないため）。**書き込みと pane.close は巡回のループの外で行い、ここで決めるのは行と印の出入りだけである** | 巡回の `default` が pane を閉じ、印まで外す。**担当者を見ないと、複数台で見張っているときに、戻した瞬間に全台が同じ issue を進め始める** |
 | **2** | `direct_chat_state` **以外**なら、どの Status でも**抜けさせる**。**「用意中」の記録（3-82d の用意の段1）が立っている run では、direct chat の印を下ろし、見た Status を記録へ書くだけにする。**記録は巡回ごとに上書きし（`direct_chat_state` を見たときも書く）、見た時刻を持つ。段3・段4・段5・`running_state` の書き込み・hold は、用意の段3 に任せる（3-82d の外れ方の表）。**この判定と用意の段3 の判定は、同じロック（`o.mu`）の中で行う**（非同期の値を巡回が読む隙間を作らないため） | **抜ける判定を「`active_states` へ戻ったとき」に絞ってはならない。**絞ると `Done` へ動かしたときに印が立ったままになり、`stopWorker` の門が pane を守り続けて**worktree も片付かない** |
 | **3** | 抜けたら、**捨てるもの3つと時計1つ**を処理する（3-82i）。**抜けた先が `terminal_states` なら「direct chat から直接抜けた」印を立てる**（3-82g）。**段1 で direct chat へ入れるときに下ろす**（打ち切りで run が続いたあと、後の正常な終わりで成果のコメントの確認を飛ばさないため） | 3-82i を見よ |
-| **4** | 抜けた先が `active_states` なら、**続きの指示を送る印を、巡回のループの外の後始末（`agent.get`・`running_state` の書き込み・hold）が終わってから立てる**。立つのは次の巡回である（3-82g） | 3-82g を見よ |
+| **4** | 抜けた先が `active_states` なら、**続きの指示を送る印を、巡回のループの外の後始末（`running_state` の書き込み・hold）が終わってから立てる**。立つのは次の巡回である。**送る直前に `agent.get` で応答を書いている最中かを見る**（3-82g） | 3-82g を見よ |
 | **5** | そのあとで `switch` へ落とす。**Status が `direct_chat_state` の run と、「用意中」の run は、`switch` へ入れずに次の候補へ移る**（用意中の run の後始末は用意の段3 が行う。落とすと、作りかけの worktree で `after_run` と片付けが走る） | 3-82f を見よ |
 
 **印を持つ run が direct chat へ入る入口は、この段1 のほかに2つある**（用意の段3・復元の段5a）。**そこで入れたあとは、次の巡回の段1 が同じ判定の表を当てる。**用意の段3 は担当者を見て入れ、復元の段5a は見ずに入れる。**`decideAfterTurn` の枝（3-82f）は direct chat へ入れない。**turn の後始末をせずに戻るだけで、入れるのは次の巡回の段1 である。
@@ -9408,7 +9408,7 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 
 **合わせて最大5分半で pane ができる。**
 
-**段4 で担当者を消し戻してはならない。**いまの着手の段2 は、`ErrStatusNotWritten` のとき `handoffAcquired` を見て `undoHandoffAcquire` を呼ぶ（`internal/orchestrator/dispatch.go`）。`handoffAcquired` は下ろす場所が無いので、バックオフを挟んでも真のままである。**消すと担当者が0人になり、次の巡回で 3-82h の順1 に当たって `failure_state` へ落ち、「担当者を1人に」という事実と違うコメントが残る。**だから、**取り直した Status が `direct_chat_state` なら消し戻さない**（人間がこの機械の担当のまま引き取ったので、次の巡回で用意する）。3-77g の表にも同じ例外を書く。**`handoffAcquired` を下ろす時機は変えない。**変えると direct chat 以外の run でも消し戻さなくなり、着手しなかった issue を別の機械が18時間触れなくなる（3-77g）。
+**段4 で担当者を消し戻してはならない。**いまの着手の段2 は、`ErrStatusNotWritten` のとき `handoffAcquired` を見て `undoHandoffAcquire` を呼ぶ（`internal/orchestrator/dispatch.go`）。`handoffAcquired` は下ろす場所が無いので、バックオフを挟んでも真のままである。**消すと担当者が0人になり、次の巡回で 3-82h の順1 に当たって `failure_state` へ落ち、「担当者を1人に」という事実と違うコメントが残る。**だから、**バックオフを挟んだやり直し（`redispatch`）で、取り直した Status が `direct_chat_state` なら消し戻さない**（人間がこの機械の担当のまま引き取ったので、次の巡回で用意する）。**入札した直後の着手では消し戻す。**入札の窓（既定3分）のあいだに人間が担当者を付けずに動かしたなら、担当者0人として 3-82h の順1 に乗るのが人間の決定どおりで、消さないと入札に勝った別の人の PC に pane ができる。着手の段2 は、取り直した Status を `ErrStatusNotWritten` と一緒に呼び出し元へ返す（いまは返していない）。3-77g の表にも同じ例外を書く。**`handoffAcquired` を下ろす時機は変えない。**変えると direct chat 以外の run でも消し戻さなくなり、着手しなかった issue を別の機械が18時間触れなくなる（3-77g）。
 
 **ただし段2 と段3 のあいだに `preflight` が1つ入る。**落ちると `clearBackoff` の手前で戻るので、
 **段3 へ進まず、印も外れない。**
@@ -9455,7 +9455,7 @@ direct chat は完全に手動の操作なので、**カードを動かした人
 | --- | --- |
 | **1** | **印を付け、「用意中」の記録を立てる**（着手の段1）。**閉じる集合（3-82f）にその worktree があれば外す。****`claimForDispatch` ではなく `o.claim` を直に呼ぶ。**あれは印を付けたあとに写しの Status を `running_state` へ書き換えるので、**引数を外すとその1行が無条件になる。****写しの Status は書き換えない**（下） |
 | **2** | **着手の段3〜段10 を踏む**（**着手の段2 と段11 は踏まない**）。**`startRunFromWorktree` は `SendFirstPrompt` を立てるが、用意中のあいだは `wakeRuns` が送らない**（下ろすか送るかは用意の段3 が決める）。落ちたら、自分が開いた pane を pane ID で閉じ、印を外す。**カンバンへは書かない。**あわせて、落ちたことを **direct chat の用意専用の記録**へ数え、次に試すまで通常の着手のバックオフと同じ計算の間隔を空ける（3-82c の門7）。**通常の着手の失敗の記録（`noteFailure`）とは混ぜない。**混ぜると、通常の着手で失敗が積もった issue（人間がまさに引き取りたいもの）が、用意の1回の失敗で上限を超えて `failure_state` へ落ちる。**通常の着手と同じ回数の上限（`agent.max_retries`。既定3）に達したら、3-82h の「書く経路」で `failure_state` を書き、落ちた理由をコメントする**（人間が了承した形）。専用の記録は、用意が成功したときと、direct chat の1パスが走った巡回でその issue が候補に無かったときに消す。落ちるたびに WARN を1行出す |
-| **3** | **カードを取り直し、`o.mu` を取ってから「用意中」を下ろす。**同じロックの中で、自分の取り直しと、巡回が用意中に書いた記録（3-82b の段2）のうち、**見た時刻が新しいほうの Status** で判定する。**印がまだこの run のもの（終わっていない）か、その Status がまだ `direct_chat_state` か、担当者がまだ自分1人かを確かめてから**（自分のログイン名が取れないときは、3-82h の順2 の「印を持っている機械」と同じく入れる）、direct chat へ入れ、`SendFirstPrompt` を下ろし、issue へ1件書く（下）。**hold のコメントはここでは書かない**（3-82h。戻したときに書く） |
+| **3** | **カードを取り直し、`o.mu` を取ってから「用意中」を下ろす。**同じロックの中で、自分の取り直しと、巡回が用意中に書いた記録（3-82b の段2）のうち、**見た時刻が新しいほうの Status** で判定する。**印がまだこの run のもの（終わっていない）か、その Status がまだ `direct_chat_state` か、担当者がまだ自分1人かを確かめてから**（自分のログイン名が取れないときは、3-82h の順2 の「印を持っている機械」と同じく入れる）、direct chat へ入れ、`SendFirstPrompt` を下ろし、issue へ1件書く（下）。**ロックの中で行うのは、判定と印の出し入れだけである。**issue への書き込み・`running_state`・hold・`pane.close` はロックを放してから行う（GitHub が遅い日に巡回を止めないため。3-8）。**hold のコメントはここでは書かない**（3-82h。戻したときに書く） |
 
 **用意の段3 に門を置く理由。**用意は最大2分かかり、巡回は30秒である。
 **その間に人間がカードを `Ready` か `In Progress` へ戻すことがある。**
@@ -9563,7 +9563,7 @@ sequenceDiagram
 | `o.dispatchBlockedStates()` | 1 | 着手の段2。**そちらへも `direct_chat_state` を足す**（下） |
 | `terminal_states` だけ | 1 | 復元の `to_dispatch_state`。**呼び出し元が `active_states` で絞っており、`direct_chat_state` は設定の検査が `active_states` と重ならないことを起動前に要求しているので、ここへは来ない** |
 | `nil` | 2 | `internal/abandon`。**いまの Status が direct chat なら起動前に断る**（3-82k）ので、`nil` を渡しても direct chat のカードへは届かない。断る検査を通ったあとでしか呼ばれないことが、`nil` でよい理由である |
-| **カンバンの選択肢のうち `direct_chat_state` 以外の全部** | 1 | **3-82h の書く経路。**拒否リストで「取り直した Status が `direct_chat_state` のときだけ書く」を表す（`UpdateStatus` は取り直した値が拒否リストにあると書かない）。選択肢の写しは `StatusOptionNames()`。**写しが空なら書かず、WARN を1行出す**（起動直後に写しが取れていないと、0人のカードが黙って残るため）。写しを取ったあとに足された選択肢へ人間が動かしていた場合は書いてしまう。受け入れる（選択肢を足したら continuo を再起動する、と FAQ に書く。3-82） |
+| **カンバンの選択肢のうち `direct_chat_state` 以外の全部** | 1 | **3-82h の書く経路。**拒否リストで「取り直した Status が `direct_chat_state` のときだけ書く」を表す（`UpdateStatus` は取り直した値が拒否リストにあると書かない）。**取り直した値が未設定（空）なら書かない**（拒否リストでは表せないので、この経路で別に見る）。選択肢の写しは `StatusOptionNames()`。**写しが空なら書かず、WARN を1行出す**（起動直後に写しが取れていないと、0人のカードが黙って残るため）。写しを取ったあとに足された選択肢へ人間が動かしていた場合は書いてしまう。受け入れる（選択肢を足したら continuo を再起動する、と FAQ に書く。3-82） |
 
 **9箇所のどれか1本でも渡し忘れると、人間が話している最中のカードが書き換えられ、次の巡回で pane が閉じる。**
 
@@ -9602,7 +9602,7 @@ issue に無駄なコメントが積まれ、その turn が「終わった」�
 | `failRun` | 失敗として落とす直前 |
 | `abandonRunClaimed` | 打ち切る直前 |
 
-**`stopAndReleaseAsync` は、その4本目である。**あちらは入口で断る。
+**`stopAndReleaseAsync` は、その4本目である。**あちらは入口で断る。**入口のあと goroutine の中で `after_run` → `stopWorker` → `release` と進むので、`release` の直前にも同じ打ち切りを置く。**
 **5本目は `stopForUnknownStateAsync`**（`Ice Box` などの知らない Status へ抜けた run を止める）。コメント → `after_run` → `stopWorker` → `release` と進むので、**上の3つと同じ打ち切りを、コメントの直前と `release` の直前に置く。**
 **6本目は `stopBecauseHandoffLost`**（担当を外されたとき）。**先に direct chat を抜けさせてから閉じる**（3-82h の手を離す経路の段1 と同じ）。担当者が別の人に替わっているので、人間が direct chat へ入れていても手を離すのが正しい。
 **このほかに、意図して印を外す道が2本ある**（用意が落ちたとき `failDirectChatSetup`・着手の段2 で取りやめたとき）。どちらも direct chat の run を守る必要が無い（前者は continuo が開いたばかりの pane、後者は pane がまだ無い）。
@@ -9611,12 +9611,12 @@ issue に無駄なコメントが積まれ、その turn が「終わった」�
 **その待ちのあいだに人間がカードを direct chat へ動かすのが、この機能のいちばん普通の使い方である**（エージェントが `blocked` を出した直後に、人間が引き取る）。
 **だから `abortTerminalForHuman` を、入口に加えて、長い待ちの中（`ensureAgentComment` の段5・段8 と `failCommentRecovery` の直前。下の表の `ensureAgentComment` の行）、長い待ちのあと（`ensureAgentComment` を抜けた直後）、`release` の直前にも呼ぶ。**
 **`postHandoffComment` の直前（`finishRunClaimed` は入口のあと `waitForBackgroundTasks` を待つ）と、`failCommentRecoveryBusy` の直前にも呼ぶ。**
-**当たったときの終え方は、その run の `PaneID` が空かどうかで分ける。コードの位置では分けない。**`stopWorker` は direct chat の印があると閉じずに戻り、実際に閉じたときだけ `PaneID` を空にするので、位置では pane の生死が決まらない。
+**当たったときの終え方は、その run の `PaneID` と、その pane で `agent.start` が済んでいるかで分ける。コードの位置では分けない。**`stopWorker` は direct chat の印があると閉じずに戻り、門を通ったときだけ `PaneID` を空にしてから閉じる（閉じ損ねても空のまま）。そのため、位置では pane の生死が決まらない。一方、`ensureAgentComment` の段4 と着手の段8 は `agent.start` の前に `PaneID` を立てるので、空でなくても Claude Code が居ないことがある。
 
 | 当たった時点 | どう終えるか |
 | --- | --- |
-| **`PaneID` が空でない**（pane が生きている。`stopWorker` を呼んでいない、門で止まった、または `ensureAgentComment` の段5 が立て直した） | **終わらせる処理をやめ、印を残す。**巡回が direct chat へ入れ、人間はその pane で話せる |
-| **`PaneID` が空**（この処理の `stopWorker` が実際に閉じた） | **Status を書かず、`after_run` を走らせず、コメントを書かず、印を外す**（閉じる pane はもう無い）。**印を残すと、pane の無い印になり誰も気づかない**（3-82j）。印を外せば、次の巡回で 3-82c が pane を用意し直す |
+| **`PaneID` が空でなく、その pane で `agent.start` が済んでいる**（`stopWorker` を呼んでいない、門で止まった、または `ensureAgentComment` の段5 が立て直した） | **終わらせる処理をやめ、印を残す。**巡回が direct chat へ入れ、人間はその pane で話せる |
+| **`PaneID` が空**（この処理の `stopWorker` が閉じた）、**または `agent.start` がまだ済んでいない**（continuo が開いたばかりのシェル） | **Status を書かず、`after_run` をまだ走らせていなければ走らせず、コメントを書かず、後者なら自分で開いた pane を ID で閉じてから、印を外す**。**印を残すと、pane の無い印になり誰も気づかない**（3-82j）。印を外せば、次の巡回で 3-82c が pane を用意し直す |
 
 **どちらでも、終端の権利（`claimTerminal` で取ったもの）を `endTerminal` で返す。**返さないと、そのあと終わらせる処理が永久に待ち、印と `agent.max_concurrent_agents` の枠が再起動まで残る。**`ensureAgentComment` の中で打ち切ったことは戻り値で返し、呼び出し元はそこで止まる。**
 
@@ -9637,9 +9637,9 @@ issue に無駄なコメントが積まれ、その turn が「終わった」�
 | `checkStalls` | 打ち切りは `failure_state` を書く |
 | `wakeRuns`（**担当の確認より前**） | あとに置くと、人間が自分を担当者に付けた瞬間に `stopBecauseHandoffLost` が走る |
 | `stopAndReleaseAsync` | 門は pane を守るが印は外れる |
-| **`reconcileRunning` の「issue がカンバンから見えなくなった」ループ**（`stopAndReleaseAsync` を呼ぶ手前） | **pane は上の行が守る。ここで見るのはログのためである。**あの WARN は「印から外します」と言い切っているので、**外さないのに出すと嘘になる** |
+| **`reconcileRunning` の「issue がカンバンから見えなくなった」ループ**（`stopAndReleaseAsync` を呼ぶ手前） | **pane は上の行が守る。ここで見るのはログのためである。**あの WARN は「印から外します」と言い切っているので、**外さないのに出すと嘘になる。****「用意中」の run はこのループでも飛ばす**（後始末は用意の段3 が行う。作りかけの worktree で `after_run` を走らせないため） |
 | **用意が落ちたとき**（`failDirectChatSetup`） | カンバンへ1バイトも書かず、自分が開いた pane を pane ID で直接閉じる。**`stopWorker` を通さない**（門で必ず止まるので、閉じられない） |
-| **印を持たない worktree の、agent 名の無い pane**（復元で取り直しに失敗したとき・direct chat で引き取れなかったとき・人間が手で Claude Code を起こしたとき） | **agent 名を問わず閉じる worktree の集合**をメモリに1つ持つ。入れるのは3つ。**復元で取り直しに失敗した worktree**（Status がまだ読めないので、その場では閉じない）と、**復元で herdr の一覧を取れなかった worktree** と、**`reconcileWorktrees` が見たときに、印を持たずに Status が `direct_chat_state` だった worktree**。**閉じる規則は1つで、印を持たない worktree にだけ当てる。**Status が `active_states` に戻っていたら、**その worktree の pane を agent 名の有無にかかわらず全部閉じてから**外す（3-9 の手順7b と同じ条件。`Ice Box` の猶予や、`In Review` で人間が分けたシェルには触らない）。それ以外の Status では、**閉じずに集合に残す**（外すと、agent 名の無い生きた pane が印も集合も無いまま残り、`Blocked` → `Ready` と動かしたときの着手がそこへ `agent.start` を送る）。**ほかに外すのは2つだけである。**`reconcileWorktrees` の走査にその worktree が出てこなくなったとき（片付け・`abandon`）と、**用意の段1 で印を付けたとき**（3-82d）。**閉じた worktree が direct chat の理由で入っていたなら、そのあとの着手で hold のコメントを書く**（3-82h。復元で引き取られなかった direct chat の run を長く使ってから戻すと、hold が古いまま別の機械に担当を外されるため）。**集合にあるあいだは、通常の候補のループ（`dispatchCandidates`）はその issue を飛ばす**（同じ巡回の着手が、閉じる前の pane へ `agent.start` を投げないため）。**direct chat の1パス（3-82b）は集合を見ない。**見ると、`Blocked` や `In Review` から入った issue（worktree が残り、印が無い）に pane が永久に来ない。**入れないと、**取り残しの処理（3-9 の手順7b）は agent 名の無い pane を飛ばすので、戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の入力欄へ `claude --resume …` を送る（direct chat を使わない run にも当たる）。**FAQ の「自分でその pane から `claude --resume` してください」は、3-82j の「pane が来ないときに人間がすること」を指す形に直す** |
+| **印を持たない worktree の、agent 名の無い pane**（復元で取り直しに失敗したとき・direct chat で引き取れなかったとき・人間が手で Claude Code を起こしたとき） | **agent 名を問わず閉じる worktree の集合**をメモリに1つ持つ。入れるのは3つ。**復元で取り直しに失敗した worktree**（Status がまだ読めないので、その場では閉じない）と、**復元で herdr の一覧を取れなかった worktree** と、**`reconcileWorktrees` が見たときに、印を持たずに Status が `direct_chat_state` だった worktree**。**閉じる規則は1つで、印を持たない worktree にだけ当てる。**Status が `active_states` に戻っていたら、**その worktree の pane を agent 名の有無にかかわらず全部閉じてから**外す（3-9 の手順7b と同じ条件。`Ice Box` の猶予や、`In Review` で人間が分けたシェルには触らない）。それ以外の Status では、**閉じずに集合に残す**（外すと、agent 名の無い生きた pane が印も集合も無いまま残り、`Blocked` → `Ready` と動かしたときの着手がそこへ `agent.start` を送る）。**ほかに外すのは2つだけである。**`reconcileWorktrees` の走査にその worktree が出てこなくなったとき（片付け・`abandon`）と、**用意の段1 で印を付けたとき**（3-82d）。**閉じ損ねたら WARN を1行出し、集合に残して次の巡回でやり直す**（黙って着手されない issue を作らないため）。**集合にあるあいだは、通常の候補のループ（`dispatchCandidates`）はその issue を飛ばす**（同じ巡回の着手が、閉じる前の pane へ `agent.start` を投げないため）。**direct chat の1パス（3-82b）は集合を見ない。**見ると、`Blocked` や `In Review` から入った issue（worktree が残り、印が無い）に pane が永久に来ない。**入れないと、**取り残しの処理（3-9 の手順7b）は agent 名の無い pane を飛ばすので、戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の入力欄へ `claude --resume …` を送る（direct chat を使わない run にも当たる）。**FAQ の「自分でその pane から `claude --resume` してください」は、3-82j の「pane が来ないときに人間がすること」を指す形に直す** |
 | **復元の引き渡しの通知**（`moveToFailure`） | **Status を書かないだけでは足りない。通知そのものを投稿しない。**pane を閉じない2つの道（herdr が `blocked` を返した／引き継いだ回数が上限）は、**`closePane` より先に `moveToFailure` を呼ぶ。**あれは Status が書けなくても通知を投稿する。**1本目は嘘を書く**（本文に「continuo が pane を閉じたので画面は残っていません」が入っている）。**2本目は、pane を閉じていないのに人間へ引き渡したと記録する。****どちらも、再起動のたびに1件積まれる。issue のコメントは消せない** |
 
 **hook の受け口へも流さない。**turn ループが居ないので読む者がおらず、
@@ -9749,7 +9749,7 @@ sequenceDiagram
     Note over C: worktree は残す
 ```
 
-**この後始末は巡回のループの外で行う。**`agent.get` を1本投げる。
+**この後始末は巡回のループの外で行う。**`agent.get` は、送る印が立った次の巡回で、送る直前に1本投げる（3-82b の段4）。
 **巡回の中で待つと、herdr が答えない日に stall 検知もレートリミットの取得も巡回ごと止まる。**
 同じ分岐の他の道も全部そうしている。
 **代償として、指示を送る印が立つのは次の巡回になる**（既定30秒）。
@@ -9804,7 +9804,7 @@ sequenceDiagram
 **コメントの文面**（i18n。角括弧は実際の値。本文の先頭の `<!-- continuo:self -->` は `postComment` が足す）。
 
 ```
-direct chat を始められませんでした。担当者が [人数] 人です（[担当者の一覧]）。
+direct chat を始められない（または続けられない）ので止めました。担当者が [人数] 人です（[担当者の一覧]）。
 direct chat を使うときは、担当者を1人だけにしてください。その1人は、pane を開きたい PC の continuo が使っている gh のアカウントです。
 担当者を直してから、Status を [direct_chat_state] へ戻してください。いまは [failure_state] へ動かしました。
 ```
@@ -9938,6 +9938,7 @@ direct chat の間は `checkStalls` を飛ばしているので、最後に見�
 | **同じ機械で書く経路が重なりうる** | 巡回が30秒より遅いと、前の巡回で立てた書く処理が終わる前に、同じカードへもう1本立つ。**取り直しの時点で先に書いた1本だけが `Wrote` を得るので、コメントが2件になるのは2本が同じ瞬間に取り直したときだけである。**重なり止めの記録は足さない（専用の台帳を足さない。3-82h の「塞がないもの」と同じ理由） |
 | **手を離す途中で担当者が自分へ戻ると、印が外れる** | 手を離す経路（3-82h）の片付けの途中で人間が担当者を自分へ戻すと、次の巡回で direct chat へ入り直す前に片付けが印を外す。**起きたらカードを1度動かせば、用意し直される**（3-82j の「pane が来ないときに人間がすること」の段2）。秒単位の窓であり、塞ぐには手を離す経路に新しい判定が要る |
 | **用意した直後、1度も話さずに戻すと、継続の指示だけが届く** | 用意の段3 で `SendFirstPrompt` を下ろすので、戻したときに送るのは継続の指示（5-4）である。**人間が話したかどうかは見ない**（見るには hook の受け口の解釈を変えることになる）。1回目の本文から始めたいときは、`Blocked` を経て `Ready` へ動かす（新しい着手になる） |
+| **direct chat に置いたまま再起動を重ねると、引き継いだ回数が上限に達しうる** | 復元は direct chat の run でも引き継いだ回数を数える（3-4 の段5b）。上限（`agent.max_takeover`。既定5）に達すると引き取らずに見送るので、戻したときに閉じる集合が pane を閉じ、1回目の本文（5-3）から始まる。**会話は `--resume` で残る。**再起動を5回重ねるのは稀なので受け入れる |
 | **turn 数は数え直さない** | 上限に達したまま戻した issue は、1回目の指示で `failure_state` へ落ちる。**人間が2回切り替えるだけで上限が外れる形にはしない。****そこから数え直したいときは、落ちた `failure_state` から `dispatch_state` へ動かす**（新しい着手として始まる）。**direct chat から直接 `dispatch_state` へ戻しても数え直されない。**印が外れていないためである |
 | **バックオフ待ちの run は守らない** | そこでは pane が既に閉じているので、守るものが無い。**`redispatch` の入口には検査を置かない**（3-82b）。**落ちるのは着手の段2 の取り直しで、そこで印が外れる**（3-82c の門1） |
 | **`agent.max_concurrent_agents` を1つ使い、自分では返さない** | pane で Claude Code が動くためである。**direct chat の run は自分では終わらないので、枠は人間がカードを戻すまで空かない。**既定は2なので、**1件置きっぱなしにすると通常の着手が半分になる。****枠が尽きて用意しなかったことを知らせる仕組みは作らない**（3-82c。人間の決定）。**人間が気づくのは、pane が来ないこと自体である** |
@@ -10261,7 +10262,7 @@ stateDiagram-v2
 | `Blocked` → `Ready` | 人間 | コメントで回答したとき | GitHub の画面 |
 | `In Review` → `Done` | 人間 | レビューを終えたとき | GitHub の画面 |
 | **どの Status** → `direct_chat_state` | 人間 | **pane に入って自分でチャットしたいとき**（3-82）。**6つのどこからでも動かせる。**動かした先で continuo は turn を送らず、表明も読まず、Status も動かさず（例外は担当者が1人でないときと用意の失敗が上限に達したとき。3-82h）、**pane も worktree も残す。****カンバンにこの選択肢を作ってあるときだけ使える。****pane を用意する条件は 3-82c が正である**（ここには書かない） | GitHub の画面 |
-| `direct_chat_state` → **どの Status** | 人間 | **切りがついて返すとき**（3-82）。**戻した先ごとに何が起きるかは 3-82g が正である**（ここには書かない）。`In Progress` と `Ready` へ戻すと**同じ pane・同じ会話のまま**続きの指示が飛ぶ | GitHub の画面 |
+| `direct_chat_state` → **どの Status** | 人間 | **切りがついて返すとき**（3-82）。**戻した先ごとに何が起きるかは 3-82g が正である**（ここには書かない）。`In Progress` と `Ready` へ戻すと、たいていは**同じ pane・同じ会話のまま**続きの指示が飛ぶ | GitHub の画面 |
 | `Ready`（人間が `direct_chat_state` から戻したもの）→ `In Progress` | **continuo** | 人間が `Ready` へ戻したとき（3-82g）。**着手待ちのまま走らせない**ため、continuo が `running_state` を書く | GraphQL |
 | `direct_chat_state` → `failure_state`（既定 `Blocked`） | **continuo** | **担当者が1人でないとき、または direct chat の用意の失敗が上限に達したとき**（3-82h）。取り直した Status が `direct_chat_state` のときだけ書き、実際に書いた機械がコメントを1件書く | GraphQL |
 
@@ -10588,10 +10589,12 @@ tracker:
   direct_chat_state: "Direct Chat"          # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
                                             # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
                                             # Status も動かさず、pane を閉じず worktree も消さない。
+                                            # 動かす前に、issue の担当者を、pane を開きたい PC の continuo の
+                                            # gh のアカウント1人だけにすること。0人か2人以上だと failure_state へ動かして知らせる。
                                             # pane がまだ無ければ、ここで1つ用意する
                                             # （continuo がその issue をまだ抱えていないときだけ。
                                             #   やり直し待ちの issue も「抱えている」に入る）。
-                                            # 上の active_states へ戻すと、同じ pane・同じ会話のまま続きの指示を送る。
+                                            # 上の active_states へ戻すと、たいていは同じ pane・同じ会話のまま続きの指示を送る。
                                             # 使うには、カンバンの画面で Status の選択肢をこの名前で1つ足すこと
                                             # （API で足すと設定済みの Status が全部消える）。
                                             # 足すまでは、この機能が使えないだけで、他は何も変わらない。
