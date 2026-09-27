@@ -2691,13 +2691,29 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-27 00:20 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-27 22:40 (JST) 時点）
 
-2026-09-27 00:08 (JST) に、GitHub App も AI 専用のアカウントもやめて、本文の先頭の HTML コメントで見分ける案を比較するよう求められた。比べた結果と2つの質問を1件のコメントにまとめた（https://github.com/maimuzo/continuo/issues/245#issuecomment-5847363267 ）。**答えをいただくまで、6 の書き直しにもレビューにも進まない。**
+2026-09-27 21:54 (JST) に、メタデータで見分ける方法の徹底的な再調査・continuo read-issue の要否・人間が起動した Claude Code の扱い・Claude Code の mod の検討を求められた（検討だけ。実装はまだ）。答えと3つの質問を1件のコメントにまとめた（https://github.com/maimuzo/continuo/issues/245#issuecomment-5856113925 ）。**答えをいただくまで、6 の書き直しにもレビューにも進まない。**
 
-**確かめたこと（2026-09-27 00:10 (JST)）。**main の continuo専用プロンプトで、continuo が起動した Claude Code が issue へ書く5つの見本（計画・成果・途中経過・まとめて直したとき×2）は、どれも本文の1行目に `<!-- continuo:agent -->` か `<!-- continuo:group -->` を持つ。Go のコードに、`<!-- continuo:` の前置きだけで判定している箇所は無い（`leadingMarkersInclude` は特定の印があるかだけを見る）。
+**確かめたこと（2026-09-27 22:00〜22:35 (JST)）。**
+
+| 何 | 結果 | 確かめた手段 |
+| --- | --- | --- |
+| メタデータで「アプリ経由」と分かる欄 | GitHub App の `performed_via_github_app` だけ。GitHub の文書 Deciding when to build a GitHub App の原文「Unlike OAuth apps, which don't indicate that the action was performed by the app, GitHub Apps indicate that the action was performed by the app on behalf of the user.」 | GitHub の文書 |
+| 欄の成り立ち | GitHub App の旧名 Integrations の時代の `performed_via_integration` を改名したもの。最初から GitHub App 専用 | https://developer.github.com/changes/11/ の原文 |
+| OAuth app のトークンの識別 | 「A user access token identifies the app as the user who signed into the app」 | GitHub の文書 Differences between GitHub Apps and OAuth apps |
+| この PC の gh のトークン | 接頭辞 `gho_`（OAuth app のトークン） | `gh auth status` |
+| `createdViaEmail` | 「Check if this comment was created via an email reply.」。人間のメールの返信でも立つので AI の印にならない | GraphQL の introspection |
+| 4-1 に jq で writer を付けられるか | 付けられる。issue #245 の161件で human 25・machine 136 | 読み取りの `gh issue view --json comments --jq` |
+| Claude Code の plugin marketplace | リポジトリの根の `.claude-plugin/marketplace.json` で成る。`claude plugin marketplace add <owner>/<repo>` で登録 | Claude Code の文書 Create a marketplace |
+| herdr のスキルの配り方 | `skills/herdr/SKILL.md` と `npx skills add` と `herdr --skill`。marketplace は使っていない | herdr のリポジトリの文書 Agent skill file |
+| mod | `tool.call` をフックしてツールの引数を書き換えられる。Early Access | anthropics/claude-code の `mods/README.md` と型の定義 |
+| いまある PreToolUse の hook | `updatedInput` でツールの引数を置き換えられる | Claude Code の文書 hooks |
 
 | 何を | 提案 | 状態 |
 | --- | --- | --- |
-| 1. 本文の先頭の HTML コメントで見分ける案に切り替え、GitHub App の仕組みを消すか | 推奨は切り替える。忘れが起きうるのは人間が自分で起動した Claude Code だけで、悪意のある AI にはどの案も強くない。人間が画面で見分けられない・書き換えで印が消えうる、は受ける | 答え待ち |
-| 2. 人間が自分で起動した Claude Code の印の付け方 | 推奨は、利用者の CLAUDE.md へ決まりを1つ写してもらう（FAQ に例文）。印は `<!-- continuo:ai -->`（`<!-- continuo:agent -->` は continuo の成果の判定に使うので流用しない）。もう1つの道は gh wrapper で自動で差し込む | 答え待ち |
+| 1. 本文の先頭の HTML コメントに切り替え、GitHub App の仕組みを消すか | 推奨は切り替える | 答え待ち |
+| 2. 人間が起動した Claude Code のために、continuo のリポジトリに marketplace を置き、continuo 用のスキルを配るか | 推奨は配る（2026-09-25 22:18 (JST) の「プラグインは使いたくない」は、書き込みを止める hook を配る plugin についてと理解。違っていたら指摘をお願いした） | 答え待ち |
+| 3. 書き忘れを機械で塞ぐ hook（PreToolUse の hook か mod）を、いま足すか | 推奨はいまは足さずスキルだけ | 答え待ち |
+| continuo read-issue | 作らない。4-1 のコマンドに jq の式を足して writer を付け、判断基準は continuo専用プロンプトの 6-1 に書く | 提案 |
+| gh wrapper | 取り下げる（人間のご判断） | 決まり |
