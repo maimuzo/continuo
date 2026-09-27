@@ -296,6 +296,10 @@ const (
 	// KeyHandoffHoldStartingNoBranch は、branch の名前を組み立てられなかったときに
 	// hold のコメントの2行目に出る。
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
+	// KeyHandoffHoldDirectChatReturned は、direct chat から作業中の Status へ戻したときの hold の
+	// 人間向けの1行目に出る（設計 3-82h。自分のログイン名を差し込む）。
+	// **印と JSON は入札の hold と同じにする。**人間向けの文だけが違う。
+	KeyHandoffHoldDirectChatReturned Key = "handoff.hold.direct_chat_returned"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
@@ -621,6 +625,11 @@ const (
 	KeyDoctorStatusNamesDirectChatMissing Key = "doctor.status_names.direct_chat_missing"
 	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-82）。
 	KeyDoctorStatusNamesRemedyDirectChat Key = "doctor.status_names.remedy_direct_chat"
+	// KeyDoctorStatusNamesDirectChatConflict は tracker.direct_chat_state が他の役割と重なっているときに出る
+	// （設計 3-82k）。**重なった相手のキー名を埋める。**
+	KeyDoctorStatusNamesDirectChatConflict Key = "doctor.status_names.direct_chat_conflict"
+	// KeyDoctorStatusNamesRemedyDirectChatConflict はその直し方に出る（設計 3-82k）。
+	KeyDoctorStatusNamesRemedyDirectChatConflict Key = "doctor.status_names.remedy_direct_chat_conflict"
 	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-82）。
 	KeyCLISetupKeyNotWritten Key = "cli.setup.key_not_written"
 )
@@ -926,6 +935,12 @@ const (
 	// KeyAbandonErrParkDirectChat は `--park` にdirect chat の状態（tracker.direct_chat_state の値）が
 	// 指定されたときに出る。**そこへ動かすと継続監視は pane を1回も閉じない。**
 	KeyAbandonErrParkDirectChat Key = "abandon.err_park_direct_chat"
+	// KeyAbandonErrToDirectChat は `--to` に direct chat の状態（tracker.direct_chat_state の値）が
+	// 指定されたときに出る（設計 3-82k）。**次に continuo が起動したとき、消した worktree と pane を作り直す。**
+	KeyAbandonErrToDirectChat Key = "abandon.err_to_direct_chat"
+	// KeyAbandonErrCurrentDirectChat は、いまの Status が direct chat のときに出る（設計 3-82k）。
+	// **`--force` でも通さない。**印が永久に外れず、枠を1つ持ち続ける。
+	KeyAbandonErrCurrentDirectChat Key = "abandon.err_current_direct_chat"
 	// KeyAbandonErrUnknownState は `--to` や `--park` の値がカンバンの Status の
 	// 選択肢に無いときに出る。**worktree を消す前に出す。**
 	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
@@ -2407,6 +2422,19 @@ const (
 	// **これは失敗ではない。**受けた側は pane を閉じず、1回目の turn も送らずに、
 	// 走っている turn の終わりを待つ。
 	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
+	// KeyOrchestratorDirectChatReady は、direct chat の pane を用意したときに issue へ書く案内である
+	// （設計 3-82d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
+	KeyOrchestratorDirectChatReady Key = "orchestrator.direct_chat.ready"
+	// KeyOrchestratorDirectChatAssigneesInvalid は、direct chat のカードの担当者が1人ではないので
+	// failure_state へ動かしたときに issue へ書く（設計 3-82h）。人数・担当者の一覧・
+	// direct_chat_state・failure_state を差し込む。
+	KeyOrchestratorDirectChatAssigneesInvalid Key = "orchestrator.direct_chat.assignees_invalid"
+	// KeyOrchestratorDirectChatNoAssignees は、担当者の一覧が空のときに一覧の代わりに出る（設計 3-82h）。
+	KeyOrchestratorDirectChatNoAssignees Key = "orchestrator.direct_chat.no_assignees"
+	// KeyOrchestratorDirectChatSetupLimit は、direct chat の用意が上限まで続けて落ちたので
+	// failure_state へ動かしたときに issue へ書く（設計 3-82h）。回数・最後の理由・
+	// direct_chat_state・failure_state を差し込む。**担当者を直せとは書かない。**
+	KeyOrchestratorDirectChatSetupLimit Key = "orchestrator.direct_chat.setup_limit"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
 	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
 	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
@@ -2685,6 +2713,7 @@ var allKeys = []Key{
 	KeyHandoffHoldAssigned,
 	KeyHandoffHoldStarting,
 	KeyHandoffHoldStartingNoBranch,
+	KeyHandoffHoldDirectChatReturned,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
@@ -2812,6 +2841,8 @@ var allKeys = []Key{
 	KeySetupSummarySkipped,
 	KeyDoctorStatusNamesDirectChatMissing,
 	KeyDoctorStatusNamesRemedyDirectChat,
+	KeyDoctorStatusNamesDirectChatConflict,
+	KeyDoctorStatusNamesRemedyDirectChatConflict,
 	KeyCLISetupKeyNotWritten,
 	KeySetupPromptOptionsHeader,
 	KeySetupPromptOptionLine,
@@ -2941,6 +2972,8 @@ var allKeys = []Key{
 	KeyAbandonParkMoved,
 	KeyAbandonErrParkActive,
 	KeyAbandonErrParkDirectChat,
+	KeyAbandonErrToDirectChat,
+	KeyAbandonErrCurrentDirectChat,
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
@@ -3474,6 +3507,10 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorErrStartupBusy,
+	KeyOrchestratorDirectChatReady,
+	KeyOrchestratorDirectChatAssigneesInvalid,
+	KeyOrchestratorDirectChatNoAssignees,
+	KeyOrchestratorDirectChatSetupLimit,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonErrStartup,

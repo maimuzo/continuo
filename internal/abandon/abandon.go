@@ -702,15 +702,32 @@ func (r *runner) reportToSkipped() {
 // running: 継続監視が動いているか（park の先を確かめるかどうかがこれで決まる）。
 // 戻り値: 続けてよければ ExitOK、確かめられなかった場合・値が誤っている場合は ExitStopped。
 func (r *runner) verifyTargets(ctx context.Context, running bool) int {
+	// **direct chat が絡む3つは、`--force` でも通さない**（設計 3-82k）。
+	// **`--force` は「pane が生きていても片付ける」ための逃げ道であって、「印が残ったままでよい」という
+	// 意味ではない。****理由は3つとも別々なので、文面も3つに分ける。**1つの文言を使い回すと、
+	// `--to` を叩いた人が `--park` の説明を読むことになる。
+	//
+	// **いまの Status が direct chat のカードは断る。**片付けの段は `active_states` に無いカードへは
+	// park を書かないので、pane が消えるのを待つ段を通らず `--force` を求められる。
+	// **`--force` を付けると worktree は消えるが、カードは direct chat のままなので、巡回はその run を
+	// 毎回飛ばし、印は永久に外れない。**消えた worktree を指したまま `agent.max_concurrent_agents` の
+	// 枠を1つ持ち続け、ログにも issue にも何も出ない。
+	// **読めなかったときは、ここでは止めない**（あとの段がいままでどおり扱う）。
+	if strings.TrimSpace(r.cfg.Tracker.DirectChatState) != "" {
+		if state, _, ok := r.currentState(ctx); ok && config.IsDirectChatState(r.cfg.Tracker, state) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrCurrentDirectChat, state))
+			return ExitStopped
+		}
+	}
 	var targets []string
 	if target := strings.TrimSpace(r.opts.ToState); target != "" {
-		// **`--to` の先を direct chat の Status にしてはならない**（設計 3-82）。
-		// **`--park` と同じ理由である。**そこへ動かすと、次に continuo が起動したとき、
-		// **いま消したばかりの issue の worktree と pane を作り直す**
-		// （巡回が direct chat の候補として拾い、pane が無いので用意する）。
+		// **`--to` の先を direct chat の Status にしてはならない**（設計 3-82k）。
+		// 片付けは通るが、**次に continuo が起動したとき、いま消したばかりの issue の worktree と pane を
+		// 作り直す**（巡回が direct chat の候補として拾い、pane が無いので用意する）。
+		// 巡回のたびに作り直されるので、抜け出すにはカードを手で動かすしかない。
 		// **`running` かどうかに関わらず断る。**書き込むのは continuo が止まっていても同じである。
 		if config.IsDirectChatState(r.cfg.Tracker, target) {
-			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkDirectChat, target))
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrToDirectChat, target))
 			return ExitStopped
 		}
 		targets = append(targets, target)
@@ -721,7 +738,7 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkActive, park))
 			return ExitStopped
 		}
-		// **park の先をdirect chat の Status にしてはならない**（設計 3-82）。
+		// **park の先を direct chat の Status にしてはならない**（設計 3-82k）。
 		// **そこは「作業中の状態」ではないので上の検査を素通りするが、動かした先で
 		// continuo は pane を1回も閉じない。**この関数のあとに続く段1 の後半は
 		// 「その worktree を cwd に持つ pane が消えるまで待つ」ので、**待ち切れずに

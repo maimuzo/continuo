@@ -253,7 +253,7 @@ func Run(ctx context.Context, opts Options) Report {
 	// **Bootstrap は「設定に書いた名前がカンバンに在るか」しか見ない。**カンバンに
 	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
 	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
-	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
+	report.add(checkStatusNames(cfg, opts.ConfigPath, boardStates, boardResult.Symbol))
 
 	// 段5c: 対応表のキー。**同じ応答を使い回すので、ここでもリクエストは増えない。**
 	// **起動時の警告（tracker の missingRewriteKeys）は doctor には出てこない。**

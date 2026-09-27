@@ -141,6 +141,17 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		// **送信そのものが失敗したときの原因を握っておく。**握らないと、issue に
 		// 残す理由が「Stop hook が届かなかった」という別の話にすり替わる。
 		var sendErr error
+		// **direct chat から作業中の Status へ戻した run は、送る直前に応答を書いている最中かを見る**
+		// （設計 3-82b の段4・3-82g）。人間が話しかけた直後に戻すのは自然な操作で、そこへ投げると
+		// turn が混ざる（設計 3-4 の段5a2 が復元で同じ判断をしている）。
+		// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ1つも指示を受け取らない。
+		if !awaitFirst && rs.takeBusyCheckBeforeSend() {
+			if st, err := o.agentStatus(waitCtx, rs); err == nil && st == herdr.AgentStatusWorking {
+				o.logger.Info("direct chat から戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+					"identifier", snap.Identifier)
+				awaitFirst = true
+			}
+		}
 		if awaitFirst {
 			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
 			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
@@ -227,6 +238,14 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
 				// コメントも二重に投稿される（設計 3-21）。
 				o.logger.Debug("サブエージェントを待っている間に、別の経路が run を終わらせていました",
+					"identifier", snap.Identifier)
+				return
+			}
+			// **esc を送る直前に、direct chat への引き取りをもう1度見る**（設計 3-82f）。
+			// **送られた esc は取り消せない。**subagent を待つあいだ（最大 `claude.poll_wait_ms`）に
+			// direct chat へ入ると待ちがすぐ切れるので、ここで見ないと人間の画面へ esc が届く。
+			if rs.inDirectChatMode() {
+				o.logger.Info("サブエージェントを待っている間に人間が引き取ったので、esc を送りません（pane は閉じません）",
 					"identifier", snap.Identifier)
 				return
 			}

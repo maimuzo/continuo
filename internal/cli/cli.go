@@ -856,11 +856,13 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		}
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKey, k))
 	}
-	// **書けなかったキーは名指しで出す**（設計 3-82）。
+	// **書けなかったキーは名指しで出す**（設計 3-82k）。
 	// **黙って捨ててはならない。**利用者はその役割に答えている。
+	// **足す行の見本は、親のキーの下にそのまま貼れる形で出す**（`  direct_chat_state: "<選んだ値>"`）。
 	for _, k := range result.SkippedKeys {
 		fmt.Fprintln(stdout)
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupKeyNotWritten, k, result.Path, k))
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupKeyNotWritten,
+			k, result.Path, scaffold.StatusKeyLine(k, assignment.Statuses())))
 	}
 	return 0
 }

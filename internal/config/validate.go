@@ -613,53 +613,31 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 	return nil
 }
 
-// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-82）。
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-82k）。
 //
-// **空なら何も見ない。**空はこの機能を使わないという意味であり、
-// カンバンに選択肢を足す必要も無い（`KnownStates` も空を捨てる）。
+// **空なら何も見ない。**空はこの機能を使わないという意味である。
 //
-// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない。**
-// `validateAutomatedStateRewrite` が `NamedStates`（`KnownStates` を含む）に名前が
-// 出てくるキーを弾くので、**`direct_chat_state` と同じ名前をキーに書いた設定は、そちらで落ちる。**
-// **ここへ同じ検査を置いても、弾く相手が1件も残らない。**
+// **重なりを見る相手の一覧は `DirectChatConflicts` の1箇所だけに置く。**`continuo doctor` も同じものを読む。
+// 別々に持つと、どれか1つだけが古くなる。
+//
+// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-82k）。
+// `validateAutomatedStateRewrite` が弾くので、ここへ同じ検査を置いても弾く相手が1件も残らない。
+//
+// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-82j）。
+// 既定が非空なので、この機能を1度も頼んでいない人にも当たり、しかもその人の WORKFLOW.md に
+// 1行も書いていないキーの名前が出るためである。
 //
 // cfg: 検証する設定。
 // 戻り値: 重なっていれば理由付きのエラー。
 func validateDirectChatState(cfg *Config) error {
-	state := strings.TrimSpace(cfg.Tracker.DirectChatState)
-	if state == "" {
+	conflicts := DirectChatConflicts(*cfg)
+	if len(conflicts) == 0 {
 		return nil
 	}
-	// **重なった相手のキー名を必ず出す。**「重なっています」だけでは、どの行を直せば
-	// よいのかが分からない。**書いてある順に見る**（map を回さないので、同じ設定なら
-	// 毎回同じ行が返る）。
-	for _, conflict := range []struct {
-		key string
-		hit bool
-	}{
-		// 巡回の候補になるので、手を離した直後にまた着手する。
-		{"tracker.active_states", containsStateFold(cfg.Tracker.ActiveStates, state)},
-		// 完了として扱われ、worktree を片付けにいく。
-		{"tracker.terminal_states", containsStateFold(cfg.Tracker.TerminalStates, state)},
-		// 着手した直後にdirect chat へ入り、1回も turn を送れなくなる。
-		{"tracker.running_state", containsStateFold([]string{cfg.Tracker.RunningState}, state)},
-		// 着手待ちの issue が全部、人間が引き取っているものとして扱われる。
-		{"tracker.dispatch_state", containsStateFold([]string{cfg.Tracker.DispatchState}, state)},
-		// 打ち切った run の pane が閉じなくなり、`agent.max_concurrent_agents` の枠が空かない。
-		{"tracker.failure_state", containsStateFold([]string{cfg.Tracker.FailureState}, state)},
-		// エージェントが自分の表明1行でdirect chat へ入れてしまう（切り替えるのは人間である）。
-		{"tracker.status_signal_map", containsStateFold(sortedSignalTargets(cfg.Tracker.StatusSignalMap), state)},
-		// 人間がチャットしている worktree を片付けにいく。
-		{"cleanup.on_states", containsStateFold(cfg.Cleanup.OnStates, state)},
-	} {
-		if conflict.hit {
-			return invalidValueError(
-				"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
-				i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflict.key),
-			)
-		}
-	}
-	return nil
+	return invalidValueError(
+		"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
+		i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflicts[0]),
+	)
 }
 
 // containsStateFold は ss の中に target と同じ状態名があるかどうかを返す。

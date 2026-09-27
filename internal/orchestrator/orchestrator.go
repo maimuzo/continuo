@@ -406,6 +406,22 @@ type Orchestrator struct {
 	// 既に知らせたかどうかである（設計 3-82）。**1回だけ出す。**
 	// 選択肢は人間がカンバンを触ったときにしか増えないので、毎巡回で言い直す意味が無い。
 	directChatMissingNoted bool
+	// closeSet は「agent 名を問わず閉じる worktree の集合」である（設計 3-82f の表の最後から2行目）。
+	// **キーは project item の ID、値はその worktree の絶対パス。mu が守る。メモリだけに持つ。**
+	//
+	// **入れるのは3つである。**復元で取り直しに失敗した worktree・復元で herdr の一覧を
+	// 取れなかった worktree・`reconcileWorktrees` が見たときに印を持たずに Status が
+	// `direct_chat_state` だった worktree。
+	// **入れないと、**取り残しの処理（3-9 の手順7b）は agent 名の無い pane を飛ばすので、
+	// 戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の
+	// 入力欄へ `claude --resume …` を送る。
+	closeSet map[string]string
+	// directChatSetupFailures は、direct chat の用意（設計 3-82d の用意の段2）が落ちた記録である
+	// （キーは project item の ID。**mu が守る。メモリだけに持つ**）。
+	//
+	// **通常の着手の失敗の記録（`failures`）とは混ぜない。**混ぜると、通常の着手で失敗が積もった
+	// issue（人間がまさに引き取りたいもの）が、用意の1回の失敗で上限を超えて `failure_state` へ落ちる。
+	directChatSetupFailures map[string]*directChatSetupFailure
 	// quota は最後に読んだ枠の状態である。nil なら読めていない。
 	quota *ratelimit.Snapshot
 	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
@@ -561,15 +577,18 @@ func New(opts Options) (*Orchestrator, error) {
 		knownStateNames: knownStateNames,
 		configPath:      configPath,
 
-		runs:           map[string]*runState{},
-		sessions:       map[string]*runState{},
-		notified:       map[string]time.Time{},
-		labelSkipped:   map[string]struct{}{},
-		gated:          map[string]*gateNote{},
-		failures:       map[string]*failureNote{},
-		tokenLedger:    map[string]tokenLedgerEntry{},
-		shutdown:       shutdown,
-		shutdownCancel: shutdownCancel,
+		runs:         map[string]*runState{},
+		sessions:     map[string]*runState{},
+		notified:     map[string]time.Time{},
+		labelSkipped: map[string]struct{}{},
+		gated:        map[string]*gateNote{},
+		failures:     map[string]*failureNote{},
+		tokenLedger:  map[string]tokenLedgerEntry{},
+		closeSet:     map[string]string{},
+		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-82d）。
+		directChatSetupFailures: map[string]*directChatSetupFailure{},
+		shutdown:                shutdown,
+		shutdownCancel:          shutdownCancel,
 	}
 	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
 	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
@@ -695,7 +714,17 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	o.checkStalls(ctx)
 
 	if dispatchAllowed {
-		o.dispatchCandidates(ctx, candidates)
+		// **候補を2つに分ける**（設計 3-82b）。direct chat の候補は専用の1パスへ回し、
+		// `dispatchCandidates` へは1件も渡さない（あちらに direct chat の分岐を1つも持たせない）。
+		//
+		// **direct chat のパスを先に走らせる。**両方が `agent.max_concurrent_agents` の同じ枠を取るので、
+		// 後にすると、通常の候補が枠を埋めた巡回では、人間が名指しで頼んだ pane が1つもできない。
+		// **これは「返ってきた配列の順序をそのまま使う」（設計 4-2）の例外である。**
+		//
+		// **このパスも `dispatchAllowed` が真のときだけ走らせる。**この判断に例外を作らない（設計 3-82b）。
+		directChat, others := o.splitDirectChatCandidates(candidates)
+		o.prepareDirectChatPanes(ctx, directChat)
+		o.dispatchCandidates(ctx, others)
 	}
 
 	o.wakeRuns(ctx)
@@ -997,6 +1026,12 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		if rs.inDirectChatMode() {
 			continue
 		}
+		// **direct chat の pane を用意している最中の run も起こさない**（設計 3-82d の用意の段2）。
+		// 送るか下ろすかは用意の段3 が決める。**ここで担当を確かめ直すと、用意の段2 が使っている
+		// pane を `stopBecauseHandoffLost` が閉じうる。**
+		if rs.isPreparing() {
+			continue
+		}
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
@@ -1236,6 +1271,8 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	rs := newRunState(issue.ID, issue, now)
 	rs.AgentName = state.AgentName
 	rs.PaneID = state.PaneID
+	// **引き取った pane では Claude Code が起動済みである**（設計 3-82f。判断票6周目）。
+	rs.startedPaneID = state.PaneID
 	rs.SessionUUID = state.SessionUUID
 	rs.WorktreePath = state.WorktreePath
 	rs.Base = state.Base

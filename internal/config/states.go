@@ -1,8 +1,11 @@
 package config
 
 import (
+	"os"
 	"sort"
 	"strings"
+
+	"github.com/goccy/go-yaml"
 )
 
 // KnownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50 / 3-55）。
@@ -155,6 +158,79 @@ func RequiredBoardStates(cfg TrackerConfig) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// DirectChatConflicts は、`tracker.direct_chat_state` と同じ名前を書いている役割のキー名を返す（設計 3-82k）。
+//
+// **重なりを見る相手の7つの一覧は、この1箇所だけに置く。**起動時の検査（`Validate`）と
+// `continuo doctor` の `Status の名前` が同じものを読む。**別々に持つと、どれか1つだけが古くなる。**
+// `continuo setup` は新しい検査を持たない（既存の `takenBy` が6つの役割の重なりを断る）。
+//
+//	tracker.active_states              … 同じカードが「手を離す」と「着手する」の両方に当たる
+//	tracker.terminal_states            … 完了として扱われ、人間が話している worktree を片付けにいく
+//	tracker.running_state              … 着手した直後に direct chat へ入り、1回も turn を送れない
+//	tracker.dispatch_state             … 着手待ちの issue が全部、人間が引き取っているものとして扱われる
+//	tracker.failure_state              … 打ち切った run の pane が閉じなくなり、枠が空かない
+//	tracker.status_signal_map の遷移先 … エージェントが自分の表明1行で direct chat へ入れてしまう
+//	cleanup.on_states                  … 人間がチャットしている worktree を片付けにいく
+//
+// **`automated_state_rewrite` のキーは入れない。**そちらは `validateAutomatedStateRewrite` が弾く。
+//
+// **空なら何も返さない。**比べ方は SPEC.md 11.3 に合わせる（大文字小文字と前後の空白を無視する）。
+//
+// cfg: 設定。
+// 戻り値: 重なっている相手のキー名（上の表の順。重なりが無ければ空）。
+func DirectChatConflicts(cfg Config) []string {
+	state := strings.TrimSpace(cfg.Tracker.DirectChatState)
+	if state == "" {
+		return nil
+	}
+	var out []string
+	for _, c := range []struct {
+		key    string
+		values []string
+	}{
+		{"tracker.active_states", cfg.Tracker.ActiveStates},
+		{"tracker.terminal_states", cfg.Tracker.TerminalStates},
+		{"tracker.running_state", []string{cfg.Tracker.RunningState}},
+		{"tracker.dispatch_state", []string{cfg.Tracker.DispatchState}},
+		{"tracker.failure_state", []string{cfg.Tracker.FailureState}},
+		{"tracker.status_signal_map", sortedSignalTargets(cfg.Tracker.StatusSignalMap)},
+		{"cleanup.on_states", cfg.Cleanup.OnStates},
+	} {
+		if containsStateFold(c.values, state) {
+			out = append(out, c.key)
+		}
+	}
+	return out
+}
+
+// DirectChatConflictsInFile は、WORKFLOW.md の原文を読み直して `DirectChatConflicts` を当てる
+// （設計 3-82k。`continuo doctor` が使う）。
+//
+// **`Load` を通さない。**重なりがあると `Load` は検証でエラーを返すので、**重なりが無いときにしか
+// 動かない検査を、重なりのために置くことになる。**そこで front matter を検証せずに読み直す
+// （`internal/doctor/missing_keys.go` が同じ理由で原文を読んでいる）。
+// **未知のキーでは落とさない。**ここで知りたいのは Status の割り当てだけである。
+//
+// path: WORKFLOW.md のパス。
+// 戻り値の1つ目: 重なっている相手のキー名（`DirectChatConflicts` と同じ順）。
+// 戻り値の2つ目: 書いてある `tracker.direct_chat_state`（書いていなければ既定値）。
+// 戻り値の3つ目: 読めなかった理由。
+func DirectChatConflictsInFile(path string) ([]string, string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+	frontMatter, _, err := splitFrontMatter(string(raw))
+	if err != nil {
+		return nil, "", err
+	}
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal([]byte(frontMatter), cfg); err != nil {
+		return nil, "", err
+	}
+	return DirectChatConflicts(*cfg), cfg.Tracker.DirectChatState, nil
 }
 
 // IsDirectChatState は、その Status が「人間が pane で直接続けている」を表すかを返す（設計 3-82）。

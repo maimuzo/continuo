@@ -420,6 +420,26 @@ func StatusKeyNames() []string {
 	return out
 }
 
+// StatusKeyLine は、そのキーを WORKFLOW.md へ手で足すときの1行を返す（設計 3-82k）。
+//
+// **親のキーの下にそのまま貼れる形にする**（`  direct_chat_state: "Direct Chat"`）。
+// `tracker.direct_chat_state:` の形を見本にすると、貼った行が知らないキーになり、設定の読み込みが落ちる。
+// **値は `continuo setup` が書こうとした値そのもの**（飛ばしたなら `""`）である。
+//
+// key: `tracker.direct_chat_state` のようなドット区切りの名前（`StatusKeyNames` の1つ）。
+// st: 割り当て。
+// 戻り値: 貼れる1行。知らないキーなら空文字。
+func StatusKeyLine(key string, st Statuses) string {
+	for _, k := range statusKeys {
+		if strings.Join(k.path, ".") != key {
+			continue
+		}
+		indent := strings.Repeat("  ", len(k.path)-1)
+		return indent + k.path[len(k.path)-1] + ": " + k.value(st)
+	}
+	return ""
+}
+
 // Statuses は continuo の5つの役割へ割り当てたカンバンの Status の選択肢名である。
 //
 // **決めるのは `continuo setup` である**（利用者に番号で選ばせる）。

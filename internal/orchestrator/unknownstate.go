@@ -564,9 +564,19 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 		// **コメントを先に書く。**pane を閉じてから書くと、投稿に失敗したときに
 		// 「黙って止まった」状態がそのまま残る。
 		// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
+		//
+		// **コメントの直前と `release` の直前に、direct chat への引き取りを見る**（設計 3-82f）。
+		// この道も印を外す6本のうちの1本である。見ないと、後始末の最中に人間が direct chat へ動かしたとき、
+		// 事実と違うコメントが残り、印だけ外れる。
+		if o.abortTerminalForHuman(cleanupCtx, rs, reason) {
+			return
+		}
 		o.postHandoffComment(cleanupCtx, rs, reason, statusMove{})
 		o.runAfterRun(cleanupCtx, rs)
 		o.stopWorker(cleanupCtx, rs)
+		if o.abortTerminalForHuman(cleanupCtx, rs, reason) {
+			return
+		}
 		o.release(rs)
 	}()
 }

@@ -99,6 +99,8 @@ type adoption struct {
 //
 // **引き継げないと決めた run の pane は必ず閉じる**（設計 3-4）。巡回には
 // 「生きている pane を引き継ぐ」経路が無いので（3-16）、残すと2つ目が立つ。
+// **例外が2つある**（設計 3-4 の段3）。取り直しに失敗した run と、Status が `direct_chat_state` の
+// カードは閉じずに、閉じる集合（3-82f）へ入れる。**閉じる集合が、作業中の Status へ戻った巡回で閉じる。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // hs: hook の受け口。**nil を渡してはならない**（段5d で listen を始められない）。
@@ -125,7 +127,9 @@ func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResu
 
 	// 段4: herdr から pane と agent の一覧を取り、cwd と worktree のパスで突き合わせる。
 	m := o.matchPanes(ctx, candidates, discarded)
-	result.ClosedPanes = append(result.ClosedPanes, o.closeExtraPanes(ctx, m)...)
+	// **段3 で取り直した Status を渡す**（設計 3-82j）。Status が `direct_chat_state` の worktree と、
+	// 取り直しに失敗した worktree では、2枚目の pane を閉じない。
+	result.ClosedPanes = append(result.ClosedPanes, o.closeExtraPanes(ctx, &m, candidates, issues, fetchFailed)...)
 
 	// 段5〜5c: 引き継ぐかを決める。**turn は送らない。**
 	adoptions, noPane := o.decideAdoptions(ctx, candidates, issues, fetchFailed, m, result)
@@ -375,7 +379,7 @@ func splitOwnerRepo(raw string) (string, string, bool) {
 // candidates: 段2 で採った worktree。
 // 戻り値の1つ目: project item の ID から issue を引く写像。
 // 戻り値の2つ目: 取り直しそのものに失敗したら true（**起動は続ける。**
-// ただし引き継げないので、対応する pane は閉じる）。
+// ただし引き継げない。**対応する pane は閉じずに、閉じる集合へ入れる**。設計 3-4 の段3 の例外(1)）。
 func (o *Orchestrator) refetchByIdentities(
 	ctx context.Context,
 	candidates []restoreCandidate,
@@ -393,7 +397,7 @@ func (o *Orchestrator) refetchByIdentities(
 	issues, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, ids)
 	if err != nil {
 		o.logger.Warn(
-			"復元のための取り直しに失敗しました（起動は続けます。引き継げない run の pane は閉じます）",
+			"復元のための取り直しに失敗しました（起動は続けます。引き継げない run の pane は、Status が読めた巡回で扱います）",
 			"error", err, "count", len(ids))
 		return map[string]tracker.Issue{}, true
 	}
@@ -416,6 +420,14 @@ type paneMatch struct {
 	// **後勝ちで捨ててはならない。**捨てたほうを閉じずに残すと、設計が最も避けたい
 	// 「同じ worktree に Claude Code が2つ」がそのまま残る（設計 3-4 / 3-16）。
 	DuplicatePanes []herdr.Pane
+	// DuplicatesByWorktree は DuplicatePanes を worktree の絶対パスごとに引けるようにしたものである
+	// （設計 3-82j）。**direct chat の worktree では、引き継ぎの相手を agent 名を持つ pane に選び直す**ために要る。
+	DuplicatesByWorktree map[string][]herdr.Pane
+	// Unadoptable は、pane はあるが引き継がない worktree である（設計 3-82j。値は真）。
+	//
+	// **direct chat の worktree で、agent 名を持つ pane が1枚も無かったときに入れる。**
+	// 引き継がずに2枚とも残し、閉じる集合（3-82f）へ入れる。**「pane が無い」として段8 へ回さない。**
+	Unadoptable map[string]bool
 	// AgentByPane は pane の ID から agent を引く写像である（`agent.list` から作る）。
 	AgentByPane map[string]herdr.Agent
 	// Unknown は「突き合わせができなかった」ことを表す（`pane.list` か `agent.list` が失敗した）。
@@ -453,8 +465,10 @@ func (o *Orchestrator) matchPanes(
 	discarded []string,
 ) paneMatch {
 	m := paneMatch{
-		ByWorktree:  map[string]herdr.Pane{},
-		AgentByPane: map[string]herdr.Agent{},
+		ByWorktree:           map[string]herdr.Pane{},
+		DuplicatesByWorktree: map[string][]herdr.Pane{},
+		Unadoptable:          map[string]bool{},
+		AgentByPane:          map[string]herdr.Agent{},
 	}
 
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
@@ -522,8 +536,9 @@ func (o *Orchestrator) matchPanes(
 			}
 			m.ByWorktree[path] = keep
 			m.DuplicatePanes = append(m.DuplicatePanes, drop)
-			o.logger.Warn("同じ worktree に pane が2つあります（1つだけ引き継ぎ、残りは閉じます）",
-				"path", path, "引き継ぐ", keep.PaneID, "閉じる", drop.PaneID)
+			m.DuplicatesByWorktree[path] = append(m.DuplicatesByWorktree[path], drop)
+			o.logger.Warn("同じ worktree に pane が2つあります（1つだけ引き継ぎます）",
+				"path", path, "引き継ぐ", keep.PaneID, "引き継がない", drop.PaneID)
 			continue
 		}
 		if discardedResolved[resolvedCwd] {
@@ -549,10 +564,29 @@ func (o *Orchestrator) matchPanes(
 // **どちらも残してはならない。**巡回には「生きている pane を引き継ぐ」経路が無いので
 // （設計 3-16）、残すと2つ目が立ったままになる。
 //
+// **例外が2つある**（設計 3-82j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」）。
+//
+//	段3 の Status が `direct_chat_state` … 2枚目を閉じない。**引き継ぎの相手には agent 名を持つ pane を選ぶ**
+//	                                    （pane ID の小さいほうではない。小さいほうが人間のシェルだと、
+//	                                    引き継がれずに戻したとき Claude Code の pane が閉じ、シェルへ
+//	                                    `agent.start` が届きうる）。**agent 名を持つ pane が無ければ、
+//	                                    引き継がずに2枚とも残す**（`Unadoptable`）
+//	段3 の取り直しに失敗した            … 2枚目を閉じない（Status が読めないので、direct chat かどうかを
+//	                                    知る手立てが無い。閉じる集合が扱う）
+//
 // ctx: 呼び出しに適用するコンテキスト。
-// m: 段4 の突き合わせの結果。
+// m: 段4 の突き合わせの結果（**direct chat の worktree では、引き継ぎの相手を書き換える**）。
+// candidates: 段2 で採った worktree。
+// issues: 段3 で取り直した issue。
+// fetchFailed: 段3 の取り直しそのものに失敗したか。
 // 戻り値: 閉じた pane の ID。
-func (o *Orchestrator) closeExtraPanes(ctx context.Context, m paneMatch) []string {
+func (o *Orchestrator) closeExtraPanes(
+	ctx context.Context,
+	m *paneMatch,
+	candidates []restoreCandidate,
+	issues map[string]tracker.Issue,
+	fetchFailed bool,
+) []string {
 	var closed []string
 	for _, pane := range m.DiscardedPanes {
 		o.logger.Warn("同じ issue の2つ目の worktree に pane があったので閉じます（worktree は残します）",
@@ -561,11 +595,48 @@ func (o *Orchestrator) closeExtraPanes(ctx context.Context, m paneMatch) []strin
 			closed = append(closed, pane.PaneID)
 		}
 	}
-	for _, pane := range m.DuplicatePanes {
-		o.logger.Warn("同じ worktree に2つ目の pane があったので閉じます（worktree は残します）",
-			"pane_id", pane.PaneID, "cwd", pane.Cwd)
-		if o.closePane(ctx, pane.PaneID) {
-			closed = append(closed, pane.PaneID)
+	for _, c := range candidates {
+		drops := m.DuplicatesByWorktree[c.Path]
+		if len(drops) == 0 {
+			continue
+		}
+		if fetchFailed {
+			o.logger.Warn("取り直しに失敗したので、同じ worktree の2枚目の pane も閉じません（次の巡回で見ます）",
+				"identifier", c.Identity.IssueIdentifier, "path", c.Path)
+			continue
+		}
+		issue, found := issues[c.Identity.ProjectItemID]
+		if found && config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+			// **引き継ぎの相手を、agent 名を持つ pane に選び直す。**pane ID の昇順で最初のものを採る
+			// （`pane.list` が返す順に結果を依存させない）。
+			all := append([]herdr.Pane{m.ByWorktree[c.Path]}, drops...)
+			var keep *herdr.Pane
+			for i := range all {
+				if _, named := m.AgentByPane[all[i].PaneID]; !named {
+					continue
+				}
+				if keep == nil || all[i].PaneID < keep.PaneID {
+					keep = &all[i]
+				}
+			}
+			if keep == nil {
+				m.Unadoptable[c.Path] = true
+				o.logger.Warn("direct chat の worktree に pane が2枚以上ありますが、agent 名を持つものが無いので"+
+					"引き継がずに全部残します",
+					"identifier", c.Identity.IssueIdentifier, "path", c.Path)
+				continue
+			}
+			m.ByWorktree[c.Path] = *keep
+			o.logger.Info("direct chat の worktree の2枚目の pane は閉じません（人間が分けたシェルかもしれません）",
+				"identifier", c.Identity.IssueIdentifier, "path", c.Path, "引き継ぐ", keep.PaneID)
+			continue
+		}
+		for _, pane := range drops {
+			o.logger.Warn("同じ worktree に2つ目の pane があったので閉じます（worktree は残します）",
+				"pane_id", pane.PaneID, "cwd", pane.Cwd)
+			if o.closePane(ctx, pane.PaneID) {
+				closed = append(closed, pane.PaneID)
+			}
 		}
 	}
 	return closed
@@ -602,11 +673,19 @@ func (o *Orchestrator) decideAdoptions(
 		for _, c := range candidates {
 			o.logger.Warn("herdr の一覧を取れなかったので、この worktree は判断を保留します（次の巡回に委ねます）",
 				"identifier", c.Identity.IssueIdentifier, "path", c.Path)
+			// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-82f）。pane があるかも分からないので、
+			// Status が作業中へ戻った巡回で、agent 名を問わずその worktree の pane を閉じる。
+			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 		}
 		return nil, nil
 	}
 
 	for _, c := range candidates {
+		if m.Unadoptable[c.Path] {
+			// **引き継がずに pane を全部残し、閉じる集合へ入れる**（設計 3-82j）。段8 へは回さない。
+			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
+			continue
+		}
 		pane, alive := m.ByWorktree[c.Path]
 		if !alive {
 			noPane = append(noPane, c)
@@ -655,6 +734,9 @@ func (o *Orchestrator) decideOne(
 	if fetchFailed {
 		o.logger.Warn("取り直しに失敗したので引き継ぎません（pane も worktree も Status も残します。次の巡回で見ます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
+		// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-82f）。Status が読めた巡回で、
+		// 作業中の Status なら agent 名を問わず閉じ、それ以外なら閉じずに残す。
+		o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 		return adoption{}, false
 	}
 
@@ -672,20 +754,22 @@ func (o *Orchestrator) decideOne(
 		return adoption{}, false
 	}
 
-	// **direct chat のカードでは、この関数は pane を1枚も閉じない**（設計 3-82）。
+	// **Status が `direct_chat_state` のカードでは、この関数は pane を1枚も閉じない**（設計 3-4 の段3 の例外(2)・3-82j）。
 	//
-	// **閉じる道が、この関数の中だけで7つある。**socket のパスが変わった・agent 名が無い・
-	// セッション UUID が取れない・worktree が使えない・引き継ぎの上限、などである。
-	// **どれも「continuo が引き継げない」という意味であって、
-	// 「人間が話している画面を消してよい」という意味ではない。**
-	// **引き継げないときは、印に入れずに pane だけ残す。**
-	// 人間がカードを戻した巡回で、`reconcileWorktrees` が閉じ、着手が同じセッションへ
-	// `--resume` で立て直す（3-9 の手順7b）。
+	// **閉じずに見送る道は6つある。**socket のパスが前回と違う・agent 名が無い・セッション UUID を取れない・
+	// 確認の画面で止まっている・`agent_status` を判断できない・引き継いだ回数が上限。
+	// **コードの上では7つあるが、1つ目（`cleanup.on_states`）は設定の検査が起動前に断るので、
+	// direct chat では通らない。**
+	// **どれも「continuo が引き継げない」という意味であって、「人間が話している画面を消してよい」
+	// という意味ではない。****見送った pane は印に入れず、閉じる集合が扱う**（3-82f）。
+	// 人間がカードを作業中へ戻した巡回で、閉じる集合がその pane を閉じ、3-16 が同じセッションへ
+	// `--resume` で立て直す。会話は残るが、送るのは1回目の本文（5-3）になる。
 	directChat := config.IsDirectChatState(o.cfg.Tracker, issue.State)
 	closePane := func(reason string) {
 		if directChat {
-			o.logger.Warn("direct chat のカードなので pane は閉じません（引き継ぎはしません）",
+			o.logger.Warn("direct chat のカードなので pane は閉じません（引き継がず、閉じる集合へ入れます）",
 				"identifier", identifier, "理由", reason, "pane_id", pane.PaneID)
+			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 			return
 		}
 		o.closePaneInto(ctx, pane.PaneID, result)
@@ -776,6 +860,14 @@ func (o *Orchestrator) decideOne(
 		// （3-11 で実測。3/3）。**esc は送らない**（pane ごと閉じるので要求も消える）。
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
+		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-82f の表の最後の行）。
+		// Status を書かないだけでは足りない。この道の通知は「continuo が pane を閉じたので画面は
+		// 残っていません」と書いており、**pane を閉じないのに投稿すると嘘になる。**
+		// 再起動のたびに1件積まれ、issue のコメントは消せない。
+		if directChat {
+			closePane("確認の画面で止まっている")
+			return adoption{}, false
+		}
 		o.moveToFailure(ctx, issue,
 			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
 				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
@@ -800,6 +892,12 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("引き継いだ回数が上限に達したので引き継ぎません（無駄な turn を1回も送りません）",
 			"identifier", identifier,
 			"takeover_count", c.Identity.TakeoverCount, "max_takeover", o.cfg.Agent.MaxTakeover)
+		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-82f）。pane を閉じていないのに
+		// 人間へ引き渡したと記録することになる。**引き継がずに見送り、閉じる集合へ入れる**（設計 3-82j の代償の表）。
+		if directChat {
+			closePane("引き継いだ回数が上限に達した")
+			return adoption{}, false
+		}
 		o.moveToFailure(ctx, issue, fmt.Sprintf(
 			"continuo を再起動して同じ issue を引き継いだ回数が、上限の %d 回に達しました。"+
 				"**これ以上引き継いでも同じところで落ちる可能性が高い**ので、人間へ渡します。"+

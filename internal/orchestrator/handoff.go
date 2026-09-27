@@ -63,7 +63,7 @@ type handoffDecision struct {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手しようとしている issue。
 // 戻り値: 着手してよいか・この巡回で担当者になったか・この巡回を打ち切るか。
-func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, directChat bool) handoffDecision {
+func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) handoffDecision {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		// **draft issue にはコメントも担当者も書けない。**そもそも Dispatchable が偽なので
@@ -91,7 +91,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 	//
 	// **コメントの取得は issue 1件につき1本以上の GraphQL である。**候補が多いカンバンで
 	// 全件に掛けると、巡回1回のリクエストが候補の数だけ増える（設計 3-31）。
-	if len(logins) >= 2 && !directChat {
+	if len(logins) >= 2 {
 		o.logger.Warn("担当者が2人以上いるので触りません（人間が触っています）",
 			"identifier", issue.Identifier, "担当者の人数", issue.AssigneeCount,
 			"担当者", strings.Join(logins, ", "))
@@ -127,21 +127,11 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 		return handoffDecision{}
 	}
 
-	// **direct chat は、担当者が何人いても止まらない**（設計 3-82）。
-	// **上の「2人以上なら触らない」は、入札で issue を奪い合わないための規則である。**
-	// direct chat は入札しないので、当てる相手が無い。**当てると、既に continuo の
-	// 担当が付いている issue で人間が自分を足したときに、pane を得られなくなる。**
-	// **断るのは「別の機械が期限内で担当している」ときだけである**（下の分岐）。
-	//
 	// **入札できない機械は、担当者のいない issue のコメントを読まない**（設計 3-77a）。
 	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
 	bid, skip := o.evaluateBid()
-	// **direct chat では、レートリミットで落とさない**（設計 3-82。人間の決定）。
-	// この早い戻りは「入札できない機械は、担当者のいない issue のコメントを読まない」
-	// ためのものである。**direct chat はそもそも入札しないので、読まない理由が
-	// 「入札できないから」ではなくなる。**担当者の門を通すためにコメントは要る。
-	if !directChat && len(logins) == 0 && skip != handoff.SkipNone {
+	if len(logins) == 0 && skip != handoff.SkipNone {
 		o.logger.Debug("入札しません（この issue は他の機械に任せます）",
 			"identifier", issue.Identifier, "理由", skip.String())
 		return handoffDecision{}
@@ -178,35 +168,6 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 		Now:         o.now(),
 		IdleTimeout: o.handoffIdleTimeout(),
 	})
-
-	// **direct chat が断るのは「別の機械が期限内で担当している」ときだけである**（設計 3-82）。
-	//
-	// **入札もしないし、担当者も書かないし、期限切れの担当を外しもしない。**
-	// **書かない理由。**カンバンへの書き込みは、そのカードを `direct_chat_state` から
-	// 動かしうるうえ、担当を外すと**他の機械が入札で取りに来る。**
-	//
-	// **人間が付けた担当者では断らない。**人間が自分を担当者に付けるのは普通の操作であり
-	// （`wakeRuns` の分岐が同じことを書いている）、**自分の PC の前に座っている本人を
-	// 「他人の機械が面倒を見ている」と読んで pane を用意しないのは誤りである。**
-	// **人間の決定が防ぎたかったのは「入札して別の機械で direct chat が始まる」ことで、
-	// 入札はもう飛ばしている。**
-	if directChat {
-		switch assessment.Action {
-		case handoff.ActionSkipHeld:
-			o.logger.Info("別の機械が期限内で担当しているので、direct chat の pane を用意しません"+
-				"（その機械が用意します）",
-				"identifier", issue.Identifier, "担当者", assessment.Assignee,
-				"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
-			return handoffDecision{}
-		case handoff.ActionSkipSelfUnknown:
-			o.logger.Warn("gh の持ち主が分からないので、担当の付いた issue には触りません",
-				"identifier", issue.Identifier, "担当者", assessment.Assignee)
-			return handoffDecision{}
-		default:
-			// **担当者がいない・自分・人間が付けた・期限切れ、のどれでも進む。**
-			return handoffDecision{proceed: true}
-		}
-	}
 
 	switch assessment.Action {
 	case handoff.ActionProceed:
@@ -943,6 +904,10 @@ func (o *Orchestrator) logReleasedRecord(
 // newAccount: いま担当になっているアカウントのログイン名。
 // **呼び出し元は `verifyHandoff` が真を返したときだけここへ来る**ので、必ず1文字以上ある。
 func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newAccount string) {
+	// **先に direct chat を抜けさせてから閉じる**（設計 3-82f の印を外す道の6本目・3-82h の手を離す経路の段1）。
+	// 担当者が別の人に替わっているので、人間が direct chat へ入れていても手を離すのが正しい。
+	// **抜けさせないと `stopWorker` の門で止まり、pane を閉じずに印だけ外れる。**
+	rs.leaveDirectChatMode()
 	if !rs.claimTerminal(ctx) {
 		return
 	}
