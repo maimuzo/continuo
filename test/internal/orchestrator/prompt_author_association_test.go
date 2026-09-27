@@ -78,14 +78,14 @@ func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 	got := renderedPrompt(t)
 
 	wantEach := []string{
-		// issue のコメント。要素に authorAssociation が入る。
-		"gh issue view 188 --repo octocat/hello-world --json comments",
-		// issue の本文。立場は REST の author_association にしか無い。
-		"gh api repos/octocat/hello-world/issues/188 --jq '{author: .user.login, author_association: .author_association, body: .body}'",
+		// issue のコメント。要素に authorAssociation が入り、written_by と trusted_comment が足される（設計 3-82b）。
+		"gh issue view 188 --repo octocat/hello-world --json comments --jq '{comments: [.comments[] | ",
+		// issue の本文。立場は REST の author_association にしか無い。trusted_body が足される（設計 3-82b）。
+		"gh api repos/octocat/hello-world/issues/188 --jq '{author: .user.login, author_association: .author_association, trusted_body: ((.pull_request == null) and ",
 		// PR の説明。立場は REST の author_association にしか無い。
 		"gh api repos/octocat/hello-world/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association",
 		// PR の会話のコメント。要素に authorAssociation が入る。
-		"gh pr view <PR番号> --repo octocat/hello-world --json comments",
+		"gh pr view <PR番号> --repo octocat/hello-world --json comments --jq '{comments: [.comments[] | ",
 		// 行に紐づくレビューコメントと、レビューの判定。どちらもオブジェクトのまま出す。
 		"gh api repos/octocat/hello-world/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association",
 		"gh api repos/octocat/hello-world/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association",
@@ -228,11 +228,13 @@ const jqCommandCount = 4
 // jsonCommentsCommandCount は、**コメントを全件そのまま読ませる** `--json comments` の本数である
 // （issue のコメントと、PR の会話のコメント）。**この2本が authorAssociation を返す。**
 //
-// **`--jq` で絞り込む `--json comments` は、ここに数えない。**
+// **見分けるのは `written_by` を足しているかどうかである**（設計 3-82b）。
+// 全件を読む2本は、要素に `written_by` と `trusted_comment` を足す `--jq` を持つ。
 // 組み込みには、進捗の報告を書き足す先を1件だけ引く
-// `gh issue view … --json comments --jq '.comments[-1:][] …'` がある（設計 5-3j）。
+// `gh issue view … --json comments --jq '.comments[-1:][] …'` もある（設計 5-3j）。
 // **あれは投稿者の立場を1文字も読まないので、authorAssociation の綴りを教える役には立たない。**
 // **数に入れると、立場を読ませる場所が1つ減ったときに、この検査が気づかなくなる。**
+// `--jq` の有無では見分けられない。4本とも `--jq` を持つからである。
 const jsonCommentsCommandCount = 2
 
 // TestPrompt_jqが出すキーの名前を変えていない は、
@@ -314,10 +316,11 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(cmd, -1) {
 				produced[m[1]] = cmd
 			}
-		case strings.Contains(cmd, "--json comments") && !strings.Contains(cmd, "--jq"):
+		case strings.Contains(cmd, "--json comments") && strings.Contains(cmd, "written_by"):
 			// gh issue view / gh pr view の --json comments は authorAssociation で返す。
+			// 全件を読む2本は、要素を残したまま written_by と trusted_comment を足す（設計 3-82b）。
 			//
-			// **`--jq` で絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
+			// **絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
 			// コマンド（設計 5-3j）は、投稿者の立場を1文字も読まない。
 			produced["authorAssociation"] = cmd
 			jsonComments++
