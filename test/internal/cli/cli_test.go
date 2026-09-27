@@ -900,6 +900,51 @@ func TestRunSetup_必ず要る5つに答えればWORKFLOWmdへ書き込む(t *te
 	}
 }
 
+// TestRunSetup_direct_chat_stateが無いWORKFLOWmdでも止めず貼れる1行を出す は、設計 3-82k を確かめる。
+//
+// 目的: `tracker.direct_chat_state` はあとから足したキーなので、それより前に作った WORKFLOW.md には無い。
+// **書き込みを断らず、書けなかったことを名指しし、`tracker:` の下にそのまま貼れる1行を見本に出す。**
+// `tracker.direct_chat_state:` の形を見本にすると、貼った行が知らないキーになり、設定の読み込みが落ちる。
+// 与える情報: `direct_chat_state` の行を消した WORKFLOW.md と、6問すべてに答える入力。
+// 成功条件: 終了コードが 0 で、`  direct_chat_state: "<選んだ値>"` の行が出て、
+// `tracker.direct_chat_state:` の形の見本は出ないこと。
+func TestRunSetup_direct_chat_stateが無いWORKFLOWmdでも止めず貼れる1行を出す(t *testing.T) {
+	deps := cli.Deps{ScaffoldDetect: fixedDetection, SetupFetchStatusField: func(_ context.Context, _ setup.FetchOptions) (setup.StatusField, error) {
+		return setup.StatusField{
+			Name:    "Status",
+			Options: []string{"着手待ち", "作業中", "レビュー待ち", "保留", "完了", "手で話す"},
+		}, nil
+	}}
+
+	dir := writeWorkflowFor(t)
+	path := filepath.Join(dir, "WORKFLOW.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	var kept []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "direct_chat_state:") {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(kept, "\n")), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+
+	code, stdout, stderr := runCLIWith(deps, []string{"setup", dir}, "1\n2\n3\n4\n5\n6\n")
+	if code != 0 {
+		t.Fatalf("キーが無いだけで書き込みを断った: %d（stdout: %s / stderr: %s）", code, stdout, stderr)
+	}
+	if want := `  direct_chat_state: "手で話す"`; !strings.Contains(stdout, want) {
+		t.Errorf("tracker: の下に貼れる1行を出していない（%q が欲しい）: %s", want, stdout)
+	}
+	if strings.Contains(stdout, "tracker.direct_chat_state:") {
+		t.Errorf("貼ると知らないキーになる形の見本を出した: %s", stdout)
+	}
+}
+
 // TestRunTrust_登録の対象があれば書き込んで結果を出す は、`continuo trust` の本筋を確かめる。
 //
 // 目的: 未登録の項目があるとき、`Apply` を呼んで結果を報告すること。

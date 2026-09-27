@@ -199,6 +199,10 @@ type stubFixtureOptions struct {
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する
 	// （bubble の中では外部プロセスを起こせない）。
 	GHLogin func(ctx context.Context) (string, error)
+	// Tracker は使うテスト用トラッカー mock である。nil なら新しく作る。
+	//
+	// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-82h の書く経路）。
+	Tracker *fakeTracker
 }
 
 // newStubFixture は通信を行わない検査対象を組み立てる。
@@ -217,7 +221,10 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		status = herdr.AgentStatusIdle
 	}
 	stub := newStubHerdr(status)
-	ft := newFakeTracker(time.Now)
+	ft := opts.Tracker
+	if ft == nil {
+		ft = newFakeTracker(time.Now)
+	}
 
 	root := t.TempDir()
 	cfg := *config.DefaultConfig()

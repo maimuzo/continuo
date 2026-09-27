@@ -6,6 +6,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // humanState は、この検査で「人間が引き取っている」を表す Status である。
@@ -20,19 +22,56 @@ import (
 // **`tracker.active_states` にも `terminal_states` にも入っていない名前にする。**
 const humanState = "Human"
 
+// directChatBoardOptions はカンバンの Status の選択肢である（`humanState` を含む）。
+//
+// **書く経路（設計 3-82h）は、この写しから拒否リストを作る。**写しが空なら書かない。
+var directChatBoardOptions = []string{"Ready", "In Progress", "In Review", "Blocked", "Done", humanState}
+
 // withDirectChatState は `tracker.direct_chat_state` を設定した検査対象を作る。
+//
+// **カンバンの選択肢に `humanState` を入れる。**入れないと、候補の一覧へ足されず、
+// 書く経路も写しが空として書かない。
 //
 // t: 呼び出し元のテスト。
 // 戻り値: 組み立てた stubFixture。
 func withDirectChatState(t *testing.T) *stubFixture {
 	t.Helper()
-	return newStubFixture(t, stubFixtureOptions{
+	return withDirectChatStateOn(t, nil)
+}
+
+// withDirectChatStateOn は、テスト用トラッカー mock を指定して withDirectChatState と同じものを作る。
+//
+// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-82h）。
+//
+// t: 呼び出し元のテスト。
+// ft: 使うトラッカー。nil なら新しく作る。
+// 戻り値: 組み立てた stubFixture。
+func withDirectChatStateOn(t *testing.T, ft *fakeTracker) *stubFixture {
+	t.Helper()
+	fx := newStubFixture(t, stubFixtureOptions{
 		AgentStatus: herdr.AgentStatusWorking,
+		Tracker:     ft,
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.DirectChatState = humanState
 			cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
 		},
 	})
+	fx.Tracker.SetStatusOptions(directChatBoardOptions...)
+	return fx
+}
+
+// adoptOwnRun は、担当者がこの continuo のアカウント1人の run を印の集合へ入れる（設計 3-82h）。
+//
+// **direct chat に居られるのは、担当者が自分1人のときだけである。**担当者を付けずに
+// direct chat へ動かすと、3-82h の判定の表の順1 に当たり `failure_state` へ落ちる。
+//
+// fx: 対象の stubFixture。
+// number: issue の番号。
+// 戻り値: 入れた issue。
+func adoptOwnRun(fx *stubFixture, number int) tracker.Issue {
+	issue := adoptRun(fx, number)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	return issue
 }
 
 // TestDirectChatMode_direct chat のあいだは画面が止まっていても打ち切らない は、
@@ -50,7 +89,7 @@ func withDirectChatState(t *testing.T) *stubFixture {
 func TestDirectChatMode_directChatのあいだは画面が止まっていても打ち切らない(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := withDirectChatState(t)
-		issue := adoptRun(fx, 188)
+		issue := adoptOwnRun(fx, 188)
 		fx.Tracker.SetState(issue.ID, humanState)
 
 		const rounds = 50
@@ -91,7 +130,7 @@ func TestDirectChatMode_作業中のStatusへ戻すと同じpaneへ続きの指�
 		// 送ったあとの turn ループは `Stop` hook を待ち続ける（stub は hook を出さない）。
 		// **止めないと bubble から抜けられない。**
 		defer fx.Orc.Close()
-		issue := adoptRun(fx, 188)
+		issue := adoptOwnRun(fx, 188)
 
 		// 人間が引き取る。
 		fx.Tracker.SetState(issue.ID, humanState)
@@ -143,7 +182,7 @@ func TestDirectChatMode_エージェントが動いている最中に戻した�
 	synctest.Test(t, func(t *testing.T) {
 		fx := withDirectChatState(t) // AgentStatus は working のまま
 		defer fx.Orc.Close()
-		issue := adoptRun(fx, 188)
+		issue := adoptOwnRun(fx, 188)
 
 		fx.Tracker.SetState(issue.ID, humanState)
 		fx.Orc.Tick(context.Background())
@@ -173,7 +212,7 @@ func TestDirectChatMode_エージェントが動いている最中に戻した�
 func TestDirectChatMode_完了のStatusへ動かすとdirectChatを抜けて片付ける(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := withDirectChatState(t)
-		issue := adoptRun(fx, 188)
+		issue := adoptOwnRun(fx, 188)
 
 		fx.Tracker.SetState(issue.ID, humanState)
 		fx.Orc.Tick(context.Background())
@@ -303,6 +342,7 @@ func TestDirectChatMode_設定していなければいままでどおり止め�
 // `direct_chat_state` も渡ること。
 func TestDirectChat_カンバンに選択肢が無ければ候補の一覧へ足さない(t *testing.T) {
 	fx := withDirectChatState(t)
+	fx.Tracker.SetStatusOptions()
 
 	// **選択肢を1つも読めていない状態**（Bootstrap の前）。分からないものは足さない。
 	fx.Orc.Tick(context.Background())
@@ -345,7 +385,7 @@ func TestDirectChat_着手待ちへ戻したら作業中のStatusを書く(t *te
 	synctest.Test(t, func(t *testing.T) {
 		fx := withDirectChatState(t)
 		defer fx.Orc.Close()
-		issue := adoptRun(fx, 191)
+		issue := adoptOwnRun(fx, 191)
 
 		fx.Tracker.SetState(issue.ID, humanState)
 		fx.Orc.Tick(context.Background())
@@ -381,7 +421,7 @@ func TestDirectChat_作業中のStatusへ戻したときはStatusを書かない
 	synctest.Test(t, func(t *testing.T) {
 		fx := withDirectChatState(t)
 		defer fx.Orc.Close()
-		issue := adoptRun(fx, 192)
+		issue := adoptOwnRun(fx, 192)
 
 		fx.Tracker.SetState(issue.ID, humanState)
 		fx.Orc.Tick(context.Background())
@@ -428,7 +468,7 @@ func containsFoldStr(values []string, target string) bool {
 // 成功条件: pane が1つも閉じられず、印にも残っていること。
 func TestDirectChat_カードがdirectChatになった巡回では何もしない(t *testing.T) {
 	fx := withDirectChatState(t)
-	issue := adoptRun(fx, 193)
+	issue := adoptOwnRun(fx, 193)
 
 	fx.Tracker.SetState(issue.ID, humanState)
 
@@ -459,5 +499,420 @@ func TestDirectChat_段2の拒否リストにdirectChatのStatusが入ってい�
 	got := fx.Orc.DispatchBlockedStatesForTest()
 	if !containsFoldStr(got, humanState) {
 		t.Errorf("段2 の拒否リストに direct chat の Status が入っていない: %v", got)
+	}
+}
+
+// assigneesInvalidMarker は、担当者が1人でないときに issue へ書くコメントにだけ出る文字列である（設計 3-82h）。
+const assigneesInvalidMarker = "担当者を1人だけにしてください"
+
+// commentsContaining は、issue のコメントのうち本文に substr を含むものの数を返す。
+//
+// fx: 対象の stubFixture。
+// nodeID: issue のノード ID。
+// substr: 探す文字列。
+// 戻り値: 見つかった件数。
+func commentsContaining(ft *fakeTracker, nodeID, substr string) int {
+	n := 0
+	for _, c := range ft.CommentsOf(nodeID) {
+		if strings.Contains(c.Body, substr) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestDirectChat_担当者が0人の候補はfailure_stateへ動かしてコメントを1件書く は、
+// 3-82h の判定の表の順1（印を持っていない機械）を確かめる。
+//
+// 目的: 人間の決定「担当者が1人だけの状態以外で direct chat に移したら、エラーとして blocked に遷移して良い。
+// その際、担当者を1人だけ設定する旨をコメントに書いておいて」を示す。
+//
+// 与える情報: Status が direct chat で担当者が0人の候補（continuo は印を持っていない）。
+// 成功条件: Status が `failure_state` になり、「担当者を1人に」のコメントがちょうど1件あり、
+// 印を1つも付けていない（pane を用意しにいかない）こと。
+func TestDirectChat_担当者が0人の候補はfailure_stateへ動かしてコメントを1件書く(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := sampleIssue(301, humanState)
+		fx.Tracker.AddIssue(issue)
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got, want := fx.Tracker.StateOf(issue.ID), fx.Config.Tracker.FailureState; got != want {
+			t.Fatalf("担当者が0人なのに failure_state へ動かしていない: %q（期待 %q）", got, want)
+		}
+		if n := commentsContaining(fx.Tracker, "I_node301", assigneesInvalidMarker); n != 1 {
+			t.Fatalf("「担当者を1人に」のコメントが1件ではない: %d 件", n)
+		}
+		if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
+			t.Fatalf("担当者が0人なのに印を付けた（pane を用意しにいった）: %v", got)
+		}
+	})
+}
+
+// TestDirectChat_担当者が2人の候補もfailure_stateへ動かす は、3-82h の判定の表の順1（2人以上）を確かめる。
+//
+// 目的: 「複数人は NG」（人間の決定）を示す。自分が含まれていても NG である。
+// 与える情報: Status が direct chat で担当者が2人（自分と他人）の候補。
+// 成功条件: Status が `failure_state` になり、コメントが1件あること。
+func TestDirectChat_担当者が2人の候補もfailure_stateへ動かす(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := sampleIssue(302, humanState)
+		fx.Tracker.AddIssue(issue)
+		fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin, "someone-else")
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got, want := fx.Tracker.StateOf(issue.ID), fx.Config.Tracker.FailureState; got != want {
+			t.Fatalf("担当者が2人なのに failure_state へ動かしていない: %q（期待 %q）", got, want)
+		}
+		if n := commentsContaining(fx.Tracker, "I_node302", assigneesInvalidMarker); n != 1 {
+			t.Fatalf("「担当者を1人に」のコメントが1件ではない: %d 件", n)
+		}
+	})
+}
+
+// TestDirectChat_担当者が1人で他人の候補には何もしない は、3-82h の判定の表の順3（印を持っていない機械）を確かめる。
+//
+// 目的: どの機械が pane を持つかは担当者だけで決まる。**他人のアカウントが担当なら、この機械は何もしない。**
+// 与える情報: Status が direct chat で担当者が1人（他人）の候補。
+// 成功条件: Status が動かず、コメントも書かず、印も付けないこと。
+func TestDirectChat_担当者が1人で他人の候補には何もしない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := sampleIssue(303, humanState)
+		fx.Tracker.AddIssue(issue)
+		fx.Tracker.SetAssignees(issue.ID, "someone-else")
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
+			t.Fatalf("他人が担当している direct chat のカードを動かした: %q", got)
+		}
+		if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+			t.Fatalf("他人が担当している direct chat のカードへ書きに行った: %d 回", n)
+		}
+		if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
+			t.Fatalf("他人が担当している issue に印を付けた: %v", got)
+		}
+		if n := len(fx.Tracker.CommentsOf("I_node303")); n != 0 {
+			t.Fatalf("他人が担当している issue にコメントを書いた: %d 件", n)
+		}
+	})
+}
+
+// TestDirectChat_ログイン名が取れない巡回では候補に何もしない は、3-82h の判定の表の順2 を確かめる。
+//
+// 目的: 自分が誰か分からないまま pane を用意しない（印を持っていない機械は、この巡回では何もしない）。
+// 与える情報: gh の持ち主を取れない状態で、担当者1人の direct chat の候補。
+// 成功条件: 印を付けず、Status も動かさないこと。
+func TestDirectChat_ログイン名が取れない巡回では候補に何もしない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		fx.Tracker.SetViewerError(errors.New("gh が認証されていません"))
+		issue := sampleIssue(304, humanState)
+		fx.Tracker.AddIssue(issue)
+		fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
+			t.Fatalf("自分が誰か分からないのに印を付けた: %v", got)
+		}
+		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
+			t.Fatalf("自分が誰か分からないのにカードを動かした: %q", got)
+		}
+	})
+}
+
+// TestDirectChat_印を持つrunの担当者が0人になったらfailure_stateへ動かし指示を送らない は、
+// 3-82h の判定の表の順1（印を持っている機械）を確かめる。
+//
+// 目的: **入ったあとも毎巡回同じ判定を当てる**（人間の決定）。direct chat の最中に担当者を外すと
+// `failure_state` へ落ちてチャットが切れる。**書けるまでの巡回で turn を送らないよう、印も立てる。**
+// 与える情報: 印を持つ run。カードを direct chat へ動かし、担当者を0人にする。
+// 成功条件: Status が `failure_state` になり、コメントが1件あり、指示を1つも送っていないこと。
+// そのあとの巡回で、`failure_state` の既存の出口が pane を閉じること。
+func TestDirectChat_印を持つrunの担当者が0人になったらfailure_stateへ動かし指示を送らない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := adoptRun(fx, 305) // 担当者は付けない
+		fx.Tracker.SetState(issue.ID, humanState)
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got, want := fx.Tracker.StateOf(issue.ID), fx.Config.Tracker.FailureState; got != want {
+			t.Fatalf("担当者が0人になったのに failure_state へ動かしていない: %q（期待 %q）", got, want)
+		}
+		if n := commentsContaining(fx.Tracker, "I_node305", assigneesInvalidMarker); n != 1 {
+			t.Fatalf("「担当者を1人に」のコメントが1件ではない: %d 件", n)
+		}
+		if got := fx.Herdr.Prompts(); len(got) != 0 {
+			t.Fatalf("担当者が1人でない direct chat の run へ指示を送った: %v", got)
+		}
+
+		// **次の巡回で、`failure_state` の既存の出口（3-82g）が pane を閉じる。**
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+		if ids := fx.Herdr.ClosedPanes(); len(ids) == 0 {
+			t.Fatal("failure_state へ動いたのに pane を閉じていない")
+		}
+	})
+}
+
+// TestDirectChat_印を持つrunの担当者が他人に替わったら手を離す は、3-82h の「手を離す経路」を確かめる。
+//
+// 目的: 担当者が別の1人に替わったら、印を持つ機械は pane を閉じ、印を外す。
+// **Status を書かず、コメントも書かない。**新しい担当者の機械が pane を用意する。
+// 与える情報: direct chat に入った run。担当者を他人1人に替える。
+// 成功条件: pane が閉じ、印から外れ、`UpdateStatus` を1回も呼ばず、コメントも無いこと。
+func TestDirectChat_印を持つrunの担当者が他人に替わったら手を離す(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := adoptOwnRun(fx, 306)
+		fx.Tracker.SetState(issue.ID, humanState)
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+		if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+			t.Fatalf("自分が担当の direct chat で pane を閉じた: %v", ids)
+		}
+
+		fx.Tracker.ResetCalls()
+		fx.Tracker.SetAssignees(issue.ID, "someone-else")
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if ids := fx.Herdr.ClosedPanes(); len(ids) != 1 {
+			t.Fatalf("担当者が替わったのに pane を閉じていない（または2枚以上閉じた）: %v", ids)
+		}
+		if _, ok := viewOf(fx, issue.Identifier); ok {
+			t.Fatal("担当者が替わったのに印を外していない")
+		}
+		if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+			t.Fatalf("手を離すときに Status を書いた: %d 回", n)
+		}
+		if n := len(fx.Tracker.CommentsOf("I_node306")); n != 0 {
+			t.Fatalf("手を離すときにコメントを書いた: %d 件", n)
+		}
+		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
+			t.Fatalf("手を離すときにカードを動かした: %q", got)
+		}
+	})
+}
+
+// TestDirectChat_印を持つrunはログイン名が取れなくてもdirect_chatへ入れる は、3-82h の順2（印を持っている機械）を確かめる。
+//
+// 目的: **判定できないあいだは turn を送らない側へ倒す。**
+// 与える情報: 印を持つ run。gh の持ち主を取れない状態でカードを direct chat へ動かす。
+// 成功条件: pane を閉じず、印も外さず、Status も書かないこと。
+func TestDirectChat_印を持つrunはログイン名が取れなくてもdirectChatへ入れる(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		fx.Tracker.SetViewerError(errors.New("gh が認証されていません"))
+		issue := adoptOwnRun(fx, 307)
+		fx.Tracker.SetState(issue.ID, humanState)
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+			t.Fatalf("自分が誰か分からないだけで pane を閉じた: %v", ids)
+		}
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatal("自分が誰か分からないだけで印を外した")
+		}
+		if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+			t.Fatalf("自分が誰か分からないだけで Status を書いた: %d 回", n)
+		}
+	})
+}
+
+// TestDirectChat_選択肢の写しが空なら書く経路は書かない は、3-82e の書く経路の拒否リストを確かめる。
+//
+// 目的: 拒否リストは「カンバンの選択肢のうち direct chat 以外の全部」で作る。
+// **写しが空なら、書かずに WARN を1行出す**（空の拒否リストで書くと、人間が戻した直後のカードを上書きする）。
+// 与える情報: 選択肢を1つも読めていない状態で、担当者0人の direct chat の run。
+// 成功条件: `UpdateStatus` を1回も呼ばず、Status が direct chat のままであること。
+func TestDirectChat_選択肢の写しが空なら書く経路は書かない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		fx.Tracker.SetStatusOptions()
+		issue := adoptRun(fx, 308) // 担当者0人
+		fx.Tracker.SetState(issue.ID, humanState)
+
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+			t.Fatalf("選択肢の写しが空なのに書きに行った: %d 回", n)
+		}
+		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
+			t.Fatalf("選択肢の写しが空なのにカードを動かした: %q", got)
+		}
+	})
+}
+
+// TestDirectChat_2台が同時に書いてもコメントは実際に書いた1台だけ は、3-82h の「`Wrote` のときだけコメント」を確かめる。
+//
+// 目的: 見張っている全台が書こうとするが、実際に書けるのは取り直しの時点で先に書いた1台である。
+// **`Reached`（既にその値だった）や、取り直すと direct chat でなかったときにはコメントを書かない。**
+// 与える情報: 同じカンバンを見張る2台。担当者0人の direct chat の候補。1台目の書き込みを止めておき、
+// そのあいだに2台目が書き、1台目を進ませる。
+// 成功条件: Status が `failure_state` になり、「担当者を1人に」のコメントがちょうど1件であること。
+func TestDirectChat_2台が同時に書いてもコメントは実際に書いた1台だけ(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		a := withDirectChatState(t)
+		b := withDirectChatStateOn(t, a.Tracker)
+		issue := sampleIssue(309, humanState)
+		a.Tracker.AddIssue(issue)
+
+		release, entered := a.Tracker.HoldUpdate()
+		a.Orc.Tick(context.Background())
+		<-entered
+		b.Orc.Tick(context.Background())
+		synctest.Wait()
+		release()
+		synctest.Wait()
+
+		if got, want := a.Tracker.StateOf(issue.ID), a.Config.Tracker.FailureState; got != want {
+			t.Fatalf("failure_state へ動いていない: %q（期待 %q）", got, want)
+		}
+		if n := commentsContaining(a.Tracker, "I_node309", assigneesInvalidMarker); n != 1 {
+			t.Fatalf("実際に書いた1台だけがコメントするはずが %d 件ある", n)
+		}
+	})
+}
+
+// TestDirectChat_未設定のStatusへは書く経路は書かない は、3-82e の「取り直した値が未設定なら書かない」を確かめる。
+//
+// 目的: 人間が Status を外した item に `Blocked` を付けない。
+// 与える情報: 担当者0人の direct chat の候補。書き込みを止めているあいだに人間が Status を外す。
+// 成功条件: Status が未設定のままで、コメントも書かないこと。
+func TestDirectChat_未設定のStatusへは書く経路は書かない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		issue := sampleIssue(310, humanState)
+		fx.Tracker.AddIssue(issue)
+
+		release, entered := fx.Tracker.HoldUpdate()
+		fx.Orc.Tick(context.Background())
+		<-entered
+		fx.Tracker.SetState(issue.ID, "")
+		release()
+		synctest.Wait()
+
+		if got := fx.Tracker.StateOf(issue.ID); got != "" {
+			t.Fatalf("Status を外した item に書いた: %q", got)
+		}
+		if n := commentsContaining(fx.Tracker, "I_node310", assigneesInvalidMarker); n != 0 {
+			t.Fatalf("書いていないのにコメントを書いた: %d 件", n)
+		}
+	})
+}
+
+// TestDirectChat_戻したときにholdを書く は、3-82h の「戻したときに hold を書く」を確かめる。
+//
+// 目的: 用意した run には hold が1件も無い。**書かないと、別の機械からは「人間が付けた担当者」に見え、
+// 「担当者を外してください」という案内を公開の issue へ投稿する。**
+// 与える情報: direct chat に入った run を、作業中の Status へ戻す。
+// 成功条件: hold の印で始まるコメントが1件あり、JSON に自分のログイン名が入り、
+// 人間向けの文が direct chat から戻したことを言っていること。
+func TestDirectChat_戻したときにholdを書く(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withDirectChatState(t)
+		defer fx.Orc.Close()
+		issue := adoptOwnRun(fx, 311)
+		fx.Tracker.SetState(issue.ID, humanState)
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		fx.Herdr.SetStatus(herdr.AgentStatusIdle)
+		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		holds := fx.Tracker.MarkedHandoffCommentsOf("I_node311", config.HandoffHoldMarker)
+		if len(holds) != 1 {
+			t.Fatalf("戻したときの hold が1件ではない: %d 件", len(holds))
+		}
+		body := holds[0].Body
+		if !strings.Contains(body, `"assignee":"`+fakeViewerLogin+`"`) {
+			t.Errorf("hold の JSON に自分のログイン名が無い（hold として数えられない）: %q", body)
+		}
+		if !strings.Contains(body, "direct chat") {
+			t.Errorf("hold の人間向けの文が direct chat から戻したことを言っていない: %q", body)
+		}
+	})
+}
+
+// TestDirectChat_打ち切りはClaude_Codeが起動済みのpaneなら印を残す は、3-82f の打ち切りの1通り目を確かめる。
+//
+// 目的: 終わらせる処理の最中に人間が direct chat へ引き取ったとき、**その pane で `agent.start` が
+// 済んでいるなら、終わらせる処理をやめて印を残す。**人間はその pane で話せる。
+// 与える情報: 引き取った pane を持つ run（`agent.start` 済み）。
+// 成功条件: 打ち切り、pane を閉じず、印も残ること。
+func TestDirectChat_打ち切りはClaudeCodeが起動済みのpaneなら印を残す(t *testing.T) {
+	fx := withDirectChatState(t)
+	issue := adoptOwnRun(fx, 312)
+
+	aborted, ok := fx.Orc.AbortTerminalForHumanForTest(context.Background(), issue.ID, "w1:p1", true)
+	if !ok || !aborted {
+		t.Fatalf("direct chat の run で終わらせる処理を打ち切らなかった: aborted=%v ok=%v", aborted, ok)
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+		t.Fatalf("Claude Code が起動済みの pane を閉じた: %v", ids)
+	}
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatal("Claude Code が起動済みの pane を持つのに印を外した")
+	}
+}
+
+// TestDirectChat_打ち切りはagent_startが済んでいないpaneなら閉じて印を外す は、3-82f の打ち切りの2通り目を確かめる。
+//
+// 目的: `PaneID` が立っていても、その pane で `agent.start` が済んでいなければ Claude Code は居ない
+// （continuo が開いたばかりのシェル）。**自分で開いた pane を ID で閉じ、印を外す。**
+// **印を残すと、pane の無い印になり誰も気づかない**（3-82j）。
+// 与える情報: `agent.start` が済んでいない pane を持つ run。
+// 成功条件: 打ち切り、その pane を閉じ、印を外すこと。
+func TestDirectChat_打ち切りはagentStartが済んでいないpaneなら閉じて印を外す(t *testing.T) {
+	fx := withDirectChatState(t)
+	issue := adoptOwnRun(fx, 313)
+
+	aborted, ok := fx.Orc.AbortTerminalForHumanForTest(context.Background(), issue.ID, "w1:p9", false)
+	if !ok || !aborted {
+		t.Fatalf("direct chat の run で終わらせる処理を打ち切らなかった: aborted=%v ok=%v", aborted, ok)
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 1 || ids[0] != "w1:p9" {
+		t.Fatalf("agent.start が済んでいない pane を閉じていない: %v", ids)
+	}
+	if _, ok := viewOf(fx, issue.Identifier); ok {
+		t.Fatal("pane の無い印を残した")
+	}
+}
+
+// TestDirectChat_打ち切りはpaneが既に閉じていれば印を外すだけ は、3-82f の打ち切りの2通り目（`PaneID` が空）を確かめる。
+//
+// 目的: この処理の `stopWorker` が閉じたあとで当たったら、**閉じる相手は居ないので印を外すだけにする。**
+// 与える情報: `PaneID` が空の run。
+// 成功条件: 打ち切り、pane を1枚も閉じず、印を外すこと。
+func TestDirectChat_打ち切りはpaneが既に閉じていれば印を外すだけ(t *testing.T) {
+	fx := withDirectChatState(t)
+	issue := adoptOwnRun(fx, 314)
+
+	aborted, ok := fx.Orc.AbortTerminalForHumanForTest(context.Background(), issue.ID, "", false)
+	if !ok || !aborted {
+		t.Fatalf("direct chat の run で終わらせる処理を打ち切らなかった: aborted=%v ok=%v", aborted, ok)
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+		t.Fatalf("閉じる相手が居ないのに pane を閉じた: %v", ids)
+	}
+	if _, ok := viewOf(fx, issue.Identifier); ok {
+		t.Fatal("pane の無い印を残した")
 	}
 }

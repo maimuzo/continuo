@@ -1604,6 +1604,49 @@ func TestAbandon_parkがdirectChatの状態なら書く前に止まる(t *testin
 	}
 }
 
+// 目的: `--to` に direct chat の状態を渡したとき、**何も消さずに**止まることを確認する（設計 3-82k）。
+// **そこへ動かすと、次に continuo が起動したとき、いま消したばかりの issue の worktree と pane を作り直す。**
+// **文面は `--park` と分ける。**1つの文言を使い回すと、`--to` を叩いた人が `--park` の説明を読むことになる。
+// 与える情報: 継続監視が動いていない状態で、`tracker.direct_chat_state` を設定したうえで `--to` にその値。
+// 成功条件: 終了コードが 1、`--to` の文面が出て、worktree が残り、ボードへの書き込みが0件であること。
+func TestAbandon_toがdirectChatの状態なら何も消さずに止まる(t *testing.T) {
+	fx := newFixture(t)
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ToState = "Human" })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrToDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
+// 目的: いまの Status が direct chat のカードは、**`--force` を付けても**片付けないことを確認する（設計 3-82k）。
+// **`--force` を付けると worktree は消えるが、カードは direct chat のままなので、巡回はその run を毎回飛ばし、
+// 印は永久に外れない。**消えた worktree を指したまま枠を1つ持ち続け、ログにも issue にも何も出ない。
+// 与える情報: 継続監視が動いていない状態で、ボードの Status が direct chat の issue に `--force`。
+// 成功条件: 終了コードが 1、いまの Status の文面が出て、worktree が残り、ボードへの書き込みが0件であること。
+func TestAbandon_いまのStatusがdirectChatならforceでも止まる(t *testing.T) {
+	fx := newFixture(t)
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+	fx.Tracker.SetState("Human")
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrCurrentDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
 // {"RUCM-PATH": "P028"}
 //
 // 目的: 片付ける worktree が無いとき、`--to` の指定を黙って捨てないことを確認する

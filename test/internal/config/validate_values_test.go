@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
@@ -224,14 +225,18 @@ func TestValidate_directChatのStatusが他の役割と重なったら弾く(t *
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("何と重なったのか分からない（%s が欲しい）: %v", tc.want, err)
 			}
+			// **このキーを書いていない人にも当たるので、既定値であることを文面に入れる**（設計 3-82j）。
+			if !strings.Contains(err.Error(), i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, tc.want)) {
+				t.Errorf("既定値であることを伝える文面になっていない: %v", err)
+			}
 		})
 	}
 }
 
 // TestValidate_direct chat のStatusは空でも別の名前でも通る は、既定と正しい設定を守る。
 //
-// **既定は空である。**空でなければボードに実在することを起動時に要求するので、
-// **既定に名前を入れると、その選択肢を持たない全利用者の continuo が起動しなくなる。**
+// **既定は `"Direct Chat"` である。**この名前だけはカンバンに実在することを起動時に要求しない
+// （`config.RequiredBoardStates`）ので、選択肢を持たない利用者の continuo も起動する（設計 3-82）。
 //
 // 目的: 空のままと、他の役割と重ならない名前のどちらも通すこと。
 // 与える情報: `direct_chat_state` の1行だけを差し替えた WORKFLOW.md。
@@ -556,5 +561,26 @@ func TestResolvePath_存在しないパスはそのまま返す(t *testing.T) {
 	}
 	if got != p {
 		t.Errorf("渡したパスをそのまま返していません: %s", got)
+	}
+}
+
+// TestDirectChatConflicts_7つの相手を全部見る は、設計 3-82k の「重なりを見る相手は7つ」を確かめる。
+//
+// **一覧は `config.DirectChatConflicts` の1箇所にあり、起動時の検査と `continuo doctor` が同じものを読む。**
+// 目的: 7つのどれと重なっても名指しすること。とくに `cleanup.on_states` は `terminal_states` と別の名前にでき、
+// そのときだけ当たる。
+// 与える情報: 既定の設定の `cleanup.on_states` だけを `Archived` にし、`direct_chat_state` も `Archived` にしたもの。
+// 成功条件: `cleanup.on_states` だけが返ること。空の `direct_chat_state` では何も返らないこと。
+func TestDirectChatConflicts_7つの相手を全部見る(t *testing.T) {
+	cfg := *config.DefaultConfig()
+	cfg.Cleanup.OnStates = []string{"Archived"}
+	cfg.Tracker.DirectChatState = "Archived"
+	got := config.DirectChatConflicts(cfg)
+	if len(got) != 1 || got[0] != "cleanup.on_states" {
+		t.Fatalf("片付けの Status との重なりを名指ししていない: %v", got)
+	}
+	cfg.Tracker.DirectChatState = ""
+	if got := config.DirectChatConflicts(cfg); len(got) != 0 {
+		t.Fatalf("空の direct_chat_state で重なりを返した: %v", got)
 	}
 }

@@ -164,3 +164,33 @@ func TestDoctor_directChatのStatusがカンバンに無ければ注意を出す
 		}
 	}
 }
+
+// 目的: `tracker.direct_chat_state` が他の役割と重なっているとき、`Status の名前` が `!` を出し、
+// 重なった相手のキー名を名指しすることを確認する（設計 3-82k）。
+//
+// **重なりがあると `config.Load` がエラーを返し、この見出し語は `?`（設定が読めません）で戻っていた。**
+// **重なりが無いときにしか動かない検査を、重なりのために置くことになる。**そこで設定を読み直して見る。
+// **doctor は「なぜ起動しないか」を調べるために叩かれる道具である。**
+//
+// 与える情報: `direct_chat_state` を `failure_state` と同じ `Blocked` にした WORKFLOW.md。
+// 成功条件: 記号が `!` で、説明に `tracker.failure_state` が入っていること。
+func TestDoctor_directChatのStatusが他の役割と重なれば相手のキーを名指しする(t *testing.T) {
+	fx := newFixture(t)
+	raw, err := os.ReadFile(fx.WorkflowPath)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	content := setFrontMatterValue(t, string(raw), []string{"tracker", "direct_chat_state"}, `"Blocked"`)
+	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+
+	report := fx.Run(t)
+	res := assertSymbol(t, report, doctor.LabelStatusNames, doctor.SymbolUnknown)
+	if !strings.Contains(res.Detail, "tracker.failure_state") {
+		t.Errorf("重なった相手のキー名が説明に入っていない: %s", res.Detail)
+	}
+	if !strings.Contains(res.Detail, "Blocked") {
+		t.Errorf("重なった名前が説明に入っていない: %s", res.Detail)
+	}
+}
