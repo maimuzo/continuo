@@ -825,7 +825,7 @@ func (o *Orchestrator) GateViews() []GateView
 		})
 ```
 
-**先例の `RunView`（[internal/orchestrator/orchestrator.go:1353-1387](../../../internal/orchestrator/orchestrator.go#L1353-L1387)）は
+**先例の `RunView`（[internal/orchestrator/orchestrator.go:1513-1547](../../../internal/orchestrator/orchestrator.go#L1513-L1547)）は
 フィールドが全部値型で、スライスを1つも持っていない。**だから
 [internal/orchestrator/orchestrator.go:1413-1436](../../../internal/orchestrator/orchestrator.go#L1413-L1436) の `RunViews` は
 そのまま代入していて安全に成立している。**ここで初めてスライスが入る。**
@@ -1214,7 +1214,7 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 | **`polling.interval_ms` の既定は30000ミリ秒** | [internal/config/default.go:87](../../../internal/config/default.go#L87) の `IntervalMs: 30000`。**3回目の巡回はちょうど60秒後になり、`noticeMinAge` と同値である** |
 | **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:254-281](../../../internal/i18n/messages/ja.json#L254-L281)（ファイルは843行）、[internal/i18n/keys.go:1039-1092](../../../internal/i18n/keys.go#L1039-L1092) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2692](../../../internal/i18n/keys.go#L2692) 付近 |
 | **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:1055](../../../internal/orchestrator/lifecycle.go#L1055) の `func containsFold(states []string, target string) bool` |
-| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1353-1387](../../../internal/orchestrator/orchestrator.go#L1353-L1387) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1413-1436](../../../internal/orchestrator/orchestrator.go#L1413-L1436) の代入だけで写しが成立している** |
+| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1513-1547](../../../internal/orchestrator/orchestrator.go#L1513-L1547) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1413-1436](../../../internal/orchestrator/orchestrator.go#L1413-L1436) の代入だけで写しが成立している** |
 | **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:67-70](../../../internal/orchestrator/handoff.go#L67-L70) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
 | **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:374](../../../internal/server/server.go#L374) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
 | **コメントを書き換える経路も消す経路も無い** | 検索パターン `updateIssueComment` `deleteIssueComment` `minimizeComment` `UpdateComment` `DeleteComment` の5本を `grep -rniE` で束ね、対象 `internal/` と `cmd/`、commit 73fb41ae で `wc -l` が `0` |

@@ -12304,7 +12304,7 @@ gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}
 **`continuo init` は front matter へ `language: auto` を書き、`auto` は環境変数から決まる**ので、
 書き出した時点では両者は同じ値になる。
 **`applyWriteLanguage` は front matter を読まない。**front matter の `language` を読むのは
-`useLanguageFromConfig`（[internal/cli/cli.go:898](../../internal/cli/cli.go#L898)）で、
+`useLanguageFromConfig`（[internal/cli/cli.go:982](../../internal/cli/cli.go#L982)）で、
 **そちらは画面に出す文言の言語を決める**（3-35。設定が主・環境変数 `LANG` が従）。
 **`continuo init` はその経路を通らない**ので、雛形へ差し込む1行は環境変数から決まる。
 **continuo は OSS として配る。**日本語を読み書きしない人も `continuo init` を叩く。
