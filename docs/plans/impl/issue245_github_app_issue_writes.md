@@ -2691,31 +2691,38 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | 設定のキー | `tracker.comments.github_app_attribution` を `tracker.comments.write_issues_via_github_app` に改める（禁止された呼び名を含むため。まだリリースしていない） | 承認済み（6 へ移した） |
 | hook の挙動 | 変えない。`continuo hook` の引数・宛先・約束・返すものも、張る hook の種類も変えない。issue ごとの設定ファイルの `env` に環境変数を1つ足すだけ | 承認済み（6 へ移した） |
 
-### 10-6. 人間に訊いていること（2026-09-27 23:55 (JST) 時点）
+### 10-6. 人間に訊いていること（2026-09-28 00:40 (JST) 時点）
 
-2026-09-27 23:36 (JST) に、信頼の判定の名前・plugin の書き出し先・`--plugin-dir` の確かさ・compaction・スキルへ移す部分・continuo で動いていることの見分け方を問われた。答えと2つの質問を1件のコメントにまとめた。**答えをいただくまで、6 の書き直しにも起票にも進まない。**
+2026-09-28 00:27 (JST) に、構成（下の表）と、`continuo-issue-comments` をこの issue で作ることを了承された。ただし `continuo-issue-comments` の内容は確認中。あわせて、main が何かを明記すること・スキルの名前を説明的にすること・continuo の run の見分け方をシーケンス図で説明すること・2つの plugin の違いをまとめることを求められ、1件のコメントで答えた。**次は 6 を書き直し、設計レビューの前に人間へ見せる。**
+
+この節で「main」と書くのは、maimuzo/continuo の既定の branch `main`（2026-09-28 00:29 (JST) の時点で commit `9a53dcfc`。`internal/prompt/builtin.md` を最後に変えた commit は `5231b3eb`）である。この issue の branch には、やめると決めた GitHub App の手順が足してあるので、字数は main で数える。
 
 **決まったこと。**
 
 | 何 | 決まり | いつ |
 | --- | --- | --- |
-| 投稿者が人間かAIかの見分け方 | GitHub App をやめ、本文の先頭の HTML コメントで見分ける（方針。細部は検討中） | 2026-09-27 23:36 (JST) |
-| 信頼してよいかの判定 | 4-1 の jq の式で決める（`gh --jq` なので新しい依存なし）。名前はコメントが `trusted_comment`、issue の本文が `trusted_body` | 同上 |
+| 投稿者が人間かAIかの見分け方 | GitHub App をやめ、本文の先頭の HTML コメントで見分ける | 2026-09-27 23:36 (JST) |
+| 信頼してよいかの判定 | 4-1 の jq の式で決める（`gh --jq` なので新しい依存なし）。名前はコメントが `trusted_comment`、issue の本文が `trusted_body` | 2026-09-27 23:36 (JST)。名前は 2026-09-28 00:27 (JST) に了承 |
+| 必ず守らせる決まりの置き場所 | `--append-system-prompt-file`（既定のシステムプロンプトの末尾に足す。置き換えない） | 2026-09-28 00:27 (JST) |
+| 構成（下の表） | plugin 化の issue の前提にする | 同上 |
+| `continuo-issue-comments` | この issue で作る（内容は確認中） | 同上 |
 | continuo のリポジトリに Claude Code の plugin marketplace を置く構造 | 採用 | 2026-09-27 23:04 (JST) |
 | 書き忘れを機械で塞ぐ hook（PreToolUse・mod） | いまは足さない | 同上 |
 | gh wrapper | 取り下げ | 2026-09-27 21:54 (JST) |
 
-**提案している構成（plugin 化の issue の前提。答え待ち）。**
+**構成。**
 
 | 何 | どうするか | 理由 |
 | --- | --- | --- |
-| 必ず守らせる決まり（1・2・3-1・3-2 の骨組み・3-3〜3-5・3-7・4-1・4-2・5-3 の60分・6・7-1）と WORKFLOW.md の本文 | issue ごとに `<実行時ディレクトリ>/issues/<スラグ>/system-prompt.md` へ書き、`--append-system-prompt-file` で渡す | システムプロンプトは compaction のあとも残る。最初のプロンプトは要約で消えうる |
-| 場面ごとの手順（3-2 の細部・3-6・5-3 の書き足し・5-5・5-6・5-7・7-2） | plugin `continuo-run` のスキルにする。呼ぶ時機はシステムプロンプトに名前で書く | 呼んでいないスキルの一覧は compaction のあとに戻らない。呼んだスキルの本文は1つ5,000トークン・合計25,000トークンまで戻るので、5-6 と 7-2 は分ける |
-| `continuo-run` の届け方 | `plugins/continuo-run/` を `//go:embed all:continuo-run` で埋め込み、起動の前に `<実行時ディレクトリ>/plugins/<中身のハッシュ>/continuo-run/` へ書き出して（一時ディレクトリ→rename）、`--plugin-dir` で渡す。marketplace には載せない | worktree を汚さない。走っている run は古い版のまま走り切れる |
-| continuo で動いていることの見分け方 | 設定ファイルの `env` に `CONTINUO_ISSUE=<owner>/<repo>#<番号>` を書く | 人間が入れた `continuo` の plugin が run の中で効くのを止めるため |
-| 人間が起動する Claude Code | marketplace の plugin `continuo`（issue へ書くときに `<!-- continuo:ai -->` を付けるスキルと、読むときの jq の式）。この issue で作るか別の issue かは答え待ち | 事故の元が人間の起動した Claude Code の書き込みだったため |
+| 必ず守らせる決まり（1・2・3-1・3-2 の骨組み・3-3〜3-5・3-7・4-1・4-2・5-3 の60分・6・7-1）と WORKFLOW.md の本文 | issue ごとに `<実行時ディレクトリ>/issues/<スラグ>/system-prompt.md` へ書き、`--append-system-prompt-file` で渡す。1行目は run の宣言の行 | システムプロンプトは compaction のあとも残る |
+| 場面ごとの手順 | plugin `continuo-agent-procedures` のスキル10本にする。呼ぶ時機はシステムプロンプトに名前で書く | 呼んでいないスキルの一覧は compaction のあとに戻らない |
+| `continuo-agent-procedures` の届け方 | `//go:embed` で埋め込み、`<実行時ディレクトリ>/plugins/<中身のハッシュ>/continuo-agent-procedures/` へ書き出して `--plugin-dir` で渡す。marketplace には載せない。`hooks/` を入れない | worktree を汚さない。版が実行ファイルと常に同じ |
+| `continuo-issue-comments` | marketplace で配る。スキル `marking-and-trusting-issue-comments` の1本 | 人間が起動した Claude Code の書き込みに印を付ける |
+| continuo の run の見分け方 | run の宣言の行（`このセッションは continuo が起動した run です…`）を `system-prompt.md` の1行目に書く。`continuo-issue-comments` のスキルは、その行があれば止まる | 設定ファイルの env と `printenv` の案は、`printenv` が毎回確認を出すのでやめた |
 
-**hook への影響の判定。**設定ファイルの `env` と起動の引数は変えるが、hook の引数・宛先・約束・Claude Code へ返すものは変わらない。`continuo-run` に `hooks/` を入れない限り成り立つ。
+**スキルの名前（案）。**`writing-plan-comment-and-design-review-verdict`（3-2）・`reviewing-pull-request-and-posting-verdict`（3-6）・`appending-progress-comment`（5-3）・`formatting-comments-for-humans`（5-5）・`requesting-adversarial-review`・`triaging-review-findings-before-fixing`・`counting-review-rounds-and-stopping`（5-6）・`briefing-subagents`（5-7）・`reporting-grouped-issue-statuses`・`writing-results-to-grouped-issues`（7-2）。
+
+**hook への影響の判定。**起動の引数に `--append-system-prompt-file` と `--plugin-dir` を足すだけで、hook の引数・宛先・約束・Claude Code へ返すものは変わらない。`continuo-agent-procedures` に `hooks/` を入れない限り成り立つ。
 
 **確かめたこと。**
 
@@ -2723,14 +2730,13 @@ PATH の先頭に置いたのは、`FAKE_GH_CALLED` と出すだけの偽の `gh
 | --- | --- | --- |
 | `gh --jq` に jq の実行ファイルが要るか | 要らない。`gh` は `github.com/itchyny/gojq` を中に持つ | 実機と cli/cli の `go.mod`（2026-09-27 23:07 (JST)） |
 | `trusted_comment` の式 | issue #245 の168件で true 28件 | 読み取りの `gh issue view --json comments --jq`（2026-09-27 23:49 (JST)） |
-| `--plugin-dir` は install するか | しない。スキルは呼べたが、`claude plugin list` と `~/.claude/settings.json`・`~/.claude/plugins/installed_plugins.json` は起動の前と同じ | Claude Code 2.1.283 の実機と文書 plugins/create（2026-09-27 23:38〜23:47 (JST)） |
-| compaction のあとに残るもの | `--append-system-prompt-file` の中身と、呼んだスキルの本文は残る。会話だけで伝えた語は消えた（`/compact` に落とせと指示した計測）。呼んでいないスキルの一覧は戻らない | 同じ実機と文書 context-window の「What survives compaction」 |
-| 設定ファイルの `env` が Bash に届くか | 届く | 同じ実機 |
-| スキルの `` !`コマンド` `` | 権限の確認に掛かって止まる。使わない | 同じ実機 |
-| `--plugin-dir` を止められるか | managed settings で止められる | 文書 plugins/create |
-| continuo専用プロンプトの大きさ | 1431行・94,872バイト・29節。5-6 は約9,300字、7-2 は約6,300字 | main の `internal/prompt/builtin.md` |
+| `--plugin-dir` は install するか | しない。`claude plugin list` と `~/.claude/settings.json`・`~/.claude/plugins/installed_plugins.json` は起動の前と同じ | Claude Code 2.1.283 の実機と文書 plugins/create（2026-09-27 23:38〜23:47 (JST)） |
+| `--append-system-prompt-file` は置き換えるか | 置き換えない。既定のシステムプロンプトの末尾に足す | 文書 CLI reference と実機（2026-09-28 00:28 (JST)） |
+| compaction のあとに残るもの | `--append-system-prompt-file` の中身と、呼んだスキルの本文は残る。呼んでいないスキルの一覧は戻らない | 実機と文書 context-window（2026-09-27 23:42〜23:47 (JST)） |
+| `printenv` を叩かせると | `--permission-mode acceptEdits` でも実行の確認が出る | 実機（2026-09-27 23:38・23:44 (JST)） |
+| スキルの名前の決まり | 英小文字・数字・ハイフン、64字まで | Agent Skills の仕様 |
+| main の continuo専用プロンプトの大きさ | 1431行・94,872バイト・29節。5-6 は約9,300字、7-2 は約6,300字 | `git show origin/main:internal/prompt/builtin.md` |
 
-| 何を | 提案 | 状態 |
-| --- | --- | --- |
-| 1. 上の構成を plugin 化の issue の前提にするか | 推奨は前提にする。本文を下書きして確かめていただいてから起票 | 答え待ち |
-| 2. 人間が起動する Claude Code のための `continuo` の plugin を、この issue で作るか | 推奨はこの issue で作る | 答え待ち |
+| 何を | 状態 |
+| --- | --- |
+| `continuo-issue-comments` の内容（SKILL.md の下書きをコメントに載せた） | 人間が確認中 |
