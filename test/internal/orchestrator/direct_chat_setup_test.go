@@ -196,8 +196,10 @@ func TestDirectChat_用意中に担当者が替わったら自分で開いたpan
 // **通常の着手と同じ回数の上限（`agent.max_retries`）を超えたら、書く経路で `failure_state` を書き、
 // 落ちた理由をコメントする**（人間が了承した形）。担当者を直せとは書かない。
 // **比べ方は通常の着手と同じ「超えたら」なので、`agent.max_retries: 0` なら1回目の失敗で書く。**
+// **書くのは次の巡回の門7 である**（用意の段2 は数えるだけ。書く場所を1つにして重ならないようにする）。
 // 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。
-// 成功条件: pane を閉じ、印を外し、Status が `failure_state` になり、「用意できませんでした」が1件。
+// 成功条件: 落ちた巡回ではカードを動かさない。次の巡回で pane を閉じ、印を外し、Status が `failure_state` になり、
+// 「用意できませんでした」が1件。
 func TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く(t *testing.T) {
 	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
 	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません")
@@ -207,7 +209,15 @@ func TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動�
 	id, node := addOwnDirectChatIssue(fx, 323)
 
 	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	if got := fx.Tracker.StateOf(id); got != humanState {
+		t.Fatalf("用意の段2 が自分でカードを動かした（書くのは次の巡回の門7 だけのはず）: %q", got)
+	}
 
+	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "上限を超えて failure_state へ動かす", func() bool {
 		return fx.Tracker.StateOf(id) == fx.Config.Tracker.FailureState
 	})
@@ -732,10 +742,11 @@ func (e errString) Error() string { return string(e) }
 
 // TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す は、設計 3-82c の門7 を確かめる。
 //
-// 目的: 用意の失敗が上限を超えた回の `failure_state` の書き込みが失敗しても、**次の巡回で書き直す。**
+// 目的: 用意の失敗が上限を超えた issue へ門7 が書く `failure_state` の書き込みが失敗しても、**次の巡回で書き直す。**
 // **書き直すまで用意はやり直さない**（やり直すと、上限を超えたあとも pane を開いては閉じる）。
-// 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。1回目の巡回では `UpdateStatus` が失敗する。
-// 成功条件: 2回目の巡回で Status が `failure_state` になり、理由のコメントが1件で、`agent.start` は1回のまま。
+// 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。2回目の巡回（門7 が初めて書く）では
+// `UpdateStatus` が失敗する。
+// 成功条件: 3回目の巡回で Status が `failure_state` になり、理由のコメントが1件で、`agent.start` は1回のまま。
 func TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す(t *testing.T) {
 	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
 	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません",
@@ -744,10 +755,15 @@ func TestDirectChat_上限を超えたときに書けなかったら次の巡回
 		return nil, &rpcErr{Code: "agent_start_failed", Message: "起動できませんでした"}
 	})
 	id, node := addOwnDirectChatIssue(fx, 351)
-	fx.Tracker.SetUpdateError(errors.New("GraphQL が一時的に失敗しました"))
 
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 15*time.Second, "上限を超えた回の書き込みが失敗する", func() bool {
+	waitFor(t, 15*time.Second, "1回目の用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	fx.Tracker.SetUpdateError(errors.New("GraphQL が一時的に失敗しました"))
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "門7 の書き込みが失敗する", func() bool {
 		return strings.Contains(fx.Logs.String(), "direct chat のカードへ failure_state を書けませんでした") &&
 			len(fx.Orc.RunningIdentifiers()) == 0
 	})
@@ -879,5 +895,139 @@ func TestDirectChat_turnの終わりに引き取りを見たあと手を離す�
 	}
 	if got := fx.Tracker.StateOf(issue.ID); got != state {
 		t.Errorf("手を離すときにカードを動かした: %q から %q へ", state, got)
+	}
+}
+
+// TestDirectChat_上限を超えたissueへ書いている最中の巡回では2本目を立てない は、設計 3-82c の門7 を確かめる。
+//
+// 目的: 上限を超えた issue へ書く経路は門7 の1箇所だけが走らせ、**書いている最中は次の巡回で2本目を立てない。**
+// 書き込みが巡回の間隔より長くかかると、2本が並んで書き、コメントが2件付きうる。
+// 与える情報: `agent.max_retries` を0にし、`agent.start` が必ず失敗する用意。門7 の1本目の `UpdateStatus` を止めておき、
+// その間にもう1回巡回を回す。
+// 成功条件: 止めている間に `UpdateStatus` が1回も記録されないこと（1本目は関門の手前で待っているので記録されない）。
+// 放したあと Status が `failure_state` になり、理由のコメントが1件であること。
+func TestDirectChat_上限を超えたissueへ書いている最中の巡回では2本目を立てない(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
+	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません")
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(map[string]any) (any, *rpcErr) {
+		return nil, &rpcErr{Code: "agent_start_failed", Message: "起動できませんでした"}
+	})
+	id, node := addOwnDirectChatIssue(fx, 354)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+
+	releaseUpdate, entered := fx.Tracker.HoldUpdate()
+	fx.Orc.Tick(context.Background())
+	select {
+	case <-entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("門7 が書き込みを始めない")
+	}
+	fx.Tracker.ResetCalls()
+
+	fx.Orc.Tick(context.Background())
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if n := countString(fx.Tracker.Calls(), "UpdateStatus"); n != 0 {
+			releaseUpdate()
+			t.Fatalf("書いている最中の巡回で2本目の書き込みを立てた: UpdateStatus %d 回", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	releaseUpdate()
+	waitFor(t, 15*time.Second, "1本目が failure_state を書く", func() bool {
+		return fx.Tracker.StateOf(id) == fx.Config.Tracker.FailureState
+	})
+	waitFor(t, 5*time.Second, "理由のコメントを書く", func() bool {
+		return commentsContaining(fx.Tracker, node, "用意できませんでした") == 1
+	})
+}
+
+// countString は、並びの中に want がいくつあるかを返す。
+//
+// list: 数える並び。
+// want: 数える値。
+// 戻り値: 一致した数。
+func countString(list []string, want string) int {
+	n := 0
+	for _, v := range list {
+		if v == want {
+			n++
+		}
+	}
+	return n
+}
+
+// TestDirectChat_turnの終わりに引き取りを見たあと終わらせる処理が走っているあいだは指示を送らない は、
+// 設計 3-82f の `wakeRuns` の行（終端の権利を取った run）を確かめる。
+//
+// 目的: turn の終わりがカードを direct chat と読んで送る印を立てたあと、**巡回より先に人間が引き渡しの Status へ
+// 動かすと、direct chat へは入らないまま終わらせる処理が始まる。**そこへ続きの指示を送ると、
+// 終わらせる処理（`after_run`・`pane.close`）と並んで turn が走る。
+// 与える情報: 1回目の turn の終わりにカードが direct chat だった run。巡回を回す前に `Blocked` へ動かす。
+// `workspace_hooks.after_run` は1秒かかる（終わらせる処理が走っている時間を作る。後片付けの期限
+// `herdr.read_timeout_ms` は fixture では2秒なので、それより短くする）。
+// 成功条件: `agent.prompt` が増えないこと。pane を閉じ、印を外すこと。
+func TestDirectChat_turnの終わりに引き取りを見たあと終わらせる処理が走っているあいだは指示を送らない(t *testing.T) {
+	slow := "sleep 1"
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.WorkspaceHooks.AfterRun = &slow })
+	issue := turnEndSeesDirectChat(t, fx, 355)
+	sent := fx.Herdr.CountMethod(herdr.MethodAgentPrompt)
+
+	fx.Tracker.SetState(issue.ID, "Blocked")
+	fx.Orc.Tick(context.Background())
+	assertNoPromptFor(t, fx, sent, "終わらせる処理が走っている run へ続きの指示を送った")
+	waitFor(t, 15*time.Second, "pane を閉じて印を外す", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); n != sent {
+		t.Fatalf("終わらせる処理のあいだに続きの指示を送った: agent.prompt が %d 回から %d 回へ", sent, n)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n == 0 {
+		t.Error("引き渡しへ動かしたのに pane を閉じていない")
+	}
+}
+
+// TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるときに下ろす は、設計 3-82i を確かめる。
+//
+// 目的: direct chat へ入る前の turn ループが一時的な失敗で立てた「turn の終わりを待つ印」が残ると、
+// 戻したあと `wakeRuns` が送る印より先にそれを取り、**指示を送らずに待つだけの turn ループを起こす。**
+// 戻しても指示が届かず、約1時間後に stall で打ち切られる。**抜けるときに下ろせば、送る印で続きの指示が届く。**
+// 与える情報: 1回目の `agent.prompt` が herdr へ届かずに切れた run（待つ印が立つ）。そのあと direct chat へ動かし、
+// 巡回で入れてから作業中へ戻す。
+// 成功条件: 戻したあと、1回目の本文ではない続きの指示が届くこと。
+func TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるときに下ろす(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Tracker.VerifyStatesEvery = 0 })
+	fx.AllowLog("herdr へ届かなかったので", "herdr との通信が一時的に失敗した")
+	issue := sampleIssue(356, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	fx.Herdr.DropConnection(herdr.MethodAgentPrompt)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "1回目の turn が herdr へ届かず、待つ印が立つ", func() bool {
+		return strings.Contains(fx.Logs.String(), "herdr との通信が一時的に失敗した")
+	})
+	fx.Herdr.StopDropping(herdr.MethodAgentPrompt)
+	prompts := recordPrompts(fx)
+
+	fx.Tracker.SetState(issue.ID, humanState)
+	fx.Orc.Tick(context.Background())
+	if got := prompts(); len(got) != 0 {
+		t.Fatalf("direct chat へ入れた巡回で指示を送った: %v", got)
+	}
+
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+	waitFor(t, 20*time.Second, "戻した run へ続きの指示を送る", func() bool {
+		fx.Orc.Tick(context.Background())
+		return len(prompts()) >= 1
+	})
+	if got := prompts()[0]; strings.Contains(got, firstPromptMarker) {
+		t.Errorf("戻した run へ1回目の本文を送った（継続の指示であるべき）: %q", got)
 	}
 }

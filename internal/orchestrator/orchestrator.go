@@ -1038,6 +1038,13 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		if rs.isPreparing() {
 			continue
 		}
+		// **終わらせる処理が走っている run も起こさない**（設計 3-82f）。turn の終わりが direct chat を見て
+		// 送る印を立てたあと、巡回より先に人間が `Done` などへ動かすと、印が残ったまま終わらせる処理が始まる。
+		// 起こすと、終わらせる処理（成果のコメントの確認・`after_run`・`pane.close`）と並んで続きの指示が届く。
+		// **担当の確認より前に置く。**終わらせている run で `stopBecauseHandoffLost` を走らせないためである。
+		if rs.isTerminating() {
+			continue
+		}
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。

@@ -305,3 +305,48 @@ turn の終わりの判定・hook の受け口・送る内容は変えない。
 `sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
 `go vet ./...`: 終了コード 0。
 **使い方の文言（`messages/ja.json`）を直したので、`messages/en.json` の `_source_sha256` を入れ直した**（入れ直す前の1回目は `TestMessages_英語の資源が正の資源の版に追いついている` が落ちた）。
+
+## 実装レビュー3周目で直すもの
+
+**言いたいこと。**判断票（PR #267 の実装レビュー3周目）で「直す」と決めた7件のうち、PR の本文（メインが直す）を除く6件を、直す前に全部並べる。
+
+| # | 指摘 | 直す場所 | 影響範囲と確かめたこと |
+| --- | --- | --- | --- |
+| u1 | 終わらせている最中の run へ続きの指示が送られる（mid） | `internal/orchestrator/runstate.go` に `isTerminating` を足す。`internal/orchestrator/orchestrator.go` の `wakeRuns`。`internal/orchestrator/lifecycle.go` の `finishRunAsync` と `stopAndReleaseAsync` | **送る印を立てる6箇所**は `decideAfterTurn` の direct chat の枝（lifecycle.go）・turn ループの先頭の2つ（turn.go。控えが direct chat のときと、待ちのコンテキストが切れているとき）・`startRunFromWorktree` の段11 の失敗（dispatch.go）・用意の段3 の戻った枝と `returnFromDirectChatAsync`（directchat.go）。このうち、印を立てたあと巡回より先に Status が `terminal_states` や引き渡しへ動きうるのは前の2つ。**`wakeRuns` の判定の順は「印・控え・用意中・終端・担当の確認・待つ印・送る印」**にし、終端の権利（`terminating`）を持つ run を起こさない。担当の確認より前に置くのは、終わらせている run で `stopBecauseHandoffLost` を走らせないため。`finishRunAsync` と `stopAndReleaseAsync` は終端の権利を取ったその場で送る印を下ろす。**下ろしても失うものは無い。**`endTerminal` で run が続くのは打ち切り（`abortTerminalForHuman`。direct chat の印が立っているときだけ）とリトライの枝（`abandonRunClaimed`。この2つの関数からは来ない）だけで、前者は作業中へ戻した巡回の段4 が送る印を立て直す |
+| u2 | direct chat を抜けても turn の終わりを待つ印が残る（mid） | `internal/orchestrator/runstate.go` の `leaveDirectChatMode` | **待つ印を立てる3箇所**は turn ループの `turnTransient`（turn.go）・`startRunFromWorktree` の `ErrStartupBusy`（dispatch.go）・`wakeRuns` の起こし直し（orchestrator.go）。復元の `Adopt` は direct chat の run には立てない（restore.go が `AwaitTurnEnd && !directChat` で渡す）。**下ろしたあと、作業中へ戻す経路は段4 の送る印と、送る直前の確認（`busyCheckBeforeSend`。応答中なら送らず待つ）が受け持つ。**用意中に下ろす道（段2・担当者が他人）と用意の段3 の戻った枝は、そもそも待つ印を立てない（用意の段2 は `ErrStartupBusy` でも立てない）ので影響しない |
+| u3 | 用意中に巡回が見た Status の時刻が処理した時刻（low） | `internal/orchestrator/reconcile.go` の `reconcileRunning` と `updateDirectChatMode` | `FetchIssuesByIDs` が返った直後の時刻を取り、`updateDirectChatMode` へ渡して `notePreparingSeen` に記録する。用意の段3（`finishDirectChatSetup`）の自分の時刻も「取り直しが返った直後」なので、比べる2つの時刻の取り方がそろう。stall の時計の引き直し（`resetStallClock`）はいままでどおり処理した時刻 |
+| u4 | 用意の失敗の上限で書く処理が2本重なる（low） | `internal/orchestrator/directchat.go` の `failDirectChatSetup`・門7・`directChatSetupFailure` | `failDirectChatSetup` は書かない（数えて、pane を閉じ、印を外すだけ）。**書くのは門7 の1箇所だけ**にする。専用の記録に「書いている最中」を1つ持ち、門7 は立っていれば goroutine を立てない。書き終えたら下ろす（記録が消えていれば何もしない）。**上限を超えた回の書き込みは、次の巡回（既定30秒）の門7 になる。**設計 3-82d の用意の段2 と 3-82c の門7 の文をこれに合わせる |
+| u5 | 門7 の書き直しが門5・門6 の後ろ（low） | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 上限を超えた issue の書き直しは枠も `preflight` も要らないので、門5 の前（門4 のあと）へ移す。間隔の判定（門7 の後半）は今の位置のまま。設計 3-82c の門の一覧に位置を書く |
+| u6 | issue166 の記録のリンク3本（low） | `docs/plans/impl/issue166_stop_hook_block.md` の3本 | 着地先: `turnLoop` の `awaitFirst` の枝、`max_dispatch_turns` の枝、`isTurnBoundaryHook`。**コードを直し終えてから、着地先の中身で確かめる。**あわせて、この周のコードの変更でずれるリンク（CLAUDE.md の `pendingDir` ほか）を差分の行の対応で振り直す |
+
+**hook の規則（CLAUDE.md の6）との当たり。**検知の網に掛かるのは `orchestrator.go`（`wakeRuns`）・`runstate.go`（`leaveDirectChatMode` と読み出し1つ）・`reconcile.go` は網の外。
+`wakeRuns` が turn ループを起こす条件を1つ足すだけで、turn の終わりの判定（`confirmTurnEnd`・`awaitStop`・`awaitHook`）・hook の受け口・送る内容・`OnHook`・`pendingDir` は変えない。
+`leaveDirectChatMode` が下ろす待つ印は本体の中の状態で、hook の側から見える違いは無い。4つの定義のどれにも当たらない。
+
+### 直した場所（実装レビュー3周目）
+
+| # | どこ |
+| --- | --- |
+| u1 | `internal/orchestrator/runstate.go` の `isTerminating`（新設）、`internal/orchestrator/orchestrator.go` の `wakeRuns`（用意中の判定の次、担当の確認の前）、`internal/orchestrator/lifecycle.go` の `finishRunAsync` と `stopAndReleaseAsync`（終端の権利を取ったその場で `takeNeedsPrompt`）。設計 3-82f の `wakeRuns` の行 |
+| u2 | `internal/orchestrator/runstate.go` の `leaveDirectChatMode`（`awaitTurnEnd` を下ろす）。設計 3-82i |
+| u3 | `internal/orchestrator/reconcile.go` の `reconcileRunning`（`fetchedAt`）と `updateDirectChatMode`（引数を足し、`notePreparingSeen` へ渡す）。設計 3-82b の段2 |
+| u4 | `internal/orchestrator/directchat.go` の `directChatSetupFailure.Writing`（新設）・`beginDirectChatSetupLimitWrite` と `endDirectChatSetupLimitWrite`（`directChatSetupLimitBody` を置き換えた）・`failDirectChatSetup`（書かなくした）。設計 3-82c の門7 と 3-82d の用意の段2 |
+| u5 | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes`（上限の判定を門4 と門5 のあいだへ移した。間隔の判定は元の位置）。関数の門の一覧 |
+| u6 | `docs/plans/impl/issue166_stop_hook_block.md` の3本（`turn.go#L164`・`turn.go#L174-L185`・`orchestrator.go#L1446-L1455`）。この周のコードの変更でずれた `CLAUDE.md` の `pendingDir`・設計の `reconcile.go` の1本・`issue134_136_140_blocked_notice.md` の7本・`docs/spec/event_process_system.md` の3本を、差分の行の対応で振り直した |
+
+### 足したテスト（実装レビュー3周目）
+
+| テスト | 何を確かめるか | 直しを外すと |
+| --- | --- | --- |
+| `TestDirectChat_turnの終わりに引き取りを見たあと終わらせる処理が走っているあいだは指示を送らない` | u1 | `wakeRuns` の判定と `takeNeedsPrompt` の両方を外すと落ちる（確かめた）。片方だけ外しても通る（二重の守り） |
+| `TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるときに下ろす` | u2 | 外すと落ちる（確かめた） |
+| `TestDirectChat_上限を超えたissueへ書いている最中の巡回では2本目を立てない` | u4 | `Writing` の判定を外すと落ちる（確かめた） |
+| `TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く`（直した） | u4。落ちた巡回ではカードを動かさず、次の巡回の門7 が書く | — |
+| `TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す`（直した） | u4。門7 が初めて書く巡回で失敗させ、その次の巡回で書き直す | — |
+
+テスト用の herdr に `StopDropping`（`DropConnection` を外す）を足した。
+
+### テストの結果（実装レビュー3周目）
+
+`sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
+`go vet ./...`: 終了コード 0。

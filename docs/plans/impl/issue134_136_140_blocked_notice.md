@@ -489,7 +489,7 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 	}
 ```
 
-**`containsFold` は既にある**（[internal/orchestrator/lifecycle.go:1055](../../../internal/orchestrator/lifecycle.go#L1055)。大文字小文字を無視して比べる）。
+**`containsFold` は既にある**（[internal/orchestrator/lifecycle.go:1060](../../../internal/orchestrator/lifecycle.go#L1060)。大文字小文字を無視して比べる）。
 
 **人間が付けた担当の経路**（[internal/orchestrator/handoff.go:137-154](../../../internal/orchestrator/handoff.go#L137-L154)）。
 **`comments` も `truncated` も `viewer` も手元にある**（7-1 で `FetchAllComments` の戻り値に `truncated` を足す）。
@@ -825,9 +825,9 @@ func (o *Orchestrator) GateViews() []GateView
 		})
 ```
 
-**先例の `RunView`（[internal/orchestrator/orchestrator.go:1519-1553](../../../internal/orchestrator/orchestrator.go#L1519-L1553)）は
+**先例の `RunView`（[internal/orchestrator/orchestrator.go:1526-1560](../../../internal/orchestrator/orchestrator.go#L1526-L1560)）は
 フィールドが全部値型で、スライスを1つも持っていない。**だから
-[internal/orchestrator/orchestrator.go:1558-1581](../../../internal/orchestrator/orchestrator.go#L1558-L1581) の `RunViews` は
+[internal/orchestrator/orchestrator.go:1565-1588](../../../internal/orchestrator/orchestrator.go#L1565-L1588) の `RunViews` は
 そのまま代入していて安全に成立している。**ここで初めてスライスが入る。**
 
 **`noteGate` の側も、受け取った `assignees` を写して持つ。**
@@ -1213,13 +1213,13 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 | **`sort.Slice` は安定ではない** | [internal/server/view.go:142](../../../internal/server/view.go#L142) の `sort.Slice(runs, func(i, j int) bool { return runs[i].Identifier < runs[j].Identifier })` は鍵が一意なので成立している。**`Since` は一意ではない** |
 | **`polling.interval_ms` の既定は30000ミリ秒** | [internal/config/default.go:87](../../../internal/config/default.go#L87) の `IntervalMs: 30000`。**3回目の巡回はちょうど60秒後になり、`noticeMinAge` と同値である** |
 | **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:254-281](../../../internal/i18n/messages/ja.json#L254-L281)（ファイルは843行）、[internal/i18n/keys.go:1039-1092](../../../internal/i18n/keys.go#L1039-L1092) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2692](../../../internal/i18n/keys.go#L2692) 付近 |
-| **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:1055](../../../internal/orchestrator/lifecycle.go#L1055) の `func containsFold(states []string, target string) bool` |
-| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1519-1553](../../../internal/orchestrator/orchestrator.go#L1519-L1553) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1558-1581](../../../internal/orchestrator/orchestrator.go#L1558-L1581) の代入だけで写しが成立している** |
+| **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:1060](../../../internal/orchestrator/lifecycle.go#L1060) の `func containsFold(states []string, target string) bool` |
+| **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1526-1560](../../../internal/orchestrator/orchestrator.go#L1526-L1560) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1565-1588](../../../internal/orchestrator/orchestrator.go#L1565-L1588) の代入だけで写しが成立している** |
 | **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:67-70](../../../internal/orchestrator/handoff.go#L67-L70) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
 | **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:374](../../../internal/server/server.go#L374) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
 | **コメントを書き換える経路も消す経路も無い** | 検索パターン `updateIssueComment` `deleteIssueComment` `minimizeComment` `UpdateComment` `DeleteComment` の5本を `grep -rniE` で束ね、対象 `internal/` と `cmd/`、commit 73fb41ae で `wc -l` が `0` |
 | **`FetchIssuesByStates` は途中で切れない** | [internal/tracker/adapter.go:617-625](../../../internal/tracker/adapter.go#L617-L625) が上限超過で `CategoryPagination` の `*Error` を返す |
 | **`PostComment` が `self_marker` を先頭に付ける** | [internal/tracker/adapter.go:1118-1121](../../../internal/tracker/adapter.go#L1118-L1121) の `full = selfMarker + "\n" + body` |
 | **担当者が2人以上の経路にコメントは無い** | [internal/orchestrator/handoff.go:78-83](../../../internal/orchestrator/handoff.go#L78-L83) の `return` は、`FetchAllComments`（[internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108)）より25行前にある |
-| **`o.failures` は着手できた run しか持たない** | `noteFailure` の呼び出しは [internal/orchestrator/lifecycle.go:576](../../../internal/orchestrator/lifecycle.go#L576) と [internal/orchestrator/lifecycle.go:653](../../../internal/orchestrator/lifecycle.go#L653) の2箇所だけで、どちらも `rs *runState` を持つ |
+| **`o.failures` は着手できた run しか持たない** | `noteFailure` の呼び出しは [internal/orchestrator/lifecycle.go:576](../../../internal/orchestrator/lifecycle.go#L576) と [internal/orchestrator/lifecycle.go:656](../../../internal/orchestrator/lifecycle.go#L656) の2箇所だけで、どちらも `rs *runState` を持つ |
 | **`_source_sha256` の入れ直しは規則である** | [CONTRIBUTING.md:100](../../../CONTRIBUTING.md#L100) が「`ja.json` の文言を直したときは、`en.json` の先頭の `_source_sha256` を入れ直してください」と決めている |

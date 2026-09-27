@@ -603,6 +603,9 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
+	// **送る印を下ろす**（設計 3-82f）。turn の終わりが direct chat を見て立てたものが残っている
+	// ことがある。`wakeRuns` は終わらせている run を起こさないが、残すと打ち切りで run が続いたあとに読まれる。
+	rs.takeNeedsPrompt()
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
@@ -892,6 +895,8 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
+	// **送る印を下ろす**（`finishRunAsync` と同じ理由。設計 3-82f）。
+	rs.takeNeedsPrompt()
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()

@@ -100,7 +100,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 | --- | --- |
 | **`<task-notification>` のあと** | 窓の中で `<task-notification>` を受けて待ち直したあと、その処理の応答が差し戻される。`awaitStop` が空の `Stop` を掴み、`settle_ms` の窓が開く |
 | **走行中の `Stop` のあと** | 同上。`background_tasks` が空でない `Stop` で待ち直したあと |
-| **引き継いだ run** | [internal/orchestrator/turn.go:160](../../../internal/orchestrator/turn.go#L160)。`agent.prompt` を送らずに `confirmTurnEnd` から入る（3-4 の段5a2） |
+| **引き継いだ run** | [internal/orchestrator/turn.go:164](../../../internal/orchestrator/turn.go#L164)。`agent.prompt` を送らずに `confirmTurnEnd` から入る（3-4 の段5a2） |
 
 **そのときの時刻。**continuo は **2.0 秒**で窓を閉じ、**2.5 秒**で transcript を読む
 （`settle_ms` の既定 2000ms は [internal/config/default.go:140](../../../internal/config/default.go#L140)、
@@ -118,7 +118,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 | --- | --- |
 | **差し戻された側の応答Aで Status が動き、書き直し中の pane を閉じる** | [internal/orchestrator/lifecycle.go:49-51](../../../internal/orchestrator/lifecycle.go#L49-L51) が応答Aから表明を読み、[internal/orchestrator/lifecycle.go:116-118](../../../internal/orchestrator/lifecycle.go#L116-L118) の default の枝が `finishRun` へ進む |
 | **書き直した応答Bが、どこからも読まれない** | 読み取り範囲は「`typed` の user 行から次の `typed` の user 行まで」（[internal/orchestrator/transcript.go:521-546](../../../internal/orchestrator/transcript.go#L521-L546)）。差し戻しの行は `typed` ではないので応答Bは応答Aと同じ範囲に入り、**その範囲は読み終わっている** |
-| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:571](../../../internal/orchestrator/runstate.go#L571) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:162-172](../../../internal/orchestrator/turn.go#L162-L172) が `failure_state` へ落とす |
+| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:571](../../../internal/orchestrator/runstate.go#L571) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:174-185](../../../internal/orchestrator/turn.go#L174-L185) が `failure_state` へ落とす |
 
 **3つ目がいちばん見えにくい。**issue に残る理由は
 **「作業が終わったという表明を出しませんでした」**になり、実際に起きたこととは別の話になる。
@@ -304,7 +304,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **案：`UserPromptSubmit` を `<task-notification>` 以外も「turn が続いている」と見る。**
 **採らない。****差し戻しが `UserPromptSubmit` を出すかどうかを確かめられていない。**
 出さないなら1件も拾えず、出すなら
-[internal/orchestrator/orchestrator.go:1279-1289](../../../internal/orchestrator/orchestrator.go#L1279-L1289) の
+[internal/orchestrator/orchestrator.go:1446-1455](../../../internal/orchestrator/orchestrator.go#L1446-L1455) の
 `isTurnBoundaryHook` が広がって、**人間が pane へ直接打った入力まで turn の判定に混ざる。**
 
 ---

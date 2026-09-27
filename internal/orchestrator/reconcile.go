@@ -90,6 +90,10 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		o.logger.Warn("実行中の issue を取り直せません（この巡回では照合しません）", "error", err)
 		return
 	}
+	// **取り直しが返った時刻を控える**（設計 3-82b の段2）。用意の段3 は、巡回が見た Status と自分の取り直しの
+	// 新しいほうで判定する。**処理した時刻を渡すと、前の issue の処理（担当者の判定の GraphQL など）のぶん
+	// 新しく見え、素早く往復したときに古い値が勝つ。**用意の段3 の時刻も取り直しが返った直後に取っている。
+	fetchedAt := o.now()
 
 	seen := map[string]bool{}
 	for _, issue := range issues {
@@ -104,7 +108,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		// **`tracker.direct_chat_state` 以外へ動いたら、どの Status でも抜ける。**
 		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
 		// pane が残り、worktree も片付かない。**
-		o.updateDirectChatMode(ctx, rs, issue)
+		o.updateDirectChatMode(ctx, rs, issue, fetchedAt)
 		// 段5: **Status が `direct_chat_state` の run と、「用意中」の run は、`switch` へ入れない**（設計 3-82b）。
 		//
 		// **飛ばすかどうかは、カードの Status で決める。`rs.inDirectChatMode()` で決めてはならない**（設計 3-82f）。
@@ -212,11 +216,12 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
-func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue) {
+// fetchedAt: その issue を取り直した時刻（取り直しが返った直後）。用意中の run の記録に使う。
+func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue, fetchedAt time.Time) {
 	now := o.now()
 	// **用意中かどうかと、見た Status の記録を、用意の段3 と同じロックの中で決める**（設計 3-82b の段2）。
 	o.mu.Lock()
-	preparing := rs.notePreparingSeen(issue.State, now)
+	preparing := rs.notePreparingSeen(issue.State, fetchedAt)
 	o.mu.Unlock()
 
 	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {

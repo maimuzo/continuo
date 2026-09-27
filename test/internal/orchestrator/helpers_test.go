@@ -205,6 +205,17 @@ func (fh *fakeHerdr) DropConnection(method string) {
 	fh.drops[method] = true
 }
 
+// StopDropping は `DropConnection` で入れた台本を外し、そのメソッドへ再び答えるようにする。
+//
+// **herdr が再起動し終えた場面の再現である。**
+//
+// method: 対象のメソッド名。
+func (fh *fakeHerdr) StopDropping(method string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	delete(fh.drops, method)
+}
+
 // fakeWorkspace はテスト用herdr mock が持つ workspace 1件である。
 //
 // **本物と同じく、リポジトリの親 workspace も持つ**（issue #19）。`worktree.open` に

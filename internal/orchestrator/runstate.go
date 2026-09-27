@@ -1773,6 +1773,11 @@ func (rs *runState) leaveDirectChatMode() bool {
 	rs.directChatPauseCtx, rs.directChatPauseCancel = context.WithCancel(context.Background())
 	// **捨てるもの3つを、印を下ろすのと同じ区間で捨てる**（設計 3-82i）。
 	rs.discardTurnBoundaryLocked()
+	// **turn の終わりを待つ印も下ろす**（設計 3-82g）。direct chat へ入る前の turn ループが
+	// 一時的な失敗で立てたものが残ると、戻したあと `wakeRuns` が送る印より先にこれを取り、
+	// 指示を送らずに待つだけの turn ループを起こす（約1時間後に stall で打ち切られる）。
+	// **応答を書いている最中かは、送る直前の確認（`busyCheckBeforeSend`）が受け持つ。**
+	rs.awaitTurnEnd = false
 	return true
 }
 
@@ -2228,6 +2233,18 @@ func (rs *runState) endRewrite() {
 	rs.rewriting = false
 	close(rs.rewriteDone)
 	rs.rewriteDone = nil
+}
+
+// isTerminating は「この run を終わらせる処理」が走っている最中かを返す。
+//
+// **`wakeRuns` が見る。**終わらせている run へ続きの指示を送ると、終わらせる処理
+// （`ensureAgentComment`・`after_run`・`pane.close`）と並んで turn が走る。
+//
+// 戻り値: 終わらせる処理が印を持っていれば true。
+func (rs *runState) isTerminating() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.terminating
 }
 
 // endTerminal は「終わらせる処理」の印を外す。

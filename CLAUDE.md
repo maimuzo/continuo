@@ -233,7 +233,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1601-1606](internal/cli/cli.go#L1601-L1606) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1491-1495](internal/orchestrator/orchestrator.go#L1491-L1495) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1498-1502](internal/orchestrator/orchestrator.go#L1498-L1502) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 | [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |

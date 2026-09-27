@@ -23,6 +23,11 @@ type directChatSetupFailure struct {
 	LastAt time.Time
 	// Reason は最後に落ちた理由の要約である（上限を超えたときのコメントに載せる）。
 	Reason string
+	// Writing は、上限を超えた issue へ書く経路（`failure_state` とコメント）が走っている最中であることを表す。
+	//
+	// **書くのは門7 の1箇所だけで、書いている最中は次の goroutine を立てない。**書き込みが巡回の間隔より
+	// 長くかかると、2本が並んで書き、コメントが2件付きうる。
+	Writing bool
 }
 
 // assigneeVerdict は、direct chat のカードの担当者を 3-82h の判定の表に当てた答えである。
@@ -93,6 +98,7 @@ func (o *Orchestrator) splitDirectChatCandidates(candidates []tracker.Issue) ([]
 //	門2 draft issue である                  … Debug
 //	門3 担当者が自分1人ではない             … 0人か2人以上なら `failure_state` を書く。1人で他人なら Debug
 //	門4 この worktree に pane が1枚でもある  … Debug（「Claude Code が居るか」は判定しない）
+//	門7 用意の失敗が上限を超えた            … 用意せず、書く経路だけを走らせる（門5 より前で見る）
 //	門5 空きスロットが無い                  … Debug（人間の決定で、専用の知らせは作らない）
 //	門6 着手の直前の検査（`preflight`）      … `preflight` が自分で出す
 //	門7 用意が直前に落ちてから間隔が空いていない … Debug
@@ -185,6 +191,28 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
+		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけを走らせる**（設計 3-82d の用意の段2）。
+		// **書くのはここだけである。**用意の段2 の失敗（`failDirectChatSetup`）は数えるだけで書かない。
+		// 書けなかったら次の巡回でまた書く。書けたらカードは direct chat から外れ、記録は候補から外れた巡回で消える。
+		// **門5・門6 より前で見る。**書く経路は枠も `preflight` も使わないので、枠が埋まっている・
+		// 検査に落ちるというだけで書き直しを止めてはならない。
+		if body, over, start := o.beginDirectChatSetupLimitWrite(issue.ID); over {
+			o.clearGate(issue.ID)
+			if !start {
+				o.logger.Debug("direct chat の用意の失敗が上限を超えた issue へ書いている最中なので、この巡回では書きません",
+					"identifier", issue.Identifier)
+				continue
+			}
+			o.logger.Debug("direct chat の用意の失敗が上限を超えているので、用意せず failure_state を書きます",
+				"identifier", issue.Identifier, "上限", o.cfg.Agent.MaxRetries)
+			o.wg.Add(1)
+			go func(issue tracker.Issue) {
+				defer o.wg.Done()
+				defer o.endDirectChatSetupLimitWrite(issue.ID)
+				o.writeDirectChatFailure(ctx, issue, body)
+			}(issue)
+			continue
+		}
 		// 門5: 空きスロット。**人間の決定で、枠が尽きたことを知らせる仕組みは作らない**（設計 3-82c）。
 		// **出すのは Debug 1行だけである。**`clearGate` はこの分岐の外（下の共通の後始末）でも呼ぶ。
 		// **見るのは全体の上限だけである**（`globalFreeSlot`）。Status ごとの上限は当てない。
@@ -198,20 +226,6 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		// 先に落とすと、未信頼のリポジトリで direct chat を頼んだ人へ、直し方のコメントが1件も出ない。
 		if !o.preflight(ctx, issue) {
 			o.clearGate(issue.ID)
-			continue
-		}
-		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけをやり直す**（設計 3-82d の用意の段2）。
-		// 上限に届いた回の書き込み（`failDirectChatSetup`）が失敗しても、ここで次の巡回ごとに書き直す。
-		// 書けたらカードは direct chat から外れ、記録は候補から外れた巡回で消える。
-		if body, over := o.directChatSetupLimitBody(issue.ID); over {
-			o.logger.Debug("direct chat の用意の失敗が上限を超えているので、用意せず failure_state を書き直します",
-				"identifier", issue.Identifier, "上限", o.cfg.Agent.MaxRetries)
-			o.clearGate(issue.ID)
-			o.wg.Add(1)
-			go func(issue tracker.Issue) {
-				defer o.wg.Done()
-				o.writeDirectChatFailure(ctx, issue, body)
-			}(issue)
 			continue
 		}
 		// 門7: 用意が直前に落ちてから、間隔が空いていない。
@@ -401,7 +415,8 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 //
 // **落ちたことを専用の記録へ数え、次に試すまで間隔を空ける**（門7）。
 // **通常の着手と同じ回数の上限（`agent.max_retries`）を超えたら、書く経路で `failure_state` を書き、
-// 落ちた理由をコメントする**（人間が了承した形）。書けなかったら、門7 が次の巡回で書き直す。
+// 落ちた理由をコメントする**（人間が了承した形）。**書くのはここではなく、次の巡回の門7 である。**
+// ここでも書くと、書き込みが巡回の間隔より長くかかったときに門7 の書き込みと重なり、コメントが2件付きうる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 用意に失敗した run。
@@ -415,33 +430,50 @@ func (o *Orchestrator) failDirectChatSetup(ctx context.Context, rs *runState, is
 	rs.finishPreparing()
 	o.mu.Unlock()
 	o.abandonDirectChatSetup(ctx, rs)
-	if body, over := o.directChatSetupLimitBody(issue.ID); over {
-		o.writeDirectChatFailure(ctx, issue, body)
-	}
 }
 
-// directChatSetupLimitBody は、用意の失敗が上限を超えているかと、書く経路で issue へ書く文を返す（設計 3-82d）。
+// beginDirectChatSetupLimitWrite は、用意の失敗が上限を超えているかを見て、超えていれば書く経路の番を取る
+// （設計 3-82c の門7・3-82d の用意の段2）。
 //
 // **比べ方は通常の着手（`skipByFailure`）と同じ「回数が `agent.max_retries` を超えたら」である。**
 // `agent.max_retries: 0` なら1回目の失敗で超える。「達したら」にすると、0 のときに一度も書かれない。
 //
+// **番は専用の記録の `Writing` で持つ。**判定と番を取るのを同じロックの中で行うので、2本目は立たない。
+// 番を取ったら、書き終えたときに必ず `endDirectChatSetupLimitWrite` で返すこと。
+//
 // issueID: project item の ID。
-// 戻り値の1つ目: 書く経路で issue へ書くコメント。
+// 戻り値の1つ目: 書く経路で issue へ書くコメント（番を取れたときだけ入る）。
 // 戻り値の2つ目: 上限を超えていれば true。
-func (o *Orchestrator) directChatSetupLimitBody(issueID string) (string, bool) {
+// 戻り値の3つ目: 番を取れたら true（偽なら、別の goroutine が書いている最中である）。
+func (o *Orchestrator) beginDirectChatSetupLimitWrite(issueID string) (string, bool, bool) {
 	o.mu.Lock()
 	note, ok := o.directChatSetupFailures[issueID]
-	var count int
-	var reason string
-	if ok {
-		count, reason = note.Count, note.Reason
+	if !ok || note.Count <= o.cfg.Agent.MaxRetries {
+		o.mu.Unlock()
+		return "", false, false
 	}
+	if note.Writing {
+		o.mu.Unlock()
+		return "", true, false
+	}
+	note.Writing = true
+	count, reason := note.Count, note.Reason
 	o.mu.Unlock()
-	if !ok || count <= o.cfg.Agent.MaxRetries {
-		return "", false
-	}
 	return i18n.T(i18n.KeyOrchestratorDirectChatSetupLimit,
-		count, reason, o.cfg.Tracker.DirectChatState, o.cfg.Tracker.FailureState), true
+		count, reason, o.cfg.Tracker.DirectChatState, o.cfg.Tracker.FailureState), true, true
+}
+
+// endDirectChatSetupLimitWrite は、書く経路の番を返す（設計 3-82c の門7）。
+//
+// **記録が既に消えていれば何もしない**（書けてカードが候補から外れた巡回で消える）。
+//
+// issueID: project item の ID。
+func (o *Orchestrator) endDirectChatSetupLimitWrite(issueID string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if note, ok := o.directChatSetupFailures[issueID]; ok {
+		note.Writing = false
+	}
 }
 
 // abandonDirectChatSetup は、用意した run の自分で開いた pane を閉じ、印を外す（設計 3-82d）。
