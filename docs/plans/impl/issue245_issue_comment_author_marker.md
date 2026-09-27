@@ -122,7 +122,7 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 
     gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association, state: .state, written_by: (if ((.body // "") | test("^[ \t\r\n]*<!-- (continuo:|code-review-result -->|design-review-result -->|design-review-skipped -->)")) then "ai" else "human" end), trusted_comment: ((((.body // "") | test("^[ \t\r\n]*<!-- (continuo:|code-review-result -->|design-review-result -->|design-review-skipped -->)")) | not) and (.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")), body: .body}'
 
-見本の JSON（目印で始まる本文・印の無い OWNER の本文・NONE の本文・null の本文・字下げした `<!-- continuo:ai -->`）に jq 1.7 で当て、`written_by`・`trusted_comment` が 3-82 の表どおりになることを確かめた（2026-09-28 01:45 (JST)）。
+見本の JSON（目印で始まる本文・印の無い OWNER の本文・NONE の本文・null の本文・字下げした `<!-- continuo:ai -->`）に jq 1.7.1 で当て、`written_by`・`trusted_comment` が 3-82 の表どおりになることを確かめた（2026-09-28 01:33 (JST)）。gh の中の gojq でも、同じ式が構文の誤り無しに通った（pull request #254 の行に紐づくレビューコメント。0件）
 
 **4-3（関連する記録を読む）。**別の issue と pull request を辿って読むときも、4-1・4-2 と同じ式で読む、と1文足す。
 
