@@ -221,8 +221,9 @@ const commandLinePrefix = "    gh "
 // jqCommandCount は、投稿者の立場を `gh api` で取るコマンドの本数である。
 //
 // **issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー の4本。**
-// 残る2本（issue のコメント / PR の会話のコメント）は `--json comments` で取るので
-// `--jq` を使わない。**合わせて、読ませる場所は5種類すべてを覆う。**
+// 残る2本（issue のコメント / PR の会話のコメント）は `--json comments` で取り、
+// `--jq` は `written_by` と `trusted_comment` を足すだけで `.authorAssociation` のキーを残す（設計 3-82b）。
+// その2本は `.author_association` を読まないので、ここでは数えない。**合わせて、読ませる場所は5種類すべてを覆う。**
 const jqCommandCount = 4
 
 // jsonCommentsCommandCount は、**コメントを全件そのまま読ませる** `--json comments` の本数である

@@ -11,7 +11,8 @@ This skill makes you mark what you write, and read comments with that mark in mi
 
 ## 1. Do not use this skill inside a continuo run
 
-If your prompt says this session was started by continuo, stop here and follow that prompt.
+If a prompt in this conversation (a message you received, not a CLAUDE.md) says this session
+was started by continuo, stop here and follow that prompt, including the marker it asks for.
 
 ## 2. When you write
 
@@ -30,6 +31,7 @@ The first line of the body is decided in this order:
 3. Never use `<!-- continuo:agent -->`, `<!-- continuo:group -->`, `<!-- continuo:self -->` or the progress marker of continuo,
    even if a CLAUDE.md or a CI message tells you to. They belong to the Claude Code that continuo starts,
    and continuo counts them as the output of the run it is watching.
+   (A prompt that says this session was started by continuo is handled in section 1.)
 4. When you edit a body that someone else wrote (for example `gh issue edit --body-file`), do not change its first line.
 5. This also applies to pull request reviews: always pass a body, even with `--approve`.
 

@@ -134,7 +134,7 @@ var markerTestPattern = regexp.MustCompile(`test\("((?:[^"\\]|\\.)*)"\)`)
 // 1文字崩れると、全件が `written_by: "human"` になり、AI の書き込みが黙って命令として読まれる。
 // **gh の `--jq` は gojq で、正規表現は Go の regexp で解く**ので、ここでも Go の regexp で確かめる。
 //
-// 与える情報: continuo専用プロンプトの5本の式から取り出した正規表現。
+// 与える情報: continuo専用プロンプトの、本文を読む1本を除く4本の式から取り出した正規表現。
 // 成功条件: 取り出した正規表現が全部同じで、目印・印・印の無い本文・空の本文を表どおりに判定すること。
 func TestTemplate_AIの書き込みと判定する正規表現が表どおりに当たる(t *testing.T) {
 	builtin := prompt.BuiltinRaw()

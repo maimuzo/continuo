@@ -191,7 +191,7 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 
 **project の scope を勧めない理由。**project の scope は追跡される `.claude/settings.json` に入る。commit されると、そのリポジトリで continuo が起動するすべての機械の run がスキルを読み込み、marketplace を足していない機械では起動の途中で確認が出るおそれがある（未実測）。範囲を絞る理由も無い（印が害になりうるリポジトリは 3-82d の限界の表）。
 
-**SKILL.md。**本文は英語で書く（continuo は世界中の人が使う）。スキルが効く条件は付けない。「continuo で回しているか」はモデルが判定できないからである。印は画面に表示されないが、本文の1行目を読む仕組みがあるリポジトリで害が出るかは測っていない（3-82d の限界の表）。
+**SKILL.md。**本文は英語で書く（continuo は世界中の人が使う）。**実物は `plugins/continuo-issue-comments/skills/marking-and-trusting-issue-comments/SKILL.md` が正である。**下の見本には、設計レビューの5周目と実装レビューの1周目の直し（§1 を「会話の中のプロンプトが continuo の run だと言っていれば、その印に従って止まる」にしたこと、§2 の規則3、読む順を当てる条件）が入っていない。スキルが効く条件は付けない。「continuo で回しているか」はモデルが判定できないからである。印は画面に表示されないが、本文の1行目を読む仕組みがあるリポジトリで害が出るかは測っていない（3-82d の限界の表）。
 
     ---
     name: marking-and-trusting-issue-comments
@@ -310,7 +310,7 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 | `internal/scaffold/ci_template.go`（利用者の CI の雛形） | 案内の `<!-- continuo:agent -->` の行（いまの218行）を「continuo が起動したエージェントのときだけ」と書き分ける |
 | `CONTRIBUTING.md` | 目印付きのコメントはレビューの記録で、run への指示は印の無いコメントで書く、を1文足す |
 | `README.md`・`README.ja.md` | 立場の説明（いまの README.md 22・74行、README.ja.md 22・76行）に、AI の印付きのコメントは命令として扱わない、を1文足す |
-| `docs/upgrading.md` | run が AI の書き込みを命令として扱わなくなったこと。pull request の本文を命令として扱わなくなったこと。3-4 の例外の説明（いまの615行）を「`trusted_comment` か `trusted_body` が true のものに」と直すこと。v0.1.12 以前に本文へ足した `## 書いた人によって扱いを変えること` が残っていたら消すこと。FAQ の古い見本を CLAUDE.md へ写した利用者と、既に置いた CI の雛形（書き換えられない）を直す手順。plugin の更新のしかた |
+| `docs/upgrading.md` | run が AI の書き込みを命令として扱わなくなったこと。pull request の本文を命令として扱わなくなったこと。3-4 の例外の説明（いまの615行）は、v0.1.15 の節でその版の挙動を説明しているので書き換えず、v0.1.16 の節に書くこと（設計レビューの5周目で決めた）。v0.1.12 以前に本文へ足した `## 書いた人によって扱いを変えること` が残っていたら消すこと。FAQ の古い見本を CLAUDE.md へ写した利用者と、既に置いた CI の雛形（書き換えられない）を直す手順。plugin の更新のしかた |
 | テスト | (1) `test/internal/orchestrator/prompt_author_association_test.go` の `TestPrompt_本文はJSONのまま読ませる`・`jsonCommentsCommandCount`・`TestPrompt_指示する名前はどれかのコマンドが返す名前である` を新しい式に合わせて直す。全件を読むコマンドは `--jq` の有無ではなく `written_by` を含むかで見分ける（キーの名前が残ることを確かめる形のまま）。(2) 3-4・6-3 の文面を固定している `outside_worktree_test.go`・`push_upstream_test.go` を直す。6-1 の文を固定している `TestPrompt_命令として扱う立場を限定している`・`TestPrompt_外部が立てたissueでも手が止まらない` は、6-1 の文を残すので直さずに通ることを確かめる。`TestTemplate_組み込みのプロンプトが設計5_3と一致する` が通ることを確かめる。(3) 式の揃いのテストを1本足す。continuo専用プロンプトと SKILL.md に書いた式が1文字も違わないこと（テンプレートの変数と置き換え語だけを除く）と、その正規表現を Go で組み直して、目印・印・印の無い本文・null の本文に当てた結果を確かめる。(4) `<!-- continuo:ai -->` が `FetchComments` のどの判定にも当たらないこと |
 
 **hook への影響は、pull request の本文へ1段落で書く**（CLAUDE.md の「判断した結果は、pull request の本文へ1段落で書くこと」）。戻す途中で `internal/cli/cli.go` などが diff に一度出るので、書かないと次に読む人が同じ検討をやり直す。

@@ -360,6 +360,13 @@ claude plugin marketplace add maimuzo/continuo
 claude plugin install continuo-issue-comments@continuo
 ```
 
+**自動では新しくなりません**（third-party の marketplace は、Claude Code の既定で自動更新が切れています）。新しくするときは次の2つを叩きます。
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
 **手で直すものが3つあります。**どれも、前の版の案内をあなたが写した場合だけです。
 
 | 何 | どう直すか |
