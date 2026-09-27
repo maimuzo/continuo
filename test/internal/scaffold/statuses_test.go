@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "69e4366093e68d8bbfd1a1bd7c3eb52f551d143e7b66a671893845866120c69f", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package scaffold_test
@@ -383,7 +383,7 @@ func TestUpdateStatuses_役割が欠けていたら止まる(t *testing.T) {
 	}
 }
 
-// 目的: StatusKeyNames が8つのキーを返し、それが実際に書き換えられるキーであることを確認する。
+// 目的: StatusKeyNames が9つのキーを返し、それが実際に書き換えられるキーであることを確認する。
 //
 // **雛形からどれか1つでもキーが消えると UpdateStatuses が ErrKeysNotFound で落ちる。**
 // TemplateWithValues は見つからなかったキーを報告しないので、ここで雛形の側を押さえる。
@@ -415,6 +415,6 @@ func TestStatusKeyNames_雛形に9つのキーが全部ある(t *testing.T) {
 		t.Fatalf("雛形を書き出せなかった: %v", err)
 	}
 	if _, err := scaffold.UpdateStatuses(dir, jaStatuses); err != nil {
-		t.Fatalf("雛形に8つのキーが揃っていない: %v", err)
+		t.Fatalf("雛形に9つのキーが揃っていない: %v", err)
 	}
 }

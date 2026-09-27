@@ -252,6 +252,10 @@ func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, i
 	if !rs.leaveDirectChatMode() {
 		return
 	}
+	// **turn の終わりが立てた送る印を下ろす**（`decideAfterTurn` の direct chat の枝）。
+	// 残すと、段4 の書き込み（`running_state`・hold）が終わる前に `wakeRuns` が指示を送る。
+	// 送る印は、作業中へ戻したときだけ段4 が書き込みのあとで立て直す。
+	rs.takeNeedsPrompt()
 	// 段3: 捨てるもの3つは `leaveDirectChatMode` が同じ区間で捨てた。**stall の時計を引き直す**（設計 3-82i）。
 	// **direct chat の間は `checkStalls` を飛ばしているので、最後に見た時刻も画面の版も止まったままである。**
 	// 引き直さないと、人間が黙って3時間考えていただけで、戻した巡回の `checkStalls` が

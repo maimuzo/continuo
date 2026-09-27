@@ -81,7 +81,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	// **段2 の `stopWorker` が門で止まるためである。**その直後に段5 が同じセッションへ `--resume` で
 	// 2本目の Claude Code を立てるので、人間が話している会話の記録へ、2本目が同時に書き込む。
 	// **入口だけでは足りない。**長い待ちは段6 と段7 にあり、その最中に巡回が direct chat の印を立てる。
-	// **だから段5・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前にも見る。**
+	// **だから段5・段7・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前にも見る。**
 	// **打ち切ったことは戻り値で返し、呼び出し元はそこで止まる。**
 	const why = "成果のコメントを書かせるところでした"
 	if o.abortTerminalForHuman(ctx, rs, why) {
@@ -292,6 +292,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		o.failCommentRecovery(ctx, rs,
 			"復元した Claude Code が入力を受け付けられる状態にならなかった。**本文は送っていない。**")
 		return false
+	}
+
+	// **段7 の直前に見る**（設計 3-82f）。段6 の待ちのあいだに人間が引き取っていたら、
+	// 人間が話そうとしている pane へ「コメントに書いてください」を送らない。
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
 	}
 
 	// 段7: 「コメントに書いてください」とだけ送る。**turn 数に数えない。**

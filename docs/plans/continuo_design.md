@@ -4576,7 +4576,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 
 ### 3-32d. `continuo setup` が書き換えるのは8つのキーである
 
-**言いたいこと。**Status に関わる7つに `cleanup.on_states` を足して8つにする。
+**言いたいこと。**Status に関わる7つに `cleanup.on_states` を足して8つにする。**3-82 の `tracker.direct_chat_state` を足して、いまは9つである**（このキーだけは既にある `WORKFLOW.md` に無くても書き込みを止めない）。
 **ここを雛形の `["Done"]` のまま残すと、完了の選択肢が別名のカンバンで片付けが一度も走らない。**
 
 **書き換えるキー**（`scaffold.StatusKeyNames` が返すもの。この順で画面にも出す）。
@@ -4586,6 +4586,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 | `tracker.status_signal_map.review` / `tracker.status_signal_map.blocked` | レビュー待ち / 保留に割り当てた選択肢名 |
 | `tracker.active_states` / `tracker.running_state` / `tracker.dispatch_state` | 着手待ちと作業中に割り当てた選択肢名 |
 | `tracker.terminal_states` / `tracker.failure_state` | 完了 / 保留に割り当てた選択肢名 |
+| `tracker.direct_chat_state` | direct chat に割り当てた選択肢名（`0` で飛ばしたら `""`。3-82k） |
 | **`cleanup.on_states`** | **完了に割り当てた選択肢名**（`["完了"]` のように1件で書く） |
 
 **なぜ足すか。**`cleanup.on_states` に実在しない Status（`Done`）が残っても、**誰も指摘しない。**
@@ -8050,7 +8051,7 @@ running_state・`status_signal_map` の遷移先・対応表の戻す先の3種�
 **利用者が当てる前に差分を読める形にする**ためで、`continuo setup` のように直接書く形にはしない。
 
 **`continuo setup` の `ErrKeysNotFound` とは別にする。**あちらが見るのは
-Status を割り当てる8つのキーだけで、**雛形にあって設定に無いものを網羅的に見る仕組みではない。**
+Status を割り当てる9つのキーだけで、**雛形にあって設定に無いものを網羅的に見る仕組みではない。**
 **行を探す処理だけを共有する**（`scaffold.findKeyLine`）。
 
 ### 3-75b. 足す差分は、利用者のファイルの書き方に合わせる
@@ -9609,13 +9610,13 @@ issue に無駄なコメントが積まれ、その turn が「終わった」�
 
 **3箇所とも、入口の1回だけでは足りない。**`finishRunClaimed` は入口のあと `ensureAgentComment`（`agent.prompt` を最大 `claude.turn_timeout_ms` 待つ）と `after_run` の hook を通ってから `release` する。
 **その待ちのあいだに人間がカードを direct chat へ動かすのが、この機能のいちばん普通の使い方である**（エージェントが `blocked` を出した直後に、人間が引き取る）。
-**だから `abortTerminalForHuman` を、入口に加えて、長い待ちの中（`ensureAgentComment` の段5・段8 と `failCommentRecovery` の直前。下の表の `ensureAgentComment` の行）、長い待ちのあと（`ensureAgentComment` を抜けた直後）、`release` の直前にも呼ぶ。**
-**`postHandoffComment` の直前（`finishRunClaimed` は入口のあと `waitForBackgroundTasks` を待つ）と、`failCommentRecoveryBusy` の直前にも呼ぶ。**
+**だから `abortTerminalForHuman` を、入口に加えて、長い待ちの中（`ensureAgentComment` の段5・段7・段8 と `failCommentRecovery` の直前。下の表の `ensureAgentComment` の行）、長い待ちのあと（`ensureAgentComment` を抜けた直後）、`release` の直前にも呼ぶ。**
+**`postHandoffComment` の直前（`finishRunClaimed` は入口のあと `waitForBackgroundTasks` を待つ。`failRun` と `abandonRunClaimed` のリトライを使い切った枝は `UpdateStatus` の書き込みを待つ）と、`failCommentRecoveryBusy` の直前にも呼ぶ。**
 **当たったときの終え方は、その run の `PaneID` と、その pane で `agent.start` が済んでいるかで分ける。コードの位置では分けない。**`stopWorker` は direct chat の印があると閉じずに戻り、門を通ったときだけ `PaneID` を空にしてから閉じる（閉じ損ねても空のまま）。そのため、位置では pane の生死が決まらない。一方、`ensureAgentComment` の段4 と着手の段8 は `agent.start` の前に `PaneID` を立てるので、空でなくても Claude Code が居ないことがある。
 
 | 当たった時点 | どう終えるか |
 | --- | --- |
-| **`PaneID` が空でなく、その pane で `agent.start` が済んでいる**（`stopWorker` を呼んでいない、門で止まった、または `ensureAgentComment` の段5 が立て直した） | **終わらせる処理をやめ、印を残す。**巡回が direct chat へ入れ、人間はその pane で話せる |
+| **`PaneID` が空でなく、その pane で `agent.start` が済んでいる**（`stopWorker` を呼んでいない、門で止まった、または `ensureAgentComment` の段5 が立て直した） | **終わらせる処理をやめ、印を残す。**巡回が direct chat へ入れ、人間はその pane で話せる。**「worker を止めた」印が立っていれば（段5 が立て直した場合）、新しい世代を始める**（`beginAttempt`。`SendFirstPrompt` は前の値へ戻す）。残すと、戻したときの turn ループが即座に抜け、同じ pane で続かない |
 | **`PaneID` が空**（この処理の `stopWorker` が閉じた）、**または `agent.start` がまだ済んでいない**（continuo が開いたばかりのシェル） | **Status を書かず、`after_run` をまだ走らせていなければ走らせず、コメントを書かず、後者なら自分で開いた pane を ID で閉じてから、印を外す**。**印を残すと、pane の無い印になり誰も気づかない**（3-82j）。印を外せば、次の巡回で 3-82c が pane を用意し直す |
 
 **どちらでも、終端の権利（`claimTerminal` で取ったもの）を `endTerminal` で返す。**返さないと、そのあと終わらせる処理が永久に待ち、印と `agent.max_concurrent_agents` の枠が再起動まで残る。**`ensureAgentComment` の中で打ち切ったことは戻り値で返し、呼び出し元はそこで止まる。**
@@ -9632,8 +9633,8 @@ issue に無駄なコメントが積まれ、その turn が「終わった」�
 | turn ループの `switch outcome` の手前と、`turnBlocked` で subagent を待ったあと | `turnBlocked` は esc を送ってから引き渡す。**送られた esc は取り消せない。**subagent を待つあいだ（最大 `claude.poll_wait_ms`）に direct chat へ入ると待ちがすぐ切れるので、**esc を送る直前にもう1度見る** |
 | `handleTurnEnd` の入口 | すり抜けると `applySignals` が走る |
 | **担当の確かめ直し**（`verifyHandoff`） | **免除は置かない**（3-82h）。`verifyHandoff` は担当者に自分が含まれていれば止めない。direct chat に居られるのは担当者が自分1人のときだけなので、ふつうは止まらない。**入口の門は内部の印を見るので、カードを動かしてから巡回が回る前に turn が終わると通り抜ける。**その窓で担当者が別の1人に替わっていたときは `stopBecauseHandoffLost` が pane を閉じるが、それは 3-82h の「手を離す経路」と同じ結果である |
-| **`decideAfterTurn` の `switch` の先頭** | **取り直したカードの Status で判定する枝を置く。**この関数は取り直した issue を引数で受け取っているので、出どころがある。**`default` へ落ちると引き渡しの通知を投稿し、人間の pane へ指示を送り、pane を閉じる。****「カードを動かしてから話しかける」という FAQ が勧める手順を踏んだ人が、いちばん高い確率で踏む** |
-| **`ensureAgentComment` の入口と、中の段5・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前** | **段2 の `stopWorker` が門で止まるので、その直後の段5 が同じセッションへ `--resume` で2本目の Claude Code を立てる。****人間が話している会話の記録へ、2本目が同時に書き込む。**これは pane を閉じなくしたことが生んだ危険である。**入口だけでは足りない。**長い待ちは段6（idle になるのを待つ）と段7（`agent.prompt`。最大 `claude.turn_timeout_ms`）にあり、その最中に巡回が direct chat の印を立てる（`reconcileRunning` は終わらせる処理の最中の run も見る）。**段8 の直前に見ないと、段9 の `failCommentRecovery` が、Status は書かないが事実と違う引き渡しの通知を投稿する。**だから段5・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前にも見る。当たったら上の表の `PaneID` の判定で終える（段2 の `stopWorker` が門で止まっていれば `PaneID` は残っている）。打ち切ったことは戻り値で返す。**あわせて、「direct chat から直接抜けた」印（3-82g）が立っていたら入口で抜ける** |
+| **`decideAfterTurn` の `switch` の先頭** | **取り直したカードの Status で判定する枝を置く。**この関数は取り直した issue を引数で受け取っているので、出どころがある。**`default` へ落ちると引き渡しの通知を投稿し、人間の pane へ指示を送り、pane を閉じる。****「カードを動かしてから話しかける」という FAQ が勧める手順を踏んだ人が、いちばん高い確率で踏む。****この枝では続きの指示を送る印を立てておく。**turn ループはここで終わるので、次の巡回より先に作業中へ戻されると、ループも送る印も無い run が残る。direct chat へ入れば `wakeRuns` が飛ばし、抜けるとき（3-82b の段2）に下ろして、段4 が書き込みのあとで立て直す |
+| **`ensureAgentComment` の入口と、中の段5・段7・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前** | **段2 の `stopWorker` が門で止まるので、その直後の段5 が同じセッションへ `--resume` で2本目の Claude Code を立てる。****人間が話している会話の記録へ、2本目が同時に書き込む。**これは pane を閉じなくしたことが生んだ危険である。**入口だけでは足りない。**長い待ちは段6（idle になるのを待つ）と段7（`agent.prompt`。最大 `claude.turn_timeout_ms`）にあり、その最中に巡回が direct chat の印を立てる（`reconcileRunning` は終わらせる処理の最中の run も見る）。**段7 の直前に見ないと、人間が話そうとしている pane へ「コメントに書いてください」が送られる。****段8 の直前に見ないと、段9 の `failCommentRecovery` が、Status は書かないが事実と違う引き渡しの通知を投稿する。**だから段5・段7・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前にも見る。当たったら上の表の `PaneID` の判定で終える（段2 の `stopWorker` が門で止まっていれば `PaneID` は残っている）。打ち切ったことは戻り値で返す。**あわせて、「direct chat から直接抜けた」印（3-82g）が立っていたら入口で抜ける** |
 | `checkStalls` | 打ち切りは `failure_state` を書く |
 | `wakeRuns`（**担当の確認より前**） | あとに置くと、人間が自分を担当者に付けた瞬間に `stopBecauseHandoffLost` が走る |
 | `stopAndReleaseAsync` | 門は pane を守るが印は外れる |
@@ -13887,7 +13888,7 @@ issue のテキスト表示と同じで、区切りが行頭の `--` だけで�
 `gh api repos/cli/cli/pulls/3/comments` では2件とも出る。
 
 **雛形を直しても、既に WORKFLOW.md を持っている利用者には届かない。**
-`continuo init` は既にあるファイルを作り直さず、`continuo setup` は Status の8つのキーの行しか
+`continuo init` は既にあるファイルを作り直さず、`continuo setup` は Status の9つのキーの行しか
 書き換えない（[internal/scaffold/update.go](internal/scaffold/update.go)）。
 **本文は1文字も触らない。**したがって**新しい版へ上げても、古い本文のまま回り続ける。**
 

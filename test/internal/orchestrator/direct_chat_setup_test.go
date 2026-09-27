@@ -480,6 +480,247 @@ func TestDirectChat_再起動でagent名を持つpaneが無いdirectChatのworkt
 	}
 }
 
+// abortedLog は、終わらせる処理を人間の引き取りでやめたときにだけ出るログである（設計 3-82f）。
+const abortedLog = "この run を終わらせるのをやめます"
+
+// TestDirectChat_コメントを書かせる途中で引き取って戻すと同じpaneで続く は、
+// 設計 3-82f の打ち切りを `ensureAgentComment` の段5〜段7 から通して確かめる。
+//
+// 目的: エージェントが表明を出して終わり、成果のコメントが無いので continuo が段2 で pane を閉じ（止めた印が立つ）、
+// 段5 で新しい pane に `--resume` で立て直している最中に、人間がカードを direct chat へ動かす。
+// **これがこの機能のいちばん普通の使い方である。**
+// 段7 の直前で打ち切り、**人間の pane へ「コメントに書いてください」を送らない。**
+// そのあと作業中の Status へ戻したら、**同じ pane で続きの指示が届く。**
+// 止めた印が残っていると、戻したときの turn ループが即座に抜けて、指示が1つも届かない。
+// 与える情報: `review` を表明するがコメントを書かない run。復元の `agent.start` の最中にカードを direct chat へ動かす。
+// 成功条件: 打ち切りのログが出て、指示は1回目の1つだけのまま。作業中へ戻すと、1回目の本文ではない指示が1つ届き、
+// pane は段2 の1枚しか閉じていないこと。
+func TestDirectChat_コメントを書かせる途中で引き取って戻すと同じpaneで続く(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	issue := sampleIssue(341, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "CONTINUO-STATUS: review", false),
+	})
+	var mu sync.Mutex
+	var texts []string
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		text, _ := params["text"].(string)
+		mu.Lock()
+		texts = append(texts, text)
+		first := len(texts) == 1
+		mu.Unlock()
+		if first {
+			// **コメントは書かない。**run の終わりで成果のコメントを書かせに行く（設計 3-25）。
+			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+	prompts := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), texts...)
+	}
+	// **2回目の `agent.start`（段5 の立て直し）だけを待たせる。**
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	var once, enterOnce sync.Once
+	release := func() { once.Do(func() { close(gate) }) }
+	t.Cleanup(release)
+	starts := 0
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		starts++
+		second := starts == 2
+		mu.Unlock()
+		if second {
+			enterOnce.Do(func() { close(entered) })
+			<-gate
+		}
+		return map[string]any{
+			"type":  "agent_started",
+			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	select {
+	case <-entered:
+	case <-time.After(30 * time.Second):
+		t.Fatal("成果のコメントを書かせるための立て直し（段5 の agent.start）が来ない")
+	}
+	// ★ 人間が引き取る。巡回が direct chat の印を立てる。
+	fx.Tracker.SetState(issue.ID, humanState)
+	fx.Orc.Tick(context.Background())
+	release()
+	waitFor(t, 20*time.Second, "終わらせる処理を打ち切る", func() bool {
+		return strings.Contains(fx.Logs.String(), abortedLog)
+	})
+	if got := prompts(); len(got) != 1 {
+		t.Fatalf("人間が引き取った pane へ指示を送った（1回目の指示だけのはず）: %v", got)
+	}
+
+	// 人間が continuo へ返す。
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+	waitFor(t, 20*time.Second, "戻した run へ続きの指示を送る", func() bool {
+		fx.Orc.Tick(context.Background())
+		return len(prompts()) >= 2
+	})
+	if got := prompts()[1]; strings.Contains(got, firstPromptMarker) {
+		t.Errorf("戻したのに1回目の本文を送った（継続の指示であるべき）: %q", got)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 1 {
+		t.Errorf("閉じた pane が段2 の1枚ではない: %d 回", n)
+	}
+}
+
+// TestDirectChat_turnの終わりに引き取りを見たあと巡回より先に戻しても指示が届く は、
+// `decideAfterTurn` の direct chat の枝（設計 3-82f）が送る印を立てることを確かめる。
+//
+// 目的: turn の終わりに取り直したカードが direct chat だったとき、turn ループはそこで終わる。
+// **次の巡回より先に人間が作業中へ戻すと、direct chat へは1度も入らない。**
+// 送る印を立てておかないと、ループも送る印も無い run が残り、戻しても指示が1つも届かない。
+// 与える情報: 1回目の turn の待ちの最中にカードを direct chat へ動かし、表明の無い `Stop` を流した run。
+// 巡回を回す前に作業中の Status へ戻す。
+// 成功条件: 次の巡回で2回目の指示が届くこと。
+func TestDirectChat_turnの終わりに引き取りを見たあと巡回より先に戻しても指示が届く(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	issue := sampleIssue(342, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	releasePrompt := blockFirstPrompt(t, fx)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	// ★ 巡回を回さずにカードを direct chat へ動かす。turn の終わりが先に見る。
+	fx.Tracker.SetState(issue.ID, humanState)
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "途中まで進めました。\n\nCONTINUO-STATUS: working", false),
+	})
+	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	releasePrompt()
+	waitFor(t, 20*time.Second, "turn の終わりが引き取りを見る", func() bool {
+		return strings.Contains(fx.Logs.String(), "この turn の後始末をせずに戻ります")
+	})
+
+	// ★ 巡回より先に、人間が作業中へ戻す。
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+	waitFor(t, 20*time.Second, "戻した run へ2回目の指示を送る", func() bool {
+		fx.Orc.Tick(context.Background())
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) >= 2
+	})
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
+		t.Errorf("pane を閉じた: %d 回", n)
+	}
+}
+
+// TestDirectChat_Statusごとの上限に達していてもpaneを用意する は、設計 3-82c の門5 を確かめる。
+//
+// 目的: **門5 は全体の上限（`agent.max_concurrent_agents`）だけを見る。**用意する pane は
+// `running_state` の枠を消費しないので、Status ごとの上限を当てると、全体が空いていても pane が来ない。
+// 与える情報: `agent.max_concurrent_agents_by_state` の `In Progress` を1にし、1件が `In Progress` で走っている。
+// そこへ担当者が自分1人の issue を direct chat へ置く。
+// 成功条件: direct chat の pane を用意し、「話しかけられます」の案内を書くこと。
+func TestDirectChat_Statusごとの上限に達していてもpaneを用意する(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) {
+		cfg.Agent.MaxConcurrentAgents = 3
+		cfg.Agent.MaxConcurrentAgentsByState = map[string]int{"In Progress": 1}
+	})
+	holdPrompt(fx)
+	running := sampleIssue(343, "Ready")
+	fx.Tracker.AddIssue(running)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1件目が In Progress で走る", func() bool {
+		return fx.Tracker.StateOf(running.ID) == fx.Config.Tracker.RunningState
+	})
+
+	_, node := addOwnDirectChatIssue(fx, 344)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "Status ごとの上限に関わらず direct chat の pane を用意する", func() bool {
+		return commentsContaining(fx.Tracker, node, readyCommentMarker) == 1
+	})
+}
+
+// TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせに行かない は、設計 3-82g の `Done` の行を確かめる。
+//
+// 目的: 人間が Claude Code を終了させてから `Done` へ動かすのは、人間が名指しした出口である。
+// **書かせに行くと、終了させたものを `--resume` で立て直すことになる。**
+// 与える情報: 1回目の turn を送ったあと direct chat へ入れ、コメントを1件も書かずに `Done` へ動かした run。
+// 成功条件: 立て直しの `agent.start` も指示も無く、pane を閉じ、印から外すこと。
+func TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせに行かない(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	holdPrompt(fx)
+	issue := sampleIssue(345, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	fx.Tracker.SetState(issue.ID, humanState)
+	fx.Orc.Tick(context.Background())
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.TerminalStates[0])
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != 1 {
+		t.Fatalf("direct chat から Done へ抜けたのに、成果のコメントを書かせるために立て直した: agent.start %d 回", n)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); n != 1 {
+		t.Fatalf("direct chat から Done へ抜けたのに指示を送った: agent.prompt %d 回", n)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n == 0 {
+		t.Fatal("Done へ動かしたのに pane を閉じていない")
+	}
+}
+
+// TestDirectChat_閉じる集合の pane は作業中でない Status では閉じない は、設計 3-82f の閉じる集合を確かめる。
+//
+// 目的: **閉じるのは、印を持たずに Status が `active_states` へ戻った巡回だけである。**
+// それ以外の Status で閉じると、人間が `In Review` へ動かして見返している画面が消える。
+// 与える情報: 復元で確認の画面のまま見送った direct chat の pane（閉じる集合に入る）。
+// カードを `In Review` へ動かした巡回と、そのあと作業中へ戻した巡回。
+// 成功条件: `In Review` の巡回では閉じず、作業中へ戻した巡回で閉じること。
+func TestDirectChat_閉じる集合のpaneは作業中でないStatusでは閉じない(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	holdPrompt(fx)
+	fx.AllowLog("権限の確認で止まっている", "direct chat のカードなので pane は閉じません", "印に入っていない worktree に生きた pane",
+		"着手に失敗しました")
+	issue := sampleIssue(346, humanState)
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	wt := prepareWorktree(t, fx, issue, identityOverride{})
+	installPanes(fx, livePane{
+		PaneID: "p-346", Cwd: wt.Path, AgentName: "continuo-hello-world-346",
+		AgentStatus: herdr.AgentStatusBlocked, SessionUUID: "sess-346",
+	})
+	restore(t, fx)
+
+	fx.Tracker.SetState(issue.ID, "In Review")
+	fx.Orc.Tick(context.Background())
+	if ids := closedPaneIDs(fx); indexOf(ids, "p-346") >= 0 {
+		t.Fatalf("作業中でない Status なのに、閉じる集合の pane を閉じた: %v", ids)
+	}
+
+	fx.Tracker.SetState(issue.ID, "In Progress")
+	fx.Orc.Tick(context.Background())
+	if ids := closedPaneIDs(fx); indexOf(ids, "p-346") < 0 {
+		t.Fatalf("作業中へ戻したのに、閉じる集合の pane を閉じていない: %v", ids)
+	}
+}
+
 // errString はテストで返すエラーである。
 type errString string
 

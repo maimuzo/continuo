@@ -457,6 +457,20 @@ func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 	return true, "", 0
 }
 
+// globalFreeSlot は、全体の上限（`agent.max_concurrent_agents`）だけで空きがあるかを返す
+// （設計 3-82c の門5）。
+//
+// **direct chat の pane を用意する門だけが使う。**Status ごとの上限
+// （`agent.max_concurrent_agents_by_state`）は当てない。用意する pane は `running_state` の枠を
+// 消費しないので、当てると、Status ごとの上限を書いた人に、全体が空いていても pane が来ない。
+//
+// 戻り値の1つ目: 空きがあるか。
+// 戻り値の2つ目: `agent.max_concurrent_agents` の値。
+func (o *Orchestrator) globalFreeSlot() (bool, int) {
+	limit := o.reloadableConfig().MaxConcurrentAgents
+	return len(o.snapshotRuns()) < limit, limit
+}
+
 // lookupFolded は Status 名をキーにした写像を、大文字小文字を無視して引く（設計 3-13）。
 //
 // m: 引く写像。

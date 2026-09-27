@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "69e4366093e68d8bbfd1a1bd7c3eb52f551d143e7b66a671893845866120c69f", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **上限を超える1行を流し込まれたときの検査である。**
 //

@@ -129,7 +129,7 @@ func TemplateWithValues(values Values) string {
 		out = replaceLineWithBlock(out, repositoriesPlaceholderCode, repositoriesBlock(values.Repositories))
 	}
 	if values.Statuses.Complete() {
-		// **雛形には8つのキーが必ずあり、どれも値を同じ行に持つので、
+		// **雛形には9つのキーが必ずあり、どれも値を同じ行に持つので、
 		// 見つからないことも書き換えられないことも起こらない。**
 		// 雛形を壊したときは test/internal/scaffold/statuses_test.go が落とす。
 		out, _, _, _ = applyStatuses(out, values.Statuses)

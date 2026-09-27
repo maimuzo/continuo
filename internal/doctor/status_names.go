@@ -116,7 +116,9 @@ func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string
 	// 巡回も dispatch も止まらない。**止まる `✗` と同じ記号にすると、区別が付かなくなる。**
 	//
 	// **`カンバン` の見出し語では出ない。**起動時の照合の一覧から外してあるためである
-	// （`config.RequiredBoardStates`）。**だからここで出さないと、どこにも出ない。**
+	// （`config.RequiredBoardStates`）。**起動後の巡回も WARN を1回だけ出す**（`candidateStates`）が、
+	// **`continuo doctor` の一覧に並ぶのはここだけである。**どちらかを消すと、起動する前か動いている最中の
+	// どちらかで、選択肢が無いことに気づく手立てが無くなる。
 	// **`未記入の項目` とは別の話である。**あちらは「WORKFLOW.md にキーが書かれていない」を
 	// 見ており、こちらは「書いた名前がカンバンに無い」を見ている。
 	directChatMissing := directChatOptionMissing(cfg.Config, boardOptions)

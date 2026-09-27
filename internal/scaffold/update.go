@@ -5,7 +5,7 @@ package scaffold
 // **雛形を書き直さない。**`continuo setup` は `continuo init` が置いたあとの
 // WORKFLOW.md に対して走るので、雛形で丸ごと上書きすると、利用者がその間に手で直した行
 // （`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行など）が
-// 全部消える。書き換えるのは StatusKeyNames が返す8つのキーの行だけで、
+// 全部消える。書き換えるのは StatusKeyNames が返す9つのキーの行だけで、
 // **他の行・空行・並び順・インデント・行の右側のコメントは1文字も変えない。**
 
 import (

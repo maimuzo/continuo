@@ -3,12 +3,12 @@
   "usecase_name": "既存のボードの Status を割り当てる",
   "source": {
     "file": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md",
-    "rucm_block_sha256": "077d22fa0b0308204249c9a0913017e90a652e85bcbc1531ed0051a03085d827"
+    "rucm_block_sha256": "59e5a16968084f2e9a8a7f5aec5d722e3c49d9d13fcbeaf68b91cf59839a9420"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。"
+      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の9つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。"
     },
     "WORKFLOW.mdが無い": {
       "rfs": {
@@ -697,7 +697,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。",
+      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の9つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

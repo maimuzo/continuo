@@ -187,9 +187,10 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		}
 		// 門5: 空きスロット。**人間の決定で、枠が尽きたことを知らせる仕組みは作らない**（設計 3-82c）。
 		// **出すのは Debug 1行だけである。**`clearGate` はこの分岐の外（下の共通の後始末）でも呼ぶ。
-		if free, blocker, limit := o.freeSlotBlocker(); !free {
+		// **見るのは全体の上限だけである**（`globalFreeSlot`）。Status ごとの上限は当てない。
+		if free, limit := o.globalFreeSlot(); !free {
 			o.logger.Debug("空きスロットが無いので、direct chat の pane を用意しません",
-				"identifier", issue.Identifier, "上限に達した設定", blocker, "その上限", limit)
+				"identifier", issue.Identifier, "上限に達した設定", "agent.max_concurrent_agents", "その上限", limit)
 			o.clearGate(issue.ID)
 			continue
 		}
@@ -877,6 +878,21 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 	if paneID != "" && started {
 		o.logger.Info("人間が引き取ったので、この run を終わらせるのをやめます（pane も印も worktree も残します）",
 			"identifier", rs.issue().Identifier, "やめた理由", summaryLine(reason))
+		// **止めた印が立っていたら、新しい世代を始める。**ここへ来るのは `ensureAgentComment` が段2 で
+		// `stopWorker` を通し（止めた印が立つ）、段5 で新しい pane に `--resume` で立て直したあとだけである
+		// （`stopWorker` も `closeDirectChatSetupPane` も `PaneID` を空にするので、それ以外の道では
+		// この枝へ入らない）。**残すと、戻したときの turn ループが `currentWorker` で即座に抜け、
+		// 同じ pane で続かないまま stall で打ち切られる。**
+		//
+		// **`SendFirstPrompt` は前の値へ戻す。**`beginAttempt` は立てるが、戻したときに送るのは
+		// 継続の指示である（設計 3-82g）。**`resumed` は真にする**（同じセッションなので累計トークンを畳み込まない）。
+		if rs.stoppedByContinuo() {
+			sendFirst := rs.snapshot().SendFirstPrompt
+			rs.beginAttempt(true)
+			if !sendFirst {
+				rs.clearSendFirstPrompt()
+			}
+		}
 		rs.endTerminal()
 		return true
 	}

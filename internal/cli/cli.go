@@ -677,7 +677,7 @@ func countLines(s string) int {
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
-// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
+// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す9つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
 //

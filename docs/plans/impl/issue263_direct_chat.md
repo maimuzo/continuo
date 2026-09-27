@@ -197,3 +197,62 @@
 ## 止まった理由
 
 （無し）
+
+## 実装レビュー1周目で直すもの
+
+**言いたいこと。**判断票（PR #267 の実装レビュー1周目）で「直す」と決めた11件を、直す前に全部並べる。
+影響範囲を確かめてから一気に直す。
+
+| # | 指摘 | 直す場所 | 影響範囲と確かめたこと |
+| --- | --- | --- | --- |
+| r1 | 立て直したあとの打ち切りで「止めた印」が残る（high） | `internal/orchestrator/directchat.go` の `abortTerminalForHuman` の「印を残す」枝 | 止めた印（`markWorkerStopped`）を立てる道は `stopWorker` と `closeDirectChatSetupPane` の2つ。**どちらも `PaneID` を空にする**ので、そのあと印を残す枝（`PaneID` が空でなく `agent.start` 済み）へ入れるのは、`ensureAgentComment` の段5 が新しい pane で `agent.start` を通した後だけである（段7・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前の4地点）。**止めた印が立っていれば `beginAttempt(true)` で世代を進める。**`beginAttempt` は `terminating` も下ろすが、この枝はこのあと `endTerminal` で同じものを下ろすので矛盾しない（`claimTerminal` → 打ち切り → `endTerminal` の順は変わらない）。**`SendFirstPrompt` は `beginAttempt` の前の値へ戻す**（立てたままにすると、戻したときに1回目の本文が送られる）。`resumed` は真にする（同じセッションなので累計トークンを畳み込まない）。古い世代の turn ループが残っていても、世代が変わるので `currentWorker` が偽になって抜ける |
+| r2 | turn の終わりに direct chat を見たとき送る印を立てない（mid） | `internal/orchestrator/lifecycle.go` の `decideAfterTurn` の direct chat の枝と、`internal/orchestrator/reconcile.go` の `updateDirectChatMode` の段2 | 枝で `setNeedsPrompt` を立てる。**direct chat に入れば `wakeRuns` が飛ばす。**入らずに戻れば次の巡回で送る。**ただし入ってから戻ったときは、段4 の「書き込みが終わってから送る印を立てる」を守るため、抜けた時点でこの印を下ろす**（`takeNeedsPrompt`）。下ろさないと、hold と `running_state` を書く前に `wakeRuns` が送る |
+| r3 | 門5 が Status ごとの上限まで当てる（mid） | `internal/orchestrator/dispatch.go` に全体の枠だけを見る関数を分け、`internal/orchestrator/directchat.go` の門5 から呼ぶ | 設計 3-82c の門5 は `agent.max_concurrent_agents` だけ。通常の着手（`dispatchCandidates`）は今までどおり `freeSlotBlocker` を使う |
+| r4 | `failRun` と打ち切りの上限の枝に、引き渡しの通知の直前の打ち切りが無い（low） | `internal/orchestrator/lifecycle.go` の `failRun` と `abandonRunClaimed` のリトライを使い切った枝 | `finishRunClaimed` と同じく `UpdateStatus` のあと・`postHandoffComment` の直前に置く。`noteFailure` はその前で数える（Status は `protectedStates` が守っている）|
+| r5 | `ensureAgentComment` の段7 の直前に見ない（low） | `internal/orchestrator/comment.go` | 段6 の `confirmStartup` を抜けたあと、`agent.prompt` の直前に1つ足す。当たれば r1 の枝を通る |
+| r6 | CLAUDE.md の cli.go のリンク3本の着地先が違う（low） | `CLAUDE.md` の3本だけ | 着地先: `parseErrorExitCode` の関数全体、`runHook` の注記「2 を返してはならない」の2行、`--socket` と `--pending-dir` の欠落と相対パスを exit 1 にしている範囲。**cli.go の行数が変わらないことを確かめてから直す**（このあと触るのはコメント1行の数字だけ）|
+| r7 | 「8つのキー」が残る（実際は9つ）（low） | `docs/FAQ.md`・`docs/bug_details.md`・`docs/plans/continuo_design.md` の本文・`internal/cli/cli.go` のコメント・`internal/scaffold/fill.go`・`internal/scaffold/update.go`・`test/internal/scaffold/statuses_test.go`・`docs/spec/usecases/` の RUCM | **巻き込まないもの。**設計 3-32d の見出し（題名）。RUCM の基本フロー16 と、その否定の分岐（`VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり…`）。**16 は「無いと止まるキー」の数を言っており、`direct_chat_state` は無くても止めない（`statusKeys` の `optional`）ので8のままが正しい。**RUCM を直したら CFG を生成し直し、テストのマーカーのハッシュを揃える |
+| r8 | doctor の注記「ここで出さないと、どこにも出ない」（low） | `internal/doctor/status_names.go` | 巡回も起動後に WARN を1回出す（`candidateStates` の `noteDirectChatMissing`）。**doctor の一覧に並ぶのはここだけ**、と書き直す |
+| r9 | FAQ に戻す以外の抜け方が無い（low） | `docs/FAQ.md` の direct chat の節 | `Blocked` / `In Review` へ動かすと pane を閉じ worktree は残す。`Done` へ動かすと pane を閉じ `cleanup.on_states` なら片付ける（未 push があれば断る）。**チャットの中で PR をマージして issue が閉じると、カンバンの自動化が `Done` へ動かすので pane が閉じる**。`Ice Box` はコメントを1件書いて止める（設計 3-82g） |
+| r10 | PR の本文の hook の段落が `turn.go` の変更を少なく書く（low） | PR #267 の本文 | `turn.go` の差分のコード行を全部並べて書き直す（待ちを打ち切るコンテキスト・ループの先頭の2つ・送る直前の確認・待ちのあと `switch` の手前・esc の直前）|
+| r11 | 打ち切りの呼び出し元などにテストが無い（low） | `test/internal/orchestrator/` | r1 と r5 を `ensureAgentComment` から通す。r2 を turn の終わりから通す。r3・`Done` へ直接抜けたとき成果のコメントを書かせないこと・閉じる集合で作業中でない Status では残すこと |
+
+**hook の規則（CLAUDE.md の6）との当たり。**触るファイルのうち検知の網に掛かるのは `internal/cli/cli.go`（コメントの数字1つ）だけで、
+`turn.go`・`runstate.go`・`hookinput.go`・`settings.go` は触らない。r1 は `runstate.go` の既存の `beginAttempt` を呼ぶだけで、
+turn の終わりの判定・hook の受け口・送る内容は変えない。
+
+### 直した場所（実装レビュー1周目）
+
+| # | どこ |
+| --- | --- |
+| r1 | `internal/orchestrator/directchat.go` の `abortTerminalForHuman`（止めた印が立っていれば `beginAttempt(true)`、`SendFirstPrompt` は前の値へ戻す） |
+| r2 | `internal/orchestrator/lifecycle.go` の `decideAfterTurn`（`setNeedsPrompt`）と `internal/orchestrator/reconcile.go` の `updateDirectChatMode`（抜けたら `takeNeedsPrompt`） |
+| r3 | `internal/orchestrator/dispatch.go` の `globalFreeSlot` を足し、`internal/orchestrator/directchat.go` の門5 から呼ぶ |
+| r4 | `internal/orchestrator/lifecycle.go` の `failRun` と `abandonRunClaimed` のリトライを使い切った枝 |
+| r5 | `internal/orchestrator/comment.go` の段7 の直前。設計 3-82f の地点の列挙にも段7 を足した |
+| r6 | `CLAUDE.md` の cli.go のリンク3本（`1773-1791`・`1746-1747`・`1601-1606`） |
+| r7 | `docs/FAQ.md`・`docs/bug_details.md`・設計 3-32d の本文と表・8053 行付近・13890 行付近・`internal/cli/cli.go`・`internal/scaffold/fill.go`・`internal/scaffold/update.go`・`test/internal/scaffold/statuses_test.go`・RUCM（概要・事後条件・図2つ）と CFG とテストのマーカー7本 |
+| r8 | `internal/doctor/status_names.go` |
+| r9 | `docs/FAQ.md` の「作業中へ戻す以外の抜け方」 |
+| r10 | PR #267 の本文の hook の段落 |
+| r11 | `test/internal/orchestrator/direct_chat_setup_test.go` の5本（下） |
+
+### 足したテスト（実装レビュー1周目）
+
+| テスト | 何を確かめるか | 直しを外すと |
+| --- | --- | --- |
+| `TestDirectChat_コメントを書かせる途中で引き取って戻すと同じpaneで続く` | r1・r5 を `ensureAgentComment` の段5〜段7 から通す | r1 を外すと戻しても指示が届かずに落ち、r5 を外すと人間の pane へ指示が送られて落ちる（確かめた） |
+| `TestDirectChat_turnの終わりに引き取りを見たあと巡回より先に戻しても指示が届く` | r2 | 外すと落ちる（確かめた） |
+| `TestDirectChat_Statusごとの上限に達していてもpaneを用意する` | r3 | 外すと落ちる（確かめた） |
+| `TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせに行かない` | 3-82g の `Done` の行 | — |
+| `TestDirectChat_閉じる集合のpaneは作業中でないStatusでは閉じない` | 3-82f の閉じる集合 | — |
+
+### 直さずに残したもの（実装レビュー1周目）
+
+- **設計 3-32d の見出し「8つのキーである」。**題名は巻き込まない（依頼の決まり）。本文と表は9つへ直した
+- **RUCM の基本フロー16 と、その否定の分岐（CFG の条件文を含む）。**16 は「無いと止まるキー」の数を言っており、`direct_chat_state` は無くても止めないので8のままが正しい
+
+### テストの結果（実装レビュー1周目）
+
+`sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
+`go vet ./...`: 終了コード 0。`sh scripts/check-rucm.sh --strict`: 終了コード 0（[W1] の警告は前から在るもの）。

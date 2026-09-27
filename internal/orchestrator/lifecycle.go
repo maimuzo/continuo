@@ -90,8 +90,14 @@ func (o *Orchestrator) decideAfterTurn(
 		//
 		// **ここでは direct chat へ入れない**（設計 3-82b）。turn の後始末をせずに戻るだけで、
 		// **入れるのは次の巡回の段1 である。**担当者の判定（3-82h）を当てる場所を1つに保つためである。
+		//
+		// **送る印は立てておく。**ここで turn ループは終わるので、次の巡回より先に人間が作業中の Status へ
+		// 戻すと、ループも送る印も無い run が残り、戻しても指示が1つも届かない。
+		// direct chat へ入れば `wakeRuns` が飛ばし、抜けるときに `updateDirectChatMode` が下ろす
+		// （hold と `running_state` を書き終えてから立て直す）。入らずに戻れば次の巡回で送る。
 		o.logger.Info("人間が引き取ったので、この turn の後始末をせずに戻ります（次の巡回で direct chat へ入れます）",
 			"identifier", current.Identifier, "状態", current.State)
+		rs.setNeedsPrompt()
 		return true
 	case containsFold(o.cfg.Tracker.TerminalStates, current.State):
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました", current.State))
@@ -719,7 +725,7 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 		return
 	}
 	// **人間が direct chat へ引き取っていたら、失敗として扱うのをやめる**（設計 3-82f）。
-	// 入口・`ensureAgentComment` を抜けた直後・`release` の直前で見る（`finishRunClaimed` と同じ理由）。
+	// 入口・通知の直前・`ensureAgentComment` を抜けた直後・`release` の直前で見る（`finishRunClaimed` と同じ理由）。
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
 	}
@@ -731,6 +737,12 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	// **失敗は issue 単位で数える**（設計 3-16）。印はこのあと release で消えるので、
 	// 印の中の RetryCount では次の巡回が0回目として拾い直してしまう。
 	o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+	// **`postHandoffComment` の直前にも見る**（設計 3-82f。`finishRunClaimed` と同じ理由）。
+	// 書き込みを待っている間に人間が引き取っていたら、事実と違う引き渡しの通知を投稿しない
+	// （Status は `protectedStates` が守っている）。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
 	if o.ensureAgentComment(ctx, rs) || o.abortTerminalForHuman(ctx, rs, reason) {
 		return
@@ -814,6 +826,10 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		}
 		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
 		o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+		// **`postHandoffComment` の直前にも見る**（設計 3-82f。`finishRunClaimed` と同じ理由）。
+		if o.abortTerminalForHuman(ctx, rs, reason) {
+			return
+		}
 		o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
 		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
 		if o.ensureAgentComment(ctx, rs) || o.abortTerminalForHuman(ctx, rs, reason) {
