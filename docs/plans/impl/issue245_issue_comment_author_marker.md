@@ -330,8 +330,8 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 | 7-7 | `--append-system-prompt-file` が入った版 | 遅くとも 2.1.69 には在った（変更履歴の 2.1.69 の節が、このフラグが対話モードでも働くと書いている）。どの版で入ったかは分からない | 2026-09-28。`anthropics/claude-code` の `CHANGELOG.md` |
 | 7-8 | スキルの本文に裸で書いた HTML コメントが届くか | 届く。`<!-- … -->` を3つ書いたスキルを `--plugin-dir` で読み込ませ、本文をそのまま写させたところ、3つとも欠けずに届いた | 2026-09-28 01:56 (JST)。Claude Code 2.1.283 |
 | 7-9 | 4-2 の REST の式を中身のある pull request に掛けた | 設計レビューの5周目の関連処理まで見る役が、cli/cli の PR 14517 の reviews（2件）で gh の中の gojq に掛け、MEMBER の APPROVED が `trusted_comment: true` になった | 2026-09-28。gh 2.100.0。読み取りだけ |
-| 7-10 | `claude plugin validate` | marketplace と plugin の両方が通る。警告は `version` が無いことだけ（`version` を書かないのはわざと。Git で配る marketplace の中の plugin は commit の SHA を版にする。Claude Code の文書 plugins/loading の「How Claude Code computes the version」） | 2026-09-28 02:30 (JST)。Claude Code 2.1.283 |
-| 7-11 | 式の揃いのテストが、ずれを見つけるか | スキルの式の1文字（`COLLABORATOR` → `COLLABORATER`）を変えると `TestTemplate_スキルとcontinuo専用プロンプトが同じ式で読む` が落ち、戻すと通った | 2026-09-28 02:25 (JST) |
+| 7-10 | `claude plugin validate` | marketplace と plugin の両方が通る。警告は `version` が無いことだけ（`version` を書かないのはわざと。Git で配る marketplace の中の plugin は commit の SHA を版にする。Claude Code の文書 plugins/loading の「How Claude Code computes the version」） | 2026-09-28（JST）。Claude Code 2.1.283 |
+| 7-11 | 式の揃いのテストが、ずれを見つけるか | スキルの式の1文字（`COLLABORATOR` → `COLLABORATER`）を変えると `TestTemplate_スキルとcontinuo専用プロンプトが同じ式で読む` が落ち、戻すと通った | 2026-09-28（JST） |
 
 ## 8. 設計レビューの記録
 
