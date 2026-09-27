@@ -87,6 +87,11 @@ func (s *stubHerdr) PaneList(_ context.Context, params herdr.PaneListParams) (*h
 	}, nil
 }
 
+// WorkspaceList は workspace を1つも返さない（direct chat の門4 が引く。設計 3-82c）。
+func (s *stubHerdr) WorkspaceList(_ context.Context) (*herdr.WorkspaceListResult, error) {
+	return &herdr.WorkspaceListResult{Type: "workspace_list"}, nil
+}
+
 // WorktreeOpen は workspace を1つ返す。
 func (s *stubHerdr) WorktreeOpen(_ context.Context, _ herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error) {
 	return &herdr.WorktreeOpenResult{Type: "worktree_opened", Workspace: herdr.Workspace{WorkspaceID: "w1"}}, nil

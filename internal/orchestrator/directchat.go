@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -123,7 +124,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 
 	// **pane の写像は、この1パスで1回だけ作る**（設計 3-82b）。`pane.list` は機械中の pane を
 	// 全部返すので、候補ごとに引き直すと巡回1回で候補の数だけ飛ぶ。**`agent.list` は投げない。**
-	var panes map[string]herdr.Pane
+	var panes directChatPaneIndex
 	var panesErr error
 	panesDone := false
 
@@ -173,7 +174,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		if panesErr != nil {
 			// **「引けなかった」と「pane が無い」を混ぜない**（設計 3-82b）。混ぜると、herdr の socket が
 			// 一瞬落ちただけで、人間が話している pane の隣に2枚目を開くことになる。
-			o.logger.Warn("pane の一覧を取れないので、direct chat の pane は用意しません（次の巡回で見ます）",
+			o.logger.Warn("pane か workspace の一覧を取れないので、direct chat の pane は用意しません（次の巡回で見ます）",
 				"identifier", issue.Identifier, "error", panesErr)
 			o.clearGate(issue.ID)
 			continue
@@ -193,7 +194,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		}
 		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけを走らせる**（設計 3-82d の用意の段2）。
 		// **書くのはここだけである。**用意の段2 の失敗（`failDirectChatSetup`）は数えるだけで書かない。
-		// 書けなかったら次の巡回でまた書く。書けたらカードは direct chat から外れ、記録は候補から外れた巡回で消える。
+		// 書けなかったら次の巡回でまた書く。**実際に書けたら（`Wrote`）記録を消す**（下の goroutine）。
 		// **門5・門6 より前で見る。**書く経路は枠も `preflight` も使わないので、枠が埋まっている・
 		// 検査に落ちるというだけで書き直しを止めてはならない。
 		if body, over, start := o.beginDirectChatSetupLimitWrite(issue.ID); over {
@@ -209,7 +210,12 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			go func(issue tracker.Issue) {
 				defer o.wg.Done()
 				defer o.endDirectChatSetupLimitWrite(issue.ID)
-				o.writeDirectChatFailure(ctx, issue, body)
+				// **実際に書けたら、専用の記録を消す。**残すと、索引の遅れでカードがまだ候補に見える間に
+				// 人間が direct chat へ戻したとき、1回も用意し直さずにまた `failure_state` へ落とす。
+				// 書けなかったら残す（次の巡回でまた書く）。
+				if o.writeDirectChatFailure(ctx, issue, body) {
+					o.forgetDirectChatSetupFailure(issue.ID)
+				}
 			}(issue)
 			continue
 		}
@@ -283,13 +289,18 @@ func (o *Orchestrator) setUpDirectChat(ctx context.Context, rs *runState, issue 
 	//
 	// **`startRun` から入ってはならない**（設計 3-82d）。あれは着手の段2 を踏むので、
 	// 用意の段2 が `ErrStatusNotWritten` で落ち、pane が1枚もできない。
-	if err := o.startRunFromWorktree(ctx, rs, issue, false, true); err != nil {
+	//
+	// **`ErrStartupBusy` は失敗ではない**（herdr が登録していないだけで Claude Code は動いている）。
+	// 用意の段3 へ「既に動いている」と伝える。
+	err := o.startRunFromWorktree(ctx, rs, issue, false, true)
+	busy := errors.Is(err, ErrStartupBusy)
+	if err != nil && !busy {
 		o.failDirectChatSetup(ctx, rs, issue, err)
 		return
 	}
 	// **用意が成功したら、専用の記録を消す**（設計 3-82d の用意の段2）。
 	o.forgetDirectChatSetupFailure(issue.ID)
-	o.finishDirectChatSetup(ctx, rs, issue)
+	o.finishDirectChatSetup(ctx, rs, issue, busy)
 }
 
 // directChatSetupOutcome は用意の段3 の外れ方である（設計 3-82d の外れ方の表）。
@@ -321,7 +332,9 @@ const (
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 用意の段2 を通った run。
 // issue: 対象の issue。
-func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, issue tracker.Issue) {
+// busy: 用意の段2 が「Claude Code は既に動いている」（`ErrStartupBusy`）に着地したなら true。
+// 作業中へ戻されていたとき、1回目の本文を送る前に走っている turn の終わりを待つかをこれで決める。
+func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, issue tracker.Issue, busy bool) {
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは Status と担当者だけである。
 	fetched, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{issue.ID})
 	ownAt := o.now()
@@ -380,6 +393,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 	case setupReturned:
 		// **用意の最中に人間が作業中の Status へ戻した**（設計 3-82d の外れ方の表の1行目）。
 		// **印は残し、`SendFirstPrompt` を立てたまま、送る印を立てる。**1回目の本文（5-3）が送られる。
+		// Claude Code が既に動いていたなら、送る印の代わりに turn の終わりを待つ印を立てる（下）。
 		// **書き込みが終わってから送る印を立てる**（判断票6周目）。
 		o.logger.Info("direct chat の pane を用意している最中に作業中の Status へ戻されたので、1回目の指示を送ります",
 			"identifier", issue.Identifier, "状態", decided)
@@ -390,7 +404,17 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 		rs.setIssueState(decided)
 		o.writeRunningStateOnReturn(ctx, rs, returned)
 		o.postDirectChatHold(ctx, returned)
-		rs.setNeedsPrompt()
+		if busy {
+			// **Claude Code は既に動いている**（用意の段2 が `ErrStartupBusy` に着地した）。
+			// **送る印ではなく、turn の終わりを待つ印を立てる**（通常の着手のこの道と同じ。設計 3-80）。
+			// `SendFirstPrompt` は立ったままなので、走っている turn が終わった次の周で1回目の本文が送られる。
+			// 送る印を立てると、`wakeRuns` が走っている turn へ1回目の本文を投げ、turn が混ざる。
+			// **送る直前の確認の印も立てる**（送る直前に、まだ応答を書いている最中なら送らずに待つ）。
+			rs.setBusyCheckBeforeSend()
+			rs.setAwaitTurnEnd()
+		} else {
+			rs.setNeedsPrompt()
+		}
 	case setupLost:
 		// **印はもう無いので、閉じないと誰も管理しない Claude Code が残る。**
 		o.logger.Info("direct chat の用意を終える前に印が外れていたので、自分で開いた pane を閉じます",
@@ -544,7 +568,7 @@ func (o *Orchestrator) noteDirectChatSetupFailure(issueID, reason string) int {
 	return note.Count
 }
 
-// forgetDirectChatSetupFailure は用意の失敗の記録を消す（用意が成功したとき。設計 3-82d）。
+// forgetDirectChatSetupFailure は用意の失敗の記録を消す（用意が成功したときと、門7 の書く経路が実際に書けたとき。設計 3-82d）。
 //
 // issueID: project item の ID。
 func (o *Orchestrator) forgetDirectChatSetupFailure(issueID string) {
@@ -605,9 +629,22 @@ func (o *Orchestrator) directChatSetupBackoff(issueID string) (time.Duration, bo
 //
 // **判定に使った担当者は、その巡回の取得の値である。**書く直前に取り直さない（設計 3-82h）。
 //
+// **書いている最中の issue には、次の goroutine を立てない**（上限の書き込みの `Writing` と同じ番）。
+// 呼び出し元は門3 と巡回の段1 の2つで、どちらも巡回ごとに呼ぶ。書き込みが巡回の間隔より長くかかると、
+// 2本が並んで書き、同じ機械がコメントを2件付けうる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue（その巡回で読んだ値）。
 func (o *Orchestrator) writeDirectChatAssigneeFailureAsync(ctx context.Context, issue tracker.Issue) {
+	o.mu.Lock()
+	if o.directChatAssigneeWriting[issue.ID] {
+		o.mu.Unlock()
+		o.logger.Debug("担当者が1人ではない direct chat のカードへ書いている最中なので、この巡回では書きません",
+			"identifier", issue.Identifier)
+		return
+	}
+	o.directChatAssigneeWriting[issue.ID] = true
+	o.mu.Unlock()
 	logins := assigneeLogins(issue)
 	list := strings.Join(logins, ", ")
 	if len(logins) == 0 {
@@ -621,6 +658,11 @@ func (o *Orchestrator) writeDirectChatAssigneeFailureAsync(ctx context.Context, 
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
+		defer func() {
+			o.mu.Lock()
+			delete(o.directChatAssigneeWriting, issue.ID)
+			o.mu.Unlock()
+		}()
 		o.writeDirectChatFailure(ctx, issue, body)
 	}()
 }
@@ -648,35 +690,37 @@ func (o *Orchestrator) writeDirectChatAssigneeFailureAsync(ctx context.Context, 
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 // body: 書けたときに issue へ書くコメント（`<!-- continuo:self -->` は `postComment` が足す）。
-func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker.Issue, body string) {
+// 戻り値: `failure_state` を実際に書けた（`Wrote`）なら true。コメントを書けたかは問わない。
+func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker.Issue, body string) bool {
 	blocked, ok := o.statusesOtherThan(o.cfg.Tracker.DirectChatState)
 	if !ok {
 		o.logger.Warn("カンバンの Status の選択肢をまだ読めていないので、direct chat のカードへ failure_state を書けません"+
 			"（次の巡回でやり直します）",
 			"identifier", issue.Identifier)
-		return
+		return false
 	}
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.FailureState, blocked)
 	if err != nil {
 		o.logger.Warn("direct chat のカードへ failure_state を書けませんでした（次の巡回でやり直します）",
 			"identifier", issue.Identifier, "failure_state", o.cfg.Tracker.FailureState, "error", err)
-		return
+		return false
 	}
 	if !moved.Wrote {
 		// **既にその値だった（`Reached`）・人間が動かしていた・別の機械が先に書いた、のどれかである。**
 		// **コメントは書かない。**
 		o.logger.Info("direct chat のカードへ failure_state を書きませんでした（取り直すと direct chat ではありませんでした）",
 			"identifier", issue.Identifier, "取り直した Status", moved.Previous)
-		return
+		return false
 	}
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
-		return
+		return true
 	}
 	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("direct chat のカードを failure_state へ動かした理由を issue へ書けませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}
+	return true
 }
 
 // statusesOtherThan は、`UpdateStatus` を許可リストとして使うための拒否リストを返す
@@ -746,22 +790,76 @@ func (o *Orchestrator) letGoOfDirectChatAsync(ctx context.Context, rs *runState,
 	}()
 }
 
+// directChatPaneIndex は、門4 が「この worktree に pane が1枚でもあるか」を引くための写像である（設計 3-82c）。
+type directChatPaneIndex struct {
+	// cwds は、pane の cwd（シンボリックリンク解決済み）の集合である。
+	cwds map[string]bool
+	// workspacesWithPanes は、pane を1枚でも持つ herdr workspace の ID の集合である。
+	workspacesWithPanes map[string]bool
+	// worktreeWorkspaces は、herdr workspace が開いている作業ディレクトリ（`checkout_path`。
+	// シンボリックリンク解決済み）から workspace の ID を引く写像である。
+	worktreeWorkspaces map[string]string
+}
+
 // directChatPanes は、この巡回で使う pane の写像を1回だけ作る（設計 3-82b）。
 //
 // **候補1件ごとに引き直してはならない。**`pane.list` は機械中の pane を全部返すので、
-// 候補が N 件あると巡回1回で N 本になる。
+// 候補が N 件あると巡回1回で N 本になる。**`pane.list` と `workspace.list` を1回ずつ投げる。**
 //
 // **引けなかったときは、その理由を返す。**呼び出し側は「pane が無い」と混ぜてはならない。
 //
-// ctx: `pane.list` に適用するコンテキスト。
-// 戻り値の1つ目: 解決済みの cwd から pane を引く写像。
-// 戻り値の2つ目: 引けなかった理由。
-func (o *Orchestrator) directChatPanes(ctx context.Context) (map[string]herdr.Pane, error) {
+// ctx: `pane.list` と `workspace.list` に適用するコンテキスト。
+// 戻り値の1つ目: 門4 が引く写像。
+// 戻り値の2つ目: どちらかを引けなかった理由。
+func (o *Orchestrator) directChatPanes(ctx context.Context) (directChatPaneIndex, error) {
 	// **`agent.list` は投げない**（設計 3-82b）。pane の有無しか要らない。
-	return o.paneMapByCwd(ctx)
+	index := directChatPaneIndex{
+		cwds:                map[string]bool{},
+		workspacesWithPanes: map[string]bool{},
+		worktreeWorkspaces:  map[string]string{},
+	}
+	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
+	if err != nil {
+		return index, err
+	}
+	for _, pane := range list.Panes {
+		if pane.WorkspaceID != "" {
+			index.workspacesWithPanes[pane.WorkspaceID] = true
+		}
+		if pane.Cwd == "" {
+			continue
+		}
+		if resolved, ok := resolvePath(pane.Cwd); ok {
+			index.cwds[resolved] = true
+		}
+	}
+	workspaces, err := o.herdr.WorkspaceList(ctx)
+	if err != nil {
+		return index, err
+	}
+	for _, ws := range workspaces.Workspaces {
+		if ws.Worktree == nil || ws.Worktree.CheckoutPath == "" {
+			continue
+		}
+		checkout := ws.Worktree.CheckoutPath
+		if resolved, ok := resolvePath(checkout); ok {
+			checkout = resolved
+		}
+		index.worktreeWorkspaces[checkout] = ws.WorkspaceID
+	}
+	return index, nil
 }
 
 // directChatPaneExists は、その issue の worktree に pane が1枚でもあるかを返す（設計 3-82c の門4）。
+//
+// **当たるのは2通りである。**どちらか一方でも当たれば「ある」と答える。
+//
+//	cwd がその worktree である pane がある
+//	その worktree を開いている herdr workspace に pane が1枚でもある（cwd は問わない）
+//
+// **2つ目は、用意の段2 が pane を引くのと同じ見方である**（`resolvePane` は `worktree.open` が返した
+// workspace の中の1枚を、cwd を見ずに使う）。cwd だけで見ると、人間がその workspace の pane で
+// 別のディレクトリへ移っていたときに門4 を通り抜け、段2 がその pane を掴んで `agent.start` を投げる。
 //
 // **「Claude Code が居るか」では判定しない。**判定する手段が無いためである。
 // herdr が agent を登録していないことは、Claude Code が居ないことを意味しない（3-80）。
@@ -769,12 +867,12 @@ func (o *Orchestrator) directChatPanes(ctx context.Context) (map[string]herdr.Pa
 // **だから「pane が1枚でもあれば触らない」に倒す。**取りこぼす側の代償は「人間が自分で立て直す」であり、
 // 取り違える側の代償は「会話が汚れる」である。**前者は人間が気づけるが、後者は気づけない。**
 //
-// panes: この巡回で1回だけ作った pane の写像（`directChatPanes` の戻り値）。
+// panes: この巡回で1回だけ作った写像（`directChatPanes` の戻り値）。
 // issue: 対象の issue。
 // 戻り値の1つ目: pane が1枚でもあれば true。
 // 戻り値の2つ目: worktree の置き場所を決められなかった場合のエラー
 // （**エラーのときは「分からない」なので、触らない側に倒すこと**）。
-func (o *Orchestrator) directChatPaneExists(panes map[string]herdr.Pane, issue tracker.Issue) (bool, error) {
+func (o *Orchestrator) directChatPaneExists(panes directChatPaneIndex, issue tracker.Issue) (bool, error) {
 	loc, warnings, err := workspace.Locate(o.ws.ResolvedRoot(), o.cfg.Herdr.Worktree.BranchTemplate, toIssueRef(issue))
 	if err != nil {
 		return false, err
@@ -790,8 +888,13 @@ func (o *Orchestrator) directChatPaneExists(panes map[string]herdr.Pane, issue t
 		// ここは「これから作る」場合に必ず通る。**pane も在りようがない。**
 		want = loc.Path
 	}
-	_, found := panes[want]
-	return found, nil
+	if panes.cwds[want] {
+		return true, nil
+	}
+	if id, ok := panes.worktreeWorkspaces[want]; ok && panes.workspacesWithPanes[id] {
+		return true, nil
+	}
+	return false, nil
 }
 
 // postDirectChatReady は「話しかけられます」を issue へ1件書く（設計 3-82d の用意の段3）。

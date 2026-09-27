@@ -233,7 +233,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1601-1606](internal/cli/cli.go#L1601-L1606) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1498-1502](internal/orchestrator/orchestrator.go#L1498-L1502) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1506-1510](internal/orchestrator/orchestrator.go#L1506-L1510) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 | [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
@@ -389,7 +389,7 @@ git worktree remove "$ROLLBACK"
 - **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときだけ）
 - **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
 - **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:10259](docs/plans/continuo_design.md#L10259) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:10264](docs/plans/continuo_design.md#L10264) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
 
   > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、

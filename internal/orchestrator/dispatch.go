@@ -903,7 +903,9 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 // directChat: direct chat の用意（設計 3-82d の用意の段2）かどうか。**真なら段11 を踏まない。**
 // **この引数だけは残す**（設計 3-82b）。印は着手の goroutine が非同期に立てるので、印で判定し直すと
 // この設計が消したかった隙間が復活する。
-// 戻り値: いずれかの段で失敗した場合のエラー。
+// 戻り値: いずれかの段で失敗した場合のエラー。**direct chat の用意で「Claude Code は既に動いている」
+// （`ErrStartupBusy`）に着地したときは、失敗ではないが `ErrStartupBusy` をそのまま返す**
+// （用意の段3 が、戻された run に1回目の本文を送る前に turn の終わりを待つかをこれで決める）。
 func (o *Orchestrator) startRunFromWorktree(
 	ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool,
 ) error {
@@ -923,6 +925,14 @@ func (o *Orchestrator) startRunFromWorktree(
 		return failed
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
+	// **direct chat の用意では、`worktree.open` が開いた pane をここで控える**（設計 3-82d の用意の段2）。
+	// 段8 まで控えないと、段4〜段8 で落ちたときに後始末（`closeDirectChatSetupPane`）が閉じる相手を知らず、
+	// **シェルの pane が残る。**残った pane は門4 に当たり続けるので、用意し直されず、上限の書く経路にも届かない。
+	// **新しく開いた workspace のときだけ控える。**既に開いていた workspace の pane は人間のものでありうる
+	// （門4 がそもそも止めるが、閉じる側へ倒す理由にはしない）。段8 は `resolvePane` の値で上書きする（同じ pane）。
+	if directChat && prepared.HerdrPaneID != "" && !prepared.AlreadyOpen {
+		rs.setPaneID(prepared.HerdrPaneID)
+	}
 
 	// 段4: worktree を新しく作ったときだけ after_create を走らせる（仕様 5.3.4）。
 	if prepared.Created {
@@ -1130,8 +1140,10 @@ func (o *Orchestrator) startRunFromWorktree(
 			// **direct chat の用意では、これが正常な着地である**（設計 3-82d の用意の段2）。
 			// herdr が登録していないだけで Claude Code は生きているので、人間はもう話しかけられる。
 			// **turn の終わりを待つ印は立てない。**入れるか戻すかは用意の段3 が決める。
+			// **`ErrStartupBusy` をそのまま返す。**戻された run へ1回目の本文を送るなら、走っている turn の
+			// 終わりを待ってからにしなければならない（通常の着手のこの道と同じ）。それを決めるのは用意の段3 である。
 			rs.markStartedIfZero(o.now())
-			return nil
+			return ErrStartupBusy
 		}
 		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
 			"identifier", issue.Identifier)

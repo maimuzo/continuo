@@ -118,7 +118,7 @@ sequenceDiagram
 
 | カンバンの Status | 巡回が呼ぶもの | 後片付けをするか |
 | --- | --- | --- |
-| **終端**（`Done`） | `finishRunAsync`（[internal/orchestrator/lifecycle.go:596](../../internal/orchestrator/lifecycle.go#L596)） | **する。4つとも** |
+| **終端**（`Done`） | `finishRunAsync`（[internal/orchestrator/lifecycle.go:602](../../internal/orchestrator/lifecycle.go#L602)） | **する。4つとも** |
 | **引き渡し**（`In Review` / `Blocked`） | `stopAndReleaseAsync`（[internal/orchestrator/lifecycle.go:864](../../internal/orchestrator/lifecycle.go#L864)） | **しない** |
 
 **どちらも `go func()` で別のスレッドへ逃がしている。**巡回のループは止まらない。

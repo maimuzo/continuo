@@ -874,7 +874,7 @@ CodeDefaultBranch string
 **`NativeRef` には入れない。**あそこは「orchestrator が中身を解釈しない」場所であり、
 `default_branch` の1キーだけが例外だと 3-22 が明記している。**例外を増やさない。**
 
-**[internal/orchestrator/dispatch.go:1308-1318](../../../internal/orchestrator/dispatch.go#L1308-L1318) の
+**[internal/orchestrator/dispatch.go:1320-1330](../../../internal/orchestrator/dispatch.go#L1320-L1330) の
 `toIssueRef` が、`Issue` から上の5つを写す。**
 **`CodeOwner` と `CodeRepo` は、`Issue.CodeRepoNameWithOwner` を
 最初の `/` 1つだけで割って入れる**（`strings.Cut`）。割れなければ両方とも空にして
@@ -998,7 +998,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | 何 | どうする |
 | --- | --- |
-| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:360](../../../internal/orchestrator/orchestrator.go#L360)）と同じ形 |
+| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:362](../../../internal/orchestrator/orchestrator.go#L362)）と同じ形 |
 | 鍵 | **issue の identifier ＋ 理由の種類。**理由が変わったら数え直す |
 | いつ書くか | **同じ鍵で3回続けて落ち、かつ最初に落ちてから60秒以上たったとき**（3-68） |
 | 通ったら | **印を消す**（`clearUntrusted` と同じ）。直したあと再発したら、もう一度知らせる |

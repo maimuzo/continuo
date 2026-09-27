@@ -274,7 +274,7 @@ func TestDirectChat_用意が落ちた直後の巡回ではやり直さない(t 
 // 与える情報: 入札して担当者になったあと stall で打ち切られ、バックオフ中の run。その間に人間が
 // カードを direct chat へ動かす。
 // 成功条件: 担当者が自分のまま残り、released のコメントが無いこと。
-// 印が外れ、direct chat の1パスが pane を用意し直すこと（「話しかけられます」が1件）。
+// 印が外れ、次の巡回の direct chat の1パスが pane を用意し直すこと（「話しかけられます」が1件）。
 func TestDirectChat_バックオフ明けに人間が引き取っていたら書いた担当者を消し戻さない(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
@@ -302,9 +302,11 @@ func TestDirectChat_バックオフ明けに人間が引き取っていたら書
 	// バックオフのあいだに人間が direct chat へ引き取る。
 	fx.Tracker.SetState(issue.ID, humanState)
 	clock.Advance(30 * time.Second)
-	fx.Orc.Tick(context.Background())
-	// **着手の段2 で印が外れ、同じ巡回の direct chat の1パスが pane を用意し直す**（設計 3-82c の門1 の表の段4〜段5）。
+	// **着手の段2 で印が外れ、次の巡回の direct chat の1パスが pane を用意し直す**（設計 3-82c の門1 の表の段4〜段5）。
+	// **巡回は待ちの中で回す。**`redispatch` の段2 は別の goroutine なので、印が外れるのが
+	// 同じ巡回の direct chat の1パスより後になりうる（1回だけ回すと、`-race -cpu 1,2 -count=10` で20回中10回落ちた）。
 	waitFor(t, 10*time.Second, "direct chat の pane が用意される", func() bool {
+		fx.Orc.Tick(context.Background())
 		return commentsContaining(fx.Tracker, nodeIDOfIssue(issue), readyCommentMarker) == 1
 	})
 
@@ -1029,5 +1031,281 @@ func TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるとき�
 	})
 	if got := prompts()[0]; strings.Contains(got, firstPromptMarker) {
 		t.Errorf("戻した run へ1回目の本文を送った（継続の指示であるべき）: %q", got)
+	}
+}
+
+// failResolvePane は、用意の段2 の着手の段8（`resolvePane`）を落とす台本を入れる。
+//
+// **worktree の workspace を引く `pane.list` にだけ2枚を返す**（`resolvePane` は1枚でないと落ちる）。
+// 全体の `pane.list`（門4 が引くもの）は、all が返す pane を返す。
+//
+// fx: fixture。
+// all: 全体の `pane.list` に返す pane（nil なら0枚）。呼ばれるたびに読むので、あとから差し替えられる。
+func failResolvePane(fx *fixture, all func() []any) {
+	fx.Herdr.Handle(herdr.MethodPaneList, func(params map[string]any) (any, *rpcErr) {
+		id, _ := params["workspace_id"].(string)
+		if id == "" {
+			panes := []any{}
+			if all != nil {
+				panes = all()
+			}
+			return map[string]any{"type": "pane_list", "panes": panes}, nil
+		}
+		return map[string]any{
+			"type": "pane_list",
+			"panes": []any{
+				map[string]any{"pane_id": id + ":p1", "workspace_id": id, "agent_status": "idle"},
+				map[string]any{"pane_id": id + ":p2", "workspace_id": id, "agent_status": "idle"},
+			},
+		}, nil
+	})
+}
+
+// worktreeWorkspaceID は、テスト用の herdr が worktree のために開いた workspace の ID を返す
+// （リポジトリの親 workspace は除く）。
+//
+// fx: fixture。
+// 戻り値: workspace の ID。無ければ空文字。
+func worktreeWorkspaceID(fx *fixture) string {
+	for id, ws := range fx.Herdr.OpenWorkspaces() {
+		if ws.Checkout != ws.RepoRoot {
+			return id
+		}
+	}
+	return ""
+}
+
+// TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが開いたpaneを閉じる は、設計 3-82d の用意の段2 を確かめる。
+//
+// 目的: `worktree.open`（着手の段3）の時点で herdr は pane を開いている。**着手の段8 まで控えないと、
+// 段4〜段8 で落ちたときに後始末が閉じる相手を知らず、シェルの pane が残る。**残った pane は門4 に当たり続けるので、
+// 用意し直されず、上限の書く経路にも届かない。
+// 与える情報: 着手の段8 の `resolvePane` が落ちる用意（workspace の中に pane が2枚）。
+// 成功条件: 印を外し、`worktree.open` が開いた pane を `pane.close` で閉じること。
+func TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが開いたpaneを閉じる(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetryBackoffMs = 600000 })
+	fx.AllowLog("direct chat の pane を用意できませんでした")
+	failResolvePane(fx, nil)
+	addOwnDirectChatIssue(fx, 357)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	ws := worktreeWorkspaceID(fx)
+	if ws == "" {
+		t.Fatal("前提が崩れている（worktree の workspace が開かれていない）")
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 1 {
+		t.Fatalf("worktree.open が開いた pane を閉じていない: pane.close %d 回", n)
+	}
+	if got := fx.Herdr.ParamsOf(t, herdr.MethodPaneClose)["pane_id"]; got != ws+":p1" {
+		t.Fatalf("閉じた pane が worktree.open の開いたものではない: %v（want %s:p1）", got, ws)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != 0 {
+		t.Fatalf("前提が崩れている（段8 より先へ進んだ）: agent.start %d 回", n)
+	}
+}
+
+// TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意しない は、設計 3-82c の門4 を確かめる。
+//
+// 目的: 門4 は、用意の段2 が pane を引くのと同じ見方で「pane が1枚でもあるか」を見る。用意の段2 の `resolvePane` は
+// `worktree.open` が返した workspace の中の1枚を cwd を見ずに使う。**門4 が cwd だけで見ると、人間がその workspace の
+// pane で別のディレクトリへ移っていたときに門4 を通り抜け、その pane へ `agent.start` が届く。**
+// 与える情報: 1回目の用意が段8 で落ちて worktree の workspace が開いたまま残った issue。その workspace に、
+// cwd が別のディレクトリの pane が1枚ある。
+// 成功条件: `agent.start` を投げないこと。その pane が無くなった巡回では用意すること（検査が空振りでない証拠）。
+func TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意しない(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetryBackoffMs = 1 })
+	fx.AllowLog("direct chat の pane を用意できませんでした")
+	var mu sync.Mutex
+	var extra []any
+	failResolvePane(fx, func() []any {
+		mu.Lock()
+		defer mu.Unlock()
+		return extra
+	})
+	_, node := addOwnDirectChatIssue(fx, 358)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	ws := worktreeWorkspaceID(fx)
+	if ws == "" {
+		t.Fatal("前提が崩れている（worktree の workspace が開かれていない）")
+	}
+	// 人間がその workspace の pane で別のディレクトリへ移っている。段8 は通るようにする（直しを外すと用意が進む）。
+	mu.Lock()
+	extra = []any{map[string]any{"pane_id": ws + ":p9", "workspace_id": ws, "agent_status": "unknown", "cwd": t.TempDir()}}
+	mu.Unlock()
+	fx.Herdr.Handle(herdr.MethodPaneList, func(params map[string]any) (any, *rpcErr) {
+		id, _ := params["workspace_id"].(string)
+		mu.Lock()
+		defer mu.Unlock()
+		if id == "" {
+			return map[string]any{"type": "pane_list", "panes": append([]any{}, extra...)}, nil
+		}
+		return map[string]any{"type": "pane_list", "panes": []any{
+			map[string]any{"pane_id": id + ":p9", "workspace_id": id, "agent_status": "idle"},
+		}}, nil
+	})
+
+	time.Sleep(20 * time.Millisecond) // 門7 の間隔（1ミリ秒）を空ける。
+	fx.Orc.Tick(context.Background())
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != 0 {
+			t.Fatalf("worktree の workspace に pane があるのに用意した: agent.start %d 回", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// その pane が無くなれば用意する。
+	mu.Lock()
+	extra = nil
+	mu.Unlock()
+	waitFor(t, 15*time.Second, "pane が無くなった巡回で用意する", func() bool {
+		fx.Orc.Tick(context.Background())
+		return commentsContaining(fx.Tracker, node, readyCommentMarker) == 1
+	})
+}
+
+// TestDirectChat_用意中に戻されたときClaudeCodeが既に動いていればturnの終わりを待ってから1回目の本文を送る は、
+// 設計 3-82d の外れ方の表の1行目を確かめる。
+//
+// 目的: 用意の段2 が「Claude Code は既に動いている」（`ErrStartupBusy`）に着地した run を、用意の最中に人間が
+// 作業中の Status へ戻すことがある。**送る印を立てると、走っている turn へ1回目の本文が投げられ、turn が混ざる。**
+// 通常の着手のその道と同じく、turn の終わりを待ってから送る。
+// 与える情報: `agent.get` が `agent_not_found` を返しながら作業中の hook を流す用意。起動の確認の最中にカードを
+// `dispatch_state` へ戻す。
+// 成功条件: `running_state` を書いたあと、巡回を回しても指示を送らないこと。`Stop` が届いたら1回目の本文を送ること。
+func TestDirectChat_用意中に戻されたときClaudeCodeが既に動いていればturnの終わりを待ってから1回目の本文を送る(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	fx.AllowLog("turn の終わりの裏取りができませんでした")
+	prompts := recordPrompts(fx)
+	id, _ := addOwnDirectChatIssue(fx, 359)
+	var once sync.Once
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(map[string]any) (any, *rpcErr) {
+		once.Do(func() { fx.Tracker.SetState(id, fx.Config.Tracker.DispatchState) })
+		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+		return nil, agentNotFoundErr()
+	})
+	parent := writeTranscript(t, t.TempDir(), "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "戻された run の Status を running_state へ書く", func() bool {
+		return fx.Tracker.StateOf(id) == fx.Config.Tracker.RunningState
+	})
+	for i := 0; i < 3; i++ {
+		fx.Orc.Tick(context.Background())
+	}
+	assertNoPromptFor(t, fx, 0, "Claude Code が動いているのに1回目の本文を投げた")
+
+	fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+	waitFor(t, 20*time.Second, "turn の終わりのあとに1回目の本文を送る", func() bool {
+		fx.Orc.Tick(context.Background())
+		return len(prompts()) >= 1
+	})
+	if got := prompts()[0]; !strings.Contains(got, firstPromptMarker) {
+		t.Errorf("用意中に戻された run へ1回目の本文を送っていない: %q", got)
+	}
+}
+
+// TestDirectChat_担当者が1人でないカードへ書いている最中の巡回では2本目を立てない は、設計 3-82h の書く経路を確かめる。
+//
+// 目的: 担当者の人数による書き込みは、門3 と巡回の段1 が巡回ごとに立てる。**書いている最中は次の巡回で2本目を立てない。**
+// 書き込みが巡回の間隔より長くかかると、2本が並んで書き、同じ機械がコメントを2件付けうる。
+// 与える情報: 担当者が0人の direct chat のカード。1本目の `UpdateStatus` を止めておき、その間にもう1回巡回を回す。
+// 成功条件: 止めている間に `UpdateStatus` が1回も記録されないこと。放したあと Status が `failure_state` になり、
+// 「担当者を1人に」が1件であること。
+func TestDirectChat_担当者が1人でないカードへ書いている最中の巡回では2本目を立てない(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	fx.AllowLog("担当者が1人ではない")
+	issue := sampleIssue(360, humanState)
+	fx.Tracker.AddIssue(issue)
+	node := nodeIDOfIssue(issue)
+
+	releaseUpdate, entered := fx.Tracker.HoldUpdate()
+	fx.Orc.Tick(context.Background())
+	select {
+	case <-entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("担当者の人数による書き込みが始まらない")
+	}
+	fx.Tracker.ResetCalls()
+
+	fx.Orc.Tick(context.Background())
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if n := countString(fx.Tracker.Calls(), "UpdateStatus"); n != 0 {
+			releaseUpdate()
+			t.Fatalf("書いている最中の巡回で2本目の書き込みを立てた: UpdateStatus %d 回", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	releaseUpdate()
+	waitFor(t, 15*time.Second, "1本目が failure_state を書く", func() bool {
+		return fx.Tracker.StateOf(issue.ID) == fx.Config.Tracker.FailureState
+	})
+	waitFor(t, 5*time.Second, "理由のコメントを書く", func() bool {
+		return commentsContaining(fx.Tracker, node, assigneesInvalidMarker) == 1
+	})
+}
+
+// TestDirectChat_上限を超えた書き込みに成功したら記録を消す は、設計 3-82d の用意の段2 を確かめる。
+//
+// 目的: 門7 の書く経路が実際に書けたら、用意の失敗の記録を消す。**残すと、索引の遅れでカードがまだ候補に見える間に
+// 人間が direct chat へ戻したとき、1回も用意し直さずにまた `failure_state` へ落とす。**
+// 与える情報: `agent.max_retries` を0にし、1回目の用意を落とす。門7 が `failure_state` を書いたあと、
+// 候補から外れる巡回を挟まずに人間が direct chat へ戻す。そのときは用意が通る。
+// 成功条件: 戻した巡回で用意し（「話しかけられます」が1件）、「用意できませんでした」は1件のままであること。
+func TestDirectChat_上限を超えた書き込みに成功したら記録を消す(t *testing.T) {
+	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 })
+	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません")
+	var mu sync.Mutex
+	failing := true
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		defer mu.Unlock()
+		if failing {
+			return nil, &rpcErr{Code: "agent_start_failed", Message: "起動できませんでした"}
+		}
+		return map[string]any{
+			"type":  "agent_started",
+			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
+		}, nil
+	})
+	id, node := addOwnDirectChatIssue(fx, 361)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の用意が落ちて印が外れる", func() bool {
+		return strings.Contains(fx.Logs.String(), "direct chat の pane を用意できませんでした") &&
+			len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "門7 が failure_state を書き、理由を書く", func() bool {
+		return fx.Tracker.StateOf(id) == fx.Config.Tracker.FailureState &&
+			commentsContaining(fx.Tracker, node, "用意できませんでした") == 1
+	})
+
+	mu.Lock()
+	failing = false
+	mu.Unlock()
+	fx.Tracker.SetState(id, humanState)
+	waitFor(t, 15*time.Second, "戻した巡回で用意し直す", func() bool {
+		fx.Orc.Tick(context.Background())
+		return commentsContaining(fx.Tracker, node, readyCommentMarker) == 1
+	})
+	if n := commentsContaining(fx.Tracker, node, "用意できませんでした"); n != 1 {
+		t.Errorf("書けた記録を消さずに、戻したカードをまた落とした: 「用意できませんでした」%d 件", n)
+	}
+	if got := fx.Tracker.StateOf(id); got != humanState {
+		t.Errorf("戻したカードをまた動かした: %q", got)
 	}
 }

@@ -350,3 +350,52 @@ turn の終わりの判定・hook の受け口・送る内容は変えない。
 
 `sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
 `go vet ./...`: 終了コード 0。
+
+## 実装レビュー4周目で直すもの
+
+**言いたいこと。**判断票（PR #267 の実装レビュー4周目）で「直す」と決めた7件のうち、PR の本文（メインが直す）を除く分を、直す前に全部並べる。
+
+| # | 指摘 | 直す場所 | 影響範囲と確かめたこと |
+| --- | --- | --- | --- |
+| v1 | CI の `test (ubuntu-latest)` が赤い（high） | `test/internal/orchestrator/direct_chat_setup_test.go` の `TestDirectChat_バックオフ明けに人間が引き取っていたら書いた担当者を消し戻さない` | **手元で再現した。**`go test -race -cpu 1,2 -count=10 -run 'TestDirectChat' ./test/internal/orchestrator/` で20回中10回落ちる（落ちるのはこの1本だけ）。`redispatch` の段2 は goroutine なので、印が外れるのが同じ巡回の direct chat の1パスより後になりうる。設計 3-82c の門1 の表は「次の巡回で」。**待ちの中で巡回を回す形**（ほかのテストと同じ）にし、コメントの「同じ巡回の」を「次の巡回の」へ直す。**ほかの direct chat のテストで巡回1回の効果を前提にしているもの**を洗い、同じ形に直す（用意の goroutine は同じ巡回の1パスが立てるので、1回の巡回で足りる。見るのは「別の goroutine が印を外すのを待ってから次の巡回が拾う」形だけ） |
+| v2 | 用意の最中に戻したとき、動いている Claude Code へ1回目の指示を送る（mid） | `internal/orchestrator/dispatch.go` の `startRunFromWorktree`（direct chat で `ErrStartupBusy` を見たら、それと分かる値を返す）、`internal/orchestrator/directchat.go` の `setUpDirectChat` と `finishDirectChatSetup` の戻った枝 | 戻った枝で、既に動いていたなら**送る印ではなく turn の終わりを待つ印**（`setAwaitTurnEnd`）を立て、送る直前の確認の印（`setBusyCheckBeforeSend`）も立てる。通常の着手の `ErrStartupBusy` と同じ道（`wakeRuns` が `awaitFirst` の turn ループを立て、`SendFirstPrompt` は立ったままなので、走っている turn が終わった次の周で1回目の本文を送る）。**送る印は立てない**（両方立てると、turn ループが走っているあいだ `wakeRuns` が「既に走っている」で WARN を出し続ける）。入れた枝（`setupEnter`）では何も変えない（人間が話す）。`startRun`（通常の着手）の戻り値は変えない |
+| v3 | 用意の段2 が段4〜段8 で落ちると、シェルの pane が残る（mid） | `internal/orchestrator/dispatch.go` の `startRunFromWorktree`（段3 の直後） | **direct chat の用意で、`worktree.open` が新しく開いた workspace（`AlreadyOpen` が偽）のときだけ**、`Prepare` が返した `HerdrPaneID` を `setPaneID` で控える。既に開いていた workspace の pane は人間のものでありうるので控えない（門4 がそもそも止めるが、二重の守り）。段8 は `resolvePane` の値で上書きする（同じ pane）。後始末（`closeDirectChatSetupPane`）は `PaneID` を閉じるので、そのまま効く。打ち切り（`abortTerminalForHuman`）は用意中の run には来ない（用意中は印が立たない）。`agent.start` 前なので `paneState` は「起動済みでない」を返し、来ても閉じる側へ倒れる |
+| v4 | 門4 と用意の段2 で pane の見つけ方が違う（mid） | `internal/orchestrator/directchat.go` の `directChatPanes` と `directChatPaneExists`、設計 3-82c の門の表の4行目 | 門4 は「cwd がその worktree の pane がある」**または**「その worktree を開いている herdr workspace（`workspace.list` の `checkout_path` で引く。用意の段2 の `worktree.open` が返すのと同じ workspace）に pane が1枚でもある」で当たる。**`pane.list` と `workspace.list` は1パスで1回ずつ**。どちらかが引けなければ「引けなかった」として用意しない（「pane が無い」と混ぜない）。cwd の照合は残す（別の workspace から worktree へ入った pane も触らない側に倒す）。`paneMapByCwd` は復元が使うので変えない |
+| v5 | 担当者の人数による書き込みが重なりうる（low） | `internal/orchestrator/directchat.go` の `writeDirectChatAssigneeFailureAsync`、`internal/orchestrator/orchestrator.go` の欄と初期化 | issue ごとの「書いている最中」の集合（`o.mu` が守る）を持ち、立っていれば goroutine を立てない。書き終えたら下ろす。呼び出し元は門3 と巡回の段1 の2つで、どちらもこの関数を通る |
+| v6 | 上限を超えたあとの書き込みに成功しても記録が残る（low） | `internal/orchestrator/directchat.go` の `writeDirectChatFailure`（書けたかを返す）と門7 の goroutine | 実際に書けた（`Wrote`）ときに専用の記録を消す。`endDirectChatSetupLimitWrite` は記録が無ければ何もしないので、順序はどちらでもよい。担当者の人数の書き込みは記録を持たないので戻り値を使わない |
+| v7 | ずれたリンク（low） | `CLAUDE.md` の `continuo_design.md#L10259`、`docs/plans/impl/issue142_144_branch_mismatch.md:215`、`docs/plans/release_v0114.md:70-71`、`docs/spec/event_process_system.md:121` | **コードと設計を直し終えてから、着地先の中身で1本ずつ確かめる。**CLAUDE.md の行は「エージェントが自分で `gh` から `In Progress` → `Blocked` を動かす」経路で、origin/main でも遷移表の「同上 / エージェント自身」の行を指している。そこへ向ける。この周の変更でずれる他のリンク（CLAUDE.md の `pendingDir` ほか）も差分の行の対応で確かめる |
+
+**hook の規則（CLAUDE.md の6）との当たり。**検知の網に掛かるのは `orchestrator.go`（欄1つと初期化1行）だけの見込み。
+`wakeRuns`・`OnHook`・`pendingDir` は触らない。`turn.go`・`runstate.go`・`hookinput.go`・`settings.go` は触らない。
+v2 は既存の `setAwaitTurnEnd` と `setBusyCheckBeforeSend` を呼ぶだけで、turn の終わりの判定・hook の受け口・送る内容は変えない。4つの定義のどれにも当たらない。
+
+### 直した場所（実装レビュー4周目）
+
+| # | どこ |
+| --- | --- |
+| v1 | `test/internal/orchestrator/direct_chat_setup_test.go` の `TestDirectChat_バックオフ明けに人間が引き取っていたら書いた担当者を消し戻さない`（待ちの中で巡回を回す）。同じファイルのほかのテストには、別の goroutine が印を外すのを同じ巡回で待つ形のものが無かった（`-race -cpu 1,2 -count=10` で direct chat のテストを回して0件） |
+| v2 | `internal/orchestrator/dispatch.go` の `startRunFromWorktree`（direct chat の `ErrStartupBusy` の着地で `ErrStartupBusy` を返す）、`internal/orchestrator/directchat.go` の `setUpDirectChat`（`ErrStartupBusy` を失敗にせず段3 へ渡す）と `finishDirectChatSetup` の戻った枝（`busy` なら `setBusyCheckBeforeSend` と `setAwaitTurnEnd`）。設計 3-82d の外れ方の表の1行目 |
+| v3 | `internal/orchestrator/dispatch.go` の `startRunFromWorktree` の段3 の直後（`AlreadyOpen` が偽のときだけ `setPaneID(prepared.HerdrPaneID)`）。設計 3-82d の用意の段2 |
+| v4 | `internal/orchestrator/directchat.go` の `directChatPaneIndex`（新設）・`directChatPanes`・`directChatPaneExists`、`internal/orchestrator/orchestrator.go` の `HerdrClient` に `WorkspaceList`、テストの stub に `WorkspaceList`。設計 3-82b の pane の写像の段落と 3-82c の門の表の4行目 |
+| v5 | `internal/orchestrator/directchat.go` の `writeDirectChatAssigneeFailureAsync`、`internal/orchestrator/orchestrator.go` の `directChatAssigneeWriting`（欄と初期化）。設計 3-82j の代償の表の「書く経路は、別の機械とは重なりうる」の行（同じ機械では重ねないに直した） |
+| v6 | `internal/orchestrator/directchat.go` の `writeDirectChatFailure`（書けたかを返す）と門7 の goroutine（書けたら `forgetDirectChatSetupFailure`）。設計 3-82d の用意の段2 の「専用の記録を消す」 |
+| v7 | `CLAUDE.md` の 4-1 の遷移表へのリンク（`#L10264`。「同上 / エージェント自身」の行）、`docs/plans/impl/issue142_144_branch_mismatch.md` の 5-3 の markdown ブロック（`#L10783-L12215`）、`docs/plans/release_v0114.md` の 5-3m（`#L12356-L12372`）と 5-3n（`#L12951-L12961`）、`docs/spec/event_process_system.md` の `finishRunAsync`（`lifecycle.go#L602`）。この周のコードの変更でずれた `CLAUDE.md` の `pendingDir`・`issue134_136_140_blocked_notice.md` の7本・`issue142_144_branch_mismatch.md` の `dispatch.go` の1本・`issue144_branch_and_push.md` の2本・`issue166_stop_hook_block.md` の1本を、差分の行の対応で振り直した |
+
+**残したもの（v7）。**`docs/plans/release_v0114.md` の 69 行目（3-74c）と `docs/spec/event_process_system.md` の 122 行目（`stopAndReleaseAsync`）は着地先がずれているが、判断票の一覧に無いので触っていない。
+
+### 足したテスト（実装レビュー4周目）
+
+| テスト | 何を確かめるか | 直しを外すと |
+| --- | --- | --- |
+| `TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが開いたpaneを閉じる` | v3 | 落ちる（確かめた。`pane.close` 0 回） |
+| `TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意しない` | v4。その pane が無くなった巡回では用意する（空振りでない証拠） | 落ちる（確かめた。`agent.start` 1 回） |
+| `TestDirectChat_用意中に戻されたときClaudeCodeが既に動いていればturnの終わりを待ってから1回目の本文を送る` | v2 | 落ちる（確かめた。`Stop` の前に `agent.prompt` 1 回） |
+| `TestDirectChat_担当者が1人でないカードへ書いている最中の巡回では2本目を立てない` | v5 | 落ちる（確かめた。止めている間に `UpdateStatus` 1 回） |
+| `TestDirectChat_上限を超えた書き込みに成功したら記録を消す` | v6 | 落ちる（確かめた。戻した巡回で用意し直さない） |
+
+### テストの結果（実装レビュー4周目）
+
+`sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
+`go vet ./...`: 終了コード 0。
+`go test -race -cpu 1,2 -count=10 -run 'TestDirectChat' ./test/internal/orchestrator/`: 直す前は `--- FAIL` 10件（全部 v1 のテスト）、直したあとは終了コード 0、`^--- FAIL` 0件・`^FAIL` 0件。
+**CI の結果は、push したあとメインが確かめる**（この作業では push していない）。

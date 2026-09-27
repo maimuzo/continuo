@@ -151,6 +151,8 @@ type Tracker interface {
 type HerdrClient interface {
 	// PaneList は workspace の pane を引く（設計 3-16 の段8）。
 	PaneList(ctx context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error)
+	// WorkspaceList は workspace の一覧を引く（設計 3-82c の門4。worktree を開いている workspace を引く）。
+	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
 	// WorktreeOpen は既にある worktree を workspace として開く。
 	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
 	// 着手のときは workspace の Manager が開く。
@@ -422,6 +424,10 @@ type Orchestrator struct {
 	// **通常の着手の失敗の記録（`failures`）とは混ぜない。**混ぜると、通常の着手で失敗が積もった
 	// issue（人間がまさに引き取りたいもの）が、用意の1回の失敗で上限を超えて `failure_state` へ落ちる。
 	directChatSetupFailures map[string]*directChatSetupFailure
+	// directChatAssigneeWriting は、担当者が1人ではない direct chat のカードへ書く経路（設計 3-82h）が
+	// 走っている最中の issue の集合である（キーは project item の ID。**mu が守る。メモリだけに持つ**）。
+	// **立っているあいだは次の書き込みを立てない**（2本が並ぶと、コメントが2件付きうる）。
+	directChatAssigneeWriting map[string]bool
 	// quota は最後に読んだ枠の状態である。nil なら読めていない。
 	quota *ratelimit.Snapshot
 	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
@@ -587,8 +593,10 @@ func New(opts Options) (*Orchestrator, error) {
 		closeSet:     map[string]string{},
 		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-82d）。
 		directChatSetupFailures: map[string]*directChatSetupFailure{},
-		shutdown:                shutdown,
-		shutdownCancel:          shutdownCancel,
+		// **担当者の人数による書き込みの番**（設計 3-82h）。
+		directChatAssigneeWriting: map[string]bool{},
+		shutdown:                  shutdown,
+		shutdownCancel:            shutdownCancel,
 	}
 	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
 	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの

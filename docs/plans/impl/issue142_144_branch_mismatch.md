@@ -212,7 +212,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:10777-12234](../continuo_design.md#L10777-L12234) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:10783-12215](../continuo_design.md#L10783-L12215) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**
@@ -242,7 +242,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 
 **両方向とも壊れる。**[internal/workspace/prepare.go:243-250](../../../internal/workspace/prepare.go#L243-L250) は
 再利用でも `resolveBase` を呼び、その値が
-[internal/orchestrator/dispatch.go:981](../../../internal/orchestrator/dispatch.go#L981) の `Base: prepared.Base.String()` から
+[internal/orchestrator/dispatch.go:991](../../../internal/orchestrator/dispatch.go#L991) の `Base: prepared.Base.String()` から
 [internal/workspace/identity.go:457-462](../../../internal/workspace/identity.go#L457-L462) へ流れる。
 
 | 向き | 何が起きるか |
