@@ -131,7 +131,7 @@ os.Rename(tmp.Name(), path)
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1769-1789](internal/cli/cli.go#L1769-L1789) が
+（[internal/cli/cli.go:1785-1805](internal/cli/cli.go#L1785-L1805) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
@@ -177,7 +177,7 @@ exit status 2
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1744-1745](internal/cli/cli.go#L1744-L1745) と
+（[internal/cli/cli.go:1760-1761](internal/cli/cli.go#L1760-L1761) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -230,10 +230,10 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1599-1604](internal/cli/cli.go#L1599-L1604) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
+| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1615-1620](internal/cli/cli.go#L1615-L1620) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1448-1452](internal/orchestrator/orchestrator.go#L1448-L1452) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1485-1489](internal/orchestrator/orchestrator.go#L1485-L1489) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 | [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
