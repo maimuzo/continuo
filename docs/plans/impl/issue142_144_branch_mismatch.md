@@ -212,7 +212,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:10911-12422](../continuo_design.md#L10911-L12422) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:10911-12401](../continuo_design.md#L10911-L12401) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**
@@ -541,7 +541,7 @@ LinkedBranches []string
 
 ### 16-7. 段7（`/code-review` の結果と対応）
 
-**correctness の欠陥は0件、low が3件。**結果は PR #146 のコメントへ貼った
+**correctness の欠陥は0件、LOW が3件。**結果は PR #146 のコメントへ貼った
 （先頭に `<!-- code-review-result -->`）。https://github.com/maimuzo/continuo/pull/146#issuecomment-5493858175
 
 | 指摘 | どうしたか | 理由 |
@@ -573,7 +573,7 @@ LinkedBranches []string
 
 ---
 
-## 17. #142: 残っていた low 2件を直した（人間の判断が出たあと）
+## 17. #142: 残っていた LOW 2件を直した（人間の判断が出たあと）
 
 **言いたいこと。**16-8 で人間の判断待ちにしていた2件は、**2件とも「直す」で決まった。**
 **置き場所は `## この issue を読むこと` の直前へ移し、読むだけのときは worktree を作らせない。**
