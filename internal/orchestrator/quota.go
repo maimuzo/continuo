@@ -55,6 +55,11 @@ type quotaWindow struct {
 	Percent int
 	// ResetsAt は resets_at である。
 	ResetsAt time.Time
+	// Standin は、ResetsAt が usage API の返した値ではなく continuo が付けた仮の期限であるかである
+	// （usage API が resets_at: null を返した期間。issue #284）。**仮の期限の切れは、新しさの判定で
+	// 数えない**（ステータスラインは weekly_scoped を運ばないので、usage API から statusline取得へ
+	// 切り替えると置き換わらず、新しい値が届いていても入札を見送ってしまう）。quota.json にも書かない。
+	Standin bool
 }
 
 // sessionMark はセッションごとに覚えるものである。
@@ -307,11 +312,21 @@ func (o *Orchestrator) quotaFreshLocked(now time.Time) bool {
 		return false
 	}
 	for _, w := range qs.windows {
-		if !w.ResetsAt.After(now) {
+		// **仮の期限の切れは数えない**（Standin のコメント）。切れた期間は snapshotOf が除くので、
+		// 入札はその期間を使用率0と読む（resets_at が null の期間はまだ使っていない）。
+		if !w.Standin && !w.ResetsAt.After(now) {
 			return false
 		}
 	}
 	return true
+}
+
+// apiSwitched は、usage API から statusline取得へ切り替えているかを返す（issue #284）。
+// **o.quotaMu を持たずに呼ぶ**（中で取る）。
+func (o *Orchestrator) apiSwitched() bool {
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	return o.quota.apiSwitched
 }
 
 // quotaRefreshInterval は新しさの幅（入札に使ってよい値の古さの上限）を返す。statusline取得の
@@ -454,6 +469,7 @@ func windowsOfAPI(
 			}
 		}
 		if qw, ok := shapeWindow(float64(l.Percent), resetsAt, now); ok {
+			qw.Standin = l.ResetsAt == nil
 			out[kind] = qw
 		}
 	}
@@ -551,6 +567,11 @@ func (o *Orchestrator) persistQuota() {
 	o.quotaMu.Lock()
 	out := make(map[string]quotaFileWindow, len(o.quota.windows))
 	for kind, w := range o.quota.windows {
+		// **仮の期限の期間は書かない。**読み戻すと本物の期限として扱われ、切れた時点で新しさの判定を
+		// 止めてしまう。usage API の次の読み取りでまた入る。
+		if w.Standin {
+			continue
+		}
 		out[kind] = quotaFileWindow{Percent: w.Percent, ResetsAt: w.ResetsAt}
 	}
 	o.quotaMu.Unlock()

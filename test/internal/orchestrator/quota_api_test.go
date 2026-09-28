@@ -169,6 +169,10 @@ func newKeychainReader(t *testing.T, script *apiScript, securityBody string, tim
 // **巡回の間隔は30秒・usage API を読む間隔と値の古さの上限は5分**（既定）にする。
 func apiConfig(cfg *config.Config) {
 	cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+	// **token_source を OS の既定に任せない。**既定は macOS が keychain、ほかが claude_credentials で、
+	// Keychain の案内を WARN に足すかがこれで決まる（macOS でだけ通るテストを作らないため）。
+	// Keychain の案内を確かめるテストは、mutate で keychain にする。
+	cfg.RateLimit.TokenSource = ratelimit.TokenSourceClaudeCredentials
 	cfg.RateLimit.PollIntervalMs = 300000
 	cfg.RateLimit.RefreshIntervalMs = 300000
 	cfg.Polling.IntervalMs = 30000
@@ -311,6 +315,44 @@ func TestQuotaAPI_応答に無い期間は触らずnullの期間は次の読み�
 	}
 	if snap := fx.Orc.QuotaForBidForTest(); snap != nil {
 		t.Errorf("null の期間の期限が過ぎたのに新しいままである: %+v", snap)
+	}
+}
+
+// 目的: usage API が resets_at: null で返した期間の仮の期限が切れても、ほかの期間の値が新しければ
+// 入札を止めないことを確かめる（issue #284。PR #294 の実装レビュー3周目）。
+// ステータスラインは weekly_scoped を運ばないので、usage API から statusline取得へ切り替えると
+// 仮の期限の weekly_scoped は置き換わらない。その切れを新しさの判定に数えると、新しい値が
+// 届いていても入札を見送ってしまう。
+// 与える情報: 手で進める時計。5時間・週が本物の resets_at、weekly_scoped が null の usage API の応答。
+// 5分20秒後にステータスラインの新しい応答の行（5時間と週）。
+// 成功条件: 仮の期限（5分30秒後）を過ぎても入札の写しが nil にならず、weekly_scoped は写しに入らない
+// （入札は使用率0と読む）。
+func TestQuotaAPI_nullの期間の仮の期限が切れても新しい値があれば入札を止めない(t *testing.T) {
+	clock := newTestClock()
+	fx := newAPIFixture(t, clock, nil, nil)
+	now := clock.Now()
+	five := now.Add(2 * time.Hour).Truncate(time.Minute)
+	week := now.Add(72 * time.Hour).Truncate(time.Minute)
+
+	fx.Orc.OnAPISnapshot(&ratelimit.Snapshot{Limits: []ratelimit.Limit{
+		{Kind: handoff.LimitKindSession, Percent: 20, ResetsAt: ptr(five)},
+		{Kind: handoff.LimitKindWeeklyAll, Percent: 30, ResetsAt: ptr(week)},
+		{Kind: handoff.LimitKindWeeklyScoped, Percent: 0, ResetsAt: nil},
+	}})
+	clock.Advance(5*time.Minute + 20*time.Second)
+	fx.Orc.OnStatusline(slLine("pane-a", 100, slWin(21, five), slWin(31, week)))
+	fx.Orc.OnStatusline(slLine("pane-a", 200, slWin(21, five), slWin(31, week)))
+
+	clock.Advance(20 * time.Second)
+	snap := fx.Orc.QuotaForBidForTest()
+	if snap == nil {
+		t.Fatal("仮の期限が切れただけで、新しい値があるのに入札の写しが nil になった")
+	}
+	if _, ok := limitOf(snap, handoff.LimitKindWeeklyScoped); ok {
+		t.Errorf("仮の期限が切れた weekly_scoped が入札の写しに残っている: %+v", snap)
+	}
+	if got, ok := limitOf(snap, handoff.LimitKindSession); !ok || got.Percent != 21 {
+		t.Errorf("ステータスラインの5時間が写しに無い: %+v", snap)
 	}
 }
 

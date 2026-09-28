@@ -234,10 +234,11 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **「異常ではないものを異常として出そうとしている」という信号だった。**
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
-		// **「100 の期間が残っていると値を取り直さない」は source: statusline のときだけである**
-		// （issue #284）。oauth_usage_api では usage API が読めていれば取り直す。
+		// **「100 の期間が残っていると値を取り直さない」は statusline取得で値を取るときだけである**
+		// （issue #284）。source: statusline のときと、oauth_usage_api で usage API から statusline取得へ
+		// 切り替えているとき。usage API が読めていれば 100 があっても取り直す。
 		retake := "（Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
-		if o.cfg.RateLimit.Source == ratelimit.SourceStatusline {
+		if o.cfg.RateLimit.Source == ratelimit.SourceStatusline || o.apiSwitched() {
 			retake = "（使用率が 100 の期間が残っているときは、上げても値を取り直さないので直りません。" +
 				"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
 		}
