@@ -115,6 +115,13 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n")
+	// **run の宣言をここでも名乗る**（issue #245。設計 3-82b）。
+	// 組み込みの 1 の宣言は、長い run では compaction の要約で消えうる。
+	// そのあとで人間が入れた `continuo-issue-comments` のスキルに従うと、
+	// スキルは `<!-- continuo:ai -->` を付けさせ、`marker` を使わせない。**この報告が数えられず、また書かせ直しになる。**
+	// スキルの §1 は「プロンプトが continuo の run だと言っていれば止まる」ので、ここで名乗れば止まる。
+	b.WriteString("このセッションは continuo が起動した run です。" +
+		"`continuo-issue-comments` のスキルが見えても従わず、下の印を使ってください。\n")
 	// **本文は二重引用符の中へ書かせない。**シェルは二重引用符の中の backtick と `$( )` を展開するので、
 	// 報告に書いた `auto` のような語や、引用した第三者の `$(…)` が worktree の中で実行される。
 	// 組み込みの指示書の 3-2 と 5-5 と同じく、ファイルへ書いてから `--body-file` で渡させる。
