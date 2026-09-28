@@ -282,6 +282,17 @@ func (fh *fakeHerdr) DropConnection(method string) {
 	fh.drops[method] = true
 }
 
+// StopDropping は `DropConnection` で入れた台本を外し、そのメソッドへ再び答えるようにする。
+//
+// **herdr が再起動し終えた場面の再現である。**
+//
+// method: 対象のメソッド名。
+func (fh *fakeHerdr) StopDropping(method string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	delete(fh.drops, method)
+}
+
 // fakeWorkspace はテスト用herdr mock が持つ workspace 1件である。
 //
 // **本物と同じく、リポジトリの親 workspace も持つ**（issue #19）。`worktree.open` に
@@ -773,6 +784,13 @@ type fakeTracker struct {
 	calls []string
 	// verifyErr は VerifyStatusOptions が返すエラーである。
 	verifyErr error
+	// lastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧である（設計 3-83）。
+	lastFetchStates []string
+	// statusOptions は StatusOptionNames が返すカンバンの選択肢名である（設計 3-83）。
+	//
+	// **nil のままなら「まだ読めていない」を表す。**`tracker.direct_chat_state` を
+	// 候補の一覧へ足すかどうかの判定は、これが在ることを条件にしている。
+	statusOptions []string
 	// statesErr は FetchIssuesByStates が返すエラーである。
 	statesErr error
 	// updateErr は UpdateStatus が返すエラーである。
@@ -1349,6 +1367,10 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchIssuesByStates")
+	// **頼まれた Status の一覧を控える**（設計 3-83）。
+	// `tracker.direct_chat_state` を足すかどうかは、カンバンの選択肢を読んでから決まる。
+	// **控えないと、足した／足さなかったを検査から見分けられない。**
+	ft.lastFetchStates = append([]string(nil), states...)
 	if ft.statesErr != nil {
 		return nil, ft.statesErr
 	}
@@ -1698,6 +1720,32 @@ func (ft *fakeTracker) VerifyStatusOptions(_ context.Context, _ config.TrackerCo
 	defer ft.mu.Unlock()
 	ft.record("VerifyStatusOptions")
 	return ft.verifyErr
+}
+
+// StatusOptionNames はカンバン側の Status の選択肢名を返す（設計 3-83）。
+func (ft *fakeTracker) StatusOptionNames() []string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	out := make([]string, len(ft.statusOptions))
+	copy(out, ft.statusOptions)
+	return out
+}
+
+// LastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧を返す（設計 3-83）。
+func (ft *fakeTracker) LastFetchStates() []string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	return append([]string(nil), ft.lastFetchStates...)
+}
+
+// SetStatusOptions はカンバン側の Status の選択肢名を差し替える（設計 3-83）。
+//
+// **`tracker.direct_chat_state` をここへ入れないと、候補の一覧に足されない。**
+// 選択肢がまだ読めていない状態（`Bootstrap` の前）と同じ扱いになる。
+func (ft *fakeTracker) SetStatusOptions(names ...string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.statusOptions = append([]string(nil), names...)
 }
 
 // ===== 本物の git を使うリポジトリ =====

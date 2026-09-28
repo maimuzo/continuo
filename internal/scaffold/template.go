@@ -80,6 +80,20 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+  direct_chat_state: "Direct Chat"          # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
+                                            # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
+                                            # Status も動かさず、pane を閉じず worktree も消さない。
+                                            # 動かす前に、issue の担当者を、pane を開きたい PC の continuo の
+                                            # gh のアカウント1人だけにすること。0人か2人以上だと failure_state へ動かして知らせる。
+                                            # 途中で担当者を別の1人に替えると、この PC の continuo は pane を閉じて手を離す。
+                                            # pane がまだ無ければ、ここで1つ用意する
+                                            # （continuo がその issue をまだ抱えていないときだけ。
+                                            #   やり直し待ちの issue も「抱えている」に入る）。
+                                            # 上の active_states へ戻すと、たいていは同じ pane・同じ会話のまま続きの指示を送る。
+                                            # 使うには、カンバンの画面で Status の選択肢をこの名前で1つ足すこと
+                                            # （API で足すと設定済みの Status が全部消える）。
+                                            # 足すまでは、この機能が使えないだけで、他は何も変わらない。
+                                            # 空にすると、この機能は一切効かない
   verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。

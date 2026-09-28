@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -78,6 +79,38 @@ var ErrStartupBusy = i18n.Sentinel(i18n.KeyOrchestratorErrStartupBusy)
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に見直すこと。**
 var ErrStatusNotWritten = errors.New("カンバンの Status を書かなかったので着手しません")
 
+// statusNotWrittenError は `ErrStatusNotWritten` に、**着手の段2 が取り直した Status** を添えたものである
+// （設計 3-83c の門1 の表の下）。
+//
+// **呼び出し元（`runStartOrFail`）が、書いた担当者を消し戻すかを決めるのに使う。**
+// バックオフを挟んだやり直しで取り直した Status が `direct_chat_state` なら消し戻さない。
+// **`errors.Is(err, ErrStatusNotWritten)` はそのまま真になる**（`Is` を持たせてある）。
+type statusNotWrittenError struct {
+	// state は段2 が取り直した Status である。item が見えなかったときは空である。
+	state string
+}
+
+// Error は `ErrStatusNotWritten` と同じ文を返す（ログに出る文を変えない）。
+func (e *statusNotWrittenError) Error() string { return ErrStatusNotWritten.Error() }
+
+// Is は `ErrStatusNotWritten` との比較を真にする。
+//
+// target: 比べる相手。
+// 戻り値: `ErrStatusNotWritten` なら true。
+func (e *statusNotWrittenError) Is(target error) bool { return target == ErrStatusNotWritten }
+
+// statusNotWrittenState は、着手の段2 が取り直した Status をエラーから取り出す。
+//
+// err: `startRun` が返したエラー。
+// 戻り値: 取り直した Status。添えられていなければ空文字。
+func statusNotWrittenState(err error) string {
+	var e *statusNotWrittenError
+	if errors.As(err, &e) {
+		return e.state
+	}
+	return ""
+}
+
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
 //
 // **これは二重の守りの外側であって、主の守りではない。**主の守りは
@@ -114,6 +147,11 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 	}
 	add(o.cfg.Tracker.FailureState)
 	add(o.cfg.Tracker.DispatchState)
+	// **`direct_chat_state` も入れる**（設計 3-83）。
+	// **この一覧は拒否リストであって「`active_states` の外を全部」ではない。**
+	// 入れないと、**人間が着手の隙間にカードを direct chat へ動かしたとき、
+	// 段2 の最後の砦が素通りして `running_state` で上書きする。**
+	add(o.cfg.Tracker.DirectChatState)
 	for _, dest := range o.cfg.Tracker.StatusSignalMap {
 		if dest != nil {
 			add(*dest)
@@ -143,30 +181,31 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 着手する project item の ID。
 // identifier: ログに出す `<owner>/<repo>#<番号>`。
-// 戻り値: `active_states` にあれば true。**取り直しに失敗したときも false**
+// 戻り値の1つ目: `active_states` にあれば true。**取り直しに失敗したときも false**
 // （分からないなら書かない）。
-func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) bool {
+// 戻り値の2つ目: 取り直した Status（設計 3-83c。取り直せなかったときは空文字）。
+func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) (bool, string) {
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは `State` が
 	// `active_states` に入っているかだけである。
 	current, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{itemID})
 	if err != nil {
 		o.logger.Warn("着手の直前に Status を取り直せないので着手しません（次の巡回でやり直します）",
 			"identifier", identifier, "error", err)
-		return false
+		return false, ""
 	}
 	if len(current) == 0 {
 		o.logger.Warn("着手の直前に取り直したら item が見えないので着手しません",
 			"identifier", identifier)
-		return false
+		return false, ""
 	}
 	state := current[0].State
 	if containsFold(o.cfg.Tracker.ActiveStates, state) {
-		return true
+		return true, state
 	}
 	o.logger.Info("着手の直前に取り直した Status が active_states に無いので着手しません（人間が動かした可能性があります）",
 		"identifier", identifier, "取り直した Status", state,
 		"active_states", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
-	return false
+	return false, state
 }
 
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
@@ -212,6 +251,14 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		if _, taken := o.lookupRunByID(issue.ID); taken {
 			// **関門より前で飛ばした**（設計 6-1）。止めているのは担当者の関門ではないので、
 			// 古い理由と誤った直し方をダッシュボードに出し続けない。
+			o.clearGate(issue.ID)
+			continue
+		}
+		// **閉じる集合にある issue は飛ばす**（設計 3-83f）。同じ巡回の着手が、閉じる前の pane へ
+		// `agent.start` を投げないためである。**閉じ終えれば `reconcileWorktrees` が集合から外す。**
+		if o.inCloseSet(issue.ID) {
+			o.logger.Info("この issue の worktree の pane をまだ閉じ終えていないので、この巡回では着手しません",
+				"identifier", issue.Identifier)
 			o.clearGate(issue.ID)
 			continue
 		}
@@ -410,6 +457,20 @@ func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 	return true, "", 0
 }
 
+// globalFreeSlot は、全体の上限（`agent.max_concurrent_agents`）だけで空きがあるかを返す
+// （設計 3-83c の門5）。
+//
+// **direct chat の pane を用意する門だけが使う。**Status ごとの上限
+// （`agent.max_concurrent_agents_by_state`）は当てない。用意する pane は `running_state` の枠を
+// 消費しないので、当てると、Status ごとの上限を書いた人に、全体が空いていても pane が来ない。
+//
+// 戻り値の1つ目: 空きがあるか。
+// 戻り値の2つ目: `agent.max_concurrent_agents` の値。
+func (o *Orchestrator) globalFreeSlot() (bool, int) {
+	limit := o.reloadableConfig().MaxConcurrentAgents
+	return len(o.snapshotRuns()) < limit, limit
+}
+
 // lookupFolded は Status 名をキーにした写像を、大文字小文字を無視して引く（設計 3-13）。
 //
 // m: 引く写像。
@@ -559,8 +620,23 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。カンバンは continuo が
 		// 触る前の状態のままなので、issue の担当者も元へ戻す。**残すと、着手しなかった
 		// issue をほかの機械が18時間触らない。**
+		//
+		// **例外が1つある**（設計 3-83c の門1 の表の下・3-77g）。**バックオフを挟んだやり直し
+		// （`reuse`）で、取り直した Status が `direct_chat_state` なら消し戻さない。**
+		// 人間がこの機械の担当のまま引き取ったので、次の巡回で direct chat の1パスが pane を用意する。
+		// **消すと担当者が0人になり、次の巡回で `failure_state` へ落ち、
+		// 「担当者を1人に」という事実と違うコメントが残る。**
+		// **消さないときは released も書かない**（`undoHandoffAcquire` を呼ばない。判断票6周目）。
+		// **入札した直後の着手（`reuse` が偽）では消し戻す。**入札の窓のあいだに人間が担当者を
+		// 付けずに動かしたなら、担当者0人として 3-83h の順1 に乗るのが人間の決定どおりである。
 		if rs.handoffAcquired() {
-			o.undoHandoffAcquire(ctx, issue)
+			if reuse && config.IsDirectChatState(o.cfg.Tracker, statusNotWrittenState(err)) {
+				o.logger.Info("人間が direct chat へ引き取ったので、書いた担当者は消し戻しません"+
+					"（次の巡回で pane を用意します）",
+					"identifier", issue.Identifier, "取り直した Status", statusNotWrittenState(err))
+			} else {
+				o.undoHandoffAcquire(ctx, issue)
+			}
 		}
 		return
 	}
@@ -595,6 +671,11 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 // rs: 再 dispatch する run。
 func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	issue := rs.issue()
+	// **ここに direct chat の検査を置いてはならない**（設計 3-83b）。
+	// **守るものが1つも無く、置くと1つ壊れる。**バックオフ待ちの run では pane が既に閉じている。
+	// **置くと `clearBackoff` の手前で戻り、着手の段2 へ二度と進まない。**
+	// 設計 3-83c の門1 の表は、まさにその段2 で印が外れることを
+	// 「最大5分半で pane ができる」という約束の根拠にしている。
 	if !o.preflight(ctx, issue) {
 		// 検査に落ちたら、この巡回では何もしない。次の巡回でまた見る。
 		return
@@ -777,8 +858,10 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **書く前に ID 指定で取り直し、`active_states` にあるときだけ書く**（許可リスト）。
 	// 拒否リストだけでは `In Review` のような「設定に名前が出てこない状態」を守れず、
 	// 人間へ引き渡し済みの issue を上書きしてしまう。
-	if !o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier) {
-		return ErrStatusNotWritten
+	// **取り直した Status はエラーへ添えて返す**（設計 3-83c）。呼び出し元が
+	// 書いた担当者を消し戻すかをこれで決める。
+	if allowed, state := o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier); !allowed {
+		return &statusNotWrittenError{state: state}
 	}
 	// **拒否リストも渡し続ける。**UpdateStatus はこのあともう一度 ID 指定で取り直すので、
 	// 上の取り直しとの隙間に人間が動かした場合は、そちらが最後の砦になる。
@@ -790,7 +873,8 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		// **書かなかったのに段3 へ進んではならない。**item がもう見えないか、
 		// 取り直した結果 terminal_states / failure_state に入っていたということである。
 		// どちらも「いま着手してはいけない」を意味する。
-		return ErrStatusNotWritten
+		// **`Previous` は `UpdateStatus` が書く直前に取り直した値である**（設計 3-83c）。
+		return &statusNotWrittenError{state: moved.Previous}
 	}
 	// **動かしたなら、その記録を issue に残す**（設計 3-29）。
 	// **既に running_state だった場合は書き込みが起きないので、コメントも出ない。**
@@ -805,6 +889,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 「元は何だったか」を書くために要る。
 	rs.setLastWrittenState(o.cfg.Tracker.RunningState)
 
+	return o.startRunFromWorktree(ctx, rs, issue, reuse, false)
+}
+
+// startRunFromWorktree は着手の段3〜段11 を実行する（設計 3-16）。
+//
+// **段2（Status の書き込み）は呼び出し側が済ませている。**direct chat では踏まない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 印を付けた run。
+// issue: 着手する issue。
+// reuse: 再 dispatch かどうか（真なら身元ファイルの takeover_count を1つ増やす）。
+// directChat: direct chat の用意（設計 3-83d の用意の段2）かどうか。**真なら段11 を踏まない。**
+// **この引数だけは残す**（設計 3-83b）。印は着手の goroutine が非同期に立てるので、印で判定し直すと
+// この設計が消したかった隙間が復活する。
+// 戻り値: いずれかの段で失敗した場合のエラー。**direct chat の用意で「Claude Code は既に動いている」
+// （`ErrStartupBusy`）に着地したときは、失敗ではないが `ErrStartupBusy` をそのまま返す**
+// （用意の段3 が、戻された run に1回目の本文を送る前に turn の終わりを待つかをこれで決める）。
+func (o *Orchestrator) startRunFromWorktree(
+	ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool,
+) error {
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
@@ -821,6 +925,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		return failed
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
+	// **direct chat の用意では、`worktree.open` が開いた pane をここで控える**（設計 3-83d の用意の段2）。
+	// 段8 まで控えないと、段4〜段8 で落ちたときに後始末（`closeDirectChatSetupPane`）が閉じる相手を知らず、
+	// **シェルの pane が残る。**残った pane は門4 に当たり続けるので、用意し直されず、上限の書く経路にも届かない。
+	// **新しく開いた workspace のときだけ控える。**既に開いていた workspace の pane は人間のものでありうる
+	// （門4 がそもそも止めるが、閉じる側へ倒す理由にはしない）。段8 は `resolvePane` の値で上書きする（同じ pane）。
+	if directChat && prepared.HerdrPaneID != "" && !prepared.AlreadyOpen {
+		rs.setPaneID(prepared.HerdrPaneID)
+	}
 
 	// 段4: worktree を新しく作ったときだけ after_create を走らせる（仕様 5.3.4）。
 	if prepared.Created {
@@ -1024,6 +1136,15 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		//
 		// **1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので
 		// `SendFirstPrompt` は真のまま残り、走っている turn が終わった次の周で送られる。
+		if directChat {
+			// **direct chat の用意では、これが正常な着地である**（設計 3-83d の用意の段2）。
+			// herdr が登録していないだけで Claude Code は生きているので、人間はもう話しかけられる。
+			// **turn の終わりを待つ印は立てない。**入れるか戻すかは用意の段3 が決める。
+			// **`ErrStartupBusy` をそのまま返す。**戻された run へ1回目の本文を送るなら、走っている turn の
+			// 終わりを待ってからにしなければならない（通常の着手のこの道と同じ）。それを決めるのは用意の段3 である。
+			rs.markStartedIfZero(o.now())
+			return ErrStartupBusy
+		}
 		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
 			"identifier", issue.Identifier)
 		// **働き始めた時刻を入れる**（設計 3-80）。**この道は `beginTurn` を通らない。**
@@ -1035,6 +1156,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	if startErr != nil {
 		return startErr
+	}
+
+	if directChat {
+		// **段11 は踏まない**（設計 3-83d の用意の段2）。`SendFirstPrompt` は立ったままだが、
+		// 用意中のあいだは `wakeRuns` が送らない。**下ろすか送るかは用意の段3 が決める。**
+		rs.markStartedIfZero(o.now())
+		return nil
 	}
 
 	// 段11: 1回目の turn を送る。**巡回のループはここでブロックしない。**
@@ -1077,6 +1205,9 @@ func (o *Orchestrator) launchClaude(
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)
+	// **この pane で Claude Code が起動済みであることを控える**（設計 3-83f。判断票6周目）。
+	// 打ち切りの終え方（印を残すか、自分で開いた pane を閉じて印を外すか）をこれで決める。
+	rs.setStartedPane(params.PaneID)
 	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
 	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
 	// `claude.turn_timeout_ms` を2回またぐことになる。

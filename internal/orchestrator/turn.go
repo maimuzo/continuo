@@ -106,9 +106,41 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 	waitCtx, waitCancel := context.WithCancel(ctx)
 	defer waitCancel()
 	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
+	// **人間が引き取ったら、herdr の待ちだけをやめる**（設計 3-83）。
+	// **`pane.close` は呼ばない。**呼ぶと、人間が話している画面が消える。
+	// **読むのはここで1回だけである。**このあと `leaveDirectChatMode` が張り直したものは、
+	// 次に立つ turn ループが読む。
+	defer context.AfterFunc(rs.directChatPauseContext(), waitCancel)()
 
 	for {
 		if ctx.Err() != nil || !rs.currentWorker(epoch) {
+			return
+		}
+		// **direct chat では1文字も送らない**（設計 3-83）。
+		// **`max_dispatch_turns` の判定より前に置く。**あとに置くと、上限に達している run が
+		// `finishRun(failure_state)` へ落ちて pane を閉じにいく。
+		if rs.inDirectChatMode() {
+			o.logger.Info("人間が引き取っているので turn を送りません（pane は閉じません）",
+				"identifier", rs.issue().Identifier)
+			return
+		}
+		// **控えの Status が `direct_chat_state` でも送らない**（`wakeRuns` と同じ理由。設計 3-83f）。
+		// 印はまだ立っていないので、**送る印を立て直してから抜ける。**起こされたときに `wakeRuns` が
+		// 下ろしているので、立て直さないと、作業中へ戻したときに指示が1つも届かない。
+		if o.cardInDirectChat(rs) {
+			o.logger.Info("カードが direct chat にあるので turn を送りません（作業中へ戻したら送ります）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+			return
+		}
+		// **待ちを打ち切るコンテキストが既に死んでいる**（direct chat へ入って、また抜けたあと）。
+		// **`leaveDirectChatMode` は新しいものを張るが、走っている turn ループはそれを読まない**
+		// （読むのは起動時の1回だけである）。このまま送ると、送る前に打ち切られて
+		// **turn 数だけが増える。**抜けて、新しい turn ループに張り直させる。
+		if waitCtx.Err() != nil {
+			o.logger.Info("待ちのコンテキストが切れているので、この turn ループは畳みます（次の巡回が起こし直します）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
 			return
 		}
 
@@ -118,6 +150,17 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		// **送信そのものが失敗したときの原因を握っておく。**握らないと、issue に
 		// 残す理由が「Stop hook が届かなかった」という別の話にすり替わる。
 		var sendErr error
+		// **direct chat から作業中の Status へ戻した run は、送る直前に応答を書いている最中かを見る**
+		// （設計 3-83b の段4・3-83g）。人間が話しかけた直後に戻すのは自然な操作で、そこへ投げると
+		// turn が混ざる（設計 3-4 の段5a2 が復元で同じ判断をしている）。
+		// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ1つも指示を受け取らない。
+		if !awaitFirst && rs.takeBusyCheckBeforeSend() {
+			if st, err := o.agentStatus(waitCtx, rs); err == nil && st == herdr.AgentStatusWorking {
+				o.logger.Info("direct chat から戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+					"identifier", snap.Identifier)
+				awaitFirst = true
+			}
+		}
 		if awaitFirst {
 			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
 			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
@@ -179,6 +222,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", snap.Identifier)
 			return
 		}
+		// **待っている間に人間が引き取った**（設計 3-83）。**run は諦めない。pane も閉じない。**
+		//
+		// **`switch outcome` より手前に置くことが要である。**あとに置くと、
+		// `turnBlocked` が esc を送って `finishRun(failure_state)` を呼び、
+		// `turnStalled` / `turnSendFailed` が `abandonRun` を呼ぶ。**どれも pane を閉じる。**
+		if rs.inDirectChatMode() {
+			o.logger.Info("待っている間に人間が引き取ったので、この turn は終わりにします（pane は閉じません）",
+				"identifier", snap.Identifier)
+			return
+		}
 		switch outcome {
 		case turnAborted:
 			return
@@ -194,6 +247,14 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
 				// コメントも二重に投稿される（設計 3-21）。
 				o.logger.Debug("サブエージェントを待っている間に、別の経路が run を終わらせていました",
+					"identifier", snap.Identifier)
+				return
+			}
+			// **esc を送る直前に、direct chat への引き取りをもう1度見る**（設計 3-83f）。
+			// **送られた esc は取り消せない。**subagent を待つあいだ（最大 `claude.poll_wait_ms`）に
+			// direct chat へ入ると待ちがすぐ切れるので、ここで見ないと人間の画面へ esc が届く。
+			if rs.inDirectChatMode() {
+				o.logger.Info("サブエージェントを待っている間に人間が引き取ったので、esc を送りません（pane は閉じません）",
 					"identifier", snap.Identifier)
 				return
 			}

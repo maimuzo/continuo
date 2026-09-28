@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -90,6 +91,10 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		o.logger.Warn("実行中の issue を取り直せません（この巡回では照合しません）", "error", err)
 		return
 	}
+	// **取り直しが返った時刻を控える**（設計 3-83b の段2）。用意の段3 は、巡回が見た Status と自分の取り直しの
+	// 新しいほうで判定する。**処理した時刻を渡すと、前の issue の処理（担当者の判定の GraphQL など）のぶん
+	// 新しく見え、素早く往復したときに古い値が勝つ。**用意の段3 の時刻も取り直しが返った直後に取っている。
+	fetchedAt := o.now()
 
 	seen := map[string]bool{}
 	for _, issue := range issues {
@@ -99,6 +104,24 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			continue
 		}
 		rs.setIssue(issue)
+
+		// **direct chat の出入りは、下の switch より前に1回で決める**（設計 3-83）。
+		// **`tracker.direct_chat_state` 以外へ動いたら、どの Status でも抜ける。**
+		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
+		// pane が残り、worktree も片付かない。**
+		o.updateDirectChatMode(ctx, rs, issue, fetchedAt)
+		// 段5: **Status が `direct_chat_state` の run と、「用意中」の run は、`switch` へ入れない**（設計 3-83b）。
+		//
+		// **飛ばすかどうかは、カードの Status で決める。`rs.inDirectChatMode()` で決めてはならない**（設計 3-83f）。
+		// 印は非同期に立つので、巡回が同期に読むと必ず隙間ができる。その隙間に落ちると、
+		// 下の `default` が `stopAndReleaseAsync` を呼び、人間が話している pane を閉じて印まで外す。
+		// **カードの Status は、いまこの巡回が取り直した値そのものなので、隙間が無い。**
+		//
+		// **用意中の run の後始末は用意の段3 が行う。**落とすと、作りかけの worktree で
+		// `after_run` と片付けが走る。
+		if config.IsDirectChatState(o.cfg.Tracker, issue.State) || rs.isPreparing() {
+			continue
+		}
 
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
@@ -148,9 +171,123 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		if seen[id] {
 			continue
 		}
+		// **「用意中」の run はこのループでも飛ばす**（設計 3-83f）。後始末は用意の段3 が行う。
+		// 作りかけの worktree で `after_run` を走らせないためである。
+		if rs.isPreparing() {
+			continue
+		}
+		// **人間が引き取っている run は、ここでも印から外さない**（設計 3-83f）。
+		// **pane は `stopAndReleaseAsync` の入口が守る。ここで見るのはログのためである。**
+		// 下の WARN は「印から外します」と言い切っているので、外さないのに出すと嘘になる。
+		if rs.inDirectChatMode() {
+			o.logger.Warn("issue がカンバンから見えなくなりましたが、人間が引き取っているので何もしません（pane も印も残します）",
+				"identifier", rs.issue().Identifier)
+			continue
+		}
 		o.logger.Warn("issue がカンバンから見えなくなったので印から外します（continuo は面倒を見ません）",
 			"identifier", rs.issue().Identifier)
 		o.stopAndReleaseAsync(ctx, rs)
+	}
+}
+
+// updateDirectChatMode は、取り直した Status で direct chat の出入りを決める（設計 3-83b の段1〜段4）。
+//
+// **この順序の正は設計 3-83b の表だけである。****`reconcileRunning` の `switch` より前に呼ぶ。**
+//
+//	段1 Status が `direct_chat_state` … 担当者を 3-83h の表で判定する
+//	    0人か2人以上       → `failure_state` を書きに行き（ループの外）、印も立てる
+//	    ログイン名が取れない → 印を立てる（用意の最中でも立てる）
+//	    1人で自分ではない  → 手を離す（用意中の run では印を下ろすだけ。後始末は用意の段3）
+//	    1人で自分          → 印を立てる（用意の最中でも立てる）
+//	段2 それ以外の Status  … どの Status でも抜けさせる。**用意中の run では印を下ろし、
+//	                          見た Status を記録へ書くだけにする**（`direct_chat_state` を見たときも書く）
+//	段3 抜けたら          … 捨てるもの3つと時計1つ（3-83i）。`terminal_states` なら「直接抜けた」印
+//	段4 抜けた先が作業中  … ループの外で `running_state`・hold を書いてから、続きの指示を送る印を立てる
+//
+// **段2 の用意中の判定と、用意の段3 の判定は、同じロック（`o.mu`）の中で行う**（設計 3-83b）。
+//
+// **抜ける判定を「`active_states` へ戻ったとき」に絞ってはならない。**絞ると `Done` へ動かしたときに
+// 印が立ったままになり、`stopWorker` の門が pane を守り続けて worktree も片付かない。
+//
+// **turn 数は数え直さない**（設計 3-83j）。人間が2回切り替えるだけで上限が外れてはならない。
+//
+// **書き込みと `pane.close` は巡回のループの外で行う**（設計 3-83h / 3-8）。
+// ここで決めるのは、どの表の行に当たったかと、印の出し入れだけである。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// issue: 取り直した issue。
+// fetchedAt: その issue を取り直した時刻（取り直しが返った直後）。用意中の run の記録に使う。
+func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue, fetchedAt time.Time) {
+	now := o.now()
+	// **用意中かどうかと、見た Status の記録を、用意の段3 と同じロックの中で決める**（設計 3-83b の段2）。
+	o.mu.Lock()
+	preparing := rs.notePreparingSeen(issue.State, fetchedAt)
+	o.mu.Unlock()
+
+	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+		// 段1: 担当者を 3-83h の判定の表で判定する。**毎巡回当てる。入るときだけにしない。**
+		switch o.judgeDirectChatAssignees(ctx, issue) {
+		case assigneeInvalidCount:
+			// **印を持っていれば、あわせて direct chat の印も立てる**（書けるまでの巡回で turn を送らないため）。
+			// 書いたあと、次の巡回で `failure_state` の既存の出口（3-83g）が pane を閉じる。
+			o.enterDirectChat(rs, issue)
+			o.writeDirectChatAssigneeFailureAsync(ctx, issue)
+		case assigneeLoginUnknown, assigneeSelf:
+			// **判定できないあいだは turn を送らない側へ倒す**（順2）。
+			o.enterDirectChat(rs, issue)
+		case assigneeOther:
+			if preparing {
+				// **用意中の run では direct chat の印を下ろすだけにする**（判断票6周目）。
+				// **`o.runs` の印は用意の段3 が外す。**用意の段2 が使っている pane を閉じないため。
+				rs.leaveDirectChatMode()
+				return
+			}
+			o.letGoOfDirectChatAsync(ctx, rs, issue)
+		}
+		return
+	}
+
+	if preparing {
+		// 段2: **用意中の run では、direct chat の印を下ろし、見た Status を記録するだけにする。**
+		// 段3・段4・段5・`running_state` の書き込み・hold は、用意の段3 に任せる（設計 3-83d の外れ方の表）。
+		rs.leaveDirectChatMode()
+		return
+	}
+	// 段2: **`direct_chat_state` 以外なら、どの Status でも抜けさせる。**
+	if !rs.leaveDirectChatMode() {
+		return
+	}
+	// **turn の終わりが立てた送る印を下ろす**（`decideAfterTurn` の direct chat の枝）。
+	// 残すと、段4 の書き込み（`running_state`・hold）が終わる前に `wakeRuns` が指示を送る。
+	// 送る印は、作業中へ戻したときだけ段4 が書き込みのあとで立て直す。
+	rs.takeNeedsPrompt()
+	// 段3: 捨てるもの3つは `leaveDirectChatMode` が同じ区間で捨てた。**stall の時計を引き直す**（設計 3-83i）。
+	// **direct chat の間は `checkStalls` を飛ばしているので、最後に見た時刻も画面の版も止まったままである。**
+	// 引き直さないと、人間が黙って3時間考えていただけで、戻した巡回の `checkStalls` が
+	// 「止まっている」と読み、指示を1回も送る前に pane を閉じて `failure_state` を書く。
+	rs.resetStallClock(now)
+	if containsFold(o.cfg.Tracker.TerminalStates, issue.State) {
+		// **「direct chat から直接抜けた」印を立てる**（設計 3-83g）。`ensureAgentComment` が入口で見る。
+		rs.setDirectExitToTerminal()
+	}
+	if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+		o.logger.Info("direct chat を抜けました（作業中の Status ではないので、続きの指示は送りません）",
+			"identifier", issue.Identifier, "状態", issue.State)
+		return
+	}
+	// 段4: ループの外で後始末をし、終わってから続きの指示を送る印を立てる。
+	o.returnFromDirectChatAsync(ctx, rs, issue)
+}
+
+// enterDirectChat は、印を持つ run を direct chat へ入れる（設計 3-83b の段1）。
+//
+// rs: 対象の run。
+// issue: 取り直した issue。
+func (o *Orchestrator) enterDirectChat(rs *runState, issue tracker.Issue) {
+	if rs.enterDirectChatMode() {
+		o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
+			"identifier", issue.Identifier, "状態", issue.State)
 	}
 }
 
@@ -175,6 +312,17 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		path     string
 		identity *workspace.Identity
 	}
+	// **閉じる集合から、走査に出てこなくなった worktree を外す**（設計 3-83f）。
+	// 片付けや `abandon` で worktree が消えたのに集合に残ると、`dispatchCandidates` が
+	// 再起動までその issue を飛ばし続ける（開き直した issue に着手されず、ログにも出ない）。
+	present := make(map[string]bool, len(scanned))
+	for _, w := range scanned {
+		if w.Identity != nil {
+			present[w.Identity.ProjectItemID] = true
+		}
+	}
+	o.pruneCloseSet(present)
+
 	var orphans []orphan
 	ids := make([]string, 0, len(scanned))
 	for _, w := range scanned {
@@ -234,13 +382,28 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 			}
 			continue
 		}
+		// **印を持たずに Status が `direct_chat_state` の worktree は、閉じる集合へ入れる**（設計 3-83f）。
+		// direct chat で引き取れなかった・人間が手で Claude Code を起こした pane は agent 名を持たない。
+		// **入れないと、戻したときの着手がその pane をそのまま使い、生きた Claude Code の入力欄へ
+		// `claude --resume …` を送る。****閉じるのは作業中の Status へ戻ったときだけである**（下）。
+		if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+			o.addToCloseSet(orph.identity.ProjectItemID, orph.path)
+		}
 		// 手順7b: **Status が `active_states` に戻ったときだけ** pane を閉じる。
 		// この条件を外してはならない。**`In Review` / `Blocked` の run は、復元が
 		// 「pane も worktree も残す」と決めて印に入れていない**（設計 3-4 の段5a）。
 		// 条件なしに閉じると、復元の直後の巡回が、人間のレビュー待ちで正常に
 		// 止まっている Claude Code を毎巡回で落とす。
-		if containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
-			o.closeOrphanPane(ctx, orph.path, orph.identity)
+		if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+			// **閉じる集合の worktree は、閉じずに集合に残す**（設計 3-83f）。外すと、agent 名の無い
+			// 生きた pane が印も集合も無いまま残り、`Blocked` → `Ready` と動かしたときの着手がそこへ
+			// `agent.start` を送る。
+			continue
+		}
+		// **閉じる集合に入っている worktree では、agent 名の無い pane も閉じる**（設計 3-9 の手順7b・3-83f）。
+		inSet := o.inCloseSet(orph.identity.ProjectItemID)
+		if o.closeOrphanPane(ctx, orph.path, orph.identity, inSet) && inSet {
+			o.removeFromCloseSet(orph.identity.ProjectItemID)
 		}
 	}
 }
@@ -262,37 +425,72 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // エージェントには書き換えられない。**照合はシンボリックリンクを解決してから行う**
 // （置き場所は解決済みだが、pane の cwd は起動時の文字列がそのまま入りうる。設計 3-4 の段4）。
 //
+// **閉じる集合（設計 3-83f）に入っている worktree では、agent 名の無い pane も閉じる**（`includeUnnamed`）。
+// **そのときは、その worktree を開いている herdr workspace の pane も cwd を問わず閉じる。**門4（設計 3-83c）と
+// 同じ見方である。workspace は `workspace.list` の `checkout_path` で引くので、これも身元ファイルを使わない。
+// **閉じ損ねたら WARN を1行出し、偽を返す。**呼び出し側は集合に残して次の巡回でやり直す
+// （黙って着手されない issue を作らないため）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス（走査で得た値）。
 // identity: worktree の身元ファイル（**ログに出す issue の名前にだけ使う**）。
-func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string, identity *workspace.Identity) {
+// includeUnnamed: 真なら agent 名の無い pane も閉じる。
+// 戻り値: 閉じるべき pane を全部閉じられたら true（1枚も無かったときも true）。
+func (o *Orchestrator) closeOrphanPane(
+	ctx context.Context, worktreePath string, identity *workspace.Identity, includeUnnamed bool,
+) bool {
 	want, ok := resolvePath(worktreePath)
 	if !ok {
 		// 解決できないパスは突き合わせの対象から外す（設計 3-4 の段4 と同じ判断）。
 		o.logger.Warn("worktree のパスを解決できないので pane は閉じません",
 			"identifier", identity.IssueIdentifier, "path", worktreePath)
-		return
+		return false
 	}
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
 		o.logger.Warn("pane の一覧を取れないので pane は閉じません",
 			"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
-		return
+		return false
 	}
+	// **閉じる集合の worktree では、その worktree を開いている herdr workspace の pane も閉じる**（設計 3-83c の門4・3-83f）。
+	// 着手の段8 の `resolvePane` は、workspace の中の1枚を cwd を見ずに使う。cwd だけで探すと、人間がその
+	// workspace の pane で別のディレクトリへ移っていたときに閉じ損ね、そのシェルへ `agent.start` が届く。
+	// **通常の道（`includeUnnamed` が偽）では `workspace.list` を投げない**（3-9 の手順7b は変えない）。
+	worktreeWorkspaces := map[string]bool{}
+	if includeUnnamed {
+		workspaces, err := o.herdr.WorkspaceList(ctx)
+		if err != nil {
+			o.logger.Warn("workspace の一覧を取れないので pane は閉じません",
+				"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
+			return false
+		}
+		for _, ws := range workspaces.Workspaces {
+			if ws.WorkspaceID == "" || ws.Worktree == nil || ws.Worktree.CheckoutPath == "" {
+				continue
+			}
+			if got, ok := resolvePath(ws.Worktree.CheckoutPath); ok && got == want {
+				worktreeWorkspaces[ws.WorkspaceID] = true
+			}
+		}
+	}
+	allClosed := true
 	for _, p := range list.Panes {
-		if p.Agent == "" {
+		if p.Agent == "" && !includeUnnamed {
 			continue
 		}
 		got, ok := resolvePath(p.Cwd)
-		if !ok || got != want {
+		if (!ok || got != want) && !worktreeWorkspaces[p.WorkspaceID] {
 			continue
 		}
 		o.logger.Warn("印に入っていない worktree に生きた pane があったので閉じます",
-			"identifier", identity.IssueIdentifier, "pane_id", p.PaneID, "cwd", p.Cwd)
+			"identifier", identity.IssueIdentifier, "pane_id", p.PaneID, "cwd", p.Cwd,
+			"agent 名が無くても閉じる", includeUnnamed)
 		if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: p.PaneID}); err != nil {
-			o.logger.Warn("pane を閉じられませんでした", "pane_id", p.PaneID, "error", err)
+			o.logger.Warn("pane を閉じられませんでした（次の巡回でやり直します）", "pane_id", p.PaneID, "error", err)
+			allClosed = false
 		}
 	}
+	return allClosed
 }
 
 // checkStalls は stall を判定する（設計 3-21 / 3-27 の評価順）。
@@ -329,6 +527,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
+		if snap.DirectChatMode {
+			// **人間が画面の前にいる**（設計 3-83）。**画面が止まっていても打ち切らない。**
+			// 打ち切ると `failure_state` へ落ちて Status がdirect chat から外れ、
+			// **direct chat を抜けた次の巡回で pane が閉じる。**
+			continue
+		}
 		if snap.WaitingQuota {
 			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
 			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {

@@ -133,6 +133,12 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-83）。
+	// **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
+	if err := validateDirectChatState(cfg); err != nil {
+		return err
+	}
+
 	if cfg.Tracker.StatusSignalPrefix == "" {
 		return requiredValueError("tracker.status_signal_prefix")
 	}
@@ -574,7 +580,8 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 				"tracker.automated_state_rewrite のキー",
 				from,
 				"tracker の他のキー（active_states / terminal_states / running_state / "+
-					"dispatch_state / failure_state / status_signal_map の遷移先）に無い Status 名にすること"+
+					"dispatch_state / failure_state / direct_chat_state / status_signal_map の遷移先）"+
+					"に無い Status 名にすること"+
 					"（既に名前の出てくる Status は「知らない Status」にならないので、この行は1度も効かない）",
 			)
 		}
@@ -588,6 +595,33 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-83k）。
+//
+// **空なら何も見ない。**空はこの機能を使わないという意味である。
+//
+// **重なりを見る相手の一覧は `DirectChatConflicts` の1箇所だけに置く。**`continuo doctor` も同じものを読む。
+// 別々に持つと、どれか1つだけが古くなる。
+//
+// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-83k）。
+// `validateAutomatedStateRewrite` が弾くので、ここへ同じ検査を置いても弾く相手が1件も残らない。
+//
+// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-83j）。
+// 既定が非空なので、この機能を1度も頼んでいない人にも当たり、しかもその人の WORKFLOW.md に
+// 1行も書いていないキーの名前が出るためである。
+//
+// cfg: 検証する設定。
+// 戻り値: 重なっていれば理由付きのエラー。
+func validateDirectChatState(cfg *Config) error {
+	conflicts := DirectChatConflicts(*cfg)
+	if len(conflicts) == 0 {
+		return nil
+	}
+	return invalidValueError(
+		"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
+		i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflicts[0]),
+	)
 }
 
 // containsStateFold は ss の中に target と同じ状態名があるかどうかを返す。

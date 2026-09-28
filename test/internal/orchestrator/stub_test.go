@@ -42,6 +42,9 @@ type stubHerdr struct {
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
 	sentKeys [][]string
+	// prompts は AgentPrompt に渡された本文である。
+	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-83）。
+	prompts []string
 
 	// sl は statusline取得の agent（名前が `sl-` で始まるもの）に対する台本である（issue #284）。
 	// **issue の run の台本と分ける。**nil の欄は、起動できて入力を受け付ける状態を返す。
@@ -129,6 +132,11 @@ func (s *stubHerdr) PaneList(_ context.Context, params herdr.PaneListParams) (*h
 	}, nil
 }
 
+// WorkspaceList は workspace を1つも返さない（direct chat の門4 が引く。設計 3-83c）。
+func (s *stubHerdr) WorkspaceList(_ context.Context) (*herdr.WorkspaceListResult, error) {
+	return &herdr.WorkspaceListResult{Type: "workspace_list"}, nil
+}
+
 // PaneRename は何もせずに成功を返す。
 func (s *stubHerdr) PaneRename(_ context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error) {
 	return &herdr.PaneRenameResult{Type: "pane_info", Pane: herdr.Pane{PaneID: params.PaneID, Label: params.Label}}, nil
@@ -161,6 +169,15 @@ func (s *stubHerdr) AgentStartWithRetry(
 	}, nil
 }
 
+// Prompts は AgentPrompt に渡された本文を返す。
+func (s *stubHerdr) Prompts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.prompts))
+	copy(out, s.prompts)
+	return out
+}
+
 // AgentPrompt は現在の状態のまま返る（turn を終わらせない）。
 func (s *stubHerdr) AgentPrompt(ctx context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
 	if isSLName(params.Target.String()) {
@@ -178,6 +195,7 @@ func (s *stubHerdr) AgentPrompt(ctx context.Context, params herdr.AgentPromptPar
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.prompts = append(s.prompts, params.Text)
 	return &herdr.AgentPromptResult{
 		Type:  "agent_prompted",
 		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
@@ -279,6 +297,10 @@ type stubFixtureOptions struct {
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する
 	// （bubble の中では外部プロセスを起こせない）。
 	GHLogin func(ctx context.Context) (string, error)
+	// Tracker は使うテスト用トラッカー mock である。nil なら新しく作る。
+	//
+	// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-83h の書く経路）。
+	Tracker *fakeTracker
 }
 
 // newStubFixture は通信を行わない検査対象を組み立てる。
@@ -297,7 +319,10 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		status = herdr.AgentStatusIdle
 	}
 	stub := newStubHerdr(status)
-	ft := newFakeTracker(time.Now)
+	ft := opts.Tracker
+	if ft == nil {
+		ft = newFakeTracker(time.Now)
+	}
 
 	root := opts.Root
 	if root == "" {

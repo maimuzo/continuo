@@ -1,14 +1,24 @@
 package config
 
 import (
+	"os"
 	"sort"
 	"strings"
+
+	"github.com/goccy/go-yaml"
 )
 
 // KnownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50 / 3-55）。
 //
 // **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
-// `failure_state` / `status_signal_map` の遷移先**を、書かれた順に集める。
+// `failure_state` / `direct_chat_state` / `status_signal_map` の遷移先**を、書かれた順に集める。
+//
+// **`direct_chat_state` は空でなければ入れる**（設計 3-83）。**入れないと、その Status へ
+// 動かされた issue が「知らない Status」として扱われ、猶予のあとで worker が止まる
+// （＝pane が閉じてチャットが切れる）。**
+//
+// **ただし「カンバンに実在しなければ起動を止める」一覧には入れない。**そちらは
+// `RequiredBoardStates` が持つ。**この一覧をそのまま使ってはならない**（設計 3-83）。
 //
 // **`automated_state_rewrite` は、キーも値もここへ入れない**（設計 3-54 / 3-55）。
 //
@@ -17,10 +27,10 @@ import (
 //	値   … `Validate` が「`active_states` に入っていること」を起動前に要求しているので
 //	       （`validateAutomatedStateRewrite`）、**足しても1件も増えない**
 //
-// **起動時に「カンバンに実在しなければ起動を止める」一覧も、これである**
-// （`tracker` の `requiredStatesForBootstrap`。設計 3-57）。
-// **キーも含む一覧が要るのは、カンバン側の選択肢が設定に出てくるかを見るときだけである**
-// （`NamedStates`）。
+// **起動時に「カンバンに実在しなければ起動を止める」一覧は、これではない。**
+// `RequiredBoardStates` が、この一覧から `direct_chat_state` だけを差し引いて返す
+// （設計 3-83）。**キーも含む一覧が要るのは、カンバン側の選択肢が設定に出てくるかを
+// 見るときだけである**（`NamedStates`）。
 //
 // **集めるのはこの1箇所だけである。**同じ処理を tracker と orchestrator の両方に書くと、
 // 片方だけ直したときに「起動時に照合する Status」と「実行時に知っている Status」が
@@ -56,6 +66,7 @@ func KnownStates(cfg TrackerConfig) []string {
 	add(cfg.RunningState)
 	add(cfg.DispatchState)
 	add(cfg.FailureState)
+	add(cfg.DirectChatState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	// この一覧は起動時の照合のメッセージと issue のコメントにそのまま載る。
 	for _, target := range sortedSignalTargets(cfg.StatusSignalMap) {
@@ -113,6 +124,134 @@ func NamedStates(cfg TrackerConfig) []string {
 		out = append(out, from)
 	}
 	return out
+}
+
+// RequiredBoardStates は「カンバンに実在しなければ起動を止める」Status 名を返す（設計 3-83）。
+//
+// **`KnownStates` から `direct_chat_state` だけを差し引いたものである。**
+// **それ以外は1つも差し引かない。**
+//
+// **なぜ `direct_chat_state` だけ外すか。**止める理由が、この Status には当てはまらない。
+// 止めるのは「**GraphQL がエラーを出さずに0件を返し続ける**」ためであり、
+// `active_states` の綴りがずれると**issue が1件も見つからないのに正常に見える。**
+// **`direct_chat_state` は違う。**選択肢が無ければ、そこへ遷移できる issue が存在しない。
+// **黙って壊れる経路が無い。**
+//
+// **外すのはこの一覧からだけである。**候補を取りにいく Status の一覧
+// （`FetchIssuesByStates` へ渡すもの）からも外す必要があるが、そちらは
+// **カンバンの選択肢を実際に読んでから決める**ので、設定だけを見るこの関数では決められない
+// （orchestrator の `candidateStates`）。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: Status 名の並び（重複と空文字は落とす。書かれた順）。
+func RequiredBoardStates(cfg TrackerConfig) []string {
+	all := KnownStates(cfg)
+	want := strings.TrimSpace(cfg.DirectChatState)
+	if want == "" {
+		return all
+	}
+	out := make([]string, 0, len(all))
+	for _, s := range all {
+		if strings.EqualFold(strings.TrimSpace(s), want) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// DirectChatConflicts は、`tracker.direct_chat_state` と同じ名前を書いている役割のキー名を返す（設計 3-83k）。
+//
+// **重なりを見る相手の7つの一覧は、この1箇所だけに置く。**起動時の検査（`Validate`）と
+// `continuo doctor` の `Status の名前` が同じものを読む。**別々に持つと、どれか1つだけが古くなる。**
+// `continuo setup` は新しい検査を持たない（既存の `takenBy` が6つの役割の重なりを断る）。
+//
+//	tracker.active_states              … 同じカードが「手を離す」と「着手する」の両方に当たる
+//	tracker.terminal_states            … 完了として扱われ、人間が話している worktree を片付けにいく
+//	tracker.running_state              … 着手した直後に direct chat へ入り、1回も turn を送れない
+//	tracker.dispatch_state             … 着手待ちの issue が全部、人間が引き取っているものとして扱われる
+//	tracker.failure_state              … 打ち切った run の pane が閉じなくなり、枠が空かない
+//	tracker.status_signal_map の遷移先 … エージェントが自分の表明1行で direct chat へ入れてしまう
+//	cleanup.on_states                  … 人間がチャットしている worktree を片付けにいく
+//
+// **`automated_state_rewrite` のキーは入れない。**そちらは `validateAutomatedStateRewrite` が弾く。
+//
+// **空なら何も返さない。**比べ方は SPEC.md 11.3 に合わせる（大文字小文字と前後の空白を無視する）。
+//
+// cfg: 設定。
+// 戻り値: 重なっている相手のキー名（上の表の順。重なりが無ければ空）。
+func DirectChatConflicts(cfg Config) []string {
+	state := strings.TrimSpace(cfg.Tracker.DirectChatState)
+	if state == "" {
+		return nil
+	}
+	var out []string
+	for _, c := range []struct {
+		key    string
+		values []string
+	}{
+		{"tracker.active_states", cfg.Tracker.ActiveStates},
+		{"tracker.terminal_states", cfg.Tracker.TerminalStates},
+		{"tracker.running_state", []string{cfg.Tracker.RunningState}},
+		{"tracker.dispatch_state", []string{cfg.Tracker.DispatchState}},
+		{"tracker.failure_state", []string{cfg.Tracker.FailureState}},
+		{"tracker.status_signal_map", sortedSignalTargets(cfg.Tracker.StatusSignalMap)},
+		{"cleanup.on_states", cfg.Cleanup.OnStates},
+	} {
+		if containsStateFold(c.values, state) {
+			out = append(out, c.key)
+		}
+	}
+	return out
+}
+
+// DirectChatConflictsInFile は、WORKFLOW.md の原文を読み直して `DirectChatConflicts` を当てる
+// （設計 3-83k。`continuo doctor` が使う）。
+//
+// **`Load` を通さない。**重なりがあると `Load` は検証でエラーを返すので、**重なりが無いときにしか
+// 動かない検査を、重なりのために置くことになる。**そこで front matter を検証せずに読み直す
+// （`internal/doctor/missing_keys.go` が同じ理由で原文を読んでいる）。
+// **未知のキーでは落とさない。**ここで知りたいのは Status の割り当てだけである。
+//
+// path: WORKFLOW.md のパス。
+// 戻り値の1つ目: 重なっている相手のキー名（`DirectChatConflicts` と同じ順）。
+// 戻り値の2つ目: 書いてある `tracker.direct_chat_state`（書いていなければ既定値）。
+// 戻り値の3つ目: 読めなかった理由。
+func DirectChatConflictsInFile(path string) ([]string, string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+	frontMatter, _, err := splitFrontMatter(string(raw))
+	if err != nil {
+		return nil, "", err
+	}
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal([]byte(frontMatter), cfg); err != nil {
+		return nil, "", err
+	}
+	return DirectChatConflicts(*cfg), cfg.Tracker.DirectChatState, nil
+}
+
+// IsDirectChatState は、その Status が「人間が pane で直接続けている」を表すかを返す（設計 3-83）。
+//
+// **判定をこの1箇所に置く。**呼ぶ側で書くと、前後の空白の扱いが場所ごとにずれる。
+//
+// **`direct_chat_state` が空文字か空白だけなら、常に偽である。**空白だけを書いた設定で
+// 前後の空白を落として比べると、**Status が未設定の item に一致してしまう**
+// （巡回は `issue.State` が空の場合を明示的に扱っている）。
+//
+// **比べ方は SPEC.md 11.3 に合わせる**（大文字小文字と前後の空白を無視する）。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// state: 判定する Status 名。
+// 戻り値: 人間が引き取っている Status なら true。
+func IsDirectChatState(cfg TrackerConfig, state string) bool {
+	want := strings.TrimSpace(cfg.DirectChatState)
+	if want == "" {
+		return false
+	}
+	return strings.EqualFold(want, strings.TrimSpace(state))
 }
 
 // RewriteKeysOutsideBoard は `tracker.automated_state_rewrite` のキーのうち、

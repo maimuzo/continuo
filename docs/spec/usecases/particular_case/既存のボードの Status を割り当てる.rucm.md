@@ -24,7 +24,7 @@
 
 ```rucm
 USE CASE NAME: 既存のボードの Status を割り当てる
-BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは既にある WORKFLOW.md の Status に関する8つのキーの行だけを書き換える。
+BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは既にある WORKFLOW.md の Status に関する9つのキーの行だけを書き換える。
 PRECONDITION: 利用者は gh auth login -s project を実行済みである。利用者は GitHub Projects v2 のボードを1枚持っている。ボードは single-select の Status フィールドを持つ。利用者は continuo init を実行済みであり、WORKFLOW.md がある。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: GitHub Projects v2
@@ -52,7 +52,7 @@ BASIC FLOW:
 18. システムは VALIDATES THAT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる。
 19. システムは組み立てた全文を WORKFLOW.md へ書き込む。
 20. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。
-POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
+POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の9つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い:
 RFS BASIC FLOW 2
@@ -170,7 +170,7 @@ flowchart TD
     B18{"18. VALIDATES THAT 元の front matter が読めないか、組み立てた全文の front matter を読み直せる"}
     B19["19. システムは組み立てた全文を WORKFLOW.md へ書き込む"]
     B20["20. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する"]
-    BPOST(["POSTCONDITION WORKFLOW.md の8つのキー以外の行は変わっていない"])
+    BPOST(["POSTCONDITION WORKFLOW.md の9つのキー以外の行は変わっていない"])
 
     B1 --> B2
     B2 -- 真 --> B3
@@ -323,7 +323,7 @@ sequenceDiagram
                     Sys-->>User: 消えているキーと値がキーの行に無いキーの名前、書き戻す案内を応答する
                     Note over Sys: ABORT WORKFLOW.md は変わっていない
                 else 割り当てを書き換える
-                    Sys->>Sys: 8つのキーの行を書き換えた全文を組み立てる
+                    Sys->>Sys: 9つのキーの行を書き換えた全文を組み立てる
                     Sys->>Sys: 組み立てた全文の front matter を読み直せるかを検証する
                     alt 元は読めたのに組み立てた全文を読み直せない
                         Sys-->>User: 読み直せない理由と手で直す案内を応答する

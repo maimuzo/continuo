@@ -562,6 +562,24 @@ func FormatHold(h Hold) string {
 		holdStartingLine(h.Branch) + "\n"
 }
 
+// FormatDirectChatHold は、direct chat から作業中の Status へ戻したときの hold のコメントの本文を組み立てる
+// （設計 3-83h の「戻したときに hold を書く」）。
+//
+// **先頭の印と JSON は `FormatHold` と同じである。**`ParseHold` は JSON を読めないと hold として数えず、
+// `LatestHoldFor` は `assignee` で絞り、期限切れで外すときは `branch` を使うので、
+// **JSON を落とすと hold が無いのと同じになる。**
+// **人間向けの1行目だけが違う。**入札で担当が決まったのではなく、人間が direct chat から戻したためである。
+//
+// **足す文に `}` を入れてはならない**（FormatBid と同じ理由）。
+//
+// h: 書く hold。
+// 戻り値: 印を先頭に置いたコメント本文。
+func FormatDirectChatHold(h Hold) string {
+	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
+		i18n.T(i18n.KeyHandoffHoldDirectChatReturned, h.Assignee) + "\n" +
+		holdStartingLine(h.Branch) + "\n"
+}
+
 // holdStartingLine は「これから何が始まるか」の1行を返す。
 //
 // **branch の名前が空のときは、名前を出さない文へ落とす。**呼び出し側は
