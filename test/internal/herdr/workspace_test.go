@@ -175,3 +175,85 @@ func TestWorkspaceRename_labelが空でも送る(t *testing.T) {
 		t.Fatalf("label が空文字として送られていない: got %v", got)
 	}
 }
+
+// workspaceCreateSchemaKeys は workspace.create で continuo が送る引数の全集合である
+// （issue #284。実測: 2026-09-25、herdr 0.9.1）。
+var workspaceCreateSchemaKeys = []string{"cwd", "label", "focus"}
+
+// 目的: workspace.create が cwd・label・focus を送り、応答から workspace の ID と
+// root の pane の ID を読むことを確認する（issue #284。statusline取得の workspace を作る経路）。
+// **focus は偽を送る。**人間が見ている画面を、statusline取得のたびに奪わないためである。
+// 与える情報: clone のパス・statusline取得の label・focus 偽の WorkspaceCreateParams と、
+// 本物の herdr と同じ形（workspace・tab・root_pane）の応答を返す偽サーバ。
+// 成功条件: 送られた method が "workspace.create" で、引数が cwd・label・focus の3つだけであり、
+// それぞれの値がそのまま届くこと（focus は JSON の false）。応答の workspace.workspace_id と
+// root_pane.pane_id を読み取れること。
+func TestWorkspaceCreate_cwdとlabelとfocusを送りroot_paneのIDを読む(t *testing.T) {
+	const cwd = "/tmp/continuo-test/octocat/hello-world"
+
+	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
+		var req rpcRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			t.Errorf("偽サーバがリクエストを解析できませんでした: %v", err)
+			return
+		}
+		// **構造体で返さず、本物の herdr の wire の形をそのまま書く。**
+		// 構造体の JSON タグを取り違えても、同じ構造体で書いて読むと気づけない。
+		writeResult(t, conn, req.ID, map[string]any{
+			"type": "workspace_created",
+			"workspace": map[string]any{
+				"workspace_id": "w20",
+				"label":        herdr.StatuslineFetchLabel,
+			},
+			"tab":       map[string]any{"tab_id": "w20:t1", "workspace_id": "w20"},
+			"root_pane": map[string]any{"pane_id": "w20:p1", "workspace_id": "w20"},
+		})
+	})
+
+	client := herdr.New(fs.SocketPath(), herdr.Timeouts{Read: time.Second})
+	focus := false
+	result, err := client.WorkspaceCreate(context.Background(), herdr.WorkspaceCreateParams{
+		Cwd:   cwd,
+		Label: herdr.StatuslineFetchLabel,
+		Focus: &focus,
+	})
+	if err != nil {
+		t.Fatalf("WorkspaceCreate が失敗した: %v", err)
+	}
+	if result.Workspace.WorkspaceID != "w20" {
+		t.Fatalf("応答の workspace_id を読み取れていない: got %q, want %q", result.Workspace.WorkspaceID, "w20")
+	}
+	if result.RootPane.PaneID != "w20:p1" {
+		t.Fatalf("応答の root_pane.pane_id を読み取れていない: got %q, want %q", result.RootPane.PaneID, "w20:p1")
+	}
+
+	params := sentParams(t, fs, herdr.MethodWorkspaceCreate)
+	if got := params["cwd"]; got != cwd {
+		t.Fatalf("cwd が想定と違う: got %v, want %q", got, cwd)
+	}
+	if got := params["label"]; got != herdr.StatuslineFetchLabel {
+		t.Fatalf("label が想定と違う: got %v, want %q", got, herdr.StatuslineFetchLabel)
+	}
+	got, ok := params["focus"]
+	if !ok {
+		t.Fatalf("focus を送っていない（省くと herdr が画面を切り替える）: %v", params)
+	}
+	if got != false {
+		t.Fatalf("focus が偽として送られていない: got %v", got)
+	}
+	if len(params) != len(workspaceCreateSchemaKeys) {
+		t.Fatalf("workspace.create の引数が cwd・label・focus の3つになっていない: %v", params)
+	}
+	assertSchemaKeys(t, params, herdr.MethodWorkspaceCreate, workspaceCreateSchemaKeys)
+}
+
+// 目的: statusline取得の workspace に貼る label が、閉じ残しの片付けで照合する値と同じ
+// 固定の文字列であることを確認する（issue #284。label が変わると、前の版が残した
+// 閉じ残しを「別の workspace」と見なして閉じずに一覧から外してしまう）。
+// 与える情報: なし。
+// 成功条件: herdr.StatuslineFetchLabel が "continuo statusline fetch" であること。
+func TestStatuslineFetchLabel_固定の文字列である(t *testing.T) {
+	if herdr.StatuslineFetchLabel != "continuo statusline fetch" {
+		t.Fatalf("StatuslineFetchLabel = %q, want %q", herdr.StatuslineFetchLabel, "continuo statusline fetch")
+	}
+}

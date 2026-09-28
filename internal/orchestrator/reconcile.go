@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -360,7 +361,16 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 			// 手順7: `cleanup.on_states` に入っていれば片付ける。
 			// **ここで pane を閉じない。**`worktree.remove` の応答は workspace ごと
 			// 閉じるので、その中の pane も一緒に消える（設計 3-9 の手順3）。
-			result, err := o.ws.Cleanup(ctx, workspace.CleanupRequest{WorktreePath: orph.path})
+			//
+			// **巡回の中では待たない**（`NoWait`。issue #284）。同じリポジトリ本体で
+			// statusline取得の workspace が開いていると、その clone は閉じるまで押さえられる。
+			// 待つと巡回がそのぶん止まるので、何も消さずに次の巡回へ回す。
+			result, err := o.ws.Cleanup(ctx, workspace.CleanupRequest{WorktreePath: orph.path, NoWait: true})
+			if errors.Is(err, workspace.ErrCloneBusy) {
+				o.logger.Info("リポジトリ本体で statusline取得の workspace が開いているので、取り残された worktree の片付けを次の巡回に回します",
+					"identifier", issue.Identifier, "path", orph.path)
+				continue
+			}
 			if err != nil {
 				o.logger.Warn("取り残された worktree を片付けられません",
 					"identifier", issue.Identifier, "path", orph.path, "error", err)

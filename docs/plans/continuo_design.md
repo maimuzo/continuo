@@ -25,12 +25,12 @@
 
 | 短縮名 | 何を求めているか | continuo はどこで満たすか |
 | --- | --- | --- |
-| **定額運用** | 従量課金にならないこと。**最優先** | `claude -p` も Agent SDK も API の直叩きも使わない。**herdr の pane で対話モードの Claude Code を動かす**（3-1 の図 / 3-16 の段8・段9 / CLAUDE.md の絶対制約）。**レートリミットを読む OAuth の usage API はメッセージを送る API ではないので、この制約に抵触しないと判断している。ただし「1トークンも消費しない」ことは確かめられていない**（3-27 / 第6節）。**必須にはせず、`rate_limit.source: none` で切れるようにしてある** |
+| **定額運用** | 従量課金にならないこと。**最優先** | `claude -p` も Agent SDK も API の直叩きも使わない。**herdr の pane で対話モードの Claude Code を動かす**（3-1 の図 / 3-16 の段8・段9 / CLAUDE.md の絶対制約）。**レートリミットの使用率は、continuo が起動した Claude Code のステータスラインから受け取る**（3-27）。**値が古いときは、herdr の pane で対話モードの haiku を短く起動して `hello` を1回送る（statusline取得）。定額のログインのまま動き、`claude -p` は使わない。**1回の入力は約600トークン（実測）で、何もしていない機械では最大5分に1回走る。**API キーで動かしている機械では、この会話が従量で課金される**ので、`rate_limit.source: none` で切れるようにしてある |
 | **自動で順に実行** | 貯めたタスクが自動で順に実行されること。**実装形態は問わない** | 常駐プロセスが30秒ごとに巡回する（3-1 / 5-2 の `polling.interval_ms`） |
 | **Projects v2 のカンバンを読める** | item を状態指定で取得でき、実行中の issue を ID 指定で取り直せること | GraphQL を直接叩く（2-2 / 3-13）。**`gh project` は1回 102 point かかるので使わない** |
 | **複数カンバン監視** | 1プロセスで複数のカンバンを監視できること | **凍結中。**当面 project #3 の1枚だけを使う。**条件からの削除ではないので、凍結が解けたときに設計を壊さない構造にしてある**（3-28） |
 | **リポジトリ別の作業ディレクトリ** | 1枚のカンバンに載った issue を、その issue の所属リポジトリの作業ディレクトリで実行すること | issue の `nameWithOwner` から `ghq` でローカルの clone を引き、そこから worktree を切る（3-22） |
-| **枠回復で自動再開** | レートリミットで止まっても、枠の回復後に自動で再開すること。**「idle」と区別できていること** | **2段構えにする**（3-27）。Claude Code の自動再開の仕組みに任せ、効かなければ continuo が待って再 dispatch する。**待機中かどうかは OAuth の usage API で判定する**ので、どちらの経路でも「idle」と区別できる |
+| **枠回復で自動再開** | レートリミットで止まっても、枠の回復後に自動で再開すること。**「idle」と区別できていること** | **2段構えにする**（3-27）。Claude Code の自動再開の仕組みに任せ、効かなければ continuo が待って再 dispatch する。**待機中かどうかは、ステータスラインから受け取った使用率で判定する**（3-27）ので、どちらの経路でも「idle」と区別できる |
 | **issue から投入** | issue に書けばキューに入ること | カンバンに載った issue をそのまま拾う。**カンバンへ載せて `Ice Box` を付けるのは continuo の外で1回行う**（4-1 の遷移表）。**やるのは人間か、人間に代わって働く道具である。**continuo はカンバンに載っていない issue を見ない |
 | **外部から順序調整** | 外部から実行順序を調整できること。**あわせて「1つのセッションが複数の issue をまとめて片付けられること」**（補足2 の要求2） | **順序はカンバンの並び順で決める**（4-2）。**Priority は使わない。**4段階しかなく、それより細かい順位を付けられないためである。**並べるのは continuo の外で、continuo は読むだけである**（3-30）。**やるのは人間か、人間に代わって働く道具である。****`bug` が付いた issue を前へ出すのは、並べるときの指針である。****グループは continuo の外で作り、代表の issue のコメントで受け取る**（3-26）。continuo は代表を1件 dispatch するだけでよい |
 | **macOS ネイティブ** | macOS で動くこと（WSL2 上の Ubuntu でも動くこと）。**Docker 経由は「動く」に含めない** | Go で書き、`CGO_ENABLED=0` の static binary をクロスコンパイルする（2-5。実測済み） |
@@ -480,7 +480,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | **`herdr pane split` の直後に `herdr agent start` を呼ぶと `agent_pane_busy` が返ることがある**（実測で1回発生） | **リトライを入れる。**pane が使える状態になるまで少し待つ |
 | **`herdr agent start` は、Claude Code が信頼確認のダイアログを出している状態でも `interactive_ready: true` を返す**（実測） | **「準備できた」を「プロンプトを受け付けられる」と解釈すると誤る。**初回起動のときは画面を読んでダイアログの有無を確かめる経路が要る（3-6 の信頼の検査で未承認を弾けば、通常はここに来ない） |
 
-#### socket API の実在するメソッドと引数（2026-08-18 に `herdr api schema --json` で確認）
+#### socket API の実在するメソッドと引数（2026-08-18 に `herdr api schema --json` で確認。`workspace.create` だけは 2026-09-25 に herdr 0.9.1 で呼んで確かめた）
 
 **メソッドは85個ある。**continuo が使うものだけを挙げる。**太字が必須の引数である。**
 
@@ -488,7 +488,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | --- | --- | --- |
 | `pane.split` | **`direction`** / `cwd` / `env` / `focus` / `ratio` / `target_pane_id` / `workspace_id` | pane を作る。**continuo は使わない**（worktree.open が作る pane を使う。3-16 の段8） |
 | **`pane.list`** | `workspace_id` | **pane の一覧。**worktree.open で開いた workspace の pane を引くのに使う |
-| **`tab.create`** | `workspace_id` / `cwd` / `env` / `label` / `focus` | tab を作る。**continuo は使わない**（1 worktree = 1 workspace にするため。4-5） |
+| **`tab.create`** | `workspace_id` / `cwd` / `env` / `label` / `focus` | tab を作る。**continuo は使わない**（1 worktree = 1 workspace にするため。4-5）。**例外は statusline取得用の workspace で、これは worktree を持たない**（`workspace.create` の行） |
 | `pane.close` | **`pane_id`** | pane を閉じる |
 | **`pane.rename`** | **`pane_id`** / `label` | **pane に label を書く。**`pane.split` では書けないので、作ったあとに別途呼ぶ（3-3） |
 | `pane.report_metadata` | **`pane_id`** / **`source`** / `title` / `state_labels` / `tokens` / `ttl_ms` ほか | 揮発する付加情報。**再起動で消えるので復元の根拠にしない**（3-3） |
@@ -506,6 +506,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `worktree.list` | `cwd` / `workspace_id` | worktree の一覧 |
 | `workspace.rename` | **`workspace_id`** / **`label`** | herdr workspace に label を書く |
 | `workspace.list` | （なし） | herdr workspace の一覧 |
+| **`workspace.create`** | `cwd` / `label` / `focus` | **statusline取得用の workspace を作る**（3-27）。**issue の worktree には使わない**（issue は `worktree.open`）。応答は `workspace` / `tab` / `root_pane` を持ち、`root_pane.pane_id` に Claude Code を起動する。**渡した label は `workspace.list` にそのまま出る。作った直後の workspace は `worktree` 欄を持たない。**herdr がその clone 用の workspace を既に開いていても、別の workspace として作られる（2026-09-25・2026-09-28 に herdr 0.9.1 で実測。0.8.x では確かめていない） |
 | `workspace.close` | **`workspace_id`** / `close_group`（herdr 0.9.0 から） | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10）。**`close_group` は送らない。**送ると配下の worktree の pane ごと閉じる。送らなければ、配下を持つ親は `workspace_group_close_required` で断られ、何も閉じない（3-9 の段3b） |
 | `agent.rename` | **`target`** / `name` | agent の名前を変える |
 | `session.snapshot` | （なし） | 現在の状態をまとめて取る |
@@ -931,6 +932,13 @@ Stop hook を受け取ったとき:
 **これは人間が herdr の画面で pane を見分けるためのものであり、continuo は読み戻さない。**
 復元の照合は上の表のとおり pane の cwd と worktree のパスで行うので、label の形を変えても引き継ぎは壊れない。
 
+**例外は statusline取得用の workspace だけである**（3-27）。label は `continuo statusline fetch` で、
+**閉じ残しを片付けるときに、閉じ残しの一覧の ID がいまもその workspace を指しているかを label で確かめる。**
+**もう1つ、statusline取得の workspace を作るのに失敗したとき（応答が期限を過ぎた・ID が返らなかった）に、作る前と後の一覧の差から、増えた statusline取得の workspace をこの label で見分けて閉じ残しの一覧へ拾う**（3-4d の表）。
+合わなければ、ID が別の workspace に使い回されているので、閉じずに一覧から外す。
+**continuo が label を書き換えるのは issue の worktree の workspace だけなので**（`workspace.rename`）、
+statusline取得用の label が別の workspace に付くことは無い。**復元には使わない。**
+
 **issue の URL をそのまま貼らない。**herdr の一覧では先頭が全部 `https://github.com/` になり、
 見分けたい部分（リポジトリ名と issue 番号）が右へ押し出されて読めなくなる。
 
@@ -1154,6 +1162,7 @@ UUID が無ければ採番）。`人間に判断を渡す` の段2 と段3 も�
 ### 3-4. 状態は in-memory。永続化層を作らない
 
 `SPEC.md` 14.3 に従い、**scheduler の状態は意図的に in-memory にする。**SQLite も JSON ファイルも作らない。
+**例外は、レートリミットの使用率の写し（`quota.json`）と、statusline取得の閉じ残しの一覧（`statusline-fetch/workspaces.json`）の2つだけである**（3-4b）。どちらも復元には使わない。
 
 **起動から復元までの順序。1本の並びで示す。**
 
@@ -1162,7 +1171,15 @@ UUID が無ければ採番）。`人間に判断を渡す` の段2 と段3 も�
 | 1 | **設定を読んで検証する**（3-1） | 起動を止める。**pane には触らない**（まだ何も発見していない） |
 | 2 | **`flock` を取る**（3-17。復元手順の段1） | 二重起動なので即座に終了する |
 | 3 | **3-6 の起動時検査を全部通す** | **起動を止める。生きている pane は閉じずに放置する**（下記） |
+| 3a | **閉じ残しの statusline取得用の workspace を片付ける**（3-27。`rate_limit.source` によらない）。herdr の workspace の開け閉めの loop（3-4c）を通す | 片付けられなかった ID は一覧に残し、**起動は止めない**。次の statusline取得の前にもう一度片付ける |
+| 3b | **`rate_limit.source` が `statusline` なら、`quota.json` を読んでから `sl.sock` の listen を始める**（3-27） | `quota.json` が読めない・形が違うときは WARN を出して捨て、**起動は止めない。**`sl.sock` を開けないときは起動を止める |
 | 4 | **復元手順の段2 以降へ進む** | 段ごとの規則に従う |
+
+**3a と 3b を復元より前に置く理由。**3a は、復元の片付けが同じ clone で `worktree.open` を呼ぶと、
+閉じ残しの statusline取得用の workspace が issue の親にされうるためである（3-4c）。
+3b は、**復元した run の回復待ちの判定（3-27）に、落ちる前の使用率を効かせる**ためである。
+`quota.json` を `sl.sock` の受け付けより前に読むのは、読み込みが届いたばかりの新しい値を上書きしないためである。
+**loop の goroutine は、段3 の起動時検査より前に起こす。**起動時検査・復元・起動時の掃除は、どれも loop を通して herdr を呼びうる。
 
 > **3-6 の検査で落ちたとき、pane を閉じてはならない。**
 > 落ちる原因は continuo 側の前提が揃っていないこと（herdr に繋がらない・`gh` の認証が切れている・
@@ -1344,6 +1361,118 @@ stateDiagram-v2
 ```
 
 **turn 数が復元できない点は受け入れる。ただし引き継いだ回数は数える。**数えないと、`max_dispatch_turns` に達する前にクラッシュし続ける状況で**打ち切りが一度も発火せず、エージェントが同じ issue に無限に turn を消費する。**引き継いだ回数は身元ファイルに書き（3-18）、上限に達したら `failure_state` へ落とす。`SPEC.md` 14.3 が *"It does not mean retry timers, running sessions, or live worker state survive process restart."*（**訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない）と明記している。
+
+### 3-4b. 例外としてファイルに置くものは2つだけである
+
+**言いたいこと。**3-4 の「永続化層を作らない」の例外は、使用率の写しと、statusline取得の閉じ残しの一覧の2つだけである（issue #284）。**どちらも復元には使わない。**
+
+| ファイル（実行時ディレクトリの下） | 何を置くか | なぜ置くか | 失ったら |
+| --- | --- | --- | --- |
+| `quota.json`（0600） | 期間（5時間と7日）ごとの使用率と `resets_at`（3-27 の保管値） | **上限の最中に立て直しても、回復待ちの判定を効かせるため**（落ちる前の 100 を覚えておく） | statusline取得へ戻るだけである。新しさの時刻は置かないので、立て直した直後の入札は値を取り直してから行う |
+| `statusline-fetch/workspaces.json` | 作ったまま閉じていない statusline取得用の workspace の ID | **continuo が落ちたあとに、その workspace を閉じるため**。置いたままにすると、上限が明けたときに Claude Code が自分で続きを始めうる | その workspace は herdr の画面に残る。人間が手で閉じてよい |
+
+**`quota.json` は外から観測した値の写しであり、scheduler の状態ではない。**真の値はアカウントの側にあり、次のステータスラインで上書きされる。
+**書き方は CLAUDE.md の規則どおり、同じディレクトリの一時ファイルへ書いてから差し替える。**書けないときは WARN を出して動き続ける。
+**読めない・形が違うときは WARN を出して捨て、起動は止めない。**
+
+`statusline-fetch/settings.json`（statusline取得用の設定ファイル。3-27）も同じディレクトリに置くが、**試行のたびに書き直す入力であって状態ではない。**
+
+### 3-4c. herdr の workspace の開け閉めは、1つの loop で1つずつ行う
+
+**言いたいこと。**herdr の workspace を開け閉めする呼び出しは、1つの queue に積み、1つの goroutine（loop）で1つずつ実行する（issue #284。人間の決定 2026-09-28）。**statusline取得用の workspace が開いている clone では、issue の `worktree.open` を、それが閉じるまで後に回す。**
+
+**なぜ要るか（2026-09-28、herdr 0.9.1 で実測）。**statusline取得用の workspace（`workspace.create`。cwd は clone）を開いている間に、
+同じ clone で `worktree.open` をすると、**herdr はその workspace を issue の worktree の「親」にする**
+（`workspace.list` で `checkout_path` が clone、`is_linked_worktree` が偽）。そのあと閉じると `workspace_group_close_required` で断られる。
+**haiku の Claude Code が issue の終わるまで残り、continuo はその workspace を「この issue のために開いた親」として身元ファイルに控える。**
+herdr 0.8.x では、親を閉じると下の issue の pane も消える（3-9b）。
+
+```mermaid
+sequenceDiagram
+    participant S as statusline取得の goroutine
+    participant D as 着手の goroutine（issue 12）
+    participant L as loop（1つの goroutine）
+    participant H as herdr
+    S->>L: Do(key なし, workspace.create して clone A を押さえる)
+    L->>H: workspace.create（cwd は clone A、label は continuo statusline fetch）
+    D->>L: Do(key clone:A, 着手の段7)
+    L->>L: clone:A は押さえられているので後に回す
+    S->>H: agent.start / agent.get / agent.prompt hello（loop を通らない）
+    S->>L: Do(key なし, workspace.list で子が居ないことを確かめて閉じ、clone:A を放す)
+    L->>H: workspace.close
+    L->>H: 後に回した段7: workspace.list → worktree.open → workspace.list → workspace.rename
+```
+
+**loop の作り（internal/loop）。**
+
+| 口 | どうするか | 理由 |
+| --- | --- | --- |
+| `New` / `Start` / `Close` | `Start` で goroutine を起こす。`Close` のあとの `Do` と、積まれた仕事・後に回した仕事は `ErrClosed` で返る。**実行中の仕事は最後まで走らせるが、`Close` はその終わりを待たない。**2回呼んでよい | 止めるときに、待っている着手を永久に待たせない。止める段の期限を変えない |
+| `Do(ctx, key, fn)` | 積み、実行し終えるまで待って fn の誤りを返す。**押さえは実行する時点で確かめる。**押さえられた key の仕事は後に回し、放されたら積まれた順で queue の先頭へ戻す。実行の前に ctx が終わったら外して `ctx.Err()`。**実行が始まったら、ctx が終わっても fn が返るまで待つ** | 積んだ時点で確かめると、先に並んだ作る仕事が押さえたあとに `worktree.open` が走りうる。動き始めた仕事を待たずに返すと、作った workspace の ID が呼び出し側に届かず、押さえが永久に残る |
+| `TryDo` | 押さえられていたら後に回さず `ErrBusy` | 巡回の中の片付けを待たせない（3-9） |
+| `Job.Hold` / `Job.Release` | 仕事の中からだけ使える。押さえるのは statusline取得の作る仕事、放すのは閉じる仕事だけ | 状態を書き換えるのは loop だけにする |
+| `Runner` / `Inline` | `Runner` は `Do` と `TryDo` の interface。`Inline` は仕事をその場で実行し、押さえは何もしない | loop を受け取るのは internal/workspace の Manager だけにする。`continuo abandon` は statusline取得をしないので `Inline` を渡す |
+
+**仕事の中から `Do` を呼ばない。**loop は1つなので、中から自分へ積んで待つと返らない。**包むのは呼び出し側だけにし、共用の関数の中では包まない。**
+**待ち（値・起動の検知）と git とファイルの書き込みは、仕事に入れない。**
+
+### 3-4d. loop に通す呼び出しと、押さえの規則
+
+**言いたいこと。**同じ clone に続けて呼ぶ一続きは1つの仕事にまとめ、**key は `worktree.open` を含む仕事にだけ付ける。**`worktree.open` だけが、開いている workspace を親に作り替えるためである。
+
+| 呼び出し | 仕事 | key |
+| --- | --- | --- |
+| 着手の段7（3-16） | `workspace.list` → `worktree.open` → `workspace.list` → `workspace.rename` の一続き | その clone |
+| 片付けで workspace の ID を引き直す（3-9） | `worktree.open`（失敗したときの `workspace.list` を含む） | その clone（パスが空なら空） |
+| `worktree.remove`・worktree の workspace を閉じる・リポジトリの親 workspace を閉じる（3-9b） | それぞれ一続き。身元ファイルへ書く引き継ぎ（git を呼ぶ）は仕事の外 | 空 |
+| statusline取得用の workspace を作る・閉じる・閉じ残しを片付ける（3-27） | 作って押さえる／子が居ないことを確かめて閉じ、放す／一覧の ID を確かめて閉じる | 空 |
+
+**key は `clone:` と、リポジトリ本体のパスのシンボリックリンクを解いて Clean したもの**で、Manager の中の1つの関数だけが作る。
+着手は ghq が返すパス、片付けは git の共通ディレクトリから作ったパスを使うので、Clean だけでは一致しないことがある。
+**閉じる仕事は、作ったときの key をそのまま放す**（パスから作り直すと、解決が変わったときに押さえが残る）。
+
+**通さないもの。**`pane.close`（workspace を作らず親を作り替えない）と、`agent.*`・`pane.list`（開け閉めではない。`agent.wait` は長く待つので、入れると全部が止まる）。
+
+| 場面 | どうするか |
+| --- | --- |
+| 閉じる | `workspace.list` を引く。引けなければ閉じない。無ければ閉じたものとする。**`worktree` 欄を持ち、同じ clone の linked worktree の workspace が居るなら、親にされて子が居るので閉じない。**それ以外は閉じる。**どの場合も同じ仕事の中で放す** |
+| 閉じなかった・閉じられなかった | 閉じ残しの一覧に残し、WARN を出す。子が居なくなれば、次の試行か起動時に閉じる |
+| 作るのに失敗した（応答が期限を過ぎた・ID が返らなかった） | **herdr が作っていることがある。**作る仕事の中で、作る前に `workspace.list` を引いておき、失敗したら引き直して、増えていた label `continuo statusline fetch` の workspace を閉じ残しの一覧へ足す。herdr の一覧は cwd を返さないので、label と差で見分ける（同じ瞬間に別の continuo が作ったものを取り違えうるが、次の片付けで閉じられ、向こうの試行が1回失敗するだけ）。前の一覧を引けなければ差を取らない |
+| 期限 | 作る仕事と閉じ残しの片付けは、呼び出し側の取り消しは引き継ぎ期限だけを外した ctx で積む。**閉じる仕事は止めるときも取り消さない ctx で積む。**中の herdr の呼び出しは呼び出しごとの期限（`herdr.read_timeout_ms`）で終わる |
+
+**閉じられなくても放す理由。**押さえ続けても守れるものが無い。放したあとに親にされたら、段7 がその workspace を「この issue が開いた親」として控え、その issue の片付けで閉じる（3-9b）。
+**押さえを放すのは閉じる仕事だけなので、閉じる仕事は順番待ちに期限を掛けない。**期限で捨てると押さえが永久に残る。
+
+**待ってよいか。**巡回の中の片付けは待たない（`TryDo`。3-9）。run を終える片付け・着手の段7・復元・起動時の掃除は待つ（どれも巡回を止めない）。
+**待つ間、その run は `agent.max_concurrent_agents` のスロットを占める。**同じ巡回で着手する issue は1つの goroutine で順に着手されるので、押さえられた clone の issue が先に並ぶと、後ろの別の clone の issue も待つ。
+
+**1つの仕事の長さ。**herdr が応答しないとき、着手の段7 は最長75秒（`worktree.open` の60秒と `workspace.list` などの5秒の和）、`worktree.remove` は最長60秒 loop を止める。
+**待つ時間は前に並んだ仕事の合計になり、その間は巡回の中の片付け（`TryDo` でも queue の順番は待つ）も待つ。**
+これまでは herdr を並行に呼んでいたので、この待ちは無かった。
+
+**別のプロセスとは順番を決めない。**`--id` を分けた2つ目の continuo と `continuo abandon` は別のプロセスである。
+**片方の statusline取得用の workspace が開いている間に、もう片方が同じ clone で `worktree.open` をすると、親にされうる。**
+親にされて子が居る workspace は閉じないので、0.8.x で issue の pane を消すことは、一覧を引いてから閉じるまでの間に別のプロセスが `worktree.open` した場合を除いて起きない。
+
+### 3-4e. 全体を1つの loop で動かす形へ広げるときの向き
+
+**言いたいこと。**この loop は、continuo 全体を1つの loop で動かす形（状態を書き換えるのも herdr を呼ぶのも1つの loop だけにする形）へ広げても、`New`・`Do`・`TryDo`・`Job`・`Runner` を変えずに使える（人間の決定 2026-09-28）。**全体の作り変えは issue #284 ではやらない。**
+
+| 広げるときに足すもの | 理由 |
+| --- | --- |
+| orchestrator の状態を書き換える処理を、`*Orchestrator` を閉じ込めた関数として積む | loop は仕事を関数で受け、型引数を持たないので、orchestrator を import せずに積める |
+| 並列の処理が結果を待たずに積む口（`Post`） | hook の知らせや run の goroutine の結果を、待たずに loop へ渡す |
+| 積まれた仕事を流し切ってから閉じる口 | `Close` は積まれた仕事を `ErrClosed` で返すので、hook の知らせを積む形では取りこぼす。**`Close` の意味は変えない** |
+| 入れ子の仕事をその場で実行する汎用の口（`Job` に足す。**loop は herdr を知らないまま**）か、Manager の herdr の呼び出しを呼び出し側へ出す | **巡回を loop の仕事にすると、巡回の中から呼ぶ `Cleanup` が Manager の中で `Do` を呼び、loop が自分を待って止まる。**`Job` に herdr のメソッドを足すと loop が herdr に依存し、ほかの状態を閉じ込めた仕事へ使い回せなくなる |
+
+### 3-4f. 巡回は、statusline取得の値が届いた知らせでも回す
+
+**言いたいこと。**巡回のループは、`polling.interval_ms` の刻みと、statusline取得の値が届いた知らせ（容量1の channel）の**どちらかを待ち、受け取った順に1つずつ巡回する**（issue #284）。**2つの巡回が同時に走ることは無い。**
+
+- **巡回を呼ぶのは `Run` の goroutine だけである**（起動直後の1回も同じ goroutine）
+- **知らせで巡回を回したら、刻みを数え直す**（`time.Ticker` の `Reset`）。直後にふだんの巡回が続けて回るのを避けるためである。刻みと知らせが両方溜まっていても、知らせの channel を空にしてから数え直すので、続けて2回は回らない
+- **知らせで回した巡回も巡回の回数に数える。**知らせは statusline取得1回につき1回なので、1時間に最大12回増える。**`tracker.verify_states_every` のように巡回の回数で決めている間隔は、そのぶん短くなる**
+- **巡回の中で値を待たない。**待つあいだ（多くは十数秒、長ければ3分）、止まった run の検知・ほかの issue の着手・Status の見直しが止まるためである
 
 ### 3-5. 完了検知の3層（完了検知の3層を分ける）
 
@@ -1603,6 +1732,13 @@ upstream だけを見ると、push 先を分けた worktree が永久に片付�
 
 **手順7 が「完了の見張り」である。**`In Review` や `Blocked` に入った issue は巡回の候補から外れるので、
 **そのあと人間が `Done` へ動かしたことを、これ以外に知る方法が無い。**
+
+**手順7 の片付けは、statusline取得用の workspace が開いている clone では、次の巡回に回す**（issue #284。3-4d）。
+手順7 は巡回の中から同期で呼ばれるので、**押さえが外れるのを待つと巡回そのものが止まる。**
+そこで workspace の ID を引き直す仕事（`worktree.open`）を `TryDo` で積み、押さえられていたら**何も消さずに戻る**。
+それより前の処理（封じ込めの検査・身元ファイルの読み取り・リポジトリと branch の検算・見送りの判定）は、どれも何も消さない。
+**ログは INFO である。**押さえは statusline取得1回ぶん（多くは十数秒）で外れるので、次の巡回で片付く。
+run を終える片付けと、復元・起動時の掃除は待つ（巡回を止めないため）。
 
 **コストは1リクエスト増える。**身元ファイルから project item の ID がまとまって取れるので、
 何件あっても ID 指定の取り直し1回で済む（2-2）。**したがって1巡回あたり最大3リクエストになる**（候補の取得・実行中の照合・worktree の照合）。
@@ -2170,6 +2306,17 @@ sequenceDiagram
 **利用者の `~/.claude/settings.json` は読み書きしない。**`--settings` で指した1本だけを使う。
 **利用者の設定が `auto` になっていても、起動フラグが優先されるので影響を受けない。**
 
+**issue ごとの設定ファイルには、hook のほかに `statusLine` も書く**（`rate_limit.source: statusline` のときだけ。issue #284・3-27）。
+コマンドの行は hook と同じ引用で `'<continuo のパス>' statusline --socket '<実行時ディレクトリ>/sl.sock'` を組み立てる。
+**hook のコマンド行と、張る hook の種類は変えない。**`source: none` なら `statusLine` を書かず、利用者のステータスラインがそのまま出る。
+**書くと、continuo が起動した pane では利用者のステータスラインが出なくなる**（受け入れる。出力は固定の `continuo` の1行）。
+
+**statusline取得用の設定ファイルは別に書く**（`<実行時ディレクトリ>/statusline-fetch/settings.json`。0600。一時ファイルへ書いてから差し替える）。
+**持つのは `statusLine` と `env` だけである。**hook も `permissions.allow` も持たない。
+`env` は `claude.env` から `CLAUDE_CODE_RETRY_WATCHDOG` を除き、`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足したものである。
+**statusline取得は `--restricted` で起動するので、利用者・プロジェクト・ローカルの設定ファイルは読まれない**（公式文書: `--restricted` は managed settings と `--settings` だけを読む）。
+**利用者の設定の外へ効くキー（`cleanupPeriodDays` など）を写さない。**写すと、この節の「読み書きしない」を崩し、止まるはずの年齢による掃除をかえって動かす（3-27）。
+
 **hook に issue を教える必要は無い。**どの run のものかは hook の JSON に入っている `session_id` で判別する（3-2）。
 **continuo が起動時にセッション UUID を決め、それが hook にそのまま届くことは実測で確認済み**（3-3）。
 **socket のパスは設定ファイルに書いた hook のコマンド行へ直接埋め込む。**issue ごとに設定ファイルを作るので、これで足りる。
@@ -2201,7 +2348,8 @@ sequenceDiagram
 ### 3-15. トークンの計上は transcript から取る
 
 **言いたいこと。**hook には1つも渡ってこないが、**hook が渡す `transcript_path` を読めば正確に取れる。**
-**statusline は使わない。**300ms のまとめ込みで取りこぼすことが実測で分かっている。
+**トークンの計上には statusline は使わない。**300ms のまとめ込みで取りこぼすことが実測で分かっている。
+**ただしレートリミットの使用率（`rate_limits`）は statusline から受け取る**（この節の最後と 3-27）。取りこぼしが困るのは累計を数える用途で、使用率は最新の値が1件届けば足りる。
 
 **どこから取るか。**`Stop` hook の `transcript_path` が指す JSONL である。
 **`type` が `assistant` の行が、API 応答ごとに `.message.usage` を1件ずつ持つ。**落ちない。
@@ -2260,76 +2408,22 @@ jq -s '[.[] | select(.type=="assistant")] | unique_by(.requestId) | map(.message
 **転記の途中を読まないようにするため、`Stop` を受けてすぐには読まない**（3-25 と同じ理由で 0.5 秒待つ）。
 **表明の読み取りと同じファイルを読むので、1回開いて両方を取る。**
 
-**レートリミットの値そのものは、OAuth の usage API を直接叩けば取れる。**
+**レートリミットの使用率は、statusline の `rate_limits` から受け取る**（issue #284。受け取り方・保管の規則・statusline取得は 3-27）。
+`SPEC.md` 8.4 の指数バックオフではなく、**リセット時刻までの固定待ち**にする。
 
-**この API は何か。**`https://api.anthropic.com/api/oauth/usage` である。
-**Claude の5時間枠と週次枠の使用率とリセット時刻を返す。**メッセージを送る API ではない。
+**issue #284 までは、非公開の OAuth の usage API（`GET https://api.anthropic.com/api/oauth/usage`）を読んでいた。**
+Claude Code の OAuth トークンを macOS の Keychain か `~/.claude/.credentials.json` か環境変数から読み、5時間枠・週次枠・モデル別の週次枠の使用率を取っていた。
+**この決定を覆した。**覆す理由は次の3つである（issue #284 の本文）。
 
-| 項目 | 内容 |
+| 前の決定の根拠 | 覆す理由 |
 | --- | --- |
-| **認証** | Claude Code の OAuth トークン（`.claudeAiOauth.accessToken`）。**どこから読むかは `rate_limit.token_source` で決める**（`claude_credentials` / `keychain` / `env`） |
-| **返るもの** | `limits` 配列。要素は `kind`（`session` / `weekly_all` / `weekly_scoped`）・`percent`・`resets_at`・`severity` |
-| **枠を消費するか** | **大量には消費しない。**3回続けて叩いて `percent` が動かなかった。**ただし `percent` は整数の百分率なので、これで「1トークンも消費しない」ことは判別できない**（第6節） |
-| **資格情報が取れなかったら** | **枠の判定を諦め、`rate_limit.source: none` と同じ動きにする。起動は止めない。警告を1回だけログに出す** |
-| **macOS はどこから読むか** | **Keychain から読む**（下記）。`~/.claude/.credentials.json` は macOS では無いのが普通で、ファイルだけを見ると枠の判定が黙って効かなくなる |
-| **既存の実装** | `maimuzo-dev-core` プラグインの `detect-usage-from-webapi` スキルが同じことをしている。**continuo は同じ経路を Go で実装する** |
+| statusline は 300ms のまとめ込みで取りこぼす | **取りこぼしが困るのはトークンの累計を数える用途である。**`rate_limits` は最新の値が1件届けば足りる |
+| usage API は「エージェントに依存しないので、statusline が使えなくても動く」 | **その利点は statusline取得で埋める**（run が無い機械でも、短い haiku を起動して値を取りに行く。3-27） |
+| usage API を主にする | **非公開の API で、予告なく扱いが変わった。**2026-09-24 22:40（JST）から 429（`retry-after: 3600`）を返し続け、入札も回復待ちの判定も効かなくなった。continuo が送っていた User-Agent（`claude-code/2.0.0`）も本物とは違った |
 
-**macOS の資格情報は Keychain から読む。**
-
-**実測（2026-08-21、macOS）。**`security find-generic-password -s "Claude Code-credentials" -w` は
-**すぐ値を返し、確認のダイアログは出なかった。**返った JSON の `claudeAiOauth` に
-`accessToken` / `refreshToken` / `expiresAt` / `refreshTokenExpiresAt` / `scopes` /
-`subscriptionType` / `rateLimitTier` が入っていた。**中身の形は `~/.claude/.credentials.json` と同じである。**
-
-| 何を | どうするか |
-| --- | --- |
-| **読み方** | 上の `security` を1回起動し、標準出力の JSON から `claudeAiOauth.accessToken` を取る |
-| **`token_source` の既定** | **macOS は `keychain`、ほかの OS は `claude_credentials`。**`keychain` を macOS 以外で書いたら設定の検証で起動を止める（`security` が無い） |
-| **ダイアログ対策** | **人間が端末にいるうちに `continuo allow-keychain-access` を1回叩き、「常に許可」を選ばせる** |
-| **それでも返らなかったら** | **上限で `security` を殺し、枠の判定を捨てる。起動は止めない**（`rate_limit.source: none` と同じ動きになる。警告は1回だけログに出す） |
-| **値の扱い** | **読んだトークンをログにもエラー文にも載せない。**載せてよいのは `security` の標準エラー出力だけである |
-
-**なぜ `continuo allow-keychain-access` を先に叩いてもらうか。**macOS の Keychain は
-**初めて読む実行ファイルに確認のダイアログを出す。無人で走る continuo がそれに当たると、
-答える人がいないまま枠の判定の期限が切れる。**このコマンドは設定ファイルを読まず、Keychain を1回読んで
-**項目の名前だけ**を出す（値は1つも出さない）。
-
-**待つ上限は2つに分ける。**
-
-| どこで | 上限 | 何にそろえたか |
-| --- | --- | --- |
-| 巡回のループ・`continuo doctor` | **10秒** | 巡回のたびに `ghq` / `git` を待つ上限と同じ。**無人のプロセスが外部コマンドを待ってよい長さの上限である** |
-| `continuo allow-keychain-access` | **60秒** | 人間の手が要る準備を待つ上限と同じ。**10秒ではダイアログに気づく前に打ち切られる** |
-
-**リクエストの作り方。**ヘッダを1つ落とすと 401 になる。
-
-```bash
-curl -sS "https://api.anthropic.com/api/oauth/usage" \
-  -H "Authorization: Bearer <accessToken>" \
-  -H "anthropic-beta: oauth-2025-04-20" \
-  -H "User-Agent: claude-code/<claude --version の数字>"
-```
-
-| 何を | 値 |
-| --- | --- |
-| メソッド | **GET**（body なし） |
-| `Authorization` | `Bearer <accessToken>` |
-| `anthropic-beta` | **`oauth-2025-04-20`** |
-| `User-Agent` | `claude-code/<版>`。版が取れなければ `2.0.0` |
-
-**タイムアウトは接続10秒・全体30秒にする。**
-
-**応答のサンプル**（`limits` の部分だけ抜粋）。
-
-```json
-{"limits": [
-  {"kind": "session",       "percent": 4, "resets_at": "2026-08-18T14:09:59Z", "severity": "normal", "scope": null},
-  {"kind": "weekly_all",    "percent": 7, "resets_at": "2026-08-24T18:59:59Z", "severity": "normal", "scope": null},
-  {"kind": "weekly_scoped", "percent": 0, "resets_at": null, "severity": "normal",
-   "scope": {"model": {"display_name": "Fable"}}}
-]}
-```
-これはエージェントに依存しないので、statusline が使えなくても動く。`SPEC.md` 8.4 の指数バックオフではなく、**リセット時刻までの固定待ち**にする。
+**失ったもの。**`weekly_scoped`（モデル別の週次枠）は statusline に無いので、見なくなった。
+**消したもの。**Keychain と資格情報の読み取り・`continuo allow-keychain-access`・`continuo doctor` の資格情報の検査・
+`rate_limit.token_source` / `token_env` / `poll_interval_ms`。**`rate_limit.source: oauth_usage_api` は起動を止める**（直し方は docs/upgrading.md）。
 
 
 ### 3-16. 着手の手順の順番を固定する
@@ -2565,10 +2659,15 @@ type failureNote struct {
 | --- | --- |
 | **ロック**（`--id` を付けない） | **2つ目が起動できない。**これは正しい既定である |
 | **worktree の置き場所** | 2つ目が1つ目の worktree を「自分の前の run のもの」と見て、**走行中の pane を巡回のたびに閉じる**（既定30秒ごと） |
-| **実行時ディレクトリ** | issue ごとの設定と hook の逃がし先を共有し、**片方がもう片方の hook を食べて捨てる** |
+| **実行時ディレクトリ** | issue ごとの設定と hook の逃がし先を共有し、**片方がもう片方の hook を食べて捨てる。**使用率の socket（`sl.sock`）は、生きている相手が居れば2つ目の起動を止める（hook の socket と同じ）。`quota.json` と statusline取得の閉じ残しの一覧も共有してしまう（3-4b） |
 
 **`runtime.lock_file` を書き換えれば `--id` を付けずに2本立てられる、という指摘があった。**
 **キーごと消したので、そもそも書けない**（書くと front matter の検査で弾かれる。3-17）。
+
+**herdr の workspace の開け閉めの順番（3-4c）も、プロセスをまたいでは決めない。**
+`--id` を分けた2つの continuo が同じ clone を使うと、片方の statusline取得用の workspace が、もう片方の issue の親にされうる。
+**そのときは閉じずに WARN を出し、子の issue の workspace が閉じたあとに閉じる**（3-4d）。
+**開発時の機能のために、プロセスをまたぐ錠は作らない**（退けた案は 3-27）。
 
 **カンバンの重なりは、ここでは断らない。**同じカンバンを2つの continuo が見ることは
 **同じ issue を2台のマシンが拾う場合と同じ問題**であり、**3-77 の入札（issue の担当者と余裕値）が受け持つ。**
@@ -3168,6 +3267,12 @@ issue が `<owner>/<repo>` にあり、コードが別のリポジトリ（fork 
 すべて **`filepath.Dir(解決済みの socket のパス)`** を指す。
 socket も、issue ごとの設定ファイル（3-12）も、hook の逃がし先（3-19）も、
 **全部このディレクトリの下に置く。**
+
+**使用率を受ける socket（`sl.sock`）も同じディレクトリに置く**（issue #284。3-27）。**hook の socket とは別の socket にする。**
+hook の socket は JSON なら何でも hook として受け取り、`session_id` が知っている run のものなら stall の時計を進め直す。
+ステータスラインの入力にも `session_id` があるので、**同じ socket に判別子を足すと、判別子を知らない古い本体が hook として受け取る。**
+`sl.sock` のパスにも同じ103バイトの上限を掛ける。**超えたら、`rate_limit.source: statusline` のときだけ起動を止める**（`none` なら `sl.sock` を開かない）。
+`quota.json` と `statusline-fetch/` も同じディレクトリに置く（3-4b）。
 
 **flock のファイルだけは、ここに置かない。**`~/.continuo/continuo.lock` に固定する（3-17）。
 **下の探索順は環境で動くので、「機械で1つ」を名乗るロックがそれに従ってはならない。**
@@ -3853,19 +3958,24 @@ CONTINUO-STATUS: #47 blocked         issue ごとに違う結果を書ける
 **既定で有効なことを前提に設計する。**設定キーが公開されたら、そのとき明示的に指定する形へ変える。
 
 **「idle」と区別する方法。**hook が来ないという事実だけでは、エージェントが固まっているのか枠待ちなのか分からない。
-**OAuth の usage API を定期的に読み、枠の状態を continuo 自身が持つ。**
+**Claude Code のステータスラインが運ぶ使用率（`rate_limits`）を受け取り、枠の状態を continuo 自身が持つ**（issue #284）。
 
-> **statusline にも `rate_limits` が入る**（`five_hour` / `seven_day` の `used_percentage` と `resets_at`）。
-> **だがこれを主にしない。**statusline の出力は取りこぼしうるうえ、
-> **Claude.ai の Pro / Max 契約でセッション最初の API 応答のあとにしか現れない**（3-15）。
+**issue #284 まで、この値は OAuth の usage API から読み、statusline は「取りこぼしうるので主にしない」と決めていた。この決定を覆した。**
+覆す理由は3つある（3-15）。**取りこぼしが困るのはトークンの累計を数える用途で、`rate_limits` は最新の値が1件届けば足りる。**
+**「エージェントに依存しないので、statusline が使えなくても動く」という usage API の利点は、statusline取得（下記）で埋める。**
+**主にしていた usage API は非公開のうえ、2026-09-24 22:40（JST）から 429 を返し続けて読めなくなった。**
+
+> **値が届くのは、Claude.ai の Pro / Max 契約で、かつセッション最初の API 応答のあとだけである**（公式文書。3-15）。
+> **それ以外の契約と API キーでは、`rate_limit.source: none` にする。**
 
 | 何を | どうするか |
 | --- | --- |
-| 読む間隔 | `rate_limit.poll_interval_ms`（既定5分） |
+| **値の出どころ** | **issue の pane**（API 応答を受けるたび。追加の費用は無い）と、**statusline取得**（値が古いとき。下記） |
+| **入札に使ってよい値の古さ** | `rate_limit.refresh_interval_ms`（既定5分）。**statusline取得の間隔でもある**（`polling.interval_ms` より長くする） |
 | **新規の dispatch を止める閾値** | `rate_limit.pause_above_percent`（既定95%）。**走行中の turn は止めない** |
 | **stall の時計** | **枠待ちと判定した run についてだけ止める**（下記）。止めないと、待っているだけの worker を stall とみなして殺す |
 | 再開の契機 | **枠待ちの原因になった枠の `resets_at` を過ぎたら**、その run へ継続の指示を1回送ってみる。応答が返れば継続、返らなければ worker を止めて再 dispatch |
-| **どの枠の時刻を見るか** | **条件その1 を満たした枠のうち、`resets_at` がいちばん遅いもの。`resets_at` が `null` の枠は判定から外す**（3-15 のサンプル参照）。**`weekly_scoped` も、モデルを判別せずそのまま見る。**continuo は Claude Code が使うモデルを知らない（設定に持たない）ためである |
+| **どの枠の時刻を見るか** | **条件その1 を満たした期間のうち、`resets_at` がいちばん遅いもの。`resets_at` を過ぎた期間は判定から外す**（下の「保管値の規則」）。**モデル別の週次枠（`weekly_scoped`）は statusline に無いので見ない。**モデル別の上限に当たった run は、回復待ちと判定されずに stall として止められうる（受け入れる） |
 
 #### 「新規を止める閾値」と「この run は枠待ちである」を分ける
 
@@ -3905,30 +4015,26 @@ claude.turn_timeout_ms のあいだ何も観測できなかった run につい�
 **条件その2 を入れる理由。**枠を使い切っていても、**別の run は動いている**ことがある。
 **枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。**
 
-**この API を叩くことが「定額運用」の制約に反しない理由。**制約の理由は従量課金である。
-**この API は枠の残量とリセット時刻を返すだけで、メッセージを送る API ではない。**
+**statusline取得が「定額運用」の制約に反しない理由。**制約の理由は従量課金である。
+**statusline取得は herdr の pane で対話モードの Claude Code を起動し、定額のログインのまま `hello` を1回送る。**`claude -p` も `--bare` も使わない（下の「退けた案」）。
+**ただし API キーで動かしている機械では、この会話が従量で課金される**（何もしていない機械で1日最大288回。1回の入力は約600トークン。実測）。
 
-**ただし「1トークンも消費しない」ことは確かめられていない。**
-3回続けて叩いて `percent` が動かなかったが、**`percent` は整数の百分率なので、
-少量を消費していてもこの観測では動かない。**課金の有無も突き合わせていない（第6節）。
+**だから必須にしない。**`rate_limit.source` に `none` を指定すれば、ステータスラインを書かず、`sl.sock` を開かず、statusline取得もしない。
+入札は使用率0として参加する（3-77d）。**その場合は枠待ちと固まりを区別できないので、stall 検知だけに頼ることになる。**
 
-**だから必須にしない。**`rate_limit.source` に `none` を指定すれば、この API を1回も叩かずに運用できる。
-**その場合は枠待ちと固まりを区別できないので、stall 検知だけに頼ることになる。**
-
-**取れなかったときにどうするか。**usage API が使えない場合は、**枠待ちと固まりを区別できない。**
+**値が無いときにどうするか。**値が無い・古い間は**入札しない**（3-77i）。回復待ちの判定は、`resets_at` を過ぎていない保管値だけを見る。
+**保管値が無ければ、枠待ちと固まりを区別できない。**
 そのときは stall 検知の閾値まで待ってから worker を止め、リトライを積む（3-21）。
 **枠が回復していなければ、リトライも同じところで止まる。**リトライの回数を使い切ったら `failure_state` へ落として人間に渡す。
 
-**認証情報の出所。**`rate_limit.token_source` で指定する（`claude_credentials` / `keychain` / `env`）。
-**既定は macOS が `keychain`、ほかの OS が `claude_credentials` である**（3-15）。
-**`claude_credentials` と `keychain` は、どちらも Claude Code が使っている資格情報を読むことを指す。**
-**読み取りだけで、書き換えない**（`~/.claude.json` を書き換えない、という絶対制約に従う）。
+**資格情報は読まない。**Claude Code の OAuth トークンにも Keychain にも触らない。
+**`~/.claude.json` は、statusline取得に使う clone が信頼済みかを見るために読むだけで、書き換えない**（絶対制約）。
 
 **枠に当たってから復旧するまでの流れ。**
 
 ```mermaid
 flowchart TB
-    poll["巡回（30秒ごと）"] --> usage["usage API を読む<br/>5分に1回"]
+    poll["巡回（30秒ごと。statusline取得の値が届いた知らせでも回る）"] --> usage["保管値を読む<br/>ステータスラインから届いた使用率"]
     usage --> over{"どれかの枠が<br/>pause_above_percent を超えたか"}
     over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
     over -->|"超えていない"| normal["ふつうに dispatch する"]
@@ -3954,6 +4060,211 @@ flowchart TB
 **再開の質は、原典の3段階のうち最良を狙う。**平常時は同じセッションへ継続の指示を送るので、
 **それまでの調査や試行錯誤がそのまま残る。**worker を止めた場合は文脈が切れるので、
 **issue のコメントに残した成果を次のセッションが読む**（3-25 で必ず書かせている）。
+
+#### 使用率の受け取り方（ステータスラインと `sl.sock`）
+
+**言いたいこと。**issue ごとの設定ファイル（3-12）に `statusLine` を書き、Claude Code が描き直すたびに `continuo statusline` を exec させる（issue #284）。
+**`continuo statusline` は標準入力の JSON から4つの欄を取り出し、hook とは別の socket（`sl.sock`。3-23）へ1行で送る。**
+
+```mermaid
+sequenceDiagram
+    participant CC as Claude Code（issue の pane・statusline取得の pane）
+    participant SL as continuo statusline
+    participant D as continuo 本体
+    CC->>SL: 描き直すたびに標準入力へ JSON
+    SL->>D: sl.sock へ1行 {"session_id":"…","api_ms":10728,"five_hour":{…},"seven_day":{…}}
+    SL-->>CC: 標準出力へ固定の continuo、終了コード 0
+    D->>D: 保管値の規則（下記）で受ける。quota.json へも書く
+```
+
+| 何を | どうするか | 理由 |
+| --- | --- | --- |
+| 送る欄 | `session_id`・`cost.total_api_duration_ms`（`api_ms`）・`rate_limits.five_hour`・`rate_limits.seven_day` | 値がいつの応答のものかを見分けるのに `api_ms` が要る。**`rate_limits` が `null` の行も、`session_id` と `api_ms` だけで送る**（「応答はあったが値が無い」を見分けるため） |
+| 標準出力 | **固定の `continuo` の1行。`refreshInterval` も付けない** | 変わる値を出すと画面の版（`revision`）が動き、固まった run を stall として止められなくなる（3-21）。**ステータスラインが走るたびには版は動かなかった**（2026-09-25 に実測） |
+| 送れなかったとき | socket が無い・断られた・期限切れ・入力が 1 MiB を超えた・JSON として読めない、のどれでも、**何も書かずに固定の1行を出して終了コード 0** | 描き直しのたびに走るので、エラーの表示で画面を汚さない。**逃がし先は持たない**（値は次の描き直しで届く） |
+| 期限 | 接続 200ms・書き込み 500ms | Claude Code は実行中のスクリプトを次の更新で打ち切る（3-15） |
+| 受け手 | 1接続1行（上限 64 KiB）。**応答は返さない。知らない欄は無視する。**止めるときは配送中の行を待たずに捨てる | 欄を足しても新旧が混ざって落ちない |
+| run の状態 | **受け口は run の状態（hook の時刻・stall の時計）へ何も書かない** | 別の socket にした理由そのもの |
+
+**実測（2026-09-25・2026-09-27、macOS の1台、herdr 0.9.1、Claude Code 2.1.282〜2.1.283、Claude Max）。**
+2つの別の run の pane が同時に同じ使用率を示した（**値はアカウント全体のもの**）。pane が画面に出ていないときもステータスラインは呼ばれる。
+`--session-id` で渡した UUID がステータスラインの `session_id` にそのまま出る。起動の直後の1回は `rate_limits: null` で、値は整数で届く。
+**何もしていない間、ステータスラインは走らない。**止まっているセッションは期間が切れる時刻に描き直し、古い7日の値を送る
+（公式文書は、描き直すもう1つの契機としてプロンプトキャッシュの期限を挙げている。これは実測していない）。**Linux と herdr 0.8.x では確かめていない。**
+
+**`continuo statusline` も、hook と同じく「描き直すたびに実行ファイルを exec する」約束である**（CLAUDE.md の hook の規則と同じ構造）。
+**名前と `--socket` を変えると、ビルドした瞬間に動いている本体へ値が届かなくなる。**
+
+#### 保管値の規則
+
+**言いたいこと。**本体は期間（5時間と7日）ごとに値を1つだけ持つ（保管値）。**止まっているセッションの古い値で、新しい値を上書きしない。**
+**ステータスラインの入力には、その値がいつの API 応答のものかを示す時刻が無いので、`api_ms` の増え方で見分ける。**
+
+| 語 | 指すもの |
+| --- | --- |
+| 基準の `api_ms` | セッションごとに持つ `api_ms`。初めて見るセッションの最初の行の値で始め、`rate_limits` を持つ行で上げ、それより減った行で下げる。24時間届かないセッションは忘れる |
+| 新しい応答の行 | 基準を知っているセッションから届き、`api_ms` が基準より増えた行 |
+| 新しさの時刻 | `rate_limits` を持つ（期間が1つ以上ある）新しい応答の行を、最後に受けた時刻 |
+| 値が新しい | 新しさの時刻から `refresh_interval_ms` を過ぎておらず、保管値のどの期間も `resets_at` を過ぎていないこと |
+
+| 行 | どうするか | 理由 |
+| --- | --- | --- |
+| 値の形 | `used_percentage` は切り捨てて整数にし、100 以上は 100。今より前の `resets_at` の期間は取り込まない | 上限の判定を小数の切り上げで早めない |
+| 初めて見るセッションの最初の行 | 基準をその行の `api_ms` にし、値は「それ以外の行」の規則で当てる。**新しさの時刻は進めない**。statusline取得のセッションは起動する前に基準 0 で登録する | 立て直した直後に、上限に当たっている run の 100 を捨てない |
+| `rate_limits` を持つ新しい応答の行 | まず `resets_at` の過ぎた保管値を全部消す。期間ごとに、無いか `resets_at` が違えば置き換え、同じなら大きいほう。行に無い期間の期限内の保管値は触らない。**新しさの時刻を進める** | 新しい応答は今の値である。**期間は独立に欠けうる**（公式文書）ので、片方だけの行でも進める |
+| `rate_limits` が `null` の新しい応答の行 | 保管値にも新しさの時刻にも触らない | 値の無い行で期限切れの期間を消すと、次の行までの数秒、入札がその期間を0と読みうる |
+| それ以外の行 | 期間ごとに、無いか `resets_at` が遅ければ置き換え、同じなら大きいほう、早ければ捨てる | **上限で断られた呼び出しで `api_ms` が増えなくても 100 を受ける。**止まっているセッションの古い値では下がらない |
+
+**1つの期間の中で `resets_at` は動かなかった**（実測）。「同じなら大きいほう」はこれに頼る。
+
+| 読む口 | どうするか | 理由 |
+| --- | --- | --- |
+| **入札**（3-77） | **値が新しければ保管値の全部の写しを返す。それ以外は「読めない」**（入札しない。3-77i） | 最後の行に無かった期間も、期限内なら渡す（渡さないと入札は0と読む。3-77d）。**古さは期間ごとではなく新しさの時刻で決める**（期間ごとにすると、その期間を返さないアカウントで入札が最長7日止まる） |
+| **回復待ちと閾値** | `resets_at` を過ぎた期間を除いた保管値。**新しさは問わない**。上限は「100 以上」、閾値は「`pause_above_percent` より大きい」 | 同じ期間の中で値は下がらないので、古くても使える |
+| 錠 | 専用の錠で持つ。hook の受け取りと錠を取り合わない | |
+| `quota.json` | 変わるたびに書く（3-4b）。**新しさの時刻とセッションごとの記録は置かない** | 立て直した直後の入札は、値を取り直してから行う |
+
+**アカウントを替えると、使用率は下がり `resets_at` も変わる。**「下がらない」は同じ期間の中だけの前提である。
+替える前から開いている pane が、期間が切れる時刻に替える前の7日の値を送りうる。
+**替える前のアカウントの 100 が保管値に残っていると、立て直しても `quota.json` から戻り、着手を止めたうえで statusline取得も開かない**（100 の間は開かない。下の「statusline取得」）。**止めて `quota.json` を消して立て直せば直る**（下の「限界」）。
+continuo はアカウントを替えたことを見分けられないので、コードでは直さず、利用者の手順（FAQ）で直す。
+
+#### statusline取得（値が古いときに取りに行く）
+
+**言いたいこと。**ステータスラインの値は、会話が API 応答を受けたときにしか来ない。**issue を1件も走らせていない機械は値を1つも持てず、入札できず、pane が立たず、値が来ない。**
+そこで、値が古ければ、**利用者が既に信頼している clone の中で短い haiku の Claude Code を起動し、`hello` を1回送って値を受け取り、閉じる。**これを statusline取得と呼ぶ。**run として数えない。**
+
+```mermaid
+sequenceDiagram
+    participant T as 巡回のループ（1つの goroutine）
+    participant F as statusline取得（別の goroutine）
+    participant H as herdr
+    participant CC as statusline取得の Claude Code（haiku）
+    T->>T: 値が新しくない → その issue の入札はこの巡回では見送る
+    T->>F: 巡回の最後: 開く条件を満たせば goroutine を起こす
+    F->>H: loop を通して閉じ残しを片付け、workspace.create（cwd は clone、focus は偽）して clone を押さえる
+    F->>H: agent.start → agent.get を1秒ごと → idle か done で interactive_ready なら agent.prompt hello
+    CC-->>F: sl.sock に rate_limits を持つ新しい応答の行が届く（3分以内）
+    F->>T: 値が届いたことを知らせる（容量1の channel）
+    F->>H: loop を通して workspace.close（止めるときも取り消さない）
+    T->>T: 巡回を1回すぐ回して入札する。刻みを数え直す（3-4f）
+```
+
+| 何を | どうするか |
+| --- | --- |
+| 開く条件（巡回の最後に見る） | `source: statusline` で、**値が新しくなく**、statusline取得が走っておらず（閉じる仕事が返り goroutine が終わるまで「走っている」）、前回の試行の開始から `refresh_interval_ms` を過ぎていて（起動して最初の巡回は問わない）、**期限内の保管値に 100 の期間が無い**。issue の pane から値が届いていれば開かない |
+| clone の選び方 | 起動時に読んだ `trust.repositories` を上から見て、`ghq` で clone があり、`~/.claude.json` で信頼されている（issue の run と同じ判定。3-6）最初の1つ。**走行中は読み直さない**（3-24）。`~/.claude.json` は読むだけ（3-33） |
+| 起動 | `--settings <実行時ディレクトリ>/statusline-fetch/settings.json --model haiku --permission-mode dontAsk --restricted --strict-mcp-config --system-prompt "Reply with one word." --tools "" --disable-slash-commands --session-id <UUID>`。agent の名前は `sl-` と UUID の先頭12桁の16進 |
+| 設定ファイル | `statusLine` と `env` だけ（3-12）。`env` に `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足し（**会話の記録を残さない**）、`CLAUDE_CODE_RETRY_WATCHDOG` は渡さない（上限の最中に無期限に再試行し、pane が戻らなくなる） |
+| 起動の待ち | `agent.get` を1秒ごと。`blocked` なら送らずに閉じる。`agent_not_found` が `herdr.startup_timeout_ms` の半分続いたら、**workspace ごと閉じ、新しい workspace と新しい UUID で1回だけやり直す**。起動の期限は起動ごとに `herdr.startup_timeout_ms` |
+| 成功 | 送ってから3分以内に、このセッションの `rate_limits` を持つ新しい応答の行が届く。**知らせは閉じるより先に送る**（閉じる呼び出しのぶん入札を遅らせない） |
+| 全体の上限 | `herdr.startup_timeout_ms` の2倍と3分の和 |
+| 閉じる | **どの出口でも** loop を通して閉じる（3-4d）。**毎回閉じる**（置いたままにすると、上限が明けたときに Claude Code が自分で続きを始めうる） |
+| 閉じ残し | 作った直後に ID を `statusline-fetch/workspaces.json` へ足し、閉じたら外す（3-4b）。起動時（復元の前。3-4 の段3a）と試行の前に片付ける。**herdr の一覧に在って label が `continuo statusline fetch` のものだけ閉じる**（3-3）。label が合わないもの・一覧に無いものは閉じずに一覧から外す。親にされて子が居るものは残す |
+| 数え方 | **`agent.max_concurrent_agents` に数えない。**issue に紐づけない |
+
+**利用者の設定を読み込まない（実測）。**`--permission-mode dontAsk --restricted --strict-mcp-config` で起動すると、MCP サーバー・利用者のプラグインとスキル・`permissions.allow`・利用者とプロジェクトの CLAUDE.md・利用者とプロジェクトの hook が読み込まれなかった。
+clone のファイルの書き換えを頼むと、許可を求めて止まり、clone は変わらなかった。
+`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` で `~/.claude/projects/` に会話の記録のファイルができなかった。
+**`--system-prompt` と `--tools ""` と `--disable-slash-commands` で、`hello` の1回の入力は 26,409 トークンから 599 トークンに減り、使用率は届いた。**
+**年齢による掃除が止まることは、公式文書の読みで、実測していない**（実物の設定ディレクトリで測ると、止まらなかったときに記録を消しうるため）。
+
+**失敗の理由は7つに分け、試行ごとに WARN を出す。**止めるときの取り消しでは出さない。
+
+| 理由 | 何を案内するか |
+| --- | --- |
+| 使える clone が無い | `trust.repositories` に1つ書いて `continuo trust` を叩き、continuo を立て直す |
+| 確認の画面で止まった | 選んだ clone を Claude Code が信頼済みと見なしていない。`~/.claude.json` の記録と Claude Code の版を確かめる |
+| 起動しなかった | `agent_not_found` が続いた・期限までに `idle` か `done` にならなかった。Claude Code が 2.1.248 以上（`--restricted` を持つ）かを確かめる |
+| 途中の誤り | clone の判定・herdr の呼び出し・ファイルの書き込みの誤り。誤りの文面を添える |
+| 応答はあったが値が無い | `api_ms` は増えたのに `rate_limits` が来ない。Pro / Max 以外の契約か API キーの疑い（上限の場合もある） |
+| 値が1行も届かなかった | 上限・組織の managed settings の `statusLine`・古い herdr が確認の画面で `interactive_ready` を返した、を並べる |
+| 閉じられなかった | workspace が herdr の画面に残る。次の試行か起動時に閉じ直す。親にされて子が居たときは、子が閉じたあとに閉じる |
+
+**契約の種類で値が来ないことを前もって判定しない。**上限で最初の応答が拒否されたときと見分けられないので、**どちらも「読めない」として入札せず、間隔を空けて statusline取得を続ける。**
+**上限に当たったとき、ステータスラインで 100 が届くかは測っていない**（人間の了解 2026-09-26 で測らずに進めた）。
+
+**5分の理由。**人間が決めた（2026-09-26〜28）。1回の入力は約600トークンで、何もしていない機械で1日最大288回になる。Pro で消費を抑えたい人は `refresh_interval_ms` を伸ばせる。
+**`polling.interval_ms` より長くする決まりは、短いと巡回のたびに statusline取得が走るためである**（設定の検査で起動を止める）。
+
+#### `rate_limit.source: none` のとき
+
+issue ごとの設定ファイルに `statusLine` を書かない。`sl.sock` を開かず、`quota.json` を読まず、statusline取得もしない（**閉じ残しの一覧があれば片付けだけは行う**）。
+入札は使用率を0として参加する（3-77d）。**利用者のステータスラインは、そのまま出る。**
+
+#### 使用率をステータスラインから受ける形の限界
+
+**言いたいこと。**次の限界を受け入れる。利用者向けの案内は docs/FAQ.md と docs/upgrading.md にある。
+
+| 限界 | 何が起きるか |
+| --- | --- |
+| 上限に当たったとき 100 が届くかを測っていない | 届かなければ、上限に当たった run は今と同じく `claude.turn_timeout_ms` のあとに stall として止められる |
+| `weekly_scoped` を見ない | モデル別の週次の上限に当たった run は、回復待ちと判定されずに stall として止められうる |
+| 契約を上げた・サーバーが期間の途中で使用率を戻した | 立て直しても、その `resets_at` まで高い値が残る。次の5時間の区切りを過ぎてから `quota.json` を消して立て直せば戻る |
+| アカウントを替えた | 替える前の値が `quota.json` から戻る。替える前のアカウントの 100 が残っていると、その `resets_at`（最長7日）まで着手を止め、statusline取得も開かない。走っている run も、回復待ち（`quotaAtFull` は新しさを問わない）と判定され続けて stall にならず、枠を占める。閾値を上げても、入札は値を読めずに見送る。替える前から開いている pane が、期間が切れる時刻かプロンプトキャッシュの期限に、替える前の7日の値を送りうる。どちらも、止めて `quota.json` を消して立て直せば直る |
+| statusline取得の workspace が開いている clone | issue の着手が、それが閉じるまで待つ（多くは十数秒、長いと数分）。値が届かない間は、先頭の clone が5分のうち3分あまり押さえられる。同じ巡回で着手する別の clone の issue も待つ。その clone の run が終わるときは、片付けが待つ間スロットを占める（3-4d） |
+| 別のプロセスとは順番を決めない | `--id` を分けた2つ目の continuo・`continuo abandon` が同じ clone で `worktree.open` をすると、親にされうる。閉じずに WARN を出し、子が閉じたあとに閉じる。**「子が居るか」は同じ clone の linked worktree が居るかで見る**（herdr の一覧はどれがどれの子かを返さない）ので、同じ clone の別の issue が走っている間は、子の居なくなった親も閉じない |
+| 値が1つも入らない機械 | Pro / Max 以外・API キー・`--restricted` を持たない古い Claude Code（2.1.248 より前）・`trust.repositories` に信頼済みの clone が無い、のどれかでは、run が無い状態から値が入らず、**自動の着手が止まり続ける。**statusline取得の WARN が理由を出す |
+| API キーの機械 | 1日最大288回の haiku の会話（1回約600トークン）が従量で課金される。`rate_limit.source: none` にする |
+| 年齢による掃除 | 止まることは公式文書の読みで、実測していない。止まらなかった場合は、`cleanupPeriodDays` を延ばした利用者の古い記録を既定の30日で消しうる |
+| 利用者の設定の `env` に頼る接続 | statusline取得は利用者の設定ファイルを読まないので、プロキシなどを利用者の設定の `env` に書いている人の取得は失敗する。`claude.env` に書けば直る |
+| 組織の managed settings の `statusLine` | `--settings` は同じ managed のキーを上書きしない（公式文書）ので、値が1行も届かない。`rate_limit.source: none` にする |
+| 偽の値 | `sl.sock` のパスは issue ごとの設定ファイルに書かれ、エージェントが読める。同じ利用者として動くエージェントは偽の値を送れる（hook の socket と同じ扱い）。`resets_at` が本物と同じ偽の値は、`quota.json` を消して立て直すまで残る |
+| `continuo statusline` を持たない版をビルドした | 新しい本体が走ったまま古い実行ファイルに差し替えると、値が1行も届かなくなり、自動の着手が止まる。main からビルドし直す |
+| 古い herdr | 信頼の確認の画面で `interactive_ready: true` を返すことがある（2-1）。WARN は「値が1行も届かなかった」になる |
+| `workspace.create` と一覧へ足す間に落ちた | その workspace は押さえも一覧も無いまま残りうる。herdr の画面で手で閉じてよい |
+| `bid_window_ms` を 0 にしている | 値が古いと入札が statusline取得の十数秒ぶん遅れ、そのあいだにほかの機械が先に勝つことがある |
+| 確かめた環境 | macOS の1台（herdr 0.9.1・Claude Code 2.1.282〜2.1.283・Claude Max）だけ。Linux・herdr 0.8.x・Max 以外の契約は確かめていない |
+
+#### 使用率の受け取り方で退けた案
+
+**言いたいこと。**issue #284 の設計レビュー（1周目〜7周目。issue #284 のコメントの判断票）で退けた案を、理由と一緒に全部残す。
+
+| 案 | 退けた理由 |
+| --- | --- |
+| usage API を読み続ける（User-Agent を本物に似せる・`Retry-After` を読む） | 非公開の API で、扱いが予告なく変わった（3-15）。入札と回復待ちの判定を、これ1本に預けておく形は保てない |
+| `claude -p` で取る | 従量課金になる（CLAUDE.md の最初の禁止事項） |
+| `--bare` で起動する | 定額のログインを使わない。実測で「Not logged in」と返り、使用率は `null`。API キーを渡すと従量課金になる |
+| `--safe-mode` で起動する | ステータスラインも止まる（実測） |
+| 専用の空のフォルダを作り、`continuo trust` で信頼させる | 利用者の手順（版を上げたら `continuo trust` を叩く）が増え、`continuo trust` を大きく作り変える。ホームを git で管理している人は、信頼の鍵がホームになり、ホームの信頼はディスクに残らないので取得できない |
+| continuo 本体が `~/.claude.json` へ信頼を書く | 「常駐プロセスは利用者の Claude Code の設定を書き換えない」（3-33）を崩す |
+| セッション ID を決めて使い回す | 同じ ID の2回目の起動は「already in use」で止まる（実測）。`--resume` で回すと会話が毎回長くなる（入力 26,418 → 29,060 トークン。実測） |
+| hook の socket に判別子を足して同じ socket で受ける | 判別子を知らない古い本体が hook として受け取る（3-23） |
+| statusline取得用の pane を置いたままにする | 上限が明けたときに Claude Code が自分で続きを始めうる |
+| `agent.max_concurrent_agents` に数える | statusline取得の間は issue を1件少なくしか走らせられない |
+| 送る文に意味を持たせる（「レートリミット確認したい」など） | 使用率は応答のあとに載るので、文の中身は関係ない。応答が長くなりトークンを使う |
+| システムプロンプトと道具を既定のまま起動する | 入力が 26,409 トークン。差し替えると 599 トークン（実測） |
+| 利用者の `~/.claude/settings.json` の外へ効くキーを statusline取得用の設定ファイルへ写す | 3-12 を崩す。写すと、止まるはずの掃除をかえって動かす |
+| 起動時の `claude auth status` で API キーを見分ける | API キーを入れても `authMethod` が `claude.ai` のまま（実測） |
+| 入札の写しを、最後の新しい応答の行が持っていた期間だけにする | 写しに無い期間を入札は使用率0と読む（3-77d）。上限に近い機械が暇に見えて入札に勝つ |
+| 新しさの時刻を、5時間と7日の両方がそろった行でだけ進める | 欠けたまま届くアカウントでは入札が永久に止まる |
+| 知らないセッションの行を捨てる | 立て直した直後に、上限に当たっている run の 100 を捨てる |
+| 描き直しだけの行を捨てる | 同じアカウントの中では、止まっている pane の再送は「大きいほうを残す」「早ければ捨てる」で既に負ける |
+| 値の範囲の上限・負の使用率を 0 に丸める | 偽装は防がないと決めている。丸めても守れるものが無い |
+| statusline取得の間隔を失敗のたびに倍々にする | 契約の種類で値が来ないのか、上限で断られたのかを WARN の理由で見分けられないので、上限の機械のリセットの確かめも遅れる |
+| WARN で `rate_limit.source: none` を案内する | 上の2つを見分けられないまま勧めると、上限の最中の人が閾値と回復待ちを外す |
+| 巡回の中で、値が届くまで待ってから入札する | 待つあいだ、止まった run の検知・ほかの issue の着手が止まる。値が届いた瞬間に巡回を1回回せば、入札は値のあとにしか行われない（3-4f） |
+| 値が届いたときの巡回を別の goroutine から呼ぶ | ふだんの巡回と同時に走り、run の状態や入札を取り合う |
+| statusline取得の「作る → 値を待つ → 閉じる」を丸ごと1つの仕事にして loop に積む | 値を待つ間（最長5分）、loop が止まり、ほかの clone の着手と片付けも全部止まる |
+| statusline取得に使う clone を、いま着手中でない clone に限る | 着手が始まる瞬間と statusline取得が始まる瞬間が重なる余地が残り、確実には防げない |
+| continuo 全体を1つの loop で動かす作り変えを、issue #284 で行う | 人間が「この issue では herdr の開け閉めだけ」と決めた（2026-09-28）。loop はその形へ広げても使える作りにした（3-4e） |
+| 別のプロセスの statusline取得の workspace を label で見て、見直しながら待つ | 自分の閉じ残しも同じ label なので、閉じ残しが1つあると全部の clone の着手と片付けが待つ。人間の指示は1つのプロセスの中の queue と loop である。親にされた workspace を閉じない確かめで、0.8.x で issue の pane を消す害は防げる |
+| orchestrator が loop を受け取り、statusline取得の workspace を自分で開け閉めする | 渡し方と key の作り方と閉じる判定が2か所になり、揃え損ねると守りが黙って外れる。公開の口が3つ増える |
+| 仕事の中を示す印を ctx に付け、入れ子の `Do` をその場で実行する | ctx の値は goroutine と `context.WithoutCancel` に引き継がれ、全体を通す形で、巡回から起こした goroutine が loop を通らずに herdr を呼ぶ。この issue に入れ子の経路は無い |
+| loop に型引数を持たせる（`Loop[S]`・`Job[S]`・`State()`） | `Loop[S]` の `Do` と `Runner` の `Do` の引数が違い、1つの型に両方を持たせられない。仕事は関数なので、状態を閉じ込めた関数を積めば import も循環しない |
+| loop に `Post`・`After`・`Retry` を持たせる | 使う場所が無い。全体を通す形では `Post` を足すだけで、queue と `Do` の形は変わらない |
+| 押さえに上限を掛け、閉じるのを10秒ごとに試し直す | 押さえ続けても守れるものが無い。herdr が不調なら、後に回した `worktree.open` も失敗する |
+| `worktree.open` を含まない仕事にも key を付ける | `worktree.remove`・`workspace.close`・リポジトリの親を閉じる仕事は、statusline取得の workspace を親にしない。付けると、statusline取得の間その clone の片付けが理由なく止まる |
+| statusline取得の workspace を作る仕事に key を付ける | statusline取得は同時に1つなので、阻まれる相手は自分の前の押さえだけで、押さえが残ったときに自分で止まる |
+| `Release` が押さえた相手（owner）を確かめる | 作り直しは前の workspace を閉じる `Do` が返ってから作るので、食い違う経路が無い |
+| 閉じる仕事に別の10秒の ctx を掛ける | 前の仕事は最長75秒なので、順番待ちの間に閉じる仕事が捨てられ、押さえが永久に残る。中の herdr の呼び出しは、呼び出しごとの期限で終わる |
+| `worktree` 欄を持つだけで「親にされた」と見て閉じない | 子の居なくなった親も閉じなくなる。同じ clone の linked worktree の workspace が居るときだけ閉じない |
+| label の合わない閉じ残しを一覧に残す | 残しても誰も閉じない。continuo が label を書き換えるのは issue の worktree の workspace だけである |
+| 親にされた WARN を ID ごとに1回にする | 起きるのは閉じられなかったときと別のプロセスとの重なりだけで、そのために状態を1つ増やす理由が無い。WARN は閉じなかった試行ごと（最大5分に1回） |
+| `Options.Loop` が無ければ `loop.Inline` にする | 渡し忘れると守りが黙って消え、外の package のテストでは確かめられない。herdr を渡すのに loop が無ければ `New` が誤りを返す |
+| statusline取得の label や agent の名前に実行時ディレクトリのハッシュを入れる | 閉じる対象は自分の一覧の ID だけで、立て直して実行時ディレクトリが変わると合わなくなる |
+| 閉じ残しの片付けで pane の cwd も照合する | 同じ clone を選ぶ2つの continuo の statusline取得は、cwd も label も同じなので守りにならない |
+| 実装のあとに測る | issue #284 が「実装の前に測ること」と決めている。ただし上限に当たったとき 100 が届くかだけは、人間の了解（2026-09-26）で測らずに進めた |
 
 ### 3-28. 複数のカンバンを監視する凍結が解けたときに壊れない構造にする
 
@@ -4179,12 +4490,6 @@ continuo setup         # 既にあるカンバンの Status の選択肢を、co
                        # --status-field=<名前> Status の single-select フィールドの名前（既定 Status）
 continuo trust         # trust.repositories に列挙されたリポジトリの信頼を ~/.claude.json へ登録する（3-33）
                        # --dry-run  何が要求されているかを出すだけで、書き換えない
-continuo allow-keychain-access
-                       # macOS の Keychain を1回読み、確認のダイアログに人間が「常に許可」で答える機会を作る（3-15）
-                       # **macOS でだけ意味がある。**ほかの OS では何もせずに 0 で終わる
-                       # 設定ファイルを読まない。WORKFLOW.md がまだ無くても叩ける
-                       # 出すのは読めた項目の名前だけである。トークンの値は画面にもログにも出さない
-                       # 位置引数もフラグも取らない。待つ上限は60秒
 continuo prompt --show # Claude Code へ送るプロンプトの全文を出す（5-3f）
                        # --builtin を付けると、WORKFLOW.md を読まずに組み込みだけを出す
 
@@ -4194,6 +4499,9 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
                        #                0 なら OS が空きポートを選ぶ。渡さなければ server.port に従う
 continuo hook          # Claude Code の hook から呼ばれる。標準入力を socket へ1行で送って即終了する。
                        # 応答は待たない（3-2）。socket へ繋がらなければ --pending-dir へ逃がす（3-19）
+continuo statusline    # Claude Code のステータスラインから呼ばれる。人間が直接叩くものではない（3-27）
+                       # 標準入力から使用率を取り出し、--socket（sl.sock）へ1行で送って、固定の1行を出す
+                       # 送れなくても何も書かずに終了コード 0 で終わる。逃がし先は持たない
 ```
 
 **`continuo doctor` が検査するもの。**
@@ -4210,7 +4518,6 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **hook を受ける socket を置けるか** | 決めた場所にディレクトリを作り、**実際に listen して閉じる** | **文字列を組み立てるだけでは足りない**（issue #9）。設定が読めなくても既定値で確かめる |
 | **Claude Code の設定ディレクトリに書けるか** | `~/.claude/session-env/<使い捨ての名前>` を**実際に作って消す** | **設定を1バイトも読まないので、設定が `✗` でも走る**（6-11）。ここが書けないと issue は1件も始まらない |
 | **`workspace.root` に書けるか** | 使い捨てのディレクトリを**実際に作って消す** | **置き場所は設定にしか書いていない**ので、設定が読めているときだけ走る。書けないと着手は worktree を用意する段で必ず落ちる |
-| Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
 | **カンバンを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
 | **紛らわしい Status の組が無いか** | **カンバンの選択肢名を全部読み、設定に書いた名前と「同じに見える」「含んでいる」の組になっていないかを見る**（6-14） | **記号は `!`。**continuo は動くので起動は止めない。**`Bootstrap` も `config.Validate` も、綴りが違えば素通りする** |
 | **片付ける Status が終わったとみなす Status に収まっているか** | **`cleanup.on_states` の値が `tracker.terminal_states` に全部あるかを見る**（3-9e） | **記号は `!`。**カンバンを1バイトも読まない（設定の2つのキーを突き合わせるだけである）。**`config.Validate` は `tracker.active_states` との重なりしか見ていない** |
@@ -4219,13 +4526,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **カンバンの自動化が有効なのに書き戻しの対応表が空でないか** | **`ProjectV2.workflows` の `enabled` が真のものを数え、1件でもあるのに `tracker.automated_state_rewrite` が空なら知らせる**（3-54）。**doctor 専用のリクエストを1本送る**（起動時の検査のクエリへ混ぜると、`workflows` を読めない環境で常駐プロセスが起動しなくなる）。**`Auto-add …` で始まる自動化は数えない**（item を載せるだけで Status を書かない） | **記号は `!`。**空でも continuo は起動して走る。**だが自動化が Status を書いた瞬間に走行中の run が止まり、利用者がそれを知るのは1件止まったあとである**（issue #209）。**どの自動化がどの Status を書くかを GitHub の API は公開していない**ので、有効な自動化の名前を並べて人間に判断させる |
 | **agent teams が有効にならないか** | **`claude.env` と、doctor を叩いたシェルの `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を見る**（3-70） | **記号は `!`。**カンバンを1バイトも読まない。**読める出どころは7か所のうち2つだけ**なので、**読んでいない出どころを `✓` のときも必ず内訳に出す。****書いていないことは警告しない**（3-70 の「continuo は既定で書き込まない」） |
 
-**doctor は Keychain を読む。**
-
-| 何を | なぜ |
-| --- | --- |
-| **読む** | **doctor は人間が端末で叩く道具である。**ダイアログが出ても、その場にいる人間が答えられる。**読まないと macOS の利用者はこの検査から何も得られない**（必ず `!` になるだけで、枠が読めるのか分からない） |
-| **固まらない仕組み** | **この項目に10秒の上限を掛け、期限が来たら `security` を殺す**（3-15）。無人の巡回のループと同じ上限である |
-| **読むのは名前だけ** | **`claudeAiOauth` の下にある項目の名前**と、`accessToken` が空でないかだけを見る。**トークンの値は画面にもログにも出さない** |
+**Claude の資格情報は検査しない**（issue #284）。使用率はステータスラインから受け取るので、continuo は Claude Code の OAuth トークンも Keychain も読まない（3-27）。
+**statusline取得に使える clone があるかは、上の「clone」と「信頼登録」の行で分かる**（`trust.repositories` に書いたものが対象に入っていれば）。
 
 **カンバンを読めなかったときの記号。**
 
@@ -4264,7 +4566,6 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
                                                 ├─ 自動化（有効な自動化と対応表の噛み合い。3-54）
                                                 ├─ clone（対象リポジトリが決まる）
                                                 └─ 信頼登録（clone のパスが要る）
-資格情報（token_source が指す先だけを見る。ほかの検査に依存しないので飛ばさない）
 ```
 
 **`gh auth status` の読み方を1つに決める。**
@@ -4276,28 +4577,6 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **何を見るか** | そのブロックの **`Token scopes:` の行**。カンマで区切り、各要素の前後の空白と引用符を落とす |
 | **合格の条件** | **落とした結果に `project` が1つの要素として在ること。**`read:project` は不可（読めるだけでは Status を書けない） |
 | **該当ブロックが1つも無いとき**（未ログイン） | **`✗`。**「`gh auth login -s project` を実行してください」と出す |
-
-**資格情報の記号を、設定が読めたかどうかで分ける。**
-
-**設定で受け付ける値は `rate_limit.source` が `oauth_usage_api` / `none`、
-`rate_limit.token_source` が `claude_credentials` / `keychain`（macOS のみ）/ `env` である**（`internal/config/validate.go`）。
-
-| 状態 | 記号 | メッセージ |
-| --- | --- | --- |
-| **設定が読めない**（`WORKFLOW.md` が壊れている等） | **`!`** | **`rate_limit` の設定が読めないので、何を見るべきか決まらない。**「設定を直してからもう一度実行してください」 |
-| **`rate_limit.source` が `none`** | **`✓`** | 「枠の判定を行わない設定です。資格情報は要りません」（`token_source` は見ない） |
-| `token_source` が `env` で、`token_env` の環境変数がある | `✓` | — |
-| **`token_source` が `env` で、環境変数が無い** | **`✗`** | **枠の判定ができない設定になっている。**環境変数名を出す |
-| `token_source` が `claude_credentials` で `~/.claude/.credentials.json` がある | `✓` | — |
-| `token_source` が `claude_credentials` でファイルが無い | **`!`** | 「macOS では Keychain に入っているのが普通です」。**macOS なら、直し方に `token_source: keychain` へ移る道を足す** |
-
-**`token_source` が `keychain` のときの記号。**
-
-| 状態 | 記号 | なぜ |
-| --- | --- | --- |
-| **`accessToken` を読めた** | **`✓`** | 枠を読める |
-| **読めない / `accessToken` が無い** | **`✗`** | **利用者が `keychain` を明示して選んだのに取れていない。**`token_source: env` で環境変数が無いときと同じ扱いにそろえる。直し方は `continuo allow-keychain-access` |
-| **10秒待っても `security` が返らない** | **`!`** | **返らなかっただけで、資格情報が無いとは限らない。**「確認のダイアログが出たままかもしれません」と出す |
 
 **対象リポジトリが0件だったとき。**
 
@@ -4322,8 +4601,8 @@ $ continuo doctor
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
-! 資格情報         Keychain の項目 "Claude Code-credentials" の読み取りが期限内に終わりませんでした: …
-                  → 画面に確認のダイアログが出ていないか確かめてから、`continuo allow-keychain-access` を実行して「常に許可」を選んでください
+! 未記入の項目     WORKFLOW.md に書かれていない設定項目があります（2件／雛形は 104件）。書いていないあいだは continuo が持つ既定値が使われます
+                  → 足す差分を読むには: continuo doctor --missing-keys-patch WORKFLOW.md
 
 2件に問題があります（✗ 1件 / ! 1件）
 ```
@@ -4724,7 +5003,9 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 > もう1件付く。**コメントの本文は「continuo を起動するたびに1回だけです」と書くこと。**
 >
 > **信頼の門番は `~/.claude.json` であって `trust.repositories` ではない。**
-> 巡回のループは `trust.repositories` を1バイトも読まない（読むのは `continuo trust` だけ）。
+> 巡回のループは、issue を取るかどうかの判定に `trust.repositories` を使わない（信頼の判定は `~/.claude.json` だけで行う）。
+> **例外は statusline取得である**（issue #284。3-27）。**使う clone を選ぶために、上から見て、手元に clone があって信頼済みの最初の1つを取る。**
+> 起動時に読んだ値を使い、**走行中は読み直さない**（3-24）。書き換えたら continuo を立て直す。**`~/.claude.json` は読むだけで、書かない。**
 > **だから「書いていないから取らない」と書くのは因果が逆である。**
 > その clone で以前 Claude Code を起動していれば、書かなくても取る。
 > 逆に書いてあっても `continuo trust` を実行していなければ取らない。
@@ -6164,12 +6445,12 @@ pane は実際には生きていて誰も閉じないので、continuo の管理
 （`SPEC.md` 11.1 の malformed）。1件をエラーにすると、同じ呼び出しに乗った他の run の照合・
 取り残された worktree の照合・再起動時の復元が丸ごと飛ぶ。
 
-**枠の判定**（[internal/ratelimit/ratelimit.go](../../internal/ratelimit/ratelimit.go) の `Fetch`）。
-`security` が期限内に返らないのは一時的である。連続 `MaxTemporaryCredentialFailures`（5回）で
-初めて諦める。**打ち切り（ctx の cancel）は回数にも数えない。**恒久的なのは
-「`security` が PATH に無い・Keychain に項目が無い・ファイルが無い・環境変数が空・
-中身が壊れている・usage API が 401 / 403」である。
-**1回で諦めると、枠を使い切って黙っただけのエージェントを stall と誤認して pane を閉じる**（3-27）。
+**枠の判定**（statusline取得。[internal/orchestrator/statuslinefetch.go](../../internal/orchestrator/statuslinefetch.go)。issue #284）。
+**失敗はどれも一時的として扱う。**試行ごとに理由を付けて WARN を出し、`rate_limit.refresh_interval_ms` のあとにやり直す（3-27）。
+**恒久的として諦める失敗を持たない。**契約の種類で値が来ないこと（恒久的）と、上限で最初の応答が拒否されたこと（一時的）を、
+値が来ないという観測からは見分けられないためである。**諦めると、上限の機械がリセットを確かめられなくなる。**
+**値が無い間は入札しない**（3-77i）。`rate_limit.source: none` にするかは、WARN の理由を見て人間が決める。
+**止めるときの取り消しは失敗に数えず、WARN も出さない。**
 
 ---
 
@@ -8041,7 +8322,7 @@ running_state・`status_signal_map` の遷移先・対応表の戻す先の3種�
 
 **内訳に差分そのものを入れない理由。**差分は長い。**実測で、版を1つ上げて増えた3項目で30行、
 `continuo init` を使わずに手で書いた `WORKFLOW.md` で156行である。**
-そのまま並べると、**他の17個の検査結果が画面の外へ押し出される。**
+そのまま並べると、**他の16個の検査結果が画面の外へ押し出される。**
 
 **差分は別の口から出す。**検査結果の内訳は見出し語の桁に揃えて字下げされるので、
 **そのままでは `patch` に渡せない。**差分だけを字下げなしで出す口
@@ -8254,7 +8535,7 @@ os.Hostname() だけで決まり、重複しても検知しない）の範囲外
 ### 3-77. 複数の機械で持ち回る — 余裕値の出し方
 
 **言いたいこと。**同じカンバンを複数の機械が見張り、**枠にいちばん余裕がある1台が処理する。**
-**余裕値は使用率から作る。**使用率は「0% が未使用、100% が使い切り」で、API が返す値そのものである。
+**余裕値は使用率から作る。**使用率は「0% が未使用、100% が使い切り」で、ステータスラインが運ぶ `used_percentage` そのものである（3-27）。
 
 **式**（2026-08-29 に人間が決定）。
 
@@ -8264,8 +8545,9 @@ os.Hostname() だけで決まり、重複しても検知しない）の範囲外
 判定スコア   = 5時間余裕値 × 2 + 1週間余裕値
 ```
 
-**1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない**（最大を採れば自動的にそうなる）。
+**1週間の使用率は、1週間全体の枠（`seven_day`）を採る。**
+issue #284 までは、1週間全体の枠と、usage API が返すモデル別の枠（`weekly_scoped`）のうち、いちばん大きいものを採っていた。
+**ステータスラインはモデル別の枠を運ばないので、いまは入らない**（3-27 の「限界」）。判定の式は最大を採る形のまま変えていない。
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
 
@@ -8275,7 +8557,7 @@ os.Hostname() だけで決まり、重複しても検知しない）の範囲外
 | --- | --- |
 | **5時間余裕値と1週間余裕値が両方0以上** | 3つの値を JSON で issue のコメントに書く |
 | **どちらかがマイナス** | **投稿しない**（処理する余裕が無いという意味である） |
-| **枠を読めなかった** | **投稿しない。**読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう |
+| **枠を読めなかった**（値が無い・古い。3-77i） | **投稿しない。**読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう |
 | **どれかの枠が `rate_limit.pause_above_percent`（既定95）を超えている** | **投稿しない** |
 
 **最後の1行がある理由。**`pause_above_percent` を超えた機械は、**入札に勝っても着手しない。**
@@ -8531,9 +8813,15 @@ tracker:
 **「読めなかった」とは言い分ける。**読めなかったのは事故であり、`none` は運用者の決定である。
 
 **「読めなかった」を「枠が1件も返らない」に限る理由。**
-usage API は、**使い始めるまで現れない枠を持つ**（モデル別の枠がそれである。3-77）。
-**現れないことを「読めなかった」と扱うと、週の頭にどの機械も入札できなくなる。**
+**ステータスラインの期間（`five_hour` / `seven_day`）は、それぞれ独立に欠けることがある**（公式文書）。
+**欠けた期間を持つことを「読めなかった」と扱うと、その期間を返さないアカウントでは入札が永久に止まる。**
 返ってきた中に無い種別は、使用率0として数える。
+
+**「返ってきた中に無い種別」は、保管値に無い期間である**（issue #284。3-27 の「保管値の規則」）。
+つまり、**まだ一度も届いていない期間**か、**`resets_at` を過ぎて保管値から消えた期間**のどちらかである。
+**`resets_at` を過ぎた期間があるときは、入札へは写し全体を「読めない」として渡す**（3-77i）ので、
+消えた期間を0と読むのは、次の新しい応答の行でそれが届き直さなかったときだけである。
+**モデル別の週次枠（`weekly_scoped`）は、保管値に入らない。**
 
 **同点の決着に3段目を置く理由。**2段目（投稿の時刻）まで同じでも、**決め手が無いと
 continuo ごとに違う勝者を選び、2つが同じ issue を掴む。**アカウントの名前の順は全部で同じ答えになる。
@@ -8680,15 +8968,25 @@ GraphQL の答えで埋めると、**その取り直しが黙って止まる。*
 
 ### 3-77i. 枠を読めなくなったら、その時点から入札しない
 
-**言いたいこと。**入札は枠の写しで判定する。**読み取りに失敗したら、写しを無効にする。**
+**言いたいこと。**入札は枠の写しで判定する。**値が新しくなければ、写しを無効にする。**
 **「読めなかったら投稿しない」を、初回だけでなく常に効かせる。**
 
-**無効にしないと何が起きるか。**09:00 に資格情報が切れた機械は、
+**「値が新しい」とは何か**（issue #284。3-27 の「保管値の規則」）。**新しさの時刻**（`rate_limits` を持つ新しい応答の行を最後に受けた時刻）から
+`rate_limit.refresh_interval_ms`（既定5分）を過ぎておらず、**保管値のどの期間も `resets_at` を過ぎていないこと**である。
+**入札を読む時点の時計で判定する。**行が1つも届かない暇な機械でも、期限が過ぎた時点で入札を止めるためである。
+**古さは期間ごとではなく、新しさの時刻で判定する。**期間ごとにすると、その期間を返さないアカウントで入札が最長7日止まる。
+**値が新しくなければ、statusline取得をして、値が届いてから入札する**（3-27。届いた直後に巡回を1回回す。3-4f）。
+**`resets_at` を過ぎた期間があるときに写し全体を無効にするのは、入札が写しに無い期間を使用率0と読む**（3-77d）ためである。
+上限の機械が、期限の切れた期間を0と読まれて暇に見えることを防ぐ。
+
+**無効にしないと何が起きるか。**09:00 に値が届かなくなった機械は、
 そのときの「使用率 5%」を1日中返し続ける。**入札はそれを「いちばん暇な機械」と読み、
 正直に読めている機械に必ず勝つ。**勝った機械は着手できないので、**その issue は誰にも進まない。**
+（issue #284 までは、usage API の資格情報が切れたときにこれが起きた。）
 
 **止めるのは入札だけである。**枠待ちと新規 dispatch を止める閾値（3-27）は、
-**最後に読めた値を使い続ける。**読めないことを理由に走行中の run を捨てない。
+**`resets_at` を過ぎていない保管値を、新しさを問わずに使い続ける。**同じ期間の中で値は下がらないので、古くても上限と閾値の判定に使える。
+読めないことを理由に走行中の run を捨てない。
 
 ### 3-76. 命令として従ってよい立場を、設定で決める
 
@@ -10612,6 +10910,11 @@ space: continuo-octocat-hello-world-190   issue #190 の worktree
 **なぜ pane を分割しないか。****1画面に複数の Claude Code が並ぶと見づらい**（人間の判断）。
 **workspace が分かれていれば、画面は1つずつになる。**
 
+**例外は statusline取得用の workspace である**（issue #284。3-27）。**worktree を持たない workspace を `workspace.create` で作る。**
+cwd は利用者が信頼している clone で、label は `continuo statusline fetch`、画面は奪わない（`focus` は偽）。
+**haiku の Claude Code を1つ起動し、`hello` を1回送って値を受け取ったら閉じる。**issue の workspace ではないので、上の表の「issue ごとに1つ」には入らない。
+**herdr の画面にときどき現れるが、会話の記録は残らない。**閉じ残したものは人間が手で閉じてよい。
+
 > **`tab.create` は使わない**が、実在はする（`workspace_id` / `cwd` / `env` / `label` / `focus` を取り、
 > 応答に `root_pane.pane_id` が入る）。**リポジトリごとに workspace をまとめたくなったときの選択肢として記録しておく。**
 
@@ -10848,21 +11151,19 @@ cleanup:
   sweep_on_startup: true                    # 起動したときに、終わっている worktree と行き場の無い branch を消す
 
 rate_limit:
-  source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
-  token_source: claude_credentials          # keychain なら macOS の Keychain から読む（先に continuo allow-keychain-access を1回実行すること）。
-                                            # claude_credentials なら ~/.claude/.credentials.json、env なら下の token_env から読む。
-                                            # 既定は macOS が keychain、ほかの OS が claude_credentials。
-                                            # この設定例は、どの OS でも読める claude_credentials を書いてある（3-15）
-  token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
+  source: statusline                        # Claude Code のステータスラインから枠の使用率を受ける。Pro / Max 以外の契約と API キーは none。
+                                            # statusline取得には trust.repositories の信頼済みの clone が1つ要る
+  refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
   pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
-  poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
 
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
   on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
   repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
                                             # continuo init がカンバンから拾って並べるので、要らない行は消すこと。
-                                            # 巡回のループはここを読まない。continuo trust だけが読む
+                                            # **これから issue を作るリポジトリは、まだカンバンに無いので拾えない。**手で足すこと。
+                                            # statusline取得に使う clone を選ぶのにも読む（上から見て、信頼済みの最初の1つ）。
+                                            # 走行中は読み直さないので、書き換えたら continuo を立て直すこと
 
 restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
@@ -13379,7 +13680,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | --- | --- | --- |
 | **枠回復で自動再開するか** | **レートリミットを使い切った状態でないと観測できない。**枠を意図的に使い切るのは「定額運用」の趣旨に反する | continuo が枠の回復を待って再 dispatch する。**3-27 に既に書いてある経路を使うだけ** |
 | **`settle_ms` を何秒にするか** | **上限を決める仕組みが分からない。**観測できた8件はいずれも 0.037 秒以内だったが、**何が上限を決めているのかを特定できていない。**運用のログで分布を取るしかない | **設定を伸ばすだけ。**実際の間隔を毎回ログに出すので、実データで決め直せる（3-2） |
-| **usage API がトークンを消費するか・課金されるか** | **`percent` が整数の百分率なので、少量の消費を判別できない。**課金の有無を突き合わせる手段（利用量の明細）を持っていない | **`rate_limit.source: none` にして、この API を叩かずに運用する。**枠待ちと固まりを区別できなくなるので、stall 検知だけに頼る（3-27） |
+| **上限に当たったとき、ステータスラインで 100 が届くか** | **レートリミットを使い切った状態でないと観測できない**（上の行と同じ）。人間の了解（2026-09-26）で、測らずに進めた（3-27） | **届かなければ、上限に当たった run は `claude.turn_timeout_ms` のあとに stall として止められる**（3-21。issue #284 より前に usage API が読めなかったときと同じ）。statusline取得は「読めない」として入札しないので、設計は変わらない |
 | **Bash 以外の確認で herdr が `blocked` を返すか** | **`--permission-mode dontAsk` では権限の確認が出ない**（**既定の `auto` では、判定役の遮断で確認が出うる。ただしその経路は6回試して観測できていない**）（許可リストの外は確認せずに拒否される）。**確認を出すには権限モードを変える必要があり、それは continuo の運用と違う条件になる** | **`blocked` を拾えない確認があれば、確認の画面で画面が止まるので `claude.turn_timeout_ms` の打ち切りが拾い、`failure_state` へ落ちる**（3-21）。**止まったまま残ることはない** |
 
 **確かめた3件は、この節から外して本文へ移した。**
@@ -13411,7 +13712,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | **`agent_pane_busy` の粘りが 1.5秒しかなかった** | **30秒**に延ばし、回数ではなく時間で粘る |
 | **`setup` が `init` の書いた値を読んでいなかった** | `CheckUpdatable` が `owner` と `project_number` を返し、`setup` がフラグの次に優先する |
 | **`claude` が PATH に無くても `doctor` が通っていた** | `doctor` の検査を8つに増やし、`claude.kind` の実行ファイルを `exec.LookPath` で調べる |
-| **資格情報が無いときに、直し方が出ていなかった** | 「無い」と「読めない」を分け、macOS なら「`token_source` を `keychain` にせよ」を添える |
+| **資格情報が無いときに、直し方が出ていなかった** | 「無い」と「読めない」を分け、macOS なら「`token_source` を `keychain` にせよ」を添える（**issue #284 で、Claude の資格情報の検査ごと消した**。使用率はステータスラインから受け取る。3-27） |
 | **owner の末尾ハイフンを許していた** | GitHub の規則に合わせ、`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$` にする |
 | **消えた issue を1件混ぜると、取り直しが丸ごと失敗していた** | `nodes(ids:)` だけ、`NOT_FOUND` のみのエラーを**部分的な成功**として扱う（下の説明） |
 
@@ -13527,7 +13828,7 @@ CLI の実体は [internal/cli/cli.go](internal/cli/cli.go) に置き、`cmd/con
 type Deps struct {
 	DoctorRun     func(ctx context.Context, opts doctor.Options) doctor.Report
 	DaemonRun     func(ctx context.Context, opts daemon.Options) error
-	ProbeKeychain func(ctx context.Context, timeout time.Duration) (ratelimit.KeychainProbe, error)
+	TrustPlan     func(ctx context.Context, opts trust.Options) (*trust.Report, error)
 	// …以下同様。ゼロ値なら本物が入る
 }
 ```

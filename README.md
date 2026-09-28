@@ -92,14 +92,14 @@ How many issues run at once is a setting (two by default).
 | --- | --- |
 | OS | macOS or Linux. **No native Windows** — use WSL2 |
 | [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.9.1** (it refuses to start on a socket protocol mismatch; set `herdr.protocol: 22` in `WORKFLOW.md`) |
-| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.266 |
+| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.283. **Only Pro and Max report the usage window** through the status line; on any other plan or with an API key, set `rate_limit.source: none` |
 | [`gh`](https://cli.github.com/) | Signed in with `gh auth login -s project`. Verified against 2.97.0 |
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |
 
 **Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the kanban board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs eighteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **agent teams**, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, **kanban automations**, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs seventeen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **agent teams**, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, **kanban automations**, clones, and trust. It does **not** check your OS or Go version — that part is on you.
 
 **A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
 Exit code 0 is not the same as "continuo will start", though. **Failing to read the kanban board**
@@ -157,7 +157,6 @@ continuo init      # writes WORKFLOW.md and continuo-ci.yaml; owner and kanban b
 continuo setup                    # map your Status options to six roles (interactive; the sixth can be skipped)
 continuo trust --dry-run          # show what would be trusted, without doing it
 continuo trust                    # trust those repositories; clone them if needed
-continuo allow-keychain-access    # macOS only, once — lets continuo read your plan's usage
 continuo doctor                   # check that everything is in place
 
 continuo                          # start the daemon

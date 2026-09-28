@@ -9,17 +9,25 @@
 //	2b 依存を組み立てる          … **ここで外部プロセスを1つ起こす**（`gh auth token`）。
 //	                             **必ず期限を掛ける**（掛けないと無言で永久に止まる）
 //	3 3-6 の起動時検査を全部通す … **起動を止める。生きている pane は閉じずに放置する**
+//	3a 閉じ残しの statusline取得の workspace を閉じる … `rate_limit.source` によらず行う。
+//	                             **復元より前に閉じる**（残ったままだと、復元が開き直す
+//	                             issue の workspace の親にされうる。issue #284）
+//	3b `quota.json` を読み、`sl.sock` の listen を始める … `source: statusline` のときだけ。
+//	                             **復元より前に行う**（復元した run の回復待ちの判定に効かせる）。
+//	                             開けなければ起動を止める
 //	4 復元（3-4 の段2〜段9）    … 段ごとの規則に従う
 //	4b 起動時の掃除（3-9 の手順6 / 6b）… **復元のあとに走らせる**
 //	4c ダッシュボードを開く      … **`server.port` が null なら開かない**（設計 5-2。任意）。
 //	                              **開けなくても起動は止めない**（任意の機能の失敗で
 //	                              引き継いだ pane を放置しない）
-//	5 巡回を始める              … poll_interval_ms ごとに Tick を回す
+//	5 巡回を始める              … poll_interval_ms ごとに Tick を回す。**statusline取得で値が
+//	                             届いた知らせでも1回すぐ回す**（issue #284）
 //
 // **巡回より先に復元を終える。**先に巡回を始めると、これから引き継ぐ run の worktree に
 // 2つ目の Claude Code が立つ。
 //
-// **終了の作法。**`SIGINT` / `SIGTERM` を受けたら、**巡回を止め、hook の受け口を閉じ、
+// **終了の作法。**`SIGINT` / `SIGTERM` を受けたら、**巡回を止め、使用率の受け口（`sl.sock`）を
+// hook の受け口より先に閉じ、hook の受け口を閉じ、
 // 走行中の turn ループの終了を待ってから抜ける。pane は閉じない**（次の起動で引き継ぐ）。
 //
 // `cmd/continuo` はこのパッケージを呼ぶだけである（`package main` の非公開関数は
@@ -48,11 +56,13 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/server"
 	"github.com/maimuzo/continuo/internal/socketpath"
+	"github.com/maimuzo/continuo/internal/statuslineserver"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -293,6 +303,9 @@ func Run(ctx context.Context, opts Options) error {
 	// **組み立てたあとは、どの経路で抜けても同じ手順で閉じる。**早期 return で閉じ忘れると、
 	// hook の socket と応答の goroutine が掴まれたまま残る（`deps.close` は2回呼んでも安全である）。
 	shutdown := func() { deps.close(ctx, logger) }
+	// **herdr の開け閉めの loop を起こす**（issue #284）。起動時検査・復元・起動時の掃除は、
+	// どれも loop を通して herdr を呼びうるので、それより前に起こす。
+	deps.Loop.Start()
 
 	// 段3: 3-6 の起動時検査を全部通す。
 	// **ここで落ちて起動を止めるとき、生きている pane は閉じずに放置する。**
@@ -302,6 +315,18 @@ func Run(ctx context.Context, opts Options) error {
 	if err := runStartupChecks(ctx, cfg, deps, opts.StartupCheckTimeout, logger); err != nil {
 		shutdown()
 		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksFailed, ErrStartup, err)
+	}
+
+	// 段3b: statusline取得の閉じ残しを片付け、quota.json を読んでから使用率の socket を開く
+	// （issue #284）。**復元より前に行う。**閉じ残しは、復元の片付けの `worktree.open` で
+	// issue の親にされうる。quota.json は、復元した run の回復待ちの判定に効かせるため、
+	// sl.sock の受け付けより前に読む。**段のログは足さない**（段の数は変えない）。
+	deps.Orchestrator.PrepareStatusline(ctx)
+	if deps.Statusline != nil {
+		if err := deps.Statusline.Start(); err != nil {
+			shutdown()
+			return fmt.Errorf("%w: %w", ErrStartup, err)
+		}
 	}
 
 	// 段4: 復元（3-4 の段2〜段9）。**巡回より先に終える。**
@@ -450,6 +475,13 @@ type deps struct {
 	// Dashboard は任意の HTTP ダッシュボードである（設計 5-2）。
 	// **`server.port` が null なら nil である。**nil のまま Close を呼んでよい。
 	Dashboard *server.Server
+	// Loop は herdr の workspace の開け閉めを1つずつ行う loop である（issue #284）。
+	// **build では作るだけで、goroutine は Run の中で起こす**（build が途中で失敗しても
+	// goroutine が残らないため）。止めるときは turn ループの終了を待ったあとに閉じる。
+	Loop *loop.Loop
+	// Statusline は使用率を受ける socket（sl.sock）である（issue #284）。
+	// **`rate_limit.source: none` なら nil である。**
+	Statusline *statuslineserver.Server
 }
 
 // close は組み立てたものを終了の作法どおりに閉じる（設計 3-4 の段5）。
@@ -472,6 +504,14 @@ type deps struct {
 // ctx: 呼び出し元のコンテキスト。**キャンセル済みでもよい**（期限は付け直す）。
 // logger: ログの出力先。
 func (d *deps) close(ctx context.Context, logger *slog.Logger) {
+	// **loop は最後に閉じる。**turn ループと片付けの goroutine は loop を通して herdr を
+	// 開け閉めするので、先に閉じると片付けが `loop.ErrClosed` で落ちる。turn ループの
+	// 終了待ちが期限で抜けたときも閉じ、残った goroutine の積む仕事は `loop.ErrClosed` で返る。
+	// **段は足さない**（段のログの文言は test/internal/daemon/daemon_test.go が固定している）。
+	// **Close は実行中の仕事を待たないので、止める段の期限は変わらない。**
+	if d.Loop != nil {
+		defer d.Loop.Close()
+	}
 	// 段1: ダッシュボード。**待たずに叩き切る**（読み取り専用なので、途中で切れて
 	// 困る書き込みが1つも無い。`server.DefaultShutdownTimeout` を見よ）。
 	if d.Dashboard != nil {
@@ -489,6 +529,14 @@ func (d *deps) close(ctx context.Context, logger *slog.Logger) {
 	// 段2: hook の受け口。**受け取り済みの hook を印へ書き終えるのを待つ。**
 	// ここを待たずに抜けると、Claude Code が送り終えた `Stop` を落としたまま終わり、
 	// 次の起動が「turn が終わっていない run」として引き継ぎ直すことになる。
+	//
+	// **使用率の受け口（sl.sock）は、この段の中で hook の受け口より先に閉じる**（issue #284）。
+	// 配送中の行は待たずに捨てるので、hook の受け口の待ちは変わらない。段のログも変えない。
+	if d.Statusline != nil {
+		if err := d.Statusline.Close(); err != nil {
+			logger.Warn("使用率を受ける socket を閉じられませんでした", "error", err)
+		}
+	}
 	logger.Info("後始末 2/3: hook の受け口を閉じています"+
 		"（受け取り済みの hook を印へ書き終えるまで待ちます）",
 		"timeout", DefaultHookServerWait)
@@ -726,9 +774,13 @@ func build(
 	})
 
 	settingsRoot := filepath.Join(runtimeDir, hookserver.IssuesDirName)
+	// **herdr の workspace の開け閉めを1つずつ行う loop を作る**（issue #284）。
+	// goroutine は Run の中で起こす（deps.Loop の説明を見よ）。
+	lp := loop.New(logger)
 	ws, err := workspace.New(workspace.Options{
 		Config:       cfg,
 		Herdr:        hc,
+		Loop:         lp,
 		Logger:       logger,
 		SettingsRoot: settingsRoot,
 	})
@@ -766,9 +818,15 @@ func build(
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildTrackerFailed, err)
 	}
 
-	rl, err := ratelimit.NewReader(ratelimit.Options{Config: cfg.RateLimit, Logger: logger})
-	if err != nil {
-		return nil, i18n.Errorf(i18n.KeyDaemonBuildRateLimitFailed, err)
+	// **使用率を受ける socket（sl.sock）のパスを決める**（issue #284）。
+	// **`rate_limit.source: statusline` のときだけ要る。**パスが長すぎれば起動を止める
+	// （none なら止めない。sl.sock を開かないため）。
+	slSockPath := ""
+	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+		slSockPath, err = socketpath.ResolveStatusline(runtimeDir)
+		if err != nil {
+			return nil, i18n.Errorf(i18n.KeyDaemonBuildStatuslineSocketFailed, err)
+		}
 	}
 
 	orc, err := orchestrator.New(orchestrator.Options{
@@ -783,10 +841,12 @@ func build(
 		Tracker:        adapter,
 		Herdr:          hc,
 		Workspace:      ws,
-		RateLimit:      rl,
 		HookSocketPath: sockPath,
-		ContinuoPath:   continuoPath,
-		Logger:         logger,
+		// **使用率を受ける socket のパスを渡す**（issue #284）。none なら空で、
+		// statusLine を書かず、statusline取得も開かない。
+		StatuslineSocketPath: slSockPath,
+		ContinuoPath:         continuoPath,
+		Logger:               logger,
 		// **巡回ごとの `gh` の認証の検査は `tracker.verify_states_every` の頻度で走る**
 		// （毎巡回で外部プロセスを起動しない。設計 3-6）。
 		GHAuthCheck: func(ctx context.Context) error { return tracker.CheckGHProjectScope(ctx, nil) },
@@ -817,7 +877,14 @@ func build(
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildDashboardFailed, err)
 	}
 
-	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs, Dashboard: dash}, nil
+	// **使用率を受ける socket**（issue #284）。hook の受け口とは別である。listen は Run の中で、
+	// 起動時検査のあと・復元の前に、quota.json を読んでから始める。none なら作らない。
+	var sl *statuslineserver.Server
+	if slSockPath != "" {
+		sl = statuslineserver.New(slSockPath, orc.OnStatusline, logger)
+	}
+
+	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs, Dashboard: dash, Loop: lp, Statusline: sl}, nil
 }
 
 // newTrackerHTTPClient は GitHub の GraphQL API を叩くクライアントを作る。

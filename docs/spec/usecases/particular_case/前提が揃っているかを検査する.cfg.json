@@ -3,7 +3,7 @@
   "usecase_name": "前提が揃っているかを検査する",
   "source": {
     "file": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.rucm.md",
-    "rucm_block_sha256": "fbe043a58258a35de13b6220a8aba4e8dcb74a5e2760d2b144332e66f1a8f0a2"
+    "rucm_block_sha256": "7db64fb0acba46162770ee72a06646895094123c3735be830920e12afa0bf52f"
   },
   "root": "BASIC FLOW-1",
   "flows": {

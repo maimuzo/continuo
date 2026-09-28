@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "9a3a1a926f2ca090dd2e7f529c2df64f99445920525e7a467dc8c02509dd8e57", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -10,13 +10,9 @@ package orchestrator_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -490,47 +486,28 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは枠が空いていて（`pause_above_percent` に掛からない）、
-// turn を送った瞬間に 100% になる偽の usage API。`agent.prompt` は herdr の `timeout` を返し、
-// `agent.wait` は応答を書かずに接続を切る。リトライは 0 回。
+// 与える情報: 着手のときは使用率が空いていて（`pause_above_percent` に掛からない）、
+// turn を送った瞬間にステータスラインから 100% の行が届く（issue #284）。
+// `agent.prompt` は herdr の `timeout` を返し、`agent.wait` は応答を書かずに接続を切る。
+// リトライは 0 回。
 // 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
 // **枠待ちの印も残ったままであること**（外すと stall の時計が動き出し、枠が明けるより
 // 先に stall として諦めることになる）。
 func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
-	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	// **着手が済むまでは枠を空けておく。**100% のままだと `pause_above_percent` で
-	// dispatch が止まり、turn の経路に1度も入れない。
-	var full atomic.Bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		percent := 0
-		if full.Load() {
-			percent = 100
-		}
-		w.Header().Set("Content-Type", "application/json")
-		limit := map[string]any{"kind": "session", "percent": percent, "severity": "normal"}
-		if percent == 100 {
-			limit["resets_at"] = resetsAt
-		}
-		if err := json.NewEncoder(w).Encode(map[string]any{"limits": []map[string]any{limit}}); err != nil {
-			t.Errorf("偽の usage API が応答を書けません: %v", err)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_TRANSIENT")
-
 	fx := newFixture(t, fixtureOptions{
-		RateLimit: reader,
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetries = 0
 			cfg.Tracker.VerifyStatesEvery = 0
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
-	// **turn を送った瞬間に枠を使い切る。**herdr の待ち受けは期限までに落ち着かなかった
-	// （＝枠待ちの入口。設計 3-27）。
+	// **着手が済むまでは使用率を空けておく。**100% のままだと `pause_above_percent` で
+	// dispatch が止まり、turn の経路に1度も入れない。値は新しいので statusline取得も開かない。
+	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 0, 0)
+	// **turn を送った瞬間に使い切る**（ステータスラインから 100% の新しい応答の行が届く）。
+	// herdr の待ち受けは期限までに落ち着かなかった（＝枠待ちの入口。設計 3-27）。
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(map[string]any) (any, *rpcErr) {
-		full.Store(true)
+		fx.Orc.OnStatusline(slLine("pane-a", 300, slWin(100, time.Now().Add(2*time.Hour)), nil))
 		return nil, &rpcErr{Code: herdr.ErrCodeTimeout, Message: "待ち受けが期限までに落ち着きませんでした"}
 	})
 	// **待ち直しの最中に herdr が再起動した。**
@@ -543,8 +520,7 @@ func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨て�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// 枠の写しを取り直させる（`pollQuota` は巡回と枠待ちの待ち直しでしか走らない）。
-	fx.Orc.Tick(context.Background())
+	// **使用率は読みに行かない**（issue #284）。届いた 100% の保管値で枠待ちに入る。
 	waitFor(t, 20*time.Second, "枠待ちの待ち直しが herdr へ届く", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentWait) > 0
 	})

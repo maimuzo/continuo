@@ -3,7 +3,7 @@
   "usecase_name": "issue を着手から片付けまで見届ける",
   "source": {
     "file": "docs/spec/usecases/scenario/issue を着手から片付けまで見届ける.rucm.md",
-    "rucm_block_sha256": "c22c657b0571a9e778080c574b401aa106cb6a7c56ea690661102824418bd1ce"
+    "rucm_block_sha256": "3c947d7bca73fd029db6793ae36a7f0500c07981e2dcf90bbcebbc245c8ffde6"
   },
   "root": "BASIC FLOW-1",
   "flows": {

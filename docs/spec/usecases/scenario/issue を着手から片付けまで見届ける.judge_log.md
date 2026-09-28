@@ -14,7 +14,7 @@
 | 4 | BRIEF DESCRIPTION | 載せる・処理する・レビューする・片付ける の4文 | 中核の価値経路を4文へ落とした | `docs/plans/continuo_design.md#4-1` | 90% |
 | 5 | PRECONDITION | 使い始める用意を終えている。常駐している。選択肢名が一致する。信頼登録が済んでいる。herdr が待ち受けている | 「使い始める用意」は既存の scenario（`はじめて continuo を動かせるようにする`）が受け持つ。**そこを事前条件にすることで2本の scenario が繋がる** | `docs/spec/usecases/scenario/はじめて continuo を動かせるようにする.rucm.md` | 90% |
 | 6 | PRIMARY ACTOR | 利用者 | この時系列を始めるのは、issue を作ってボードに載せる人間である | `docs/plans/continuo_design.md#4-1` | 95% |
-| 7 | SECONDARY ACTORS | GitHub Projects v2、herdr、Claude Code、Claude の usage API、git | 取り込んだ5件の particular_case の副アクターの和集合である | 取り込んだ5件の rucm ブロック | 85% |
+| 7 | SECONDARY ACTORS | GitHub Projects v2、herdr、Claude Code、git | 取り込んだ5件の particular_case の副アクターの和集合である。**Claude の usage API は外した。**使用率は Claude Code のステータスラインから届くので（issue #284）、`レートリミットで待って再開する` の副アクターから消えた | 取り込んだ5件の rucm ブロック | 85% |
 | 8 | DEPENDENCY | 5件の INCLUDE を読点区切りで列挙する | DEPENDENCY とステップ内の INCLUDE 集合を一致させる決まりである | rucm スキルの scenario の書き方 | 100% |
 | 9 | GENERALIZATION | なし | 汎化関係にあるユースケースが無い | - | 90% |
 | 10 | 利用者がボードを直接操作すること | ステップ1 から4 と7 から9 を、利用者からボードへの直接の操作として書く | **R3（アクター間の直接相互作用の禁止）から外れる。**人間は GitHub の画面でボードを触るのであって、continuo に要求しない。**システムに仲介させて書くと、実在しない自動化を記述することになる。**同じ判断を `人間に判断を渡す` と `対象リポジトリを信頼登録する` でも行っている | `docs/plans/continuo_design.md#4-1`、`docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.rucm.md` | 60% |

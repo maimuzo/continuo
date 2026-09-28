@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -189,6 +190,82 @@ type fakeHerdr struct {
 	nextWS int
 	// drops は「応答を返さずに接続を切る」メソッドの集合である（herdr の再起動の再現）。
 	drops map[string]bool
+	// slHandlers は statusline取得の agent（名前が `sl-` で始まるもの）に対する台本である
+	// （issue #284）。**issue の run の `agent.get` / `agent.prompt` を数える台本と分ける。**
+	// 無ければ handlers の台本を使う。
+	slHandlers map[string]herdrHandler
+	// slRequests は statusline取得の agent に対するリクエストである。
+	// **requests には積まない。**issue の run の呼び出しを数えるテストの数を変えないため。
+	slRequests []recordedRequest
+}
+
+// statuslineAgentPrefix は statusline取得の agent の名前の接頭辞である（issue #284）。
+const statuslineAgentPrefix = "sl-"
+
+// HandleSL は、statusline取得の agent（名前が `sl-` で始まるもの）に対する台本を入れる。
+//
+// method: 対象のメソッド名（`agent.start` / `agent.get` / `agent.prompt` など）。
+// fn: 応答を決める関数。**t.Fatalf を使ってはならない。**
+func (fh *fakeHerdr) HandleSL(method string, fn herdrHandler) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.slHandlers[method] = fn
+}
+
+// SLRequests は statusline取得の agent に対するリクエストを受け取った順に返す。
+func (fh *fakeHerdr) SLRequests() []recordedRequest {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	out := make([]recordedRequest, len(fh.slRequests))
+	copy(out, fh.slRequests)
+	return out
+}
+
+// CountSL は、statusline取得の agent に対する method の回数を返す。
+func (fh *fakeHerdr) CountSL(method string) int {
+	n := 0
+	for _, r := range fh.SLRequests() {
+		if r.Method == method {
+			n++
+		}
+	}
+	return n
+}
+
+// SLSessionIDs は、statusline取得の `agent.start` に渡された `--session-id` を渡された順に返す。
+func (fh *fakeHerdr) SLSessionIDs() []string {
+	var ids []string
+	for _, r := range fh.SLRequests() {
+		if r.Method != herdr.MethodAgentStart {
+			continue
+		}
+		if id := argAfter(r.Params, "--session-id"); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// argAfter は `agent.start` の params の args から、flag の次の値を返す。無ければ空文字。
+func argAfter(params map[string]any, flag string) string {
+	args, _ := params["args"].([]any)
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			s, _ := args[i+1].(string)
+			return s
+		}
+	}
+	return ""
+}
+
+// isStatuslineAgentRequest は、リクエストが statusline取得の agent に宛てたものかを返す。
+func isStatuslineAgentRequest(params map[string]any) bool {
+	for _, key := range []string{"name", "target"} {
+		if v, ok := params[key].(string); ok && strings.HasPrefix(v, statuslineAgentPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // DropConnection は、そのメソッドを受けたら応答を書かずに接続を切る台本を入れる。
@@ -226,6 +303,12 @@ type fakeWorkspace struct {
 	Checkout string
 	// RepoRoot はそのリポジトリ本体のパスである。
 	RepoRoot string
+	// Label は workspace の label である（`workspace.create` と `workspace.rename` が書く）。
+	Label string
+	// Created が真なら、`workspace.create` で作ったままの workspace である（issue #284）。
+	// **本物と同じく `workspace.list` で `worktree` 欄を返さない**（実測: 2026-09-28、herdr 0.9.1）。
+	// 同じパスを cwd にした `worktree.open` で親にされると偽になり、`worktree` 欄を返す。
+	Created bool
 }
 
 // SetGitRepoDir は worktree.remove のあとに prune を叩くリポジトリを設定する。
@@ -247,6 +330,13 @@ func (fh *fakeHerdr) workspaceFor(path, repoRoot string) string {
 	defer fh.mu.Unlock()
 	for id, ws := range fh.workspaces {
 		if ws.Checkout == path {
+			// **本物と同じく、開いている workspace を親に作り替える**（issue #284）。
+			// statusline取得の workspace が開いている clone で `worktree.open` すると、
+			// herdr はそれを issue の親にする（実測: 2026-09-28、herdr 0.9.1）。
+			if ws.Created {
+				ws.Created = false
+				fh.workspaces[id] = ws
+			}
 			return id
 		}
 	}
@@ -273,6 +363,16 @@ func (fh *fakeHerdr) forgetWorkspace(id string) {
 	fh.mu.Lock()
 	defer fh.mu.Unlock()
 	delete(fh.workspaces, id)
+}
+
+// AddWorkspace は workspace を1つ直に置く（閉じ残しや親にされた状況を作るため）。
+//
+// id: workspace の ID。
+// ws: 中身。
+func (fh *fakeHerdr) AddWorkspace(id string, ws fakeWorkspace) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.workspaces[id] = ws
 }
 
 // OpenWorkspaces は、いま開いている workspace を ID 順に返す（検査から使う）。
@@ -339,6 +439,7 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 		handlers:   map[string]herdrHandler{},
 		workspaces: map[string]fakeWorkspace{},
 		drops:      map[string]bool{},
+		slHandlers: map[string]herdrHandler{},
 	}
 	fh.installDefaults()
 
@@ -401,15 +502,35 @@ func (fh *fakeHerdr) installDefaults() {
 	fh.Handle(herdr.MethodWorkspaceList, func(map[string]any) (any, *rpcErr) {
 		list := []any{}
 		for id, ws := range fh.OpenWorkspaces() {
-			list = append(list, map[string]any{
-				"workspace_id": id,
-				"worktree": map[string]any{
+			entry := map[string]any{"workspace_id": id, "label": ws.Label}
+			// **`workspace.create` で作ったままの workspace は `worktree` 欄を持たない**
+			// （本物と同じ。issue #284）。
+			if !ws.Created {
+				entry["worktree"] = map[string]any{
 					"checkout_path": ws.Checkout,
 					"repo_root":     ws.RepoRoot,
-				},
-			})
+				}
+			}
+			list = append(list, entry)
 		}
 		return map[string]any{"type": "workspace_list", "workspaces": list}, nil
+	})
+	// **statusline取得の workspace を作る**（issue #284）。本物と同じく、新しい ID を払い出し、
+	// `worktree` 欄の無い workspace にして label を控える。
+	fh.Handle(herdr.MethodWorkspaceCreate, func(params map[string]any) (any, *rpcErr) {
+		cwd, _ := params["cwd"].(string)
+		label, _ := params["label"].(string)
+		fh.mu.Lock()
+		fh.nextWS++
+		id := fmt.Sprintf("w%d", fh.nextWS)
+		fh.workspaces[id] = fakeWorkspace{Checkout: cwd, RepoRoot: cwd, Label: label, Created: true}
+		fh.mu.Unlock()
+		return map[string]any{
+			"type":      "workspace_created",
+			"workspace": map[string]any{"workspace_id": id, "label": label},
+			"tab":       map[string]any{"tab_id": id + ":t1"},
+			"root_pane": map[string]any{"pane_id": id + ":p1", "workspace_id": id},
+		}, nil
 	})
 	fh.Handle(herdr.MethodWorkspaceClose, func(params map[string]any) (any, *rpcErr) {
 		fh.forgetWorkspace(fmt.Sprint(params["workspace_id"]))
@@ -434,6 +555,13 @@ func (fh *fakeHerdr) installDefaults() {
 		}, nil
 	})
 	fh.Handle(herdr.MethodWorkspaceRename, func(params map[string]any) (any, *rpcErr) {
+		id := fmt.Sprint(params["workspace_id"])
+		fh.mu.Lock()
+		if ws, ok := fh.workspaces[id]; ok {
+			ws.Label = fmt.Sprint(params["label"])
+			fh.workspaces[id] = ws
+		}
+		fh.mu.Unlock()
 		return map[string]any{
 			"type": "workspace_info",
 			"workspace": map[string]any{
@@ -540,13 +668,27 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 
 	fh.mu.Lock()
-	fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
 	handler := fh.handlers[req.Method]
 	drop := fh.drops[req.Method]
 	tl := fh.timeline
+	sl := isStatuslineAgentRequest(req.Params)
+	if sl {
+		// **statusline取得の agent の呼び出しは別に積む**（issue #284）。issue の run の
+		// `agent.get` / `agent.prompt` を数えるテストの数を変えないため。
+		fh.slRequests = append(fh.slRequests, recordedRequest{Method: req.Method, Params: req.Params})
+		if h, ok := fh.slHandlers[req.Method]; ok {
+			handler = h
+		}
+	} else {
+		fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
+	}
 	fh.mu.Unlock()
 	// **トラッカーと同じ1本の並びへ積む。**別々の記録では前後関係を比べられない。
-	tl.note("herdr." + req.Method)
+	if sl {
+		tl.note("herdr.sl." + req.Method)
+	} else {
+		tl.note("herdr." + req.Method)
+	}
 
 	// **答えずに切る**（DropConnection。herdr の再起動の再現）。
 	// 受け取ったことは上で記録済みなので、何回届いたかは検査できる。
@@ -703,6 +845,20 @@ type fakeTracker struct {
 	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
 	// カンバン（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
 	extraCandidates []tracker.Issue
+	// onStates は FetchIssuesByStates の入口で呼ぶ関数である（nil なら呼ばない）。
+	//
+	// **巡回の途中に何かを起こすために使う**（issue #284。statusline取得の知らせが
+	// 巡回の途中に届く状況・巡回が長引く状況を作る）。錠の外で呼ぶ。
+	onStates func()
+}
+
+// SetOnStates は FetchIssuesByStates の入口で呼ぶ関数を入れる。
+//
+// fn: 呼ぶ関数。nil なら外す。
+func (ft *fakeTracker) SetOnStates(fn func()) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.onStates = fn
 }
 
 // fakeViewerLogin はテスト用トラッカー mock が名乗る「gh の持ち主」のログイン名である。
@@ -1203,6 +1359,12 @@ func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.
 // FetchIssuesByStates は states に含まれる Status の issue を、カンバンの並び順のまま返す。
 func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) ([]tracker.Issue, error) {
 	ft.mu.Lock()
+	hook := ft.onStates
+	ft.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchIssuesByStates")
 	// **頼まれた Status の一覧を控える**（設計 3-83）。
@@ -1671,6 +1833,11 @@ type fixture struct {
 	RuntimeDir string
 	// SocketPath は hook を受ける socket の絶対パスである（実際には listen しない）。
 	SocketPath string
+	// StatuslineSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。
+	// **`rate_limit.source: statusline` のときだけ入る**（実際には listen しない）。
+	StatuslineSocketPath string
+	// HomeDir は `~/.claude.json` を置いたホームディレクトリである。
+	HomeDir string
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
 	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
@@ -1769,8 +1936,12 @@ type fixtureOptions struct {
 	//
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する。
 	GHLogin func(ctx context.Context) (string, error)
-	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
-	RateLimit *ratelimit.Reader
+	// GhqExtra は `ghq list -p -e <owner>/<repo>` の偽物が返すパスの差し替えである
+	// （issue #284。statusline取得の clone の選び方を確かめるため）。
+	//
+	// **鍵は `owner/repo` である。**鍵にあれば、その値（空文字なら「clone が無い」）を返す。
+	// 鍵に無ければ、いままでどおり fixture のリポジトリのパスを返す。
+	GhqExtra map[string]string
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
@@ -1870,8 +2041,9 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	cfg.Herdr.ReadTimeoutMs = 2000
 	cfg.Herdr.StartupTimeoutMs = 2000
 	cfg.Polling.IntervalMs = 3600000
-	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
-	cfg.RateLimit.Source = "none"
+	// 使用率の判定は既定で行わない（statusline取得を開かず、issue ごとの設定ファイルに
+	// statusLine を書かない。issue #284）。
+	cfg.RateLimit.Source = ratelimit.SourceNone
 	// **入札の締め切りを待たない**（設計 3-77）。既定の3分を待つと、
 	// **どのテストも1回の巡回では着手できない。**
 	//
@@ -1894,13 +2066,24 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	logger := slog.New(slog.NewTextHandler(io.Writer(logs), &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	settingsRoot := filepath.Join(runtimeDir, hookserver.IssuesDirName)
+	// **本物の loop を渡す**（issue #284）。閉じるのは orc.Close のあと
+	// （t.Cleanup は後入れ先出しなので、orc.Close より先に登録する）。
+	lp := loop.New(logger)
+	lp.Start()
+	t.Cleanup(lp.Close)
 	mgr, err := workspace.New(workspace.Options{
-		Config:       cfg,
-		Herdr:        fake.Client(),
-		Logger:       logger,
-		Now:          nowFunc,
-		HomeDir:      home,
-		GhqList:      func(context.Context, string, string) (string, error) { return repo.Dir, nil },
+		Config:  cfg,
+		Herdr:   fake.Client(),
+		Loop:    lp,
+		Logger:  logger,
+		Now:     nowFunc,
+		HomeDir: home,
+		GhqList: func(_ context.Context, owner, name string) (string, error) {
+			if p, ok := opts.GhqExtra[owner+"/"+name]; ok {
+				return p, nil
+			}
+			return repo.Dir, nil
+		},
 		SettingsRoot: settingsRoot,
 	})
 	if err != nil {
@@ -1916,8 +2099,13 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		RuntimeDir:   runtimeDir,
 		SocketPath:   filepath.Join(runtimeDir, "hooks.sock"),
 		WorktreeRoot: worktreeRoot,
+		HomeDir:      home,
 		Logs:         logs,
 		Timeline:     tl,
+	}
+
+	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+		fx.StatuslineSocketPath = filepath.Join(runtimeDir, "sl.sock")
 	}
 
 	transcriptRoot := opts.TranscriptRoot
@@ -1966,14 +2154,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
 		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
 		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
-		ConfigPath:     opts.ConfigPath,
-		ConfigFile:     opts.ConfigFile,
-		Tracker:        ft,
-		Herdr:          fake.Client(),
-		Workspace:      mgr,
-		RateLimit:      opts.RateLimit,
-		HookSocketPath: fx.SocketPath,
-		ContinuoPath:   continuoPath,
+		ConfigPath: opts.ConfigPath,
+		ConfigFile: opts.ConfigFile,
+		Tracker:    ft,
+		Herdr:      fake.Client(),
+		Workspace:  mgr,
+		// **使用率を読む設定なら、本番と同じく sl.sock のパスを渡す**（issue #284）。
+		// listen はしない。行はテストが OnStatusline で直に入れる。
+		StatuslineSocketPath: fx.StatuslineSocketPath,
+		HookSocketPath:       fx.SocketPath,
+		ContinuoPath:         continuoPath,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。

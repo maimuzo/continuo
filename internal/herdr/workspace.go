@@ -14,6 +14,8 @@ import (
 // メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
 // （continuo は送らない。workspace.go）。**`worktree.create` / `worktree.open` / `worktree.list` /
 // `worktree.remove` に任意の `trust_repository` が増えた**（continuo は送らない）。
+// **`workspace.create` は 2026-09-25 に herdr 0.9.1 で確かめた**（statusline取得が使う。issue #284）。
+// 0.8.x で同じ形かは確かめていない。
 
 // MethodWorkspaceList は herdr の workspace の一覧を取るメソッド名である。
 //
@@ -97,6 +99,56 @@ func (c *Client) WorkspaceClose(ctx context.Context, params WorkspaceCloseParams
 	return &result, nil
 }
 
+// MethodWorkspaceCreate は herdr workspace を新しく作るメソッド名である（issue #284）。
+//
+// **statusline取得（使用率を受け取るために短い haiku の Claude Code を開くこと）にだけ使う。**
+// issue の worktree は `worktree.open` で開く（worktree.go）。
+// 引数は cwd・label・focus で、応答は workspace・tab・root_pane を持つ
+// （実測: 2026-09-25、herdr 0.9.1。`workspace.list` に渡した label がそのまま出る）。
+// **作った直後の workspace は `worktree` 欄を持たない**（実測: 2026-09-28）。
+const MethodWorkspaceCreate = "workspace.create"
+
+// WorkspaceCreateParams は workspace.create の params である。
+type WorkspaceCreateParams struct {
+	// Cwd は root の pane の作業ディレクトリである。
+	Cwd string `json:"cwd,omitempty"`
+	// Label は workspace に貼るラベルである。
+	Label string `json:"label,omitempty"`
+	// Focus は作った workspace へ画面を切り替えるかである。偽なら人間の画面を奪わない。
+	Focus *bool `json:"focus,omitempty"`
+}
+
+// WorkspaceCreateResult は workspace.create の result である。
+type WorkspaceCreateResult struct {
+	// Type は応答の変種を表す判別子である。
+	Type string `json:"type"`
+	// Workspace は作った herdr workspace である。
+	Workspace Workspace `json:"workspace"`
+	// Tab は workspace の中の tab である。
+	Tab Tab `json:"tab"`
+	// RootPane は tab の中の最初の pane である。
+	RootPane Pane `json:"root_pane"`
+}
+
+// WorkspaceCreate は workspace.create を呼び、herdr workspace を作る（issue #284）。
+//
+// **期限は Read（`herdr.read_timeout_ms`）を使う。**worktree を作らないので長くは掛からない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// params: cwd・label・focus。
+// 戻り値: 作った workspace と root の pane。herdr のエラー応答は *Error として返る。
+func (c *Client) WorkspaceCreate(ctx context.Context, params WorkspaceCreateParams) (*WorkspaceCreateResult, error) {
+	raw, err := c.call(ctx, MethodWorkspaceCreate, params, c.timeouts.Read)
+	if err != nil {
+		return nil, err
+	}
+	var result WorkspaceCreateResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodWorkspaceCreate, err)
+	}
+	return &result, nil
+}
+
 // MethodWorkspaceRename は herdr workspace に label を書くメソッド名である。
 //
 // worktree.create / worktree.open は label を引数で渡せるが、**開いたあとに label を
@@ -131,7 +183,8 @@ type WorkspaceRenameResult struct {
 
 // WorkspaceRename は workspace.rename を呼び、herdr workspace に label を書く（3-3）。
 // **label は人間が herdr の画面で workspace を見分けるための表示名である。**
-// continuo は読み戻さない。
+// continuo は読み戻さない（例外は statusline取得用の workspace だけで、片付けの照合と、作るのに
+// 失敗したときの拾い上げに読む。issue #284）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // params: workspace の ID と label（2つとも必須）。

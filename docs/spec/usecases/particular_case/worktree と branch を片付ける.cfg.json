@@ -3,7 +3,7 @@
   "usecase_name": "worktree と branch を片付ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md",
-    "rucm_block_sha256": "f9858db0a74dc8c3240e6d0156132a6a820cd75ac641eebf42d3aabf58c713f8"
+    "rucm_block_sha256": "ceb6653b4c43e6f7a5be0b550fe082de7c8743cbd66e3690db974a13e874264a"
   },
   "root": "BASIC FLOW-1",
   "flows": {
