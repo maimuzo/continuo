@@ -964,7 +964,7 @@ main() {
 	say ""
 	say "    mkdir -p ~/continuo-work && cd ~/continuo-work"
 	say "    continuo init      # WORKFLOW.md の雛形を置く"
-	say "    continuo setup     # カンバンの Status を5つの役割に対応づける"
+	say "    continuo setup     # カンバンの Status を6つの役割に対応づける（6つ目は飛ばせる）"
 	say "    continuo doctor    # 前提が揃っているかを調べる"
 	say ""
 	say "詳しくは https://github.com/${REPO}#使う を見てください。"

@@ -24,6 +24,8 @@ const (
 	stateOriginDispatchState = "tracker.dispatch_state"
 	// stateOriginFailureState は `tracker.failure_state` に書いた名前である。
 	stateOriginFailureState = "tracker.failure_state"
+	// stateOriginDirectChatState は `tracker.direct_chat_state` に書いた名前である（設計 3-83）。
+	stateOriginDirectChatState = "tracker.direct_chat_state"
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
 	// stateOriginAutomatedStateRewrite は `tracker.automated_state_rewrite` の**キー**
@@ -81,7 +83,18 @@ type confusingPair struct {
 // boardOptions: カンバン側の Status の選択肢名（tracker.Adapter.StatusOptionNames の戻り値）。
 // boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
-func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbol) Result {
+func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string, boardSymbol Symbol) Result {
+	// **`tracker.direct_chat_state` が他の役割と重なっているかを、いちばん先に見る**（設計 3-83k）。
+	//
+	// **下の `!cfg.OK` より前に置く。**重なりがあると `config.Load` がエラーを返し、下の分岐は
+	// この見出し語を `?`（設定が読めません）で返してそこで戻る。**重なりが無いときにしか動かない検査を、
+	// 重なりのために置くことになる。**そこで設定を読み直す（`missing_keys.go` と同じ形）。
+	//
+	// **既存の「紛らわしい組」の検査へ相乗りさせてはならない。**あれはカンバンの列名と設定の綴りが
+	// 似ているかを見るもので、設定どうしが同じ名前かは見ていない。そのうえ同じ名前を1件に畳む。
+	if res, found := checkDirectChatConflict(configPath); found {
+		return res
+	}
 	if !cfg.OK {
 		return Result{
 			Label:  LabelStatusNames,
@@ -97,8 +110,32 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		}
 	}
 
+	// **direct chat の選択肢が無いことは、ここで `!` として出す**（設計 3-83）。
+	//
+	// **`✗` にしない。**この Status がカンバンに無くても continuo は起動するし、
+	// 巡回も dispatch も止まらない。**止まる `✗` と同じ記号にすると、区別が付かなくなる。**
+	//
+	// **`カンバン` の見出し語では出ない。**起動時の照合の一覧から外してあるためである
+	// （`config.RequiredBoardStates`）。**起動後の巡回も WARN を1回だけ出す**（`candidateStates`）が、
+	// **`continuo doctor` の一覧に並ぶのはここだけである。**どちらかを消すと、起動する前か動いている最中の
+	// どちらかで、選択肢が無いことに気づく手立てが無くなる。
+	// **`未記入の項目` とは別の話である。**あちらは「WORKFLOW.md にキーが書かれていない」を
+	// 見ており、こちらは「書いた名前がカンバンに無い」を見ている。
+	directChatMissing := directChatOptionMissing(cfg.Config, boardOptions)
+
 	pairs := findConfusingPairs(configuredStates(cfg.Config), boardOptions)
 	if len(pairs) == 0 {
+		if directChatMissing != "" {
+			return Result{
+				Label:  LabelStatusNames,
+				Symbol: SymbolUnknown,
+				Detail: i18n.T(i18n.KeyDoctorStatusNamesDirectChatMissing, directChatMissing),
+				Remedies: []string{
+					i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChat),
+					i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
+				},
+			}
+		}
 		return Result{
 			Label:  LabelStatusNames,
 			Symbol: SymbolOK,
@@ -106,7 +143,10 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		}
 	}
 
-	notes := make([]string, 0, len(pairs))
+	notes := make([]string, 0, len(pairs)+1)
+	if directChatMissing != "" {
+		notes = append(notes, i18n.T(i18n.KeyDoctorStatusNamesDirectChatMissing, directChatMissing))
+	}
 	for _, p := range pairs {
 		reason := i18n.T(i18n.KeyDoctorStatusNamesReasonSame)
 		if p.Kind == confusionContains {
@@ -115,17 +155,76 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		notes = append(notes, i18n.T(i18n.KeyDoctorStatusNamesNote,
 			p.Configured.Origin, p.Configured.Name, p.BoardOption, reason))
 	}
-	return Result{
-		Label:  LabelStatusNames,
-		Symbol: SymbolUnknown,
-		Detail: i18n.T(i18n.KeyDoctorStatusNamesConfusing, len(pairs)),
-		Notes:  notes,
-		Remedies: []string{
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyActiveStates),
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
-		},
+	remedies := []string{
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyActiveStates),
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
 	}
+	if directChatMissing != "" {
+		// **紛らわしい組があるときも、direct chat の直し方を落とさない**（設計 3-83）。
+		// **この Status は起動時の照合から外してあるので、`continuo doctor` が
+		// 直し方を出す唯一の場所である。**
+		remedies = append(remedies, i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChat))
+	}
+	return Result{
+		Label:    LabelStatusNames,
+		Symbol:   SymbolUnknown,
+		Detail:   i18n.T(i18n.KeyDoctorStatusNamesConfusing, len(pairs)),
+		Notes:    notes,
+		Remedies: remedies,
+	}
+}
+
+// checkDirectChatConflict は、`tracker.direct_chat_state` が他の役割と重なっているかを見る（設計 3-83k）。
+//
+// **重なりを見る相手の一覧は `config.DirectChatConflicts` の1箇所だけにある。**起動時の検査も同じものを読む。
+//
+// **読めなかったときは何も言わない。**読めないことは `設定ファイル` の見出し語が既に出している。
+//
+// configPath: WORKFLOW.md のパス。
+// 戻り値の1つ目: 重なっていたときの検査結果。
+// 戻り値の2つ目: 重なっていれば true。
+func checkDirectChatConflict(configPath string) (Result, bool) {
+	if configPath == "" {
+		return Result{}, false
+	}
+	conflicts, state, err := config.DirectChatConflictsInFile(configPath)
+	if err != nil || len(conflicts) == 0 {
+		return Result{}, false
+	}
+	notes := make([]string, 0, len(conflicts))
+	for _, key := range conflicts {
+		notes = append(notes, i18n.T(i18n.KeyDoctorStatusNamesDirectChatConflict, state, key))
+	}
+	return Result{
+		Label:    LabelStatusNames,
+		Symbol:   SymbolUnknown,
+		Detail:   i18n.T(i18n.KeyDoctorStatusNamesDirectChatConflict, state, strings.Join(conflicts, " / ")),
+		Notes:    notes,
+		Remedies: []string{i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChatConflict)},
+	}, true
+}
+
+// directChatOptionMissing は、`tracker.direct_chat_state` に書いた名前がカンバンの
+// 選択肢に無いときだけ、その名前を返す（設計 3-83）。
+//
+// **空文字を書いてある（この機能を使わない）ときは、何も返さない。**
+// **比べ方は SPEC.md 11.3 に合わせる**（大文字小文字と前後の空白を無視する）。
+//
+// cfg: 読めた設定。
+// boardOptions: カンバン側の Status の選択肢名。
+// 戻り値: 無かったときだけ、設定に書いてある綴りのままの名前。あれば空文字。
+func directChatOptionMissing(cfg config.Config, boardOptions []string) string {
+	want := strings.TrimSpace(cfg.Tracker.DirectChatState)
+	if want == "" {
+		return ""
+	}
+	for _, opt := range boardOptions {
+		if strings.EqualFold(strings.TrimSpace(opt), want) {
+			return ""
+		}
+	}
+	return want
 }
 
 // configuredStates は設定に書いた Status 名を、出どころ付きで重複なく集める。
@@ -166,6 +265,13 @@ func configuredStates(cfg config.Config) []configuredState {
 	add(stateOriginRunningState, cfg.Tracker.RunningState)
 	add(stateOriginDispatchState, cfg.Tracker.DispatchState)
 	add(stateOriginFailureState, cfg.Tracker.FailureState)
+	// **`tracker.direct_chat_state` も含める**（設計 3-83）。空なら `add` が捨てる。
+	// **この Status は起動を止めない**（`config.RequiredBoardStates` が起動時の照合から
+	// 差し引いている）。**起動時の巡回も同じことを WARN で1回出すので、
+	// 気づける場所が doctor しか無いわけではない**（設計 3-83k）。**それでも載せる。**
+	// **doctor だけを黙らせると、5つの役割と揃わない。**
+	// **紛らわしい組の検査に載せ、選択肢が無いこと自体は `directChatOptionMissing` が別に見る。**
+	add(stateOriginDirectChatState, cfg.Tracker.DirectChatState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	signals := make([]string, 0, len(cfg.Tracker.StatusSignalMap))
 	for signal := range cfg.Tracker.StatusSignalMap {
