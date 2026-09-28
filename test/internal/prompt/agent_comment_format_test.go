@@ -346,6 +346,32 @@ func Test組み込みのプロンプトがレビューの回し方を持つ(t *t
 	}
 }
 
+// 目的: 3-2 が、計画のあとの人間確認を持ち続けることを固定する。
+//
+// **人間確認は、設計 → 人間確認 → 設計レビューループ → 実装 → 実装レビューループの2段目である。**
+// ここから消えると、エージェントは計画を書いた直後に、人間が見ていないまま設計レビューへ進む。
+// **問いを計画のコメントの中で訊かせると、continuo はそれを成果として数えず、書かせ直しに入る。**
+//
+// 与える情報: prompt.BuiltinRaw() の 3-2 の節。
+// 成功条件: 人間確認の段と、訊く先・再開したときの扱いを指す語が、全部そろっていること。
+func Test組み込みのプロンプトが計画のあとの人間確認を持つ(t *testing.T) {
+	section := sectionUntilNextChapter(t, prompt.BuiltinRaw(), planReviewHeading)
+	for _, want := range []struct {
+		needle string
+		why    string
+	}{
+		{"止まって、人間の確認を受ける", "手順から段が消えると、計画を人間に見せないまま設計レビューへ進みます"},
+		{"計画のコメントの中で訊かないでください", "計画のコメントで訊くと、continuo は成果として数えず、" +
+			"セッションを立て直して書かせ直します"},
+		{"直しを求めるコメントが無ければ、了承されたものとして", "了承の書き方が決まっていないと、" +
+			"Ready へ戻しただけの人間に、同じ確認を繰り返します"},
+	} {
+		if !strings.Contains(section, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", planReviewHeading, want.needle, want.why)
+		}
+	}
+}
+
 // planTicketHeading と changeTicketHeading は、判断票の見本の題名の行である（前後の空白を落とした形）。
 const (
 	planTicketHeading   = "# レビューの判断票（計画）"
