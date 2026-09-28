@@ -246,6 +246,11 @@ func TestDaemon_sl_sockを開けないとstatuslineなら起動を止めoauth_us
 			if !strings.Contains(logs.String(), "sl.sock）を開けないので") {
 				t.Fatalf("sl.sock を開けないことの WARN が出ていない\n%s", logs.String())
 			}
+			// **DisableStatusline が効いていること**を、切り替えの WARN の文面で確かめる
+			// （statusline を使えないときだけ「statusline も使えないので」になる）。
+			waitFor(t, 30*time.Second, "statusline も使えないことの WARN", func() bool {
+				return strings.Contains(logs.String(), "statusline も使えないので")
+			})
 			if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 				t.Fatalf("SIGTERM を送れません: %v", err)
 			}

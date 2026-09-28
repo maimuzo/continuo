@@ -61,7 +61,8 @@ func TestTokenSource_configとratelimitの値がずれていない(t *testing.T)
 }
 
 // 目的: `rate_limit.token_source: keychain` が macOS でだけ通り、
-// ほかの OS では**起動が止まる**ことを確認する。
+// ほかの OS では**起動が止まる**ことを確認する（`rate_limit.source` が既定の `oauth_usage_api` のとき。
+// `statusline` と `none` では止めない。validate_test.go の TestLoad_usage_APIを読まない設定なら… が見る）。
 //
 // **止めないと、Linux の運用者は5分ごとの取得で毎回失敗し、枠の判定が黙って無効化される。**
 //

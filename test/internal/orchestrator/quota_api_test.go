@@ -354,7 +354,10 @@ func apiFailures(now time.Time) []apiFailure {
 			// **目印のファイルが在ればトークンを返し、無ければ返ってこない `security`。**
 			marker := filepath.Join(t.TempDir(), "ready")
 			reader := newKeychainReader(t, s, "if [ ! -f "+marker+" ]; then exec sleep 30; fi\n"+
-				`printf '%s' '{"claudeAiOauth":{"accessToken":"test-token"}}'`, 200*time.Millisecond)
+				`printf '%s' '{"claudeAiOauth":{"accessToken":"test-token"}}'`, 2*time.Second)
+			// **期限は2秒にする。**読み直したあと偽の `security`（シェルの起動）が期限内に返ることを
+			// 前提にするので、負荷の高い CI で 200ms を越えると一時的な失敗がもう1回起きて落ちる。
+			// 失敗させる段は `sleep 30` なので、延びるのは期限の分だけである。
 			return reader, func() {
 				if err := os.WriteFile(marker, []byte("ready\n"), 0o600); err != nil {
 					t.Fatalf("目印のファイルを置けません: %v", err)
@@ -464,7 +467,10 @@ func findFailure(t *testing.T, all []apiFailure, name string) apiFailure {
 func TestQuotaAPI_トークンの一時的な失敗が6回続いても諦めない(t *testing.T) {
 	clock := newTestClock()
 	script := &apiScript{respond: apiOK()}
-	fx := newAPIFixture(t, clock, newKeychainReader(t, script, "exec sleep 30", 200*time.Millisecond), nil)
+	// **token_source を keychain に固定する。**Keychain の案内を WARN に足すかは orchestrator の
+	// 設定で決まり、既定は OS で変わる（macOS 以外は claude_credentials）。固定しないと Linux で落ちる。
+	fx := newAPIFixture(t, clock, newKeychainReader(t, script, "exec sleep 30", 200*time.Millisecond),
+		func(cfg *config.Config) { cfg.RateLimit.TokenSource = ratelimit.TokenSourceKeychain })
 
 	for i := 1; i <= 6; i++ {
 		fx.Orc.PollAPIForTest(context.Background())

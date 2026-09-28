@@ -469,6 +469,13 @@ func TestLoad_usage_APIを読まない設定ならtoken_envが空でも起動す
 			typo := validFrontMatter + "rate_limit:\n  source: " + source +
 				"\n  refresh_interval_ms: 600000\n  token_source: keychian\n"
 			assertLoadFailsWith(t, typo, "rate_limit.token_source")
+			// **macOS で作った WORKFLOW.md の keychain も、どの OS でも起動する**（OS の検査は
+			// oauth_usage_api のときだけ）。macOS 以外の CI でこの行が本来の確かめになる。
+			keychain := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: keychain\n"
+			if _, err := config.Load(writeWorkflow(t, keychain, "")); err != nil {
+				t.Fatalf("source: %s は usage API を読まないのに token_source: keychain で止まった: %v", source, err)
+			}
 		})
 	}
 }

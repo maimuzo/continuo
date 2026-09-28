@@ -2433,7 +2433,7 @@ jq -s '[.[] | select(.type=="assistant")] | unique_by(.requestId) | map(.message
 | 何を | どうするか |
 | --- | --- |
 | **読み方** | 上の `security` を1回起動し、標準出力の JSON から `claudeAiOauth.accessToken` を取る |
-| **`token_source` の既定** | **macOS は `keychain`、ほかの OS は `claude_credentials`。**`keychain` を macOS 以外で書いたら設定の検証で起動を止める（`security` が無い） |
+| **`token_source` の既定** | **macOS は `keychain`、ほかの OS は `claude_credentials`。**`rate_limit.source` が `oauth_usage_api` のとき、`keychain` を macOS 以外で書いたら設定の検証で起動を止める（`security` が無い）。`statusline` と `none` はトークンを1回も読まないので止めない（macOS で作った WORKFLOW.md をほかの OS で共有しても起動する）。`env` のときの `token_env` の必須も同じ条件である |
 | **ダイアログ対策** | **人間が端末にいるうちに `continuo allow-keychain-access` を1回叩き、「常に許可」を選ばせる** |
 | **それでも返らなかったら** | **上限で `security` を殺し、一時的な失敗として statusline へ切り替える。**`rate_limit.poll_interval_ms` のあとにもう一度読む。回数で諦めない（3-27） |
 | **値の扱い** | **読んだトークンをログにもエラー文にも載せない。**載せてよいのは `security` の標準エラー出力だけである |
@@ -4795,7 +4795,7 @@ continuo statusline    # Claude Code のステータスラインから呼ばれ�
 **資格情報の記号を、設定が読めたかどうかで分ける。**
 
 **設定で受け付ける値は `rate_limit.source` が `oauth_usage_api` / `statusline` / `none`、
-`rate_limit.token_source` が `claude_credentials` / `keychain`（macOS のみ）/ `env` である**（`internal/config/validate.go`）。
+`rate_limit.token_source` が `claude_credentials` / `keychain`（macOS のみ）/ `env` である**（`internal/config/validate.go`）。**`keychain` の OS と `env` の `token_env` を検査するのは `source` が `oauth_usage_api` のときだけである**（`statusline` と `none` はトークンを読まない）。
 
 | 状態 | 記号 | メッセージ |
 | --- | --- | --- |
