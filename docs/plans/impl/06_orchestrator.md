@@ -30,7 +30,7 @@
 | --- | --- |
 | `internal/orchestrator` | 巡回・dispatch・turn ループ・照合・リトライ・stall 検知 |
 | `internal/orchestrator` | 表明の読み取り（transcript のパース） |
-| `internal/ratelimit` | 使用率の写しの型（`Snapshot` / `Limit`）。**issue #284 で usage API の読み取りを消した。**使用率は Claude Code のステータスラインから受け取り、`internal/orchestrator` が保管する（設計 3-27） |
+| `internal/ratelimit` | usage API を読む（`rate_limit.source` が `statusline` か `none` なら1回も叩かない）。誤りは種類ごとの型で返し、`internal/orchestrator` が statusline へ切り替える（設計 3-27） |
 
 **第3段階のアダプタに1つ足す。**
 
@@ -99,7 +99,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **枠待ちの判定が2条件の連言になっている**（`percent` が 100、かつその run から hook が来ていない）
   - **`severity` は見ない。**上限を示す値が何かを実測できていない（設計 3-27）
 - [x] **`rate_limit.source: none` なら usage API を1回も叩かない**（設定の検証は対応済み）
-- [x] **資格情報が取れなかったら、枠の判定を諦めて `none` と同じ動きにする。起動は止めない**（設計 3-27）
+- [x] **資格情報が取れなかったら、statusline へ切り替える。起動は止めない**（設計 3-27 の「usage API と statusline の切り替え」）
   - **macOS では `~/.claude/.credentials.json` が無いのが普通である。**既定の `keychain` なら Keychain から読める（設計 3-15）
 - [x] **`runState.PromptID` は `UserPromptSubmit` を受けた時点で入れる**（投入時には取れない。設計 3-25）
 - [x] **枠待ちの run についてだけ、打ち切りの時計を止める**（`claude.turn_timeout_ms` の判定を飛ばす）
@@ -165,7 +165,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `internal/orchestrator` | [settings.go](../../../internal/orchestrator/settings.go) | issue ごとの Claude Code の設定ファイル（hook 8種 + `permissions` + `env`） |
 | `internal/orchestrator` | [prompt.go](../../../internal/orchestrator/prompt.go) | 1回目のテンプレートの変数展開と、2回目以降の文面の組み立て |
 | `internal/orchestrator` | [agentname.go](../../../internal/orchestrator/agentname.go) | agent 名の4段とセッション UUID の採番 |
-| `internal/ratelimit` | [ratelimit.go](../../../internal/ratelimit/ratelimit.go) | usage API の読み取り。`none` なら1回も叩かない |
+| `internal/ratelimit` | [ratelimit.go](../../../internal/ratelimit/ratelimit.go) | usage API の読み取り。`statusline` と `none` なら1回も叩かない |
 | `internal/tracker` | [by_identifier.go](../../../internal/tracker/by_identifier.go) | `FetchIssueByIdentifier`（3値。Status で絞らない） |
 | `internal/herdr` | [errors.go](../../../internal/herdr/errors.go) | `ErrCodeTimeout` を足した（turn の時間切れと枠待ちを分ける起点） |
 

@@ -2,8 +2,7 @@
 // rate_limit の節を確かめる（issue #284）。
 //
 // **`continuo init` が書いた値は、そのファイルを読むときの既定値より強い。**
-// 雛形に消したキー（token_source / token_env / poll_interval_ms）や消した値
-// （oauth_usage_api）が残っていると、書き出した WORKFLOW.md がそのまま起動時の検査で止まる。
+// 雛形の rate_limit の節が既定値とずれていると、書き出した WORKFLOW.md で別の動きになる。
 package scaffold_test
 
 import (
@@ -16,15 +15,14 @@ import (
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
-// 目的: 書き出した WORKFLOW.md の rate_limit の節が、ステータスラインから使用率を受ける
-// 新しい形であり、既定値と一致して、そのまま読み込めることを確認する。
+// 目的: 書き出した WORKFLOW.md の rate_limit の節が、usage API を主に読み、エラーのときは
+// statusline取得へ切り替える形であり、既定値と一致して、そのまま読み込めることを確認する（issue #284）。
 //
 // 与える情報: owner と project_number を埋めた雛形の書き出し。
-// 成功条件: rate_limit の節に `source: statusline` と、既定値と同じ `refresh_interval_ms` の行が
-// あること。節の中に消したキー（token_source / token_env / poll_interval_ms）が無く、
-// 雛形のどこにも oauth_usage_api と allow-keychain-access が無いこと。
-// config.Load で読み込め、source と refresh_interval_ms が既定値と一致すること。
-func TestWriteTemplate_rate_limitの節はstatuslineから受ける形である(t *testing.T) {
+// 成功条件: rate_limit の節に `source: oauth_usage_api` と、既定値と同じ `poll_interval_ms` と
+// `refresh_interval_ms` の行と、`token_env` の行があること。コメントに「API キーの機械は none」の
+// 案内があること。config.Load で読み込め、source・poll_interval_ms・refresh_interval_ms が既定値と一致すること。
+func TestWriteTemplate_rate_limitの節はweb_APIを主に読む形である(t *testing.T) {
 	dir := t.TempDir()
 	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{Owner: "acme", ProjectNumber: 3})
 	if err != nil {
@@ -39,28 +37,25 @@ func TestWriteTemplate_rate_limitの節はstatuslineから受ける形である(
 	def := config.DefaultConfig().RateLimit
 
 	section := rateLimitSection(t, content)
-	wantSource := "  source: " + def.Source
-	wantRefresh := "  refresh_interval_ms: " + strconv.Itoa(def.RefreshIntervalMs)
-	if def.Source != config.RateLimitSourceStatusline {
-		t.Fatalf("既定の rate_limit.source が statusline でない（前提が崩れている）: %q", def.Source)
-	}
-	if !hasLinePrefix(section, wantSource) {
-		t.Errorf("rate_limit の節に %q の行が無い:\n%s", wantSource, strings.Join(section, "\n"))
-	}
-	if !hasLinePrefix(section, wantRefresh) {
-		t.Errorf("rate_limit の節に %q の行が無い:\n%s", wantRefresh, strings.Join(section, "\n"))
+	if def.Source != config.RateLimitSourceOAuthUsageAPI {
+		t.Fatalf("既定の rate_limit.source が oauth_usage_api でない（前提が崩れている）: %q", def.Source)
 	}
 	// **tracker.provider にも token_source / token_env がある**（GitHub のトークンの出所）。
 	// rate_limit の節の中だけを見て取り違えない。
-	for _, removed := range []string{"token_source:", "token_env:", "poll_interval_ms:"} {
-		if hasLinePrefix(section, "  "+removed) {
-			t.Errorf("rate_limit の節に消したキー %q が残っている:\n%s", removed, strings.Join(section, "\n"))
+	for _, want := range []string{
+		"  source: " + def.Source,
+		"  poll_interval_ms: " + strconv.Itoa(def.PollIntervalMs),
+		"  refresh_interval_ms: " + strconv.Itoa(def.RefreshIntervalMs),
+		"  token_env: " + def.TokenEnv,
+	} {
+		if !hasLinePrefix(section, want) {
+			t.Errorf("rate_limit の節に %q の行が無い:\n%s", want, strings.Join(section, "\n"))
 		}
 	}
-	for _, removed := range []string{"oauth_usage_api", "allow-keychain-access"} {
-		if strings.Contains(content, removed) {
-			t.Errorf("雛形に消した %q が残っている", removed)
-		}
+	// **API キーの機械は none にさせる案内を残す。**しないと、立て直すたびに haiku の会話が
+	// 従量で課金されうる（statusline取得へ切り替えるため）。
+	if !strings.Contains(strings.Join(section, "\n"), "API キーの機械は none") {
+		t.Errorf("rate_limit の節に「API キーの機械は none」の案内が無い:\n%s", strings.Join(section, "\n"))
 	}
 
 	loaded, err := config.Load(result.Path)
@@ -69,6 +64,9 @@ func TestWriteTemplate_rate_limitの節はstatuslineから受ける形である(
 	}
 	if got := loaded.Config.RateLimit.Source; got != def.Source {
 		t.Errorf("読み込んだ rate_limit.source が違う: got %q, want %q", got, def.Source)
+	}
+	if got := loaded.Config.RateLimit.PollIntervalMs; got != def.PollIntervalMs {
+		t.Errorf("読み込んだ rate_limit.poll_interval_ms が違う: got %d, want %d", got, def.PollIntervalMs)
 	}
 	if got := loaded.Config.RateLimit.RefreshIntervalMs; got != def.RefreshIntervalMs {
 		t.Errorf("読み込んだ rate_limit.refresh_interval_ms が違う: got %d, want %d", got, def.RefreshIntervalMs)

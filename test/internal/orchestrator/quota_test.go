@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "8331be3f720bd161c8fdf64af4773cea1550a7baeb4f40edd827a37cdf112345", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "5a056949d9f623cf99d633f9af6071abceba14e2cc94d9d9fb5b3d503a4a221a", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。

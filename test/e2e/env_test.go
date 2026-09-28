@@ -136,7 +136,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 //
 // **実物の `~/.claude.json` は読みも書きもしない。**`projects` が空の JSON を置き、
 // `continuo trust` がここへ書き込む形にする。**`.claude/` も作る**
-// （transcript の置き場所の根である）。
+// （transcript の置き場所の根であり、`continuo doctor` が資格情報を探す場所でもある）。
 //
 // t: 呼び出し元のテスト。
 func (e *e2eEnv) prepareHome(t *testing.T) {
@@ -369,7 +369,8 @@ func (e *e2eEnv) TestSettings(t *testing.T) {
 		{"  turn_timeout_ms: ", "  turn_timeout_ms: 120000"},
 		{"  read_timeout_ms: ", "  read_timeout_ms: 5000"},
 		{"  startup_timeout_ms: ", "  startup_timeout_ms: 10000"},
-		// 使用率は受けない（statusline取得で本物の Claude Code を起こさせない。判定の対象でもない）。
+		// 使用率は読まない（実物の資格情報を読ませず、statusline取得で本物の Claude Code を起こさせない。
+		// 判定の対象でもない）。
 		{"  source: ", "  source: none"},
 		// **入札の締め切りを待たない**（設計 3-77）。既定の3分は、この手順書の
 		// 待ち（60秒）より長い。**待ちを縮めるだけで、判定の意味は変えない。**

@@ -12,16 +12,18 @@
 //	3a 閉じ残しの statusline取得の workspace を閉じる … `rate_limit.source` によらず行う。
 //	                             **復元より前に閉じる**（残ったままだと、復元が開き直す
 //	                             issue の workspace の親にされうる。issue #284）
-//	3b `quota.json` を読み、`sl.sock` の listen を始める … `source: statusline` のときだけ。
+//	3b `quota.json` を読み、`sl.sock` の listen を始める … `source` が `none` でないときだけ。
 //	                             **復元より前に行う**（復元した run の回復待ちの判定に効かせる）。
-//	                             開けなければ起動を止める
+//	                             開けなければ、`statusline` なら起動を止め、`oauth_usage_api` なら
+//	                             WARN を出して statusline を使わずに続ける（issue #284）
 //	4 復元（3-4 の段2〜段9）    … 段ごとの規則に従う
 //	4b 起動時の掃除（3-9 の手順6 / 6b）… **復元のあとに走らせる**
 //	4c ダッシュボードを開く      … **`server.port` が null なら開かない**（設計 5-2。任意）。
 //	                              **開けなくても起動は止めない**（任意の機能の失敗で
 //	                              引き継いだ pane を放置しない）
-//	5 巡回を始める              … poll_interval_ms ごとに Tick を回す。**statusline取得で値が
-//	                             届いた知らせでも1回すぐ回す**（issue #284）
+//	5 巡回を始める              … polling.interval_ms ごとに Tick を回す。**statusline取得で値が
+//	                             届いた知らせでも1回すぐ回す**（issue #284）。usage API は巡回の中で
+//	                             rate_limit.poll_interval_ms ごとに読む
 //
 // **巡回より先に復元を終える。**先に巡回を始めると、これから引き継ぐ run の worktree に
 // 2つ目の Claude Code が立つ。
@@ -321,11 +323,22 @@ func Run(ctx context.Context, opts Options) error {
 	// （issue #284）。**復元より前に行う。**閉じ残しは、復元の片付けの `worktree.open` で
 	// issue の親にされうる。quota.json は、復元した run の回復待ちの判定に効かせるため、
 	// sl.sock の受け付けより前に読む。**段のログは足さない**（段の数は変えない）。
+	//
+	// **`oauth_usage_api` なら開けなくても起動を止めない**（issue #284）。usage API が主なので、
+	// statusline を使わずに続ける。**DisableStatusline は復元より前に呼ぶ**（復元が issue ごとの
+	// 設定ファイルを書く前に印を立て、開いていない sl.sock を statusLine に書かないため）。
 	deps.Orchestrator.PrepareStatusline(ctx)
 	if deps.Statusline != nil {
 		if err := deps.Statusline.Start(); err != nil {
-			shutdown()
-			return fmt.Errorf("%w: %w", ErrStartup, err)
+			if cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI {
+				shutdown()
+				return fmt.Errorf("%w: %w", ErrStartup, err)
+			}
+			logger.Warn("使用率を受ける socket（sl.sock）を開けないので、statusline を使わずに続けます"+
+				"（usage API が読めないあいだは値が入らず、値が古くなると入札を見送ります）", "error", err)
+			deps.Orchestrator.DisableStatusline()
+			// **閉じない。**開けていない socket を Close で消すと、別のプロセスの sl.sock を消しうる。
+			deps.Statusline = nil
 		}
 	}
 
@@ -480,7 +493,8 @@ type deps struct {
 	// goroutine が残らないため）。止めるときは turn ループの終了を待ったあとに閉じる。
 	Loop *loop.Loop
 	// Statusline は使用率を受ける socket（sl.sock）である（issue #284）。
-	// **`rate_limit.source: none` なら nil である。**
+	// **`rate_limit.source: none` なら nil である。**`oauth_usage_api` でパスが長すぎたときと、
+	// 開けなかったときも nil である（statusline を使わずに続ける）。
 	Statusline *statuslineserver.Server
 }
 
@@ -819,14 +833,28 @@ func build(
 	}
 
 	// **使用率を受ける socket（sl.sock）のパスを決める**（issue #284）。
-	// **`rate_limit.source: statusline` のときだけ要る。**パスが長すぎれば起動を止める
-	// （none なら止めない。sl.sock を開かないため）。
+	// **`rate_limit.source` が `none` でないときだけ要る。**パスが長すぎれば、`statusline` なら
+	// 起動を止め、`oauth_usage_api` なら WARN を出して空のパスを渡す（statusLine を書かず、
+	// statusline取得も開かない。usage API が主なので起動は止めない）。
 	slSockPath := ""
-	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+	if cfg.RateLimit.Source != ratelimit.SourceNone {
 		slSockPath, err = socketpath.ResolveStatusline(runtimeDir)
 		if err != nil {
-			return nil, i18n.Errorf(i18n.KeyDaemonBuildStatuslineSocketFailed, err)
+			if cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI {
+				return nil, i18n.Errorf(i18n.KeyDaemonBuildStatuslineSocketFailed, err)
+			}
+			logger.Warn("使用率を受ける socket（sl.sock）のパスが長すぎるので、statusline を使わずに続けます"+
+				"（usage API が読めないあいだは値が入りません。claude.hook_bridge.listen を短いパスへ向けると使えます）",
+				"error", err)
+			slSockPath = ""
 		}
+	}
+
+	// **usage API の読み取りを組み立てる**（issue #284）。`source: oauth_usage_api` 以外では
+	// Enabled が偽になり、1回も叩かない。**この時点では資格情報を読まない。**
+	rl, err := ratelimit.NewReader(ratelimit.Options{Config: cfg.RateLimit, Logger: logger})
+	if err != nil {
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildRateLimitFailed, err)
 	}
 
 	orc, err := orchestrator.New(orchestrator.Options{
@@ -842,8 +870,9 @@ func build(
 		Herdr:          hc,
 		Workspace:      ws,
 		HookSocketPath: sockPath,
-		// **使用率を受ける socket のパスを渡す**（issue #284）。none なら空で、
-		// statusLine を書かず、statusline取得も開かない。
+		RateLimit:      rl,
+		// **使用率を受ける socket のパスを渡す**（issue #284）。none と、oauth_usage_api でパスが
+		// 長すぎたときは空で、statusLine を書かず、statusline取得も開かない。
 		StatuslineSocketPath: slSockPath,
 		ContinuoPath:         continuoPath,
 		Logger:               logger,
@@ -878,7 +907,7 @@ func build(
 	}
 
 	// **使用率を受ける socket**（issue #284）。hook の受け口とは別である。listen は Run の中で、
-	// 起動時検査のあと・復元の前に、quota.json を読んでから始める。none なら作らない。
+	// 起動時検査のあと・復元の前に、quota.json を読んでから始める。none とパスが無いときは作らない。
 	var sl *statuslineserver.Server
 	if slSockPath != "" {
 		sl = statuslineserver.New(slSockPath, orc.OnStatusline, logger)

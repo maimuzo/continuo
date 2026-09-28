@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "eba250dc48a24dff1cb3d7cb3cdd9531edd628cd40c0362d793b34efc380cdfd", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "c78e285c914271115bad03a9b28f161ede3a7e4d8e0e697e961d9bd9a02c74ff", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じカンバンを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //

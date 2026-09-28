@@ -4,7 +4,8 @@
 no new board is created. Build it, check that the existing `Status` field already carries the five
 options `continuo` needs, generate `WORKFLOW.md` with `continuo init` (owner, project number and the
 list of repositories are filled in automatically from `gh`), register folder trust for the
-repositories you kept with `continuo trust`, check the prerequisites with `continuo doctor`, put one
+repositories you kept with `continuo trust`, grant Keychain access once with
+`continuo allow-keychain-access` (**macOS only**), check the prerequisites with `continuo doctor`, put one
 issue into `Ready`, and watch `continuo` open a worktree and drive Claude Code until the board says
 `Done`. Every command block states which directory to run it in and works on its own. The table
 below says which steps were actually executed while writing this document and which were not.
@@ -24,6 +25,7 @@ below says which steps were actually executed while writing this document and wh
 | 段3 設定を置く | **叩いた** | 自動で埋まるとき・`--owner` / `--project` を渡すとき・`gh` が無いとき・既にあるときの4通り |
 | 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のカンバンに対して実行した（読み取りのみ） |
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みはテスト用ホームディレクトリで確かめた |
+| 段5b Keychain へのアクセスを許可する | **叩いた** | 実物の Keychain に対して（読むだけ）。**確認のダイアログは出なかった**（2026-08-21、macOS） |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
 | 段7 issue を1件用意する | **テスト用mock一式で叩いた** | 偽の `gh` とテスト用GitHub GraphQL mock に対して。**本番のカンバンには1リクエストも送っていない** |
 | 段8 動かす | **両方叩いた** | **本物で起動し、巡回が始まるところまで確かめた**（`Ready` が0件なので Claude Code は起動していない）。1件を `Ready` から `Done` まで通したのはテスト用mock一式のほう |
@@ -173,7 +175,7 @@ continuo abandon — 間違えて着手した issue を、着手する前の状�
 ```
 
 **サブコマンドは次のとおりである。**`init` / `setup` / `trust` / `abandon` /
-`doctor` / `prompt` / `version` / `hook` / `statusline` で、
+`allow-keychain-access` / `doctor` / `prompt` / `version` / `hook` / `statusline` で、
 引数に何も渡さなければ常駐する。**`hook` と `statusline` は Claude Code から呼ばれるもので、
 人間が直接叩くものではない。**
 
@@ -181,6 +183,12 @@ continuo abandon — 間違えて着手した issue を、着手する前の状�
 `continuo abandon <issue の URL> --dry-run` と `continuo abandon --dry-run <issue の URL>` は
 同じ意味になる。**`--` より後ろは、`-` で始まっていても
 位置引数として扱う。**知らないフラグは、どこに書いてもエラーのままである。
+
+`allow-keychain-access --help` の出力。**フラグは1つも無い**（段5b で使う。macOS 専用）。
+
+```text
+Usage of continuo allow-keychain-access:
+```
 
 > **実装を更新したら、必ずここへ戻ってビルドし直すこと。**
 > `/tmp/continuo` は前に建てたものが残る。**新しいサブコマンドを叩くと
@@ -618,7 +626,7 @@ trust:
 | --- | --- |
 | **巡回のループ** | **`~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted`。**これが唯一の門番 |
 | `continuo trust` | `WORKFLOW.md` の `trust.repositories`。**そこに書かれたものだけ**を `~/.claude.json` へ登録する |
-| **statusline取得**（枠の使用率が古いときに、haiku の Claude Code を短く起動して値を取ること） | 起動したときに読んだ `trust.repositories` を上から見て、**手元に clone があり `~/.claude.json` で信頼済みの最初の1つ**を使う。**走行中は読み直さないので、書き換えたら continuo を立て直す** |
+| **statusline取得**（枠の使用率を usage API から読めず、値が古いときに、haiku の Claude Code を短く起動して値を取ること） | 起動したときに読んだ `trust.repositories` を上から見て、**手元に clone があり `~/.claude.json` で信頼済みの最初の1つ**を使う。**走行中は読み直さないので、書き換えたら continuo を立て直す** |
 | `continuo doctor` の `信頼登録` | **カンバンに載っている issue のリポジトリ**について `~/.claude.json` を見る |
 
 **だから2つのことが起きうる。**
@@ -791,6 +799,60 @@ demo/sample-a の clone がないので `ghq get` で取ってきます（時間
 
 ---
 
+## 段5b. Keychain へのアクセスを1回許可する（**macOS だけ**）
+
+**実行する場所: どこでもよい**（このコマンドは `WORKFLOW.md` を読まない）
+
+```bash
+/tmp/continuo allow-keychain-access
+```
+
+**macOS でだけ必要な段である。**Linux / WSL2 では何もせずに終わるので、飛ばしてよい。
+
+**なぜ要るか。**macOS の Claude Code は OAuth トークンを Keychain に置いていて、
+`~/.claude/.credentials.json` は無いのが普通である。continuo は枠（レートリミット）の残りを読むために
+このトークンを使う。**Keychain は初めて読む実行ファイルに確認のダイアログを出すので、
+無人で走る continuo がそれに当たると、答える人がいないまま読み取りの期限が切れる。**
+（そのあいだ continuo は枠の使用率を Claude Code のステータスラインから受け取る形へ切り替え、`rate_limit.poll_interval_ms`（既定5分）ごとに読み直すので、ダイアログがそのたびに出うる。）
+**人間が端末にいるうちに1回読ませて、「常に許可」で答えておく。**
+
+**実際に叩いた出力**（2026-08-21、macOS。**このときダイアログは出なかった**）。
+
+```text
+Keychain の項目 "Claude Code-credentials" を読みます。
+確認のダイアログが出たら「常に許可」を選んでください（「許可」だけを選ぶと、次に実行するときまた出ます）。
+Keychain の項目 "Claude Code-credentials" を読めました。以後 continuo が枠を読めます
+読めた項目: accessToken, expiresAt, rateLimitTier, refreshToken, refreshTokenExpiresAt, scopes, subscriptionType
+```
+
+> **確認のダイアログが出たら「常に許可」を選ぶ。**「許可」だけを選ぶと、次に実行するときまた出る。
+> **無人運用中に出ると、答える人がいないまま10秒で打ち切られる。**答えるまで `rate_limit.poll_interval_ms` ごとに出うる。
+
+| 守られていること | 中身 |
+| --- | --- |
+| **トークンの値を出さない** | 出るのは**項目の名前だけ**である（`accessToken` という名前は出るが、値は出ない）。ログにもエラー文にも載せない |
+| **設定ファイルを読まない** | `WORKFLOW.md` がまだ無くても叩ける。読む先は Keychain の1項目に決まっている |
+| **待ちっぱなしにならない** | 60秒待っても `security` が返らなければ打ち切り、「ダイアログが出たままかもしれません」と出して終了コード 1 を返す |
+| **macOS 以外では何もしない** | 「このコマンドは macOS でだけ意味があります（いまの OS: linux）。何もしませんでした」と出して終了コード 0 |
+
+**読めなかったときは、原因と対処が出る。**
+
+```text
+Keychain の項目 "Claude Code-credentials" を読めませんでした: …
+【確かめ方】security find-generic-password -s "Claude Code-credentials" -w
+【よくある原因】claude でログインしていない / 別のユーザーのログイン Keychain に入っている / ログイン Keychain がロックされている / ダイアログで「許可しない」を選んだ
+【対処】claude でログインし直してから、continuo allow-keychain-access をもう一度実行してください。読めないままにするなら、WORKFLOW.md の rate_limit.token_source を env にして環境変数からトークンを渡すか、rate_limit.source を none にして枠の判定を止めてください
+```
+
+> **段3 の `continuo init` は、macOS では `rate_limit.token_source: keychain` を書いている。**
+> `WORKFLOW.md` の該当行はこうなっている（実際に書き出された行）。
+>
+> ```yaml
+>   token_source: keychain                    # macOS の Keychain から読む。先に continuo allow-keychain-access を1回実行すること。claude_credentials なら ~/.claude/.credentials.json、env なら下の token_env から読む
+> ```
+
+---
+
 ## 段6. 前提が揃っているかを検査する
 
 **実行する場所: `~/continuo-try`**（`WORKFLOW.md` を置いた場所）
@@ -803,8 +865,8 @@ cd ~/continuo-try
 見出し語ごとに検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
 **既存のカンバンを既定の設定のまま使って**実際に叩いた出力。
 
-> **`資格情報` の行は、この写しを取ったあとに見出し語ごと無くなったので、消してある。**
-> **`claude` から `worktree の場所` までの4行は、
+> **`資格情報` の行は、段5b を通した macOS で `rate_limit.token_source: keychain` にして
+> 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
 > 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**`herdr` の行は、herdr 0.9.1 を入れた環境で別に叩いて取ったものである**（2026-09-24）。**件数の行はそれに合わせて数え直してある。**
 > **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
 >
@@ -824,6 +886,7 @@ cd ~/continuo-try
 ✓ カンバン        <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
 ! 信頼登録        active_states の issue が0件なので、検査する対象がありません
+✓ 資格情報        Keychain の項目 "Claude Code-credentials" から accessToken を読めます（rate_limit.token_source: keychain）
 
 2件を確かめられませんでした（✗ 0件 / ! 2件）。足りないものはありません
 ```
@@ -835,6 +898,11 @@ Claude Code は SessionStart hook を走らせる前にそこへ書き、continu
 
 **`!` は「確かめられなかった」であって、足りないという意味ではない。**
 `clone` と `信頼登録` は、段7 で issue を `Ready` に置くと `✓` か `✗` に変わる。
+
+**`資格情報` が `✓` になるのは、段5b を通してあるからである。**`doctor` はこの項目で実際に Keychain を読む。
+**10秒の上限が掛かっているので、確認のダイアログが出たままでも `doctor` は固まらない**（`!` になって
+「確認のダイアログが出ていないか確かめてください」と出る）。読めなかったときは `✗` になり、
+直し方として `continuo allow-keychain-access` を案内する。
 
 **別のディレクトリから叩くなら、`WORKFLOW.md` のパスを1つだけ渡せる。**
 
@@ -896,7 +964,7 @@ EROFS: read-only file system, mkdir '/home/<ACCOUNT>/.claude/session-env/<sessio
 | `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 
 **`status_field` に実在しない名前を書いたときの出力**（実際に `continuo Status` と書いて叩いた。
-hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr 0.9.1 の環境で別に叩いて取ったもの（2026-09-24）に差し替え、無くなった `資格情報` の行を消してある）。
+hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr 0.9.1 の環境で別に叩いて取ったもの（2026-09-24）に差し替えてある）。
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
@@ -910,6 +978,7 @@ hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
 ! clone           カンバンを読めなかったため、対象のリポジトリを特定できませんでした
 ! 信頼登録        カンバンを読めなかったため、対象のリポジトリを特定できませんでした
+✓ 資格情報        Keychain の項目 "Claude Code-credentials" から accessToken を読めます（rate_limit.token_source: keychain）
 
 3件に問題があります（✗ 1件 / ! 2件）
 ```
@@ -918,7 +987,7 @@ hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr
 **それでも、既定値だけで確かめられるものは確かめる。**
 `claude` と `hook の置き場所` は既定値で、`Claude の設定` は設定を読まずに走る。
 **設定が読めないという理由で全部を `!` にすると、本当の原因を1つも指摘できない。**
-実際にプレースホルダを残したまま叩いた出力（hook の socket の場所を `$TMPDIR` に置き換え、無くなった `資格情報` の行を消して件数を数え直してある）。
+実際にプレースホルダを残したまま叩いた出力（hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 
 ```text
 ✗ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めません: ~/continuo-try/WORKFLOW.md の front matter が不正です: 埋めていない設定が 2 件あります。値を埋めてください: tracker.provider.owner がプレースホルダ（__FILL_ME__）のままです / tracker.provider.project_number がプレースホルダ（0）のままです
@@ -935,8 +1004,10 @@ hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr
 ! カンバン        設定ファイルを読めなかったため、どの project を見るか決まりません
 ! clone           カンバンを読めなかったため、対象のリポジトリを特定できませんでした
 ! 信頼登録        カンバンを読めなかったため、対象のリポジトリを特定できませんでした
+! 資格情報        rate_limit の設定が読めないので、何を見るべきか決まりません
+                  → 設定を直してからもう一度実行してください
 
-7件に問題があります（✗ 1件 / ! 6件）
+8件に問題があります（✗ 1件 / ! 7件）
 ```
 
 **`continuo init` を勧めるのは、設定ファイルが「無い」ときだけである。**
@@ -1045,16 +1116,23 @@ level=INFO msg="ダッシュボードは開きません（server.port が未設�
 level=INFO msg=巡回を始めます poll_interval_ms=30000
 ```
 
+> **枠の判定に使う資格情報を取れないと、ここに `WARN` が1回出る。**
+> 枠の使用率を usage API から読めないので、Claude Code のステータスラインへ切り替えるという知らせで、**起動は止まらない。**
+> **macOS の既定は `rate_limit.token_source: keychain` である**（段3 の `continuo init` がそう書く）。
+> 段5b を通してあれば、段6 の `資格情報` は `✓` になり、この `WARN` は出ない。
+> 巡回のループも `doctor` と同じ `security find-generic-password -s "Claude Code-credentials" -w` を
+> 起動して読むので、**読める先が2つに割れることはない。**
+
 **`Ready` の issue が0件なら、issue の処理は何も始まらない。**
-**ただし `rate_limit.source: statusline`（既定）では、Claude Code が短く起動することがある。**
-枠の使用率は Claude Code のステータスラインから受け取る。**直近の `rate_limit.refresh_interval_ms`
+**usage API から使用率を読めていれば、Claude Code も起動しない。**
+**usage API が誤りを返しているあいだは、Claude Code が短く起動することがある。**
+そのあいだは使用率を Claude Code のステータスラインから受け取るので、**直近の `rate_limit.refresh_interval_ms`
 （既定5分）に値が届いていなければ、continuo は statusline取得をする。**
 `trust.repositories` の信頼済みの clone の中で haiku の Claude Code を起動し、`hello` を1回送って、
 値が届いたら閉じる。**herdr の画面に `continuo statusline fetch` という workspace がしばらく現れて消える。**
-会話の記録は残らない。**何もしていない機械では、最大5分に1回これが起きる。**
-**`trust.repositories` に信頼済みの clone が1つも無いと、起きない代わりに `WARN` が出て、
-値が入らないので自動の着手が止まる。**段5 で `continuo trust` を通してあれば、この `WARN` は出ない。
-**枠を見ないなら `rate_limit.source: none` にする。**そのときは statusline取得をしない。
+会話の記録は残らない。**`trust.repositories` に信頼済みの clone が1つも無いと、起きない代わりに `WARN` が出る。**
+段5 で `continuo trust` を通してあれば、この `WARN` は出ない。
+**枠を見ないなら `rate_limit.source: none` にする。**そのときは usage API も statusline取得も使わない。
 
 ### 別の端末から様子を見る
 

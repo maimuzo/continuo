@@ -3,7 +3,7 @@
 // **RUCM のテストパスに対応づけたテストである。**
 // CLI の入口（`cli.Run`）の検査である。
 //
-// **外部へ1回も接続しない。**GitHub も herdr も叩かないところまでで判定する。
+// **外部へ1回も接続しない。**GitHub も herdr も Keychain も叩かないところまでで判定する。
 // 外部へ繋ぐ処理は `internal/cli` の差し替え点から偽物へ向ける。
 package cli_test
 
@@ -16,12 +16,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
 	"github.com/maimuzo/continuo/internal/trust"
@@ -1039,6 +1041,80 @@ func TestRunTrust_調べられなければ落とす(t *testing.T) {
 	}
 }
 
+// TestRunAllowKeychainAccess_macOS以外では何もしない は、OS の判定を確かめる。
+//
+// **`security` は macOS の標準コマンドであり、ほかの OS には無い。**
+// **黙って失敗させると、Linux の利用者は「なぜ動かないのか」を知る手がかりを持たない。**
+//
+// 目的: macOS 以外では Keychain を叩かず、その旨を出して終わること。
+// 与える情報: `goos` を linux にした状態。
+// 成功条件: Keychain を1回も叩かず、OS 名を含む案内が出ること。
+func TestRunAllowKeychainAccess_macOS以外では何もしない(t *testing.T) {
+	deps := cli.Deps{GOOS: "linux"}
+	var probed bool
+	deps.ProbeKeychain = func(_ context.Context, _ time.Duration) (ratelimit.KeychainProbe, error) {
+		probed = true
+		return ratelimit.KeychainProbe{}, nil
+	}
+
+	_, stdout, _ := runCLIWith(deps, []string{"allow-keychain-access"}, "")
+	if probed {
+		t.Error("macOS 以外なのに Keychain を叩いている")
+	}
+	if !strings.Contains(stdout, "linux") {
+		t.Errorf("どの OS で動いているかを示していない: %s", stdout)
+	}
+}
+
+// TestRunAllowKeychainAccess_読めたら項目の名前だけを出す は、値を漏らさないことを確かめる。
+//
+// **この出力は端末とスクロールバッファに残る。**
+// **トークンの値が1文字でも混ざってはならない。**
+//
+// 目的: 読めたとき、項目の名前だけを出すこと。
+// 与える情報: 項目の名前を返す probeKeychain。
+// 成功条件: 終了コードが 0 で、項目の名前が出ること。
+func TestRunAllowKeychainAccess_読めたら項目の名前だけを出す(t *testing.T) {
+	deps := cli.Deps{GOOS: "darwin"}
+	deps.ProbeKeychain = func(_ context.Context, _ time.Duration) (ratelimit.KeychainProbe, error) {
+		return ratelimit.KeychainProbe{
+			Fields:         []string{"accessToken", "expiresAt", "refreshToken"},
+			HasAccessToken: true,
+		}, nil
+	}
+
+	code, stdout, stderr := runCLIWith(deps, []string{"allow-keychain-access"}, "")
+	if code != 0 {
+		t.Errorf("読めたのに終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stdout, "accessToken") {
+		t.Errorf("項目の名前を出していない: %s", stdout)
+	}
+}
+
+// TestRunAllowKeychainAccess_期限内に返らなければ直し方を出す は、ダイアログで止まった場合を確かめる。
+//
+// **確認のダイアログが出たまま誰も答えないと、`security` は返らない。**
+// **黙って待ち続けると、人間は何が起きているか分からない。**
+//
+// 目的: 期限切れのとき、何が起きているかと直し方を出すこと。
+// 与える情報: `ErrKeychainTimeout` を返す probeKeychain。
+// 成功条件: 終了コードが 0 でなく、案内が出ること。
+func TestRunAllowKeychainAccess_期限内に返らなければ直し方を出す(t *testing.T) {
+	deps := cli.Deps{GOOS: "darwin"}
+	deps.ProbeKeychain = func(_ context.Context, _ time.Duration) (ratelimit.KeychainProbe, error) {
+		return ratelimit.KeychainProbe{}, ratelimit.ErrKeychainTimeout
+	}
+
+	code, stdout, _ := runCLIWith(deps, []string{"allow-keychain-access"}, "")
+	if code == 0 {
+		t.Error("期限切れなのに成功として終わっている")
+	}
+	if stdout == "" {
+		t.Error("何が起きたかを出していない")
+	}
+}
+
 // fixedDetection は `gh` を叩かずに owner とカンバンの番号を返す。
 //
 // **`continuo setup` は本物の `gh` からカンバンの一覧を引く。**検査で差し替えないと、
@@ -1140,6 +1216,52 @@ func TestRunSetup_カンバンの番号が決まらなければ候補を出し�
 	}
 	if strings.Contains(stdout, "[1/5]") {
 		t.Error("カンバンが決まらないのに役割を尋ねている")
+	}
+}
+
+// TestRunAllowKeychainAccess_読めなければ直し方を出す は、Keychain の失敗の案内を確かめる。
+//
+// **トークンの値をエラー文へ混ぜてはならない。**この出力は端末とスクロールバッファに残る。
+//
+// 目的: Keychain を読めないとき、何が起きたかと直し方を出すこと。
+// 与える情報: エラーを返す probeKeychain。
+// 成功条件: 終了コードが 0 でなく、案内が出ること。
+func TestRunAllowKeychainAccess_読めなければ直し方を出す(t *testing.T) {
+	deps := cli.Deps{
+		GOOS: "darwin",
+		ProbeKeychain: func(_ context.Context, _ time.Duration) (ratelimit.KeychainProbe, error) {
+			return ratelimit.KeychainProbe{}, errors.New("security コマンドが失敗しました")
+		},
+	}
+
+	code, stdout, _ := runCLIWith(deps, []string{"allow-keychain-access"}, "")
+	if code == 0 {
+		t.Error("読めないのに成功として終わっている")
+	}
+	if !strings.Contains(stdout, "security コマンドが失敗しました") {
+		t.Errorf("何が起きたかを出していない:\n%s", stdout)
+	}
+}
+
+// TestRunAllowKeychainAccess_accessTokenが無ければ落とす は、中身の検査を確かめる。
+//
+// **Keychain の項目は読めても、`accessToken` が空のことがある。**
+// **そのまま「読めました」と出すと、人間は枠を読めると思い込む。**
+//
+// 目的: `accessToken` が無いとき、成功として終わらないこと。
+// 与える情報: 項目はあるが `HasAccessToken` が偽の probe。
+// 成功条件: 終了コードが 0 でないこと。
+func TestRunAllowKeychainAccess_accessTokenが無ければ落とす(t *testing.T) {
+	deps := cli.Deps{
+		GOOS: "darwin",
+		ProbeKeychain: func(_ context.Context, _ time.Duration) (ratelimit.KeychainProbe, error) {
+			return ratelimit.KeychainProbe{Fields: []string{"expiresAt"}, HasAccessToken: false}, nil
+		},
+	}
+
+	code, _, _ := runCLIWith(deps, []string{"allow-keychain-access"}, "")
+	if code == 0 {
+		t.Error("accessToken が無いのに成功として終わっている")
 	}
 }
 

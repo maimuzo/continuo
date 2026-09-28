@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
@@ -104,4 +105,46 @@ func (o *Orchestrator) QuotaSessionKnownForTest(sessionID string) bool {
 	defer o.quotaMu.Unlock()
 	_, ok := o.quota.sessions[sessionID]
 	return ok
+}
+
+// QuotaAPIStateForTest は usage API の切り替えの状態の写しである（issue #284）。
+type QuotaAPIStateForTest struct {
+	// NextAt は usage API を次に試してよい時刻である。
+	NextAt time.Time
+	// Switched は statusline取得へ切り替えているかである。
+	Switched bool
+	// LastOK は usage API の直前の試しが成功したかである。
+	LastOK bool
+	// GaveUp は恒久的な失敗で usage API を試さなくなったかである。
+	GaveUp bool
+	// EverRead はこの起動のあいだに1度でも使用率を読めたかである。
+	EverRead bool
+	// FetchStopped は取得止めかである。
+	FetchStopped bool
+}
+
+// QuotaAPIStateForTest は usage API の切り替えの状態を返す（読むだけ）。
+func (o *Orchestrator) QuotaAPIStateForTest() QuotaAPIStateForTest {
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	return QuotaAPIStateForTest{
+		NextAt:       o.quota.apiNextAt,
+		Switched:     o.quota.apiSwitched,
+		LastOK:       o.quota.apiLastOK,
+		GaveUp:       o.quota.apiGaveUp,
+		EverRead:     o.quota.everRead,
+		FetchStopped: o.quota.fetchStopped,
+	}
+}
+
+// QuotaRefreshIntervalForTest は新しさの幅（quotaRefreshInterval）を返す。
+func (o *Orchestrator) QuotaRefreshIntervalForTest() time.Duration {
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	return o.quotaRefreshInterval()
+}
+
+// PollAPIForTest は pollAPI を1回呼ぶ（巡回のほかの段を通さずに、usage API の読み取りだけを確かめる）。
+func (o *Orchestrator) PollAPIForTest(ctx context.Context) {
+	o.pollAPI(ctx)
 }

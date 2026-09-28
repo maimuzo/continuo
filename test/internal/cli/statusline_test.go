@@ -244,15 +244,15 @@ func TestRunStatusline_標準入力の使用率を1行で受け口へ送る(t *t
 	}
 }
 
-// TestRun_ヘルプの一覧にstatuslineがありallowKeychainAccessが無い は、サブコマンドの一覧を確かめる。
+// TestRun_ヘルプの一覧にstatuslineとallowKeychainAccessがある は、サブコマンドの一覧を確かめる。
 //
 // **利用者は、何が使えるかを `continuo --help` の一覧からしか知れない。**
-// 消した `allow-keychain-access` が残っていると、叩いて `runMain` へ落ちる。
+// `allow-keychain-access` は、usage API を主に戻したので戻した（issue #284）。
 //
-// 目的: `continuo --help` の一覧に `statusline` が載り、`allow-keychain-access` が載らないこと。
+// 目的: `continuo --help` の一覧に `statusline` と `allow-keychain-access` が載ること。
 // 与える情報: `--help` だけ。
-// 成功条件: 終了コードが 0 で、出力に `statusline` を含み、`allow-keychain-access` を含まないこと。
-func TestRun_ヘルプの一覧にstatuslineがありallowKeychainAccessが無い(t *testing.T) {
+// 成功条件: 終了コードが 0 で、出力に `statusline` と `allow-keychain-access` を含むこと。
+func TestRun_ヘルプの一覧にstatuslineとallowKeychainAccessがある(t *testing.T) {
 	var calls int
 	code, stdout, stderr := runCLIWith(countingDaemonDeps(&calls), []string{"--help"}, "")
 	if code != 0 {
@@ -265,7 +265,7 @@ func TestRun_ヘルプの一覧にstatuslineがありallowKeychainAccessが無�
 	if !strings.Contains(usage, "statusline") {
 		t.Errorf("一覧に statusline が無い:\n%s", usage)
 	}
-	if strings.Contains(usage, "allow-keychain-access") {
-		t.Errorf("消した allow-keychain-access が一覧に残っている:\n%s", usage)
+	if !strings.Contains(usage, "allow-keychain-access") {
+		t.Errorf("一覧に allow-keychain-access が無い:\n%s", usage)
 	}
 }

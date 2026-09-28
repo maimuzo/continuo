@@ -588,22 +588,50 @@ type CleanupConfig struct {
 
 // RateLimitConfig は Claude Code のレートリミット待機の挙動を決める（3-27。仕様の範囲外）。
 type RateLimitConfig struct {
-	// Source は使用率の値をどこから取るかである。"statusline"（既定）か "none" のどちらか（issue #284）。
+	// Source は使用率の値をどこから取るかである。"oauth_usage_api"（既定）か "statusline" か
+	// "none" のどれか（issue #284）。
 	//
-	//	statusline … continuo が起動する Claude Code のステータスラインが運ぶ使用率を、
-	//	             `continuo statusline` から `sl.sock` で受けて使う。値が古ければ、
-	//	             trust.repositories の信頼済みの clone の中で短い haiku を起動して取りに行く
-	//	             （statusline取得）。使用率が届くのは Pro / Max だけである（公式文書）
-	//	none       … 使用率を読まず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
-	//	             Pro / Max 以外の契約と API キーの人はこちらにする
+	//	oauth_usage_api … Claude の usage APIを poll_interval_ms ごとに読む。
+	//	                  usage API がどのエラーでも statusline取得へ切り替え、読めたら戻る。
+	//	                  **この起動のあいだに1度も使用率を読めず、haiku に話しかけても値が
+	//	                  届かなければ、statusline取得を止める**（API キーの機械で従量の課金を
+	//	                  1回で止めるため）
+	//	statusline      … continuo が起動する Claude Code のステータスラインが運ぶ使用率を、
+	//	                  `continuo statusline` から `sl.sock` で受けて使う。値が古ければ、
+	//	                  trust.repositories の信頼済みの clone の中で短い haiku を起動して取りに行く
+	//	                  （statusline取得）。使用率が届くのは Pro / Max だけである（公式文書）
+	//	none            … 使用率を読まず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
+	//	                  Pro / Max 以外の契約と API キーの人はこちらにする
 	Source string `yaml:"source"`
+	// TokenSource は usage API を読むための認証情報の出所である（3-27）。
+	// **source が oauth_usage_api のときだけ使う。**
+	//
+	// 想定する値は3つである。
+	//
+	//	claude_credentials … `~/.claude/.credentials.json` を読む
+	//	keychain           … macOS の Keychain を `security` で読む（**macOS でだけ選べる**）
+	//	env                … 下の TokenEnv に書いた環境変数を読む
+	//
+	// **既定は OS で分かれる**（macOS は keychain。default.go の defaultRateLimitTokenSource）。
+	// macOS の Claude Code は資格情報を Keychain に置き、ファイルは無いのが普通である。
+	//
+	// **読み取りだけで、書き換えない**（`~/.claude.json` を書き換えないという絶対制約に従う）。
+	TokenSource string `yaml:"token_source"`
+	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
+	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
+	TokenEnv string `yaml:"token_env"`
 	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
 	PauseAbovePercent int `yaml:"pause_above_percent"`
+	// PollIntervalMs は usage API を読む間隔（ミリ秒）である（source が oauth_usage_api のとき。
+	// 既定 300000 = 5分）。usage API が誤りのあいだは、次に試してよい時刻までの長さにもなる。
+	PollIntervalMs int `yaml:"poll_interval_ms"`
 	// RefreshIntervalMs は、入札に使ってよい使用率の値の古さの上限（ミリ秒）で、
 	// statusline取得の間隔でもある（issue #284。既定 300000 = 5分）。
 	//
-	// **`polling.interval_ms` より長くすること**（source が statusline のとき起動時に確かめる）。
-	// 短いと巡回のたびに statusline取得が走る。**走行中は読み直さない**（reload.go）。
+	// **`polling.interval_ms` より長くすること。**source が statusline なら、短いと起動を止める。
+	// source が oauth_usage_api なら起動は止めず、`polling.interval_ms` の2倍として扱う
+	// （起動時に WARN を1回出す）。短いと巡回のたびに statusline取得が走る。
+	// **走行中は読み直さない**（reload.go）。
 	RefreshIntervalMs int `yaml:"refresh_interval_ms"`
 }
 

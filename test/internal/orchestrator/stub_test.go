@@ -280,6 +280,8 @@ type stubFixture struct {
 type stubFixtureOptions struct {
 	// Mutate は設定を書き換える関数である。nil なら既定のまま。
 	Mutate func(cfg *config.Config)
+	// RateLimit は usage API の読み取りである（issue #284）。nil なら usage API を読まない。
+	RateLimit *ratelimit.Reader
 	// AgentStatus は stub が返す agent の状態である。空なら idle。
 	AgentStatus herdr.AgentStatus
 	// Logs を真にすると、ログを syncLog へ溜める（stubFixture.Logs）。偽なら捨てる。
@@ -379,7 +381,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 	}
 	// **使用率を読む設定なら、本番と同じく sl.sock のパスを渡す**（issue #284。listen はしない）。
 	slSocket := ""
-	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+	if cfg.RateLimit.Source != ratelimit.SourceNone {
 		slSocket = filepath.Join(root, "sl.sock")
 	}
 
@@ -389,6 +391,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		Tracker:              ft,
 		Herdr:                stub,
 		Workspace:            mgr,
+		RateLimit:            opts.RateLimit,
 		StatuslineSocketPath: slSocket,
 		HookSocketPath:       filepath.Join(root, "hooks.sock"),
 		ContinuoPath:         "/opt/continuo/bin/continuo",

@@ -72,6 +72,7 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 		{"herdr.read_timeout_msが負", validFrontMatter + "herdr:\n  read_timeout_ms: -5\n", "herdr.read_timeout_ms"},
 		{"herdr.startup_timeout_msが0", validFrontMatter + "herdr:\n  startup_timeout_ms: 0\n", "herdr.startup_timeout_ms"},
 		{"agent.max_retry_backoff_msが負", validFrontMatter + "agent:\n  max_retry_backoff_ms: -1\n", "agent.max_retry_backoff_ms"},
+		{"rate_limit.poll_interval_msが負", validFrontMatter + "rate_limit:\n  poll_interval_ms: -1\n", "rate_limit.poll_interval_ms"},
 		{"rate_limit.refresh_interval_msが負", validFrontMatter + "rate_limit:\n  refresh_interval_ms: -1\n", "rate_limit.refresh_interval_ms"},
 		{"workspace_hooks.timeout_msが負", validFrontMatter + "workspace_hooks:\n  timeout_ms: -1\n", "workspace_hooks.timeout_ms"},
 		{"tracker.verify_states_everyが負", trackerFrontMatter("  verify_states_every: -1\n"), "tracker.verify_states_every"},
@@ -440,9 +441,19 @@ func TestLoad_状態の重なりは大文字小文字を無視して見る(t *te
 	assertLoadFailsWith(t, front, "tracker.failure_state")
 }
 
+// 目的: rate_limit.token_source が env なのに token_env が空だと起動が止まることを確認する。
+// 空のまま通すと、枠の取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される。
+// tracker.provider.token_env は同じ条件を検査しているので、片側だけ抜けている状態を防ぐ。
+// 与える情報: rate_limit.token_source に env、token_env に空文字を書いた front matter。
+// 成功条件: config.Load がエラーを返し、その文に "rate_limit.token_env" が含まれること。
+func TestLoad_rate_limitのtoken_sourceがenvでtoken_envが空だと落ちる(t *testing.T) {
+	front := validFrontMatter + "rate_limit:\n  token_source: env\n  token_env: \"\"\n"
+	assertLoadFailsWith(t, front, "rate_limit.token_env")
+}
+
 // 目的: rate_limit.source に "none" を書いても起動が通ることを確認する（設計 3-27）。
-// 使用率がステータスラインに載るのは Pro / Max だけなので、それ以外の契約と API キーの人には
-// "none" が必須の逃げ道である（issue #284）。
+// 使用率がステータスラインに載るのは Pro / Max だけで、API キーの機械では statusline取得が
+// 従量で課金されうるので、それ以外の契約と API キーの人には "none" が必須の逃げ道である（issue #284）。
 // 与える情報: rate_limit.source に none を書いた front matter。
 // 成功条件: config.Load が成功し、値が "none" のまま読めること。
 func TestLoad_rate_limitのsourceにnoneを書ける(t *testing.T) {

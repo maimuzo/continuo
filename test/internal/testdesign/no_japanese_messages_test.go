@@ -61,14 +61,14 @@ var japaneseLogMethods = map[string]bool{
 var japaneseAllowance = map[string]int{
 	// 設定の値が要件を満たさないときの「こうすること」の文。`invalidValueError` の第3引数。
 	//
-	// **4件の内訳**（issue #284 で数え直した）。rate_limit.refresh_interval_ms を
-	// polling.interval_ms より長くさせる文・claude.tool_gate.mode の値・claude.wait_until の
-	// herdr が受け付ける状態名・language の値、の各1件。
-	// issue #284 で rate_limit.token_source の「keychain は macOS でだけ使える」の文を消し、
-	// refresh_interval_ms の文を足したので、数は 4 のまま変わらない。
+	// **5件の内訳**（issue #284 の3本目で数え直した）。rate_limit.refresh_interval_ms を
+	// polling.interval_ms より長くさせる文・rate_limit.token_source の「keychain は macOS でだけ
+	// 使える」の文・claude.tool_gate.mode の値・claude.wait_until の herdr が受け付ける状態名・
+	// language の値、の各1件。issue #284 の3本目で usage API を主に戻し、token_source の文を戻したので
+	// 4 から 5 になった（新しく足した文ではない）。
 	// **workspace.on_broken_worktree の文は数に入らない。**`"…" + "…"` と文字列を足し合わせて
 	// 渡しており、引数が1つの文字列リテラルではないので、この検査は見ていない。
-	"internal/config/validate.go": 4,
+	"internal/config/validate.go": 5,
 	// hook の受け口。組み立ての誤りを表す errors.New が中心である。
 	"internal/hookserver": 8,
 	// 識別子の正規化で情報が落ちたときの警告。

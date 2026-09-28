@@ -24,6 +24,8 @@
 //	自動化            … カンバンの自動化が有効なのに書き戻しの対応表が空でないか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
+//	資格情報          … rate_limit.source が oauth_usage_api のとき、rate_limit の設定に応じて
+//	                   環境変数・ファイル・Keychain のいずれかから取れるか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 //
@@ -82,7 +84,7 @@ type Options struct {
 	// GraphQLEndpoint は GitHub の GraphQL API の URL である。
 	// **空なら本番の GitHub GraphQL API を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
-	// HomeDir は `~/.claude.json` を探すホームディレクトリである。
+	// HomeDir は `~/.claude.json` と `~/.claude/.credentials.json` を探すホームディレクトリである。
 	// **`~/.claude/session-env` に書けるかの検査もここを基準にする。**
 	// 空なら os.UserHomeDir() の結果を使う。
 	//
@@ -97,7 +99,7 @@ type Options struct {
 	// GhqList は `ghq list -p -e <owner>/<repo>` を実行する関数である。nil なら本物を実行する。
 	GhqList workspace.GhqListFunc
 	// LookupEnv は環境変数を引く関数である。nil なら os.LookupEnv を使う。
-	// **Agent Teams の検査（agentteams.go）が使う。**
+	// **資格情報の検査（rate_limit.token_source が env のとき）と Agent Teams の検査（agentteams.go）が使う。**
 	LookupEnv func(key string) (string, bool)
 	// LookPath は実行ファイルを PATH から探す関数である。nil なら exec.LookPath を使う。
 	//
@@ -142,6 +144,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	                                        ├─ 自動化
 //	                                        ├─ clone
 //	                                        └─ 信頼登録
+//	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
 // **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い
 // （対象のホストは github.com に固定）が、**依存の図と「上流が `✗` か `!` なら下流は `!`」の
@@ -232,7 +235,7 @@ func Run(ctx context.Context, opts Options) Report {
 	// **ここだけ期限を2倍にする。**要るリクエストが Bootstrap と候補の取得の2本だからである。
 	//
 	// **自動化のぶんを足して3倍にしない。**全体の上限（`DefaultTimeout`）は30秒で、
-	// **3倍にするとこの見出し語1つが全体を使い切れてしまい、clone・信頼登録が
+	// **3倍にするとこの見出し語1つが全体を使い切れてしまい、clone・信頼登録・資格情報が
 	// 巻き添えで `!` になる。**
 	// **自動化は要る2本より後ろで読む**（`checkBoard`）ので、期限が足りなくなったときに
 	// 諦めるのは自動化の1本だけである。
@@ -280,6 +283,13 @@ func Run(ctx context.Context, opts Options) Report {
 
 	// 段7: 信頼登録。**鍵にするのは clone の絶対パスである**（worktree のパスではない。3-32）。
 	report.add(checkTrust(opts, repos, clonePaths, boardResult.Symbol))
+
+	// 段8: 資格情報。**上流が落ちても飛ばさない。**設定が読めたかどうかだけで記号を分ける。
+	// **期限を切る。**`token_source: keychain` のときは外部コマンド（`security`）を起動し、
+	// 確認のダイアログが出たまま誰も答えないと返らないためである。
+	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkCredentials(ctx, opts, cfg, configResult.Symbol)
+	}))
 
 	return report
 }

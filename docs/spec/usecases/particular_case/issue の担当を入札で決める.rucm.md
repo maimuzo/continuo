@@ -7,15 +7,15 @@
 - `docs/plans/continuo_design.md#3-77a`（入札のコメントの形と、エージェントへ渡す前に外すこと）
 - `docs/plans/continuo_design.md#3-77b`（担当は assignee で持ち、期限は hold のコメントで持つ。見えているものと、その扱い）
 - `docs/plans/continuo_design.md#3-77c`（期限が切れたときに担当が移る先と、そのとき失われるもの）
-- `docs/plans/continuo_design.md#3-27`（使用率の受け取り方・保管値の規則・statusline取得と `rate_limit.pause_above_percent`）
-- `docs/plans/continuo_design.md#3-77i`（値が新しくなければ入札しない。値が古ければ statusline取得をして、届いてから入札する）
+- `docs/plans/continuo_design.md#3-27`（usage API と statusline の切り替え・保管値の規則・新しさの幅・statusline取得と `rate_limit.pause_above_percent`）
+- `docs/plans/continuo_design.md#3-77i`（値が新しくなければ入札しない。usage API の次の読み取りか statusline取得で値が入ってから入札する）
 - `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
 - `docs/plans/continuo_design.md#3-16`（着手の段の順番。担当が決まったあとに続く段）
 - `internal/ratelimit/ratelimit.go` の `Snapshot`、`Snapshot.MaxPercent`
-- `internal/orchestrator/quota.go` の `quotaForBid`、`quotaFreshLocked`
+- `internal/orchestrator/quota.go` の `quotaForBid`、`quotaFreshLocked`、`quotaRefreshInterval`、`OnAPISnapshot`
 - `internal/orchestrator/handoff.go` の `evaluateBid`
 - `internal/handoff/handoff.go` の `Evaluate`、`WeeklyPercent`
-- `internal/orchestrator/orchestrator.go` の `Run`、`dispatchPaused`
+- `internal/orchestrator/orchestrator.go` の `Run`、`Tick`、`pollAPI`、`dispatchPaused`
 - `internal/tracker/query.go` の `rawUserConn`（`assignees` を運んでいる）、`commentsQueryTemplate`、`defaultCommentsPerFetch`
 - `internal/config/default.go` の `Marker`、`SelfMarker`（エージェントへ渡すコメントの目印）
 
@@ -37,8 +37,8 @@ BASIC FLOW:
 4. システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。
 5. システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。
 6. IF 先頭の issue に担当者が1人もいない THEN
-7.   システムは VALIDATES THAT Claude Code のステータスラインから最後に使用率を受けてから rate_limit.refresh_interval_ms を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。
-8.   システムは1週間全体の枠の使用率を1週間の使用率にする。
+7.   システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。
+8.   システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。
 9.   システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。
 10.   システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。
 11.   システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。
@@ -174,7 +174,7 @@ continuo が取り上げることはない。
 ## 判定スコアの出し方と、投稿しない条件
 
 **言いたいこと。**余裕値は使用率から作る。**使用率は「0% が未使用、100% が使い切り」で、
-Claude Code のステータスラインが運ぶ `used_percentage` そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`。設計 3-27）。
+usage API が返す値と、Claude Code のステータスラインが運ぶ `used_percentage` そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`。設計 3-27）。
 
 ```
 5時間余裕値  = 100 − 5時間の使用率 − 5時間マージン
@@ -182,9 +182,10 @@ Claude Code のステータスラインが運ぶ `used_percentage` そのもの�
 判定スコア   = 5時間余裕値 × 2 + 1週間余裕値
 ```
 
-**1週間の使用率は、1週間全体の枠（`seven_day`）を採る**（ステップ8）。
-**モデル別の枠（`weekly_scoped`）はステータスラインが運ばないので、判定に入らない**（設計 3-77）。
-判定の式は、1週間全体の枠とモデル別の枠のうち最大を採る形のまま変えていない（`internal/handoff/handoff.go` の `WeeklyPercent`）。
+**1週間の使用率は、1週間全体の枠とモデル別の枠（`weekly_scoped`）のうち、いちばん大きいものを採る**（ステップ8。`internal/handoff/handoff.go` の `WeeklyPercent`）。
+モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない。**最大を採れば自動的にそうなる。
+**モデル別の枠は usage API しか運ばない**（設計 3-77）。`rate_limit.source: statusline` では保管値に入らず、
+`oauth_usage_api` で usage API が誤りのあいだは更新されない（保管値に残っている値をそのまま使う）。
 
 **投稿しない条件は3つある。どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
 
@@ -196,14 +197,17 @@ Claude Code のステータスラインが運ぶ `used_percentage` そのもの�
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
 
-## 値が古ければ statusline取得をして、届いてから入札する
+## 値が古ければ、usage API か statusline取得で値が入ってから入札する
 
-**言いたいこと。**巡回は使用率を取りに行かない。**保管値が新しいときだけ入札する**（ステップ7。設計 3-77i）。
+**言いたいこと。**入札の段は保管値を読むだけで、誰にも問い合わせない。**保管値が新しいときだけ入札する**（ステップ7。設計 3-77i）。
+**保管値へ値を入れるのは、巡回の先頭の usage API の読み取り（`rate_limit.source: oauth_usage_api` のとき）と、ステータスラインの行である**（設計 3-27）。
 
 | 何を | どうするか |
 | --- | --- |
-| 「値が新しい」とは | 新しさの時刻（使用率を持つ新しい応答の行を最後に受けた時刻）から `rate_limit.refresh_interval_ms`（既定5分）を過ぎておらず、保管値のどの期間もリセット時刻を過ぎていないこと（`internal/orchestrator/quota.go` の `quotaFreshLocked`） |
-| 値が新しくないとき | その巡回では入札しない（`枠を読めない`）。巡回の最後に開く条件を見て、statusline取得を開く（`maybeStartStatuslineFetch`） |
+| 「値が新しい」とは | 新しさの時刻（usage API の成功した応答か、使用率を持つ新しい応答の行を最後に受けた時刻）から新しさの幅を過ぎておらず、保管値のどの期間もリセット時刻を過ぎていないこと（`internal/orchestrator/quota.go` の `quotaFreshLocked`） |
+| 新しさの幅 | usage API の直前の試しが成功なら `max(rate_limit.refresh_interval_ms, rate_limit.poll_interval_ms + polling.interval_ms)`。それ以外（`source: statusline`・usage API が誤りで statusline へ切り替えているとき）は `rate_limit.refresh_interval_ms`（既定5分）（`quotaRefreshInterval`） |
+| usage API が誤りに変わったとき | 新しさの幅が `rate_limit.refresh_interval_ms` へ縮み、既定ではその時点で古い扱いになって入札を見送る。statusline取得か pane の行で値が入れば再開する（設計 3-77） |
+| 値が新しくないとき | その巡回では入札しない（`枠を読めない`）。`source: statusline` か、usage API が誤りで切り替えているなら、巡回の最後に開く条件を見て statusline取得を開く（`maybeStartStatuslineFetch`）。usage API が読めているなら、次の読み取り（`rate_limit.poll_interval_ms` ごと）を待つ |
 | statusline取得の値が届いたとき | 巡回のループへ知らせ、巡回を1回すぐ回して入札する（設計 3-4f） |
 | `rate_limit.source: none` のとき | 枠を見ずに入札する。**「読めなかった」とはみなさない**（`internal/orchestrator/handoff.go` の `evaluateBid`） |
 
@@ -348,7 +352,7 @@ flowchart TD
     B5{"5. VALIDATES THAT 担当者が1人もいないか、担当者がこの機械の投稿者である"}
     B6{"6. IF 担当者が1人もいない"}
     B7{"7. VALIDATES THAT 保管している5時間の枠と1週間の枠の使用率が新しい"}
-    B8["8. 1週間全体の枠の使用率を1週間の使用率にする"]
+    B8["8. 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る"]
     B9{"9. VALIDATES THAT どの枠も pause_above_percent を超えていない"}
     B10["10. 5時間余裕値を求める"]
     B11["11. 1週間余裕値を求める"]
@@ -461,7 +465,7 @@ sequenceDiagram
         alt 保管値が無いか古い
             Note over S: ABORT 投稿しない。読めない機械は必ず勝ってしまう
         else 保管値が新しい
-            S->>S: 1週間全体の枠の使用率を1週間の使用率にする
+            S->>S: 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る
             alt どれかの枠が pause_above_percent を超えている
                 Note over S: ABORT 投稿しない
             else どの枠も閾値以内

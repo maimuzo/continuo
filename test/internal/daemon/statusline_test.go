@@ -85,18 +85,21 @@ func longRuntimeDir(t *testing.T, root string) string {
 }
 
 // 目的: 使用率の socket（sl.sock）のパスが長すぎると、`rate_limit.source: statusline` なら起動を止め、
-// `none` なら止めないことを確かめる（none は sl.sock を開かないので、長さで止める理由が無い）。
+// `none` と `oauth_usage_api` なら止めないことを確かめる（none は sl.sock を開かないので、長さで止める
+// 理由が無い。oauth_usage_api は usage API が主なので、WARN を出して statusline を使わずに続ける。issue #284）。
 // 与える情報: `<dir>/h.sock` は上限に収まり `<dir>/sl.sock` は 104 バイトになる実行時ディレクトリを
 // claude.hook_bridge.listen で指定した設定。カンバンは応答を返さず、起動時検査の期限は 200ms。
 // 成功条件: statusline では起動の段のエラーで止まり、文言に sl.sock のパスが出て、起動時検査に
-// 進んでいないこと。none では sl.sock の長さでは止まらず、起動時検査（カンバンの無応答）で止まること。
-func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めnoneなら止めない(t *testing.T) {
+// 進んでいないこと。none と oauth_usage_api では sl.sock の長さでは止まらず、起動時検査（カンバンの
+// 無応答）で止まること。
+func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めnoneとoauth_usage_apiなら止めない(t *testing.T) {
 	for _, tc := range []struct {
 		source    string
 		wantSlErr bool
 	}{
 		{source: "statusline", wantSlErr: true},
 		{source: "none", wantSlErr: false},
+		{source: "oauth_usage_api", wantSlErr: false},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			root := wiringRoot(t)
@@ -153,10 +156,10 @@ func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めno
 				return
 			}
 			if mentionsSl {
-				t.Fatalf("source: none なのに sl.sock の長さで止まった: %v", err)
+				t.Fatalf("source: %s なのに sl.sock の長さで止まった: %v", tc.source, err)
 			}
 			if !strings.Contains(err.Error(), "起動時の検査に落ちました") {
-				t.Fatalf("source: none の起動が起動時検査まで進んでいない: %v", err)
+				t.Fatalf("source: %s の起動が起動時検査まで進んでいない: %v", tc.source, err)
 			}
 		})
 	}
