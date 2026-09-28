@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f8c261b64da41f49b1d0db14edd1009eb5af945eb87c7037fdd2279157eacc69", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 
 package doctor_test
 

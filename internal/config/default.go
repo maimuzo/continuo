@@ -1,6 +1,8 @@
 package config
 
 import (
+	"runtime"
+
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -251,8 +253,12 @@ func DefaultConfig() *Config {
 			SweepOnStartup:       true,
 		},
 		RateLimit: RateLimitConfig{
-			Source:            RateLimitSourceStatusline,
+			Source: RateLimitSourceOAuthUsageAPI,
+			// **既定は OS で分かれる。**分かれるのはこのキーだけである（defaultRateLimitTokenSource）。
+			TokenSource:       defaultRateLimitTokenSource(),
+			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
 			PauseAbovePercent: 95,
+			PollIntervalMs:    300000,
 			RefreshIntervalMs: 300000,
 		},
 		Trust: TrustConfig{
@@ -280,6 +286,41 @@ const RateLimitSourceStatusline = "statusline"
 
 // RateLimitSourceNone は rate_limit.source の「使用率を読まない」の値である。
 const RateLimitSourceNone = "none"
+
+// RateLimitSourceOAuthUsageAPI は rate_limit.source の「usage APIを主に読み、
+// エラーのときは statusline取得へ切り替える」の値である（既定。issue #284）。
+// **internal/ratelimit の SourceOAuthUsageAPI と同じ文字列である。**
+const RateLimitSourceOAuthUsageAPI = "oauth_usage_api"
+
+// RateLimitTokenSourceKeychain は rate_limit.token_source の「macOS の Keychain から読む」の値である。
+//
+// **internal/ratelimit の TokenSourceKeychain と同じ文字列である。**
+// internal/ratelimit は internal/config を読むので、逆向きに参照すると循環する。
+// 値がずれていないことは test/internal/config が確かめる。
+const RateLimitTokenSourceKeychain = "keychain"
+
+// RateLimitTokenSourceClaudeCredentials は rate_limit.token_source の
+// 「`~/.claude/.credentials.json` から読む」の値である。
+const RateLimitTokenSourceClaudeCredentials = "claude_credentials"
+
+// RateLimitTokenSourceEnv は rate_limit.token_source の「環境変数から読む」の値である。
+const RateLimitTokenSourceEnv = "env"
+
+// defaultRateLimitTokenSource は rate_limit.token_source の既定値を OS ごとに返す。
+//
+// **macOS だけ `keychain` である。**macOS の Claude Code は資格情報を Keychain に置き、
+// `~/.claude/.credentials.json` は無いのが普通である（2026-08-21 に実測。
+// `security find-generic-password -s "Claude Code-credentials" -w` が
+// `claudeAiOauth.accessToken` を含む JSON を返した）。
+// **既定を `claude_credentials` のままにすると、macOS では usage API が黙って読めなくなる。**
+//
+// 戻り値: darwin なら "keychain"、それ以外は "claude_credentials"。
+func defaultRateLimitTokenSource() string {
+	if runtime.GOOS == "darwin" {
+		return RateLimitTokenSourceKeychain
+	}
+	return RateLimitTokenSourceClaudeCredentials
+}
 
 // stringPtr は文字列リテラルから *string を作る。
 // YAML の null と「値が入っている」を区別して持つフィールド（status_signal_map の値など）の

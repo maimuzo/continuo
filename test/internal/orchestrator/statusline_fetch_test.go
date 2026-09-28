@@ -730,23 +730,32 @@ func TestStatuslineFetch_開いている間は同じcloneの着手がworktree_op
 	}
 }
 
-// TestSettings_statusLineはsource_statuslineのときだけ入りhookの部分は変わらない は、issue ごとの
+// TestSettings_statusLineはnone以外でstatuslineを使えるときだけ入りhookの部分は変わらない は、issue ごとの
 // 設定ファイルを確かめる（hook の規則。CLAUDE.md の「hook の挙動が変化する変更」に当たらないこと）。
 //
-// 目的: `source: statusline` のときだけ `statusLine` として `continuo statusline --socket <sl.sock>` を
-// 書き、`source: none` なら書かない（利用者のステータスラインがそのまま出る）。
+// 目的: `source` が `none` でなく statusline を使えるときだけ `statusLine` として
+// `continuo statusline --socket <sl.sock>` を書き、`source: none` と、`oauth_usage_api` で
+// statusline を使えない（DisableStatusline）ときは書かない（利用者のステータスラインがそのまま出る）。
 // **hook の部分（コマンド行と張る hook の種類）は source によらず同じである。**
-// 与える情報: source が statusline と none の2つの fixture で、同じ issue を着手させる。
-// 成功条件: statusline の設定ファイルにだけ statusLine があり、コマンド行が
-// `'<continuo>' statusline --socket '<sl.sock>'` であること。2つの hooks が、実行時ディレクトリの
+// 与える情報: source が statusline・oauth_usage_api・oauth_usage_api で DisableStatusline・none の
+// 4つの fixture で、同じ issue を着手させる。
+// 成功条件: statusline と oauth_usage_api の設定ファイルにだけ statusLine があり、コマンド行が
+// `'<continuo>' statusline --socket '<sl.sock>'` であること。hooks が、実行時ディレクトリの
 // パスを伏せると一致すること。
-func TestSettings_statusLineはsource_statuslineのときだけ入りhookの部分は変わらない(t *testing.T) {
-	read := func(t *testing.T, source string) (*fixture, map[string]json.RawMessage) {
+func TestSettings_statusLineはnone以外でstatuslineを使えるときだけ入りhookの部分は変わらない(t *testing.T) {
+	read := func(t *testing.T, source string, disable bool) (*fixture, map[string]json.RawMessage) {
 		fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = source
+			if source == ratelimit.SourceOAuthUsageAPI {
+				// **起動時の WARN を出さない**（refresh_interval_ms を polling.interval_ms より長くする）。
+				cfg.Polling.IntervalMs = 30000
+			}
 		}})
+		if disable {
+			fx.Orc.DisableStatusline()
+		}
 		holdPrompt(fx)
-		if source == ratelimit.SourceStatusline {
+		if source != ratelimit.SourceNone {
 			// **値を新しくしてから着手させる**（入札させ、statusline取得を開かせない）。
 			feedFreshQuota(fx.Orc, "pane-a", time.Now(), 10, 20)
 		}
@@ -767,8 +776,10 @@ func TestSettings_statusLineはsource_statuslineのときだけ入りhookの部�
 		}
 		return fx, m
 	}
-	withSL, slSettings := read(t, ratelimit.SourceStatusline)
-	withNone, noneSettings := read(t, ratelimit.SourceNone)
+	withSL, slSettings := read(t, ratelimit.SourceStatusline, false)
+	withNone, noneSettings := read(t, ratelimit.SourceNone, false)
+	withAPI, apiSettings := read(t, ratelimit.SourceOAuthUsageAPI, false)
+	withDisabled, disabledSettings := read(t, ratelimit.SourceOAuthUsageAPI, true)
 
 	var sl struct {
 		Type    string `json:"type"`
@@ -783,6 +794,29 @@ func TestSettings_statusLineはsource_statuslineのときだけ入りhookの部�
 	}
 	if _, ok := noneSettings["statusLine"]; ok {
 		t.Errorf("source が none なのに statusLine を書いた: %s", noneSettings["statusLine"])
+	}
+	var api struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(apiSettings["statusLine"], &api); err != nil {
+		t.Fatalf("source が oauth_usage_api なのに statusLine が無い: %v", err)
+	}
+	if wantAPI := `'/opt/continuo/bin/continuo' statusline --socket '` + withAPI.StatuslineSocketPath + `'`; api.Command != wantAPI {
+		t.Errorf("oauth_usage_api の statusLine が %+v（want command %q）", api, wantAPI)
+	}
+	if _, ok := disabledSettings["statusLine"]; ok {
+		t.Errorf("statusline を使えないのに statusLine を書いた: %s", disabledSettings["statusLine"])
+	}
+	for name, other := range map[string]struct {
+		fx *fixture
+		m  map[string]json.RawMessage
+	}{"oauth_usage_api": {withAPI, apiSettings}, "DisableStatusline": {withDisabled, disabledSettings}} {
+		hooks := strings.ReplaceAll(string(other.m["hooks"]), other.fx.RuntimeDir, "<RT>")
+		want := strings.ReplaceAll(string(slSettings["hooks"]), withSL.RuntimeDir, "<RT>")
+		if hooks != want {
+			t.Errorf("%s で hook の部分が変わった:\n %s\n %s", name, hooks, want)
+		}
 	}
 
 	hooksSL := strings.ReplaceAll(string(slSettings["hooks"]), withSL.RuntimeDir, "<RT>")

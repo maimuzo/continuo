@@ -85,18 +85,21 @@ func longRuntimeDir(t *testing.T, root string) string {
 }
 
 // 目的: 使用率の socket（sl.sock）のパスが長すぎると、`rate_limit.source: statusline` なら起動を止め、
-// `none` なら止めないことを確かめる（none は sl.sock を開かないので、長さで止める理由が無い）。
+// `none` と `oauth_usage_api` なら止めないことを確かめる（none は sl.sock を開かないので、長さで止める
+// 理由が無い。oauth_usage_api は usage API が主なので、WARN を出して statusline を使わずに続ける。issue #284）。
 // 与える情報: `<dir>/h.sock` は上限に収まり `<dir>/sl.sock` は 104 バイトになる実行時ディレクトリを
 // claude.hook_bridge.listen で指定した設定。カンバンは応答を返さず、起動時検査の期限は 200ms。
 // 成功条件: statusline では起動の段のエラーで止まり、文言に sl.sock のパスが出て、起動時検査に
-// 進んでいないこと。none では sl.sock の長さでは止まらず、起動時検査（カンバンの無応答）で止まること。
-func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めnoneなら止めない(t *testing.T) {
+// 進んでいないこと。none と oauth_usage_api では sl.sock の長さでは止まらず、起動時検査（カンバンの
+// 無応答）で止まること。
+func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めnoneとoauth_usage_apiなら止めない(t *testing.T) {
 	for _, tc := range []struct {
 		source    string
 		wantSlErr bool
 	}{
 		{source: "statusline", wantSlErr: true},
 		{source: "none", wantSlErr: false},
+		{source: "oauth_usage_api", wantSlErr: false},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			root := wiringRoot(t)
@@ -153,10 +156,113 @@ func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めno
 				return
 			}
 			if mentionsSl {
-				t.Fatalf("source: none なのに sl.sock の長さで止まった: %v", err)
+				t.Fatalf("source: %s なのに sl.sock の長さで止まった: %v", tc.source, err)
 			}
 			if !strings.Contains(err.Error(), "起動時の検査に落ちました") {
-				t.Fatalf("source: none の起動が起動時検査まで進んでいない: %v", err)
+				t.Fatalf("source: %s の起動が起動時検査まで進んでいない: %v", tc.source, err)
+			}
+		})
+	}
+}
+
+// 目的: `sl.sock` を開けない（listen に失敗する）とき、`source: statusline` なら起動を止め、
+// `source: oauth_usage_api` なら WARN を出して statusline を使わずに起動を続けることを、ビルドした
+// バイナリで確かめる（issue #284。PR #294 の実装レビュー1周目）。listen は起動時検査のあとなので、
+// 起動時検査を通る環境で回す。
+// 与える情報: 実行時ディレクトリの `sl.sock` の場所に、中身のあるディレクトリ（残骸として消せないので
+// listen まで進めない）。oauth_usage_api では、トークンを空の環境変数から読む設定（本物の Keychain も
+// usage API も読まない）。カンバンは空。
+// 成功条件: statusline では、巡回を始めずに0以外で終わり、出力に sl.sock のパスが出ること。
+// oauth_usage_api では、「sl.sock）を開けない」の WARN を出して巡回を始め、SIGTERM で 0 で終わること。
+func TestDaemon_sl_sockを開けないとstatuslineなら起動を止めoauth_usage_apiなら止めない(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		rateLimit string
+		wantStop  bool
+	}{
+		{name: "statusline", rateLimit: "rate_limit:\n  source: statusline\n", wantStop: true},
+		{
+			name: "oauth_usage_api",
+			rateLimit: "rate_limit:\n  source: oauth_usage_api\n  token_source: env\n" +
+				"  token_env: CONTINUO_TEST_NO_SUCH_USAGE_TOKEN\n",
+			wantStop: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newDaemonEnv(t)
+			env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
+			raw, err := os.ReadFile(env.WorkflowPath)
+			if err != nil {
+				t.Fatalf("WORKFLOW.md を読めません: %v", err)
+			}
+			content := strings.Replace(string(raw), "rate_limit:\n  source: none\n", tc.rateLimit, 1)
+			if content == string(raw) {
+				t.Fatal("WORKFLOW.md の rate_limit を書き換えられません")
+			}
+			if err := os.WriteFile(env.WorkflowPath, []byte(content), 0o600); err != nil {
+				t.Fatalf("WORKFLOW.md を書けません: %v", err)
+			}
+			t.Setenv("CONTINUO_TEST_NO_SUCH_USAGE_TOKEN", "")
+			slPath := filepath.Join(env.RuntimeDir, socketpath.StatuslineSocketFileName)
+			// **中身のあるディレクトリは os.Remove で消せない**ので、残骸を消す段で Start が失敗する。
+			if err := os.MkdirAll(filepath.Join(slPath, "keep"), 0o700); err != nil {
+				t.Fatalf("sl.sock の場所にディレクトリを置けません: %v", err)
+			}
+			env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+				return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+			})
+			env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+				return map[string]any{"type": "agent_list", "agents": []any{}}, nil
+			})
+
+			cmd, logs := env.start(t)
+			t.Cleanup(func() {
+				if t.Failed() || testing.Verbose() {
+					t.Logf("continuo の出力:\n%s", logs.String())
+				}
+			})
+
+			if tc.wantStop {
+				code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+				if !finished {
+					t.Fatalf("sl.sock を開けないのに 30 秒以内に終了しなかった\n%s", logs.String())
+				}
+				if code == 0 {
+					t.Fatalf("sl.sock を開けないのに終了コードが 0 だった\n%s", logs.String())
+				}
+				out := logs.String()
+				if !strings.Contains(out, slPath) {
+					t.Fatalf("出力に sl.sock のパスが出ていない\n%s", out)
+				}
+				if strings.Contains(out, "巡回を始めます") {
+					t.Fatalf("sl.sock を開けないのに巡回を始めた\n%s", out)
+				}
+				return
+			}
+
+			waitFor(t, 30*time.Second, "巡回が始まる", func() bool {
+				return strings.Contains(logs.String(), "巡回を始めます")
+			})
+			if !strings.Contains(logs.String(), "sl.sock）を開けないので") {
+				t.Fatalf("sl.sock を開けないことの WARN が出ていない\n%s", logs.String())
+			}
+			// **DisableStatusline が効いていること**を、切り替えの WARN の文面で確かめる
+			// （statusline を使えないときだけ「statusline も使えないので」になる）。
+			waitFor(t, 30*time.Second, "statusline も使えないことの WARN", func() bool {
+				return strings.Contains(logs.String(), "statusline も使えないので")
+			})
+			if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatalf("SIGTERM を送れません: %v", err)
+			}
+			code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+			if !finished {
+				t.Fatalf("SIGTERM を受けても 30 秒以内に終了しなかった\n%s", logs.String())
+			}
+			if code != 0 {
+				t.Fatalf("終了コードが 0 ではない: got %d\n%s", code, logs.String())
+			}
+			if _, err := os.Stat(filepath.Join(slPath, "keep")); err != nil {
+				t.Fatalf("開けなかった sl.sock の場所のものを消した（別のプロセスのものを消しうる）: %v", err)
 			}
 		})
 	}

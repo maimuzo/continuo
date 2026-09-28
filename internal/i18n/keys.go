@@ -53,6 +53,8 @@ const (
 	KeyDoctorLabelClone Key = "doctor.label.clone"
 	// KeyDoctorLabelTrust はリポジトリが承認済みかの検査の見出し語に出る。
 	KeyDoctorLabelTrust Key = "doctor.label.trust"
+	// KeyDoctorLabelCredentials は枠の判定に使う資格情報の検査の見出し語に出る。
+	KeyDoctorLabelCredentials Key = "doctor.label.credentials"
 	// KeyDoctorLabelClaudeHome は Claude Code の設定ディレクトリに書けるかの検査の見出し語である。
 	KeyDoctorLabelClaudeHome Key = "doctor.label.claude_home"
 	// KeyDoctorLabelWorkspaceRoot は worktree の置き場所に書けるかの検査の見出し語である。
@@ -468,6 +470,51 @@ const (
 	KeyDoctorTrustDetailUnknown Key = "doctor.trust.detail_unknown"
 )
 
+// doctor の検査「資格情報」。
+const (
+	// KeyDoctorCredentialsConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorCredentialsConfigUnreadable Key = "doctor.credentials.config_unreadable"
+	// KeyDoctorCredentialsRemedyFixConfig は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyFixConfig Key = "doctor.credentials.remedy_fix_config"
+	// KeyDoctorCredentialsNone は枠の判定を行わない設定のときの説明に出る。
+	KeyDoctorCredentialsNone Key = "doctor.credentials.none"
+	// KeyDoctorCredentialsStatusline は rate_limit.source が statusline のときの説明に出る（usage API を読まない）。
+	KeyDoctorCredentialsStatusline Key = "doctor.credentials.statusline"
+	// KeyDoctorCredentialsTokenEnvEmpty は読む環境変数名が空のときの説明に出る。
+	KeyDoctorCredentialsTokenEnvEmpty Key = "doctor.credentials.token_env_empty"
+	// KeyDoctorCredentialsRemedyTokenEnv は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyTokenEnv Key = "doctor.credentials.remedy_token_env"
+	// KeyDoctorCredentialsEnvOK は環境変数から取れたときの説明に出る。
+	KeyDoctorCredentialsEnvOK Key = "doctor.credentials.env_ok"
+	// KeyDoctorCredentialsEnvMissing は環境変数が無いときの説明に出る。
+	KeyDoctorCredentialsEnvMissing Key = "doctor.credentials.env_missing"
+	// KeyDoctorCredentialsRemedySetEnv は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedySetEnv Key = "doctor.credentials.remedy_set_env"
+	// KeyDoctorCredentialsHomeUnresolved はホームディレクトリを決められなかったときの説明に出る。
+	KeyDoctorCredentialsHomeUnresolved Key = "doctor.credentials.home_unresolved"
+	// KeyDoctorCredentialsFileFound は資格情報のファイルがあったときの説明に出る。
+	KeyDoctorCredentialsFileFound Key = "doctor.credentials.file_found"
+	// KeyDoctorCredentialsFileMissing は資格情報のファイルが無いときの説明に出る。
+	KeyDoctorCredentialsFileMissing Key = "doctor.credentials.file_missing"
+	// KeyDoctorCredentialsRemedySkipped は同じときの案内に出る。
+	KeyDoctorCredentialsRemedySkipped Key = "doctor.credentials.remedy_skipped"
+	// KeyDoctorCredentialsKeychainOK はKeychain から読めたときの説明に出る。
+	KeyDoctorCredentialsKeychainOK Key = "doctor.credentials.keychain_ok"
+	// KeyDoctorCredentialsKeychainFailed はKeychain を読めなかったときの説明に出る。
+	KeyDoctorCredentialsKeychainFailed Key = "doctor.credentials.keychain_failed"
+	// KeyDoctorCredentialsRemedyKeychain は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyKeychain Key = "doctor.credentials.remedy_keychain"
+	// KeyDoctorCredentialsKeychainTimeout はKeychain の読み取りが期限内に終わらなかったときの説明に出る。
+	KeyDoctorCredentialsKeychainTimeout Key = "doctor.credentials.keychain_timeout"
+	// KeyDoctorCredentialsKeychainNoAccessToken はKeychain は読めたが accessToken が無いときの説明に出る。
+	KeyDoctorCredentialsKeychainNoAccessToken Key = "doctor.credentials.keychain_no_access_token"
+	// KeyDoctorCredentialsRemedyKeychainTimeout は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyKeychainTimeout Key = "doctor.credentials.remedy_keychain_timeout"
+	// KeyDoctorCredentialsRemedyUseKeychain は資格情報のファイルが無い macOS で、
+	// Keychain へ切り替える案内に出る。
+	KeyDoctorCredentialsRemedyUseKeychain Key = "doctor.credentials.remedy_use_keychain"
+)
+
 // CLI の共通の文言（複数のサブコマンドが同じ文面を出す）。
 const (
 	// KeyCLIErrGetwd は作業ディレクトリを引けなかったときに出る。
@@ -744,6 +791,42 @@ const (
 	KeyCLIDoctorFlagMissingKeysPatch Key = "cli.doctor.flag_missing_keys_patch"
 	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
 	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
+)
+
+// `continuo allow-keychain-access` の文言（macOS の Keychain へのアクセスを1回許可させる）。
+//
+// **失敗の案内は「何が起きたか・確かめ方・よくある原因・対処」の4行で書く**（設計 3-34b）。
+const (
+	// KeyCLIAllowKeychainAccessErrTooManyPositional は位置引数が1つ以上あるときに出る。
+	KeyCLIAllowKeychainAccessErrTooManyPositional Key = "cli.allow_keychain_access.err_too_many_positional"
+	// KeyCLIAllowKeychainAccessNotDarwin はmacOS 以外で実行したときに出る。
+	KeyCLIAllowKeychainAccessNotDarwin Key = "cli.allow_keychain_access.not_darwin"
+	// KeyCLIAllowKeychainAccessBefore は読みに行く直前の案内に出る。
+	KeyCLIAllowKeychainAccessBefore Key = "cli.allow_keychain_access.before"
+	// KeyCLIAllowKeychainAccessBeforeDialog は同じ案内の2行目（ダイアログの答え方）に出る。
+	KeyCLIAllowKeychainAccessBeforeDialog Key = "cli.allow_keychain_access.before_dialog"
+	// KeyCLIAllowKeychainAccessOK は読めたときの1行目に出る。
+	KeyCLIAllowKeychainAccessOK Key = "cli.allow_keychain_access.ok"
+	// KeyCLIAllowKeychainAccessFields は読めた項目の名前を並べる行に出る。**値は出さない。**
+	KeyCLIAllowKeychainAccessFields Key = "cli.allow_keychain_access.fields"
+	// KeyCLIAllowKeychainAccessNoAccessToken は読めたが accessToken が無いときの1行目に出る。
+	KeyCLIAllowKeychainAccessNoAccessToken Key = "cli.allow_keychain_access.no_access_token"
+	// KeyCLIAllowKeychainAccessErrHeadline は読めなかったときの1行目に出る。
+	KeyCLIAllowKeychainAccessErrHeadline Key = "cli.allow_keychain_access.err_headline"
+	// KeyCLIAllowKeychainAccessErrHowTo は同じときの【確かめ方】に出る。
+	KeyCLIAllowKeychainAccessErrHowTo Key = "cli.allow_keychain_access.err_how_to"
+	// KeyCLIAllowKeychainAccessErrCauses は同じときの【よくある原因】に出る。
+	KeyCLIAllowKeychainAccessErrCauses Key = "cli.allow_keychain_access.err_causes"
+	// KeyCLIAllowKeychainAccessErrRemedy は同じときの【対処】に出る。
+	KeyCLIAllowKeychainAccessErrRemedy Key = "cli.allow_keychain_access.err_remedy"
+	// KeyCLIAllowKeychainAccessTimeoutHeadline は期限内に返らなかったときの1行目に出る。
+	KeyCLIAllowKeychainAccessTimeoutHeadline Key = "cli.allow_keychain_access.timeout_headline"
+	// KeyCLIAllowKeychainAccessTimeoutHowTo は同じときの【確かめ方】に出る。
+	KeyCLIAllowKeychainAccessTimeoutHowTo Key = "cli.allow_keychain_access.timeout_how_to"
+	// KeyCLIAllowKeychainAccessTimeoutCauses は同じときの【よくある原因】に出る。
+	KeyCLIAllowKeychainAccessTimeoutCauses Key = "cli.allow_keychain_access.timeout_causes"
+	// KeyCLIAllowKeychainAccessTimeoutRemedy は同じときの【対処】に出る。
+	KeyCLIAllowKeychainAccessTimeoutRemedy Key = "cli.allow_keychain_access.timeout_remedy"
 )
 
 // `continuo abandon` の引数とフラグの文言（internal/cli が出す分）。
@@ -1582,6 +1665,107 @@ const (
 	KeyHookclientCheckPendingCapacityLimitReached Key = "hookclient.check_pending_capacity.limit_reached"
 )
 
+// 枠の判定に使う usage API の読み取り（internal/ratelimit）のエラーの文言。
+const (
+	// KeyRatelimitNewReaderHomeDirFailed は資格情報のファイルを探すための
+	// ホームディレクトリを取得できなかったときに出る。
+	KeyRatelimitNewReaderHomeDirFailed Key = "ratelimit.new_reader.home_dir_failed"
+
+	// KeyRatelimitCredentialsFileNotExist は `token_source: claude_credentials` を
+	// 選んだのに資格情報のファイルが無いときの警告である。
+	// **起動は止めない**（設計 3-27）。代わりに、どう直せばよいかを必ず添える。
+	KeyRatelimitCredentialsFileNotExist Key = "ratelimit.credentials_file.not_exist"
+
+	// KeyRatelimitCredentialsRemedyKeychain は macOS での直し方である
+	// （資格情報は Keychain にあるので `token_source: keychain` へ変える）。
+	KeyRatelimitCredentialsRemedyKeychain Key = "ratelimit.credentials.remedy_keychain"
+
+	// KeyRatelimitCredentialsRemedyEnv は macOS 以外での直し方である
+	// （`token_source: env` にして環境変数から読む）。
+	KeyRatelimitCredentialsRemedyEnv Key = "ratelimit.credentials.remedy_env"
+
+	// KeyRatelimitFetchNoWindows は usage API が 200 を返したのに、session も weekly_all も
+	// 無かったときに出る（誤りとして扱い、statusline取得へ切り替える。issue #284）。
+	KeyRatelimitFetchNoWindows Key = "ratelimit.fetch.no_windows"
+	// KeyRatelimitFetchRateLimited は usage API が 429 を返したときに出る（Retry-After を添える）。
+	KeyRatelimitFetchRateLimited Key = "ratelimit.fetch.rate_limited"
+	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
+	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
+	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
+	KeyRatelimitFetchRequestFailed Key = "ratelimit.fetch.request_failed"
+	// KeyRatelimitFetchBodyReadFailed はusage API の応答の本文を読めなかったときに出る。
+	KeyRatelimitFetchBodyReadFailed Key = "ratelimit.fetch.body_read_failed"
+	// KeyRatelimitFetchUnexpectedStatus はusage API が 200 以外を返したときに出る。
+	KeyRatelimitFetchUnexpectedStatus Key = "ratelimit.fetch.unexpected_status"
+	// KeyRatelimitFetchParseFailed はusage API の応答を JSON として解析できなかったときに出る。
+	KeyRatelimitFetchParseFailed Key = "ratelimit.fetch.parse_failed"
+)
+
+// 枠の判定に使う資格情報の取り出し（internal/ratelimit の token /
+// tokenFromCredentialsFile）の文言。
+//
+// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
+const (
+	// KeyRatelimitTokenEnvNameEmpty はrate_limit.token_env が空のときに出る。
+	KeyRatelimitTokenEnvNameEmpty Key = "ratelimit.token.env_name_empty"
+	// KeyRatelimitTokenEnvValueEmpty は資格情報を読む環境変数が空のときに出る。
+	KeyRatelimitTokenEnvValueEmpty Key = "ratelimit.token.env_value_empty"
+	// KeyRatelimitCredentialsFileHomeDirUnknown は資格情報のファイルの置き場所を
+	// 決められないときに出る。
+	KeyRatelimitCredentialsFileHomeDirUnknown Key = "ratelimit.credentials_file.home_dir_unknown"
+	// KeyRatelimitCredentialsFileReadFailed は資格情報のファイルを読めなかったときに出る。
+	KeyRatelimitCredentialsFileReadFailed Key = "ratelimit.credentials_file.read_failed"
+	// KeyRatelimitCredentialsFileNotRegularFile は資格情報のファイルが通常のファイルで
+	// なかったときに出る（symlink は辿らない）。
+	KeyRatelimitCredentialsFileNotRegularFile Key = "ratelimit.credentials_file.not_regular_file"
+	// KeyRatelimitCredentialsFileParseFailed は資格情報のファイルを JSON として
+	// 解析できなかったときに出る。
+	KeyRatelimitCredentialsFileParseFailed Key = "ratelimit.credentials_file.parse_failed"
+	// KeyRatelimitCredentialsFileAccessTokenMissing は資格情報のファイルに
+	// claudeAiOauth.accessToken が無いときに出る。
+	KeyRatelimitCredentialsFileAccessTokenMissing Key = "ratelimit.credentials_file.access_token_missing"
+)
+
+// 枠の判定に使う資格情報を macOS の Keychain から読むとき（internal/ratelimit の
+// tokenFromKeychain / ProbeKeychain）の文言。
+//
+// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
+// **どれにも読み取った値そのものを載せない。**
+const (
+	// KeyRatelimitKeychainBinaryNotFound はKeychain を読むコマンドが PATH に無いときに出る。
+	KeyRatelimitKeychainBinaryNotFound Key = "ratelimit.keychain.binary_not_found"
+	// KeyRatelimitKeychainTimeout は期限内にコマンドが返らなかったときに出る。
+	KeyRatelimitKeychainTimeout Key = "ratelimit.keychain.timeout"
+	// KeyRatelimitKeychainCanceled は呼び出し側がコマンドの実行を打ち切ったときに出る。
+	KeyRatelimitKeychainCanceled Key = "ratelimit.keychain.canceled"
+	// KeyRatelimitKeychainRunFailed はコマンドが異常終了したときに出る。
+	KeyRatelimitKeychainRunFailed Key = "ratelimit.keychain.run_failed"
+	// KeyRatelimitKeychainParseFailed はKeychain の中身を JSON として解析できなかったときに出る。
+	KeyRatelimitKeychainParseFailed Key = "ratelimit.keychain.parse_failed"
+	// KeyRatelimitKeychainOauthMissing はKeychain の中身に claudeAiOauth が無いときに出る。
+	KeyRatelimitKeychainOauthMissing Key = "ratelimit.keychain.oauth_missing"
+	// KeyRatelimitKeychainAccessTokenMissing はKeychain の中身に
+	// claudeAiOauth.accessToken が無いときに出る。
+	KeyRatelimitKeychainAccessTokenMissing Key = "ratelimit.keychain.access_token_missing"
+)
+
+// 枠の判定の番兵エラー（internal/ratelimit の ErrNoCredentials / ErrKeychainTimeout /
+// ErrKeychainCanceled）の文言。
+//
+// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+// **引くのは Error() が呼ばれたときである**（internal/ratelimit の lazyError）。
+//
+// **ErrNoCredentials は上の credentials_file.* / keychain.* の先頭の %w に入る。**
+// **`continuo doctor` の `credentials` の行にそのまま出る。**
+const (
+	// KeyRatelimitErrNoCredentials は枠の判定に使う資格情報を取れなかったことを表す。
+	KeyRatelimitErrNoCredentials Key = "ratelimit.err.no_credentials"
+	// KeyRatelimitErrKeychainTimeout は Keychain の読み取りが期限内に終わらなかったことを表す。
+	KeyRatelimitErrKeychainTimeout Key = "ratelimit.err.keychain_timeout"
+	// KeyRatelimitErrKeychainCanceled は Keychain の読み取りを打ち切ったことを表す。
+	KeyRatelimitErrKeychainCanceled Key = "ratelimit.err.keychain_canceled"
+)
+
 // HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
 //
 // **画面に並べる語は dashboard.* にある。**ここにあるのは、待ち受けの開始と停止、
@@ -2330,6 +2514,8 @@ const (
 	KeyDaemonBuildTokenFailed Key = "daemon.build.token_failed"
 	// KeyDaemonBuildTrackerFailed は依存の組み立てでトラッカーのアダプタを作れなかったときに出る。
 	KeyDaemonBuildTrackerFailed Key = "daemon.build.tracker_failed"
+	// KeyDaemonBuildRateLimitFailed は依存の組み立てで枠の読み取りを作れなかったときに出る。
+	KeyDaemonBuildRateLimitFailed Key = "daemon.build.ratelimit_failed"
 	// KeyDaemonBuildStatuslineSocketFailed は rate_limit.source が statusline のとき、使用率を受ける socket（sl.sock）のパスが長すぎて起動を止めるときに出る。
 	KeyDaemonBuildStatuslineSocketFailed Key = "daemon.build.statusline_socket_failed"
 	// KeyDaemonBuildOrchestratorFailed は依存の組み立てで orchestrator を作れなかったときに出る。
@@ -2466,6 +2652,7 @@ var allKeys = []Key{
 	KeyDoctorLabelStatusNames,
 	KeyDoctorLabelClone,
 	KeyDoctorLabelTrust,
+	KeyDoctorLabelCredentials,
 	KeyDoctorSummaryAllOK,
 	KeyDoctorSummaryUnknownOnly,
 	KeyDoctorSummaryProblems,
@@ -2624,6 +2811,26 @@ var allKeys = []Key{
 	KeyDoctorTrustDetailOK,
 	KeyDoctorTrustDetailMissing,
 	KeyDoctorTrustDetailUnknown,
+	KeyDoctorCredentialsConfigUnreadable,
+	KeyDoctorCredentialsRemedyFixConfig,
+	KeyDoctorCredentialsNone,
+	KeyDoctorCredentialsStatusline,
+	KeyDoctorCredentialsTokenEnvEmpty,
+	KeyDoctorCredentialsRemedyTokenEnv,
+	KeyDoctorCredentialsEnvOK,
+	KeyDoctorCredentialsEnvMissing,
+	KeyDoctorCredentialsRemedySetEnv,
+	KeyDoctorCredentialsHomeUnresolved,
+	KeyDoctorCredentialsFileFound,
+	KeyDoctorCredentialsFileMissing,
+	KeyDoctorCredentialsRemedySkipped,
+	KeyDoctorCredentialsKeychainOK,
+	KeyDoctorCredentialsKeychainFailed,
+	KeyDoctorCredentialsRemedyKeychain,
+	KeyDoctorCredentialsKeychainTimeout,
+	KeyDoctorCredentialsKeychainNoAccessToken,
+	KeyDoctorCredentialsRemedyKeychainTimeout,
+	KeyDoctorCredentialsRemedyUseKeychain,
 	KeyCLIErrGetwd,
 	KeyCLIErrResolveConfigPath,
 	KeyCLIErrLoadConfig,
@@ -2736,6 +2943,21 @@ var allKeys = []Key{
 	KeyCLIDoctorErrWriteReport,
 	KeyCLIDoctorFlagMissingKeysPatch,
 	KeyCLIDoctorErrMissingKeysPatch,
+	KeyCLIAllowKeychainAccessErrTooManyPositional,
+	KeyCLIAllowKeychainAccessNotDarwin,
+	KeyCLIAllowKeychainAccessBefore,
+	KeyCLIAllowKeychainAccessBeforeDialog,
+	KeyCLIAllowKeychainAccessOK,
+	KeyCLIAllowKeychainAccessFields,
+	KeyCLIAllowKeychainAccessNoAccessToken,
+	KeyCLIAllowKeychainAccessErrHeadline,
+	KeyCLIAllowKeychainAccessErrHowTo,
+	KeyCLIAllowKeychainAccessErrCauses,
+	KeyCLIAllowKeychainAccessErrRemedy,
+	KeyCLIAllowKeychainAccessTimeoutHeadline,
+	KeyCLIAllowKeychainAccessTimeoutHowTo,
+	KeyCLIAllowKeychainAccessTimeoutCauses,
+	KeyCLIAllowKeychainAccessTimeoutRemedy,
 	KeyCLIAbandonFlagDryRun,
 	KeyCLIAbandonFlagForce,
 	KeyCLIAbandonFlagTo,
@@ -3027,6 +3249,34 @@ var allKeys = []Key{
 	KeyHookclientSpillRenameFailed,
 	KeyHookclientSpillNameConflict,
 	KeyHookclientCheckPendingCapacityLimitReached,
+	KeyRatelimitNewReaderHomeDirFailed,
+	KeyRatelimitCredentialsFileNotExist,
+	KeyRatelimitCredentialsRemedyKeychain,
+	KeyRatelimitCredentialsRemedyEnv,
+	KeyRatelimitFetchNoWindows,
+	KeyRatelimitFetchRateLimited,
+	KeyRatelimitFetchRequestBuildFailed,
+	KeyRatelimitFetchRequestFailed,
+	KeyRatelimitFetchBodyReadFailed,
+	KeyRatelimitFetchUnexpectedStatus,
+	KeyRatelimitFetchParseFailed,
+	KeyRatelimitTokenEnvNameEmpty,
+	KeyRatelimitTokenEnvValueEmpty,
+	KeyRatelimitCredentialsFileHomeDirUnknown,
+	KeyRatelimitCredentialsFileReadFailed,
+	KeyRatelimitCredentialsFileNotRegularFile,
+	KeyRatelimitCredentialsFileParseFailed,
+	KeyRatelimitCredentialsFileAccessTokenMissing,
+	KeyRatelimitKeychainBinaryNotFound,
+	KeyRatelimitKeychainTimeout,
+	KeyRatelimitKeychainCanceled,
+	KeyRatelimitKeychainRunFailed,
+	KeyRatelimitKeychainParseFailed,
+	KeyRatelimitKeychainOauthMissing,
+	KeyRatelimitKeychainAccessTokenMissing,
+	KeyRatelimitErrNoCredentials,
+	KeyRatelimitErrKeychainTimeout,
+	KeyRatelimitErrKeychainCanceled,
 	KeyServerNewPortOutOfRange,
 	KeyServerStartListenFailed,
 	KeyServerCloseShutdownFailed,
@@ -3324,6 +3574,7 @@ var allKeys = []Key{
 	KeyDaemonBuildWorkspaceFailed,
 	KeyDaemonBuildTokenFailed,
 	KeyDaemonBuildTrackerFailed,
+	KeyDaemonBuildRateLimitFailed,
 	KeyDaemonBuildStatuslineSocketFailed,
 	KeyDaemonBuildOrchestratorFailed,
 	KeyDaemonBuildHookServerFailed,

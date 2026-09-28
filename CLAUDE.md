@@ -159,6 +159,9 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 - **走っている run が打ち切られうる。**上限に当たっても保管値が 100 にならないので、枠待ち（`isQuotaWaiting`）と判定されず、画面の止まった run が stall として打ち切られ、やり直しに積まれる
 
 **人間が観測できる症状は、statusline取得の WARN が `rate_limit.refresh_interval_ms`（既定5分）ごとに繰り返し出ることである。**
+**既定の `rate_limit.source: oauth_usage_api` では、出るのは usage API が誤りを返してステータスラインへ切り替えているあいだだけである。**
+usage API が読めているあいだは statusline取得を開かないので、WARN は1行も出ず、壊れたことに気づけない（使用率は usage API から入り続ける）。
+切り替えているあいだは、起動してから使用率を1度でも読めていれば同じ WARN が繰り返し出る。**1度も読めていなければ、下の WARN の代わりに取得止め（statusline取得を止めた WARN）が1回だけ出て、それ以後は何も出ない。**
 どの WARN が出るかは、壊し方で変わる。
 
 - サブコマンド名・`--socket`・`sl.sock` のパス・`session_id` / `api_ms` の欄を変えた → 「statusline取得ができません（値が1行も届かなかった: …）」

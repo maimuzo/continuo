@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -260,6 +261,7 @@ func validate(cfg *Config) error {
 		{"herdr.read_timeout_ms", cfg.Herdr.ReadTimeoutMs},
 		{"herdr.startup_timeout_ms", cfg.Herdr.StartupTimeoutMs},
 		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
+		{"rate_limit.poll_interval_ms", cfg.RateLimit.PollIntervalMs},
 		{"rate_limit.refresh_interval_ms", cfg.RateLimit.RefreshIntervalMs},
 		{"workspace_hooks.timeout_ms", cfg.WorkspaceHooks.TimeoutMs},
 	} {
@@ -320,9 +322,13 @@ func validate(cfg *Config) error {
 		return requiredValueError("cleanup.on_states（cleanup.enabled が true のとき必須）")
 	}
 
-	// statusline か none のどちらか（issue #284）。**none は必須の逃げ道である。**
+	// oauth_usage_api か statusline か none のどれか（issue #284）。**none は必須の逃げ道である。**
 	// 使用率が届くのは Pro / Max だけなので、それ以外の契約と API キーの人は none にする。
 	switch cfg.RateLimit.Source {
+	case RateLimitSourceOAuthUsageAPI:
+		// **refresh_interval_ms が polling.interval_ms 以下でも起動は止めない。**
+		// v0.1.15 までの WORKFLOW.md をそのまま通すためである。orchestrator が
+		// polling.interval_ms の2倍として扱い、起動時に WARN を1回出す（quota.go の quotaRefreshInterval）。
 	case RateLimitSourceStatusline:
 		// **refresh_interval_ms は polling.interval_ms より長くする。**短いと巡回のたびに
 		// statusline取得が走り、1日に何百回も haiku を起動する。
@@ -332,7 +338,31 @@ func validate(cfg *Config) error {
 		}
 	case RateLimitSourceNone:
 	default:
-		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"statusline" か "none" のどちらか（設計 3-27）`)
+		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "statusline" か "none" のどれか（設計 3-27）`)
+	}
+	switch cfg.RateLimit.TokenSource {
+	case RateLimitTokenSourceClaudeCredentials:
+		// ~/.claude/.credentials.json を読む。token_env は参照しない。
+	case RateLimitTokenSourceKeychain:
+		// **macOS でだけ選べる。**Keychain を読む `security` は macOS の標準コマンドであり、
+		// ほかの OS には無い。ここで弾かないと、Linux の運用者は起動時ではなく5分ごとの
+		// 取得で毎回失敗し、usage API が黙って読めなくなる（5-5 と同じ理由）。
+		// **usage API を読む設定のときだけ弾く。**statusline と none はトークンを1回も読まないので、
+		// macOS で作った WORKFLOW.md をほかの OS で共有しても起動を止めない。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && runtime.GOOS != "darwin" {
+			return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
+				fmt.Sprintf(`"keychain" は macOS でだけ使える（いまの OS: %s）。"claude_credentials" か "env" にすること`, runtime.GOOS))
+		}
+	case RateLimitTokenSourceEnv:
+		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
+		// 5分ごとの取得が毎回 ErrNoCredentials になり、usage API が黙って読めなくなる（5-5）。
+		// usage API を読む設定のときだけ必須にする（statusline と none は読まない）。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && cfg.RateLimit.TokenEnv == "" {
+			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
+		}
+	default:
+		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
+			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
 	}
 	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
 		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")

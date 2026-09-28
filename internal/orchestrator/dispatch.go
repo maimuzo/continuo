@@ -10,6 +10,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -233,10 +234,17 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **「異常ではないものを異常として出そうとしている」という信号だった。**
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
+		// **「100 の期間が残っていると値を取り直さない」は statusline取得で値を取るときだけである**
+		// （issue #284）。source: statusline のときと、oauth_usage_api で usage API から statusline取得へ
+		// 切り替えているとき。usage API が読めていれば 100 があっても取り直す。
+		retake := "（Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
+		if o.cfg.RateLimit.Source == ratelimit.SourceStatusline || o.apiSwitched() {
+			retake = "（使用率が 100 の期間が残っているときは、上げても値を取り直さないので直りません。" +
+				"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
+		}
 		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
 			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください"+
-			"（使用率が 100 の期間が残っているときは、上げても値を取り直さないので直りません。"+
-			"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）",
+			retake,
 			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
 		return
 	}

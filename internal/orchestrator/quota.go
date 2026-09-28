@@ -18,9 +18,16 @@ import (
 
 // 使用率の保管値（issue #284。設計 3-27）。
 //
-// **値の出どころはステータスラインである。**continuo が起動する Claude Code（issue の pane と
-// statusline取得の pane）のステータスラインが運ぶ `rate_limits` を、`continuo statusline` が
-// `sl.sock` へ送り、OnStatusline が受ける。期間（5時間と7日）ごとに値を1つだけ保管する。
+// **値の出どころは2つある。**
+//
+//   - usage API（`rate_limit.source: oauth_usage_api` のとき。既定）… 巡回の先頭で
+//     `poll_interval_ms` ごとに読み、OnAPISnapshot が入れる（orchestrator.go の pollAPI）
+//   - ステータスライン … continuo が起動する Claude Code（issue の pane と statusline取得の pane）の
+//     ステータスラインが運ぶ `rate_limits` を、`continuo statusline` が `sl.sock` へ送り、
+//     OnStatusline が受ける（`source` が `none` でなく、statusline を使えるとき）
+//
+// 期間（5時間・7日・モデル別の7日）ごとに値を1つだけ保管する。**モデル別の7日（weekly_scoped）は
+// usage API しか運ばない。**usage API の値も、ステータスラインの新しい応答の行と同じ規則で入れる。
 //
 // **落とし穴は4つある**（計画の「何が問題なのか」）。
 //
@@ -48,6 +55,11 @@ type quotaWindow struct {
 	Percent int
 	// ResetsAt は resets_at である。
 	ResetsAt time.Time
+	// Standin は、ResetsAt が usage API の返した値ではなく continuo が付けた仮の期限であるかである
+	// （usage API が resets_at: null を返した期間。issue #284）。**仮の期限の切れは、新しさの判定で
+	// 数えない**（ステータスラインは weekly_scoped を運ばないので、usage API から statusline取得へ
+	// 切り替えると置き換わらず、新しい値が届いていても入札を見送ってしまう）。quota.json にも書かない。
+	Standin bool
 }
 
 // sessionMark はセッションごとに覚えるものである。
@@ -79,9 +91,10 @@ func newFetchWatch(sessionID string) *fetchWatch {
 // quotaStore は orchestrator が専用の錠（o.quotaMu）の下で持つ。o.mu とは別にする。
 type quotaStore struct {
 	// windows は期間ごとの保管値である。鍵は handoff.LimitKindSession（five_hour）と
-	// handoff.LimitKindWeeklyAll（seven_day）。quota.json にも置く。
+	// handoff.LimitKindWeeklyAll（seven_day）と handoff.LimitKindWeeklyScoped（usage API だけが運ぶ）。
+	// quota.json にも置く。
 	windows map[string]quotaWindow
-	// freshAt は新しさの時刻（rate_limits を持つ新しい応答の行を最後に受けた時刻）である。
+	// freshAt は新しさの時刻（rate_limits を持つ新しい応答の行か、usage API の値を最後に受けた時刻）である。
 	freshAt time.Time
 	// sessions はセッションごとの記録である。
 	sessions map[string]sessionMark
@@ -93,6 +106,30 @@ type quotaStore struct {
 	fetchRunning bool
 	// lastAttemptAt は、前回の statusline取得の試行を始めた時刻である（開く条件に使う）。
 	lastAttemptAt time.Time
+
+	// 以下は `source: oauth_usage_api` のときだけ使う（issue #284。orchestrator.go の pollAPI）。
+	//
+	// **持つのは状態だけで、誤りの種類は持たない。**誤りの種類で分けるたびに、当たらない道が
+	// 見つかったためである（API キーの機械と、トークンが読めない・失効したサブスクリプションの
+	// 機械は、usage API の誤りの種類では区別できない）。
+
+	// apiNextAt は usage API を次に試してよい時刻である。ゼロなら今すぐ試してよい。
+	apiNextAt time.Time
+	// apiSwitched は、usage API の直前の試しが誤りで、statusline取得へ切り替えているかである。
+	apiSwitched bool
+	// apiLastOK は、usage API の直前の試しが成功したかである（新しさの幅を決める）。
+	apiLastOK bool
+	// apiGaveUp は、トークンの読み取りの恒久的な失敗で、立て直すまで usage API を試さないかである
+	// （切り替えたままにする）。
+	apiGaveUp bool
+	// everRead は、この起動のあいだに使用率を1度でも読めたかである。usage API が成功したか、
+	// 使用率を持つ行（windowsOfLine が1つ以上を返す行。statusline取得でも issue の run の pane でも）を
+	// 受けたら立てる。**quota.json から読み戻した値は数えない。**
+	everRead bool
+	// fetchStopped は取得止め（statusline取得を開かない）の印である。切り替えているあいだに、
+	// haiku に話しかけたのに値が届かず、その時点で1度も読めていなければ立てる。
+	// **everRead を立てるときに解く**（立てたあとに読めた場合も）。立て直すと解ける（メモリだけに持つ）。
+	fetchStopped bool
 }
 
 // newQuotaStore は空の保管値を作る。
@@ -181,6 +218,12 @@ func (o *Orchestrator) OnStatusline(line statuslineserver.Line) {
 	}
 	mark.seenAt = now
 	qs.sessions[line.SessionID] = mark
+	// **使用率を持つ行なら、1度でも読めた印を立てる**（source: oauth_usage_api の取得止めを解く）。
+	// 保管値への入れ方とは切り離す（同じ値の行で changed が偽でも立てる）。行の読み方は変えない。
+	if len(windows) > 0 {
+		qs.everRead = true
+		qs.fetchStopped = false
+	}
 
 	if w := qs.fetch; w != nil && w.sessionID == line.SessionID && newResponse {
 		w.sawResponse = true
@@ -258,8 +301,8 @@ func dropExpiredWindows(stored map[string]quotaWindow, now time.Time) bool {
 
 // quotaFreshLocked は、入札に使ってよいほど値が新しいかを返す。o.quotaMu を持って呼ぶ。
 //
-// **新しさの時刻があり、そこから refresh_interval_ms を過ぎておらず、保管値のどの期間も
-// resets_at を過ぎていないこと。**
+// **新しさの時刻があり、そこから新しさの幅（quotaRefreshInterval）を過ぎておらず、保管値のどの
+// 期間も resets_at を過ぎていないこと。**
 func (o *Orchestrator) quotaFreshLocked(now time.Time) bool {
 	qs := &o.quota
 	if qs.freshAt.IsZero() || len(qs.windows) == 0 {
@@ -269,20 +312,180 @@ func (o *Orchestrator) quotaFreshLocked(now time.Time) bool {
 		return false
 	}
 	for _, w := range qs.windows {
-		if !w.ResetsAt.After(now) {
+		// **仮の期限の切れは数えない**（Standin のコメント）。切れた期間は snapshotOf が除くので、
+		// 入札はその期間を使用率0と読む（resets_at が null の期間はまだ使っていない）。
+		if !w.Standin && !w.ResetsAt.After(now) {
 			return false
 		}
 	}
 	return true
 }
 
-// quotaRefreshInterval は rate_limit.refresh_interval_ms を返す。
+// apiSwitched は、usage API から statusline取得へ切り替えているかを返す（issue #284）。
+// **o.quotaMu を持たずに呼ぶ**（中で取る）。
+func (o *Orchestrator) apiSwitched() bool {
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	return o.quota.apiSwitched
+}
+
+// quotaRefreshInterval は新しさの幅（入札に使ってよい値の古さの上限）を返す。statusline取得の
+// 間隔もこれを読む。**o.quotaMu を持って呼ぶ**（中で錠を取らない。apiLastOK を読むため）。
+//
+//   - 基本は `rate_limit.refresh_interval_ms`
+//   - `source: oauth_usage_api` で `refresh_interval_ms` ≤ `polling.interval_ms` なら、
+//     `polling.interval_ms` の2倍として扱う（起動は止めない。起動時に WARN を1回出す）
+//   - `source: oauth_usage_api` で usage API の直前の試しが成功なら、
+//     `max(上の値, poll_interval_ms + polling.interval_ms)`。usage API の次の読み取りが巡回1回ぶん
+//     遅れても古い扱いにしない（statusline取得を開かない）ためである。**誤りに変わると上の値へ縮む**
 func (o *Orchestrator) quotaRefreshInterval() time.Duration {
 	d := time.Duration(o.cfg.RateLimit.RefreshIntervalMs) * time.Millisecond
 	if d <= 0 {
 		d = 5 * time.Minute
 	}
+	if o.cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI {
+		return d
+	}
+	polling := time.Duration(o.cfg.Polling.IntervalMs) * time.Millisecond
+	if d <= polling {
+		d = 2 * polling
+	}
+	if o.quota.apiLastOK {
+		if w := o.apiPollInterval() + polling; w > d {
+			d = w
+		}
+	}
 	return d
+}
+
+// apiPollInterval は rate_limit.poll_interval_ms を返す（usage API を読む間隔）。
+func (o *Orchestrator) apiPollInterval() time.Duration {
+	d := time.Duration(o.cfg.RateLimit.PollIntervalMs) * time.Millisecond
+	if d <= 0 {
+		d = 5 * time.Minute
+	}
+	return d
+}
+
+// apiResetsAtSnap は、usage API の resets_at を保管値の期間と同じものとして扱う幅である。
+//
+// **usage API の resets_at は区切りの前後1秒以内で揺れる**（2026-09-28 の実測。同じ期間が
+// `18:59:59.662Z` と `19:00:00.362Z` で返り、ステータスラインは `19:00:00Z` だった）。
+// 揺れたまま入れると「resets_at が違えば置き換え」に当たり、同じ期間の値が下がる。
+const apiResetsAtSnap = time.Minute
+
+// OnAPISnapshot は usage API の読めた値を保管値へ入れる（issue #284）。
+//
+// **ステータスラインの新しい応答の行とまったく同じ規則で入れる**（applyNewResponse）。
+// 期限の過ぎた期間を消してから、応答に在る期間ごとに、resets_at が同じなら大きいほう、違えば
+// 置き換える。応答に無い期間は触らない。新しさの時刻を進め、1度でも読めた印を立てる。
+//
+//   - resets_at は最も近い分へ丸め、保管値の同じ期間との差が1分以内なら保管値の resets_at を採る
+//   - resets_at が null の期間は、使用率が 100 なら入れない（枠待ちの明ける時刻にされないため）。
+//     100 未満なら、期限を「次に試してよい時刻 + polling.interval_ms」として入れる（次の読み取りで
+//     置き換わり、読めなければ期限が過ぎて見えなくなる）
+//   - 同じ種別が複数あれば、使用率が最大のもの（同じなら resets_at の遅いもの）を採る
+//   - **weekly_scoped は usage API しか運ばないので、応答に無ければ保管値から消す**（アカウントを
+//     替えたときなどに古い値が居座らないため）。session と weekly_all は応答に無くても触らない
+//
+// 錠の取り方は OnStatusline と同じである（quotaMu の下で入れ、放してから persistQuota）。
+//
+// snap: usage API が返した枠の一覧。nil なら何もしない。
+func (o *Orchestrator) OnAPISnapshot(snap *ratelimit.Snapshot) {
+	if snap == nil {
+		return
+	}
+	now := o.now()
+	polling := time.Duration(o.cfg.Polling.IntervalMs) * time.Millisecond
+
+	o.quotaMu.Lock()
+	qs := &o.quota
+	nullExpiry := now.Add(o.apiPollInterval() + polling)
+	incoming, scopedSeen := windowsOfAPI(snap.Limits, qs.windows, now, nullExpiry)
+	changed := dropExpiredWindows(qs.windows, now)
+	if applyNewResponse(qs.windows, incoming) {
+		changed = true
+	}
+	if !scopedSeen {
+		if _, ok := qs.windows[handoff.LimitKindWeeklyScoped]; ok {
+			delete(qs.windows, handoff.LimitKindWeeklyScoped)
+			changed = true
+		}
+	}
+	qs.freshAt = now
+	qs.everRead = true
+	qs.fetchStopped = false
+	o.quotaMu.Unlock()
+
+	if changed {
+		o.persistQuota()
+	}
+}
+
+// windowsOfAPI は usage API の枠の一覧を保管値の形にする（OnAPISnapshot の規則）。
+//
+// limits: usage API が返した枠の一覧。
+// stored: いまの保管値（resets_at を寄せる相手。書き換えない）。
+// now: 今の時刻。
+// nullExpiry: resets_at が null の期間に付ける期限。
+// 戻り値の1つ目: 期間ごとの値。
+// 戻り値の2つ目: 応答に weekly_scoped が1件でもあったか。
+func windowsOfAPI(
+	limits []ratelimit.Limit, stored map[string]quotaWindow, now, nullExpiry time.Time,
+) (map[string]quotaWindow, bool) {
+	best := map[string]ratelimit.Limit{}
+	scopedSeen := false
+	for _, l := range limits {
+		switch l.Kind {
+		case handoff.LimitKindSession, handoff.LimitKindWeeklyAll:
+		case handoff.LimitKindWeeklyScoped:
+			scopedSeen = true
+		default:
+			continue
+		}
+		cur, ok := best[l.Kind]
+		if !ok || l.Percent > cur.Percent || (l.Percent == cur.Percent && resetsLater(l.ResetsAt, cur.ResetsAt)) {
+			best[l.Kind] = l
+		}
+	}
+	out := map[string]quotaWindow{}
+	for kind, l := range best {
+		var resetsAt time.Time
+		if l.ResetsAt == nil {
+			if l.Percent >= 100 {
+				continue
+			}
+			resetsAt = nullExpiry
+		} else {
+			resetsAt = l.ResetsAt.Round(time.Minute)
+			if cur, ok := stored[kind]; ok {
+				diff := cur.ResetsAt.Sub(resetsAt)
+				if diff < 0 {
+					diff = -diff
+				}
+				if diff <= apiResetsAtSnap {
+					resetsAt = cur.ResetsAt
+				}
+			}
+		}
+		if qw, ok := shapeWindow(float64(l.Percent), resetsAt, now); ok {
+			qw.Standin = l.ResetsAt == nil
+			out[kind] = qw
+		}
+	}
+	return out, scopedSeen
+}
+
+// resetsLater は、a が b より遅い resets_at かを返す（null は最も早いものとして扱う）。
+func resetsLater(a, b *time.Time) bool {
+	switch {
+	case a == nil:
+		return false
+	case b == nil:
+		return true
+	default:
+		return a.After(*b)
+	}
 }
 
 // quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77i）。
@@ -354,7 +557,7 @@ type quotaFileWindow struct {
 // **書き込み用の錠を取ってから、o.quotaMu の中で写しを取り、外で書く。**2つの行がほぼ同時に
 // 届いても、最後に書かれるのが最新の写しになる。**書けないときは WARN を出して動き続ける。**
 // **新しさの時刻とセッションごとの記録は置かない**（立て直したあとは値が古いものとして扱い、
-// statusline取得で取り直す）。
+// usage API か statusline取得で取り直す）。
 func (o *Orchestrator) persistQuota() {
 	if o.quotaPath == "" {
 		return
@@ -364,6 +567,11 @@ func (o *Orchestrator) persistQuota() {
 	o.quotaMu.Lock()
 	out := make(map[string]quotaFileWindow, len(o.quota.windows))
 	for kind, w := range o.quota.windows {
+		// **仮の期限の期間は書かない。**読み戻すと本物の期限として扱われ、切れた時点で新しさの判定を
+		// 止めてしまう。usage API の次の読み取りでまた入る。
+		if w.Standin {
+			continue
+		}
 		out[kind] = quotaFileWindow{Percent: w.Percent, ResetsAt: w.ResetsAt}
 	}
 	o.quotaMu.Unlock()
@@ -402,8 +610,14 @@ func (o *Orchestrator) loadQuota() {
 	}
 	now := o.now()
 	o.quotaMu.Lock()
+	// **weekly_scoped は source: oauth_usage_api のときだけ戻す**（usage API しか運ばないので、
+	// statusline では取り直す手段が無く、古い値が期限まで居座る）。
+	scoped := o.cfg.RateLimit.Source == ratelimit.SourceOAuthUsageAPI
 	for kind, w := range in {
-		if kind != handoff.LimitKindSession && kind != handoff.LimitKindWeeklyAll {
+		switch {
+		case kind == handoff.LimitKindSession, kind == handoff.LimitKindWeeklyAll:
+		case kind == handoff.LimitKindWeeklyScoped && scoped:
+		default:
 			continue
 		}
 		if qw, ok := shapeWindow(float64(w.Percent), w.ResetsAt, now); ok {

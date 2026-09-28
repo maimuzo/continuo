@@ -78,8 +78,8 @@ type claudeSettings struct {
 	// 引数が無い（設計 3-2 / 3-12。2026-08-19 に実測で確認済み）。
 	Env map[string]string `json:"env,omitempty"`
 	// StatusLine はステータスラインのコマンドである（issue #284）。
-	// **`rate_limit.source: statusline` のときだけ入れる**（none なら書かず、利用者の
-	// ステータスラインがそのまま出る）。hook の組み立ては変えない。
+	// **`rate_limit.source` が `none` でなく、statusline を使えるときだけ入れる**（none なら書かず、
+	// 利用者のステータスラインがそのまま出る。`oauth_usage_api` でも書く）。hook の組み立ては変えない。
 	StatusLine *statusLineSetting `json:"statusLine,omitempty"`
 }
 
@@ -96,9 +96,10 @@ type statusLineSetting struct {
 // **コマンド行は hook と同じ shellQuote で引用する。**パスに空白が入っても割れないようにする。
 // **使うフラグは `--socket` だけである**（internal/cli の runStatusline）。
 //
-// 戻り値: statusLine。`source: statusline` でないか、sl.sock のパスが無ければ nil。
+// 戻り値: statusLine。`source: none` か、statusline を使えない（sl.sock のパスが無いか、
+// DisableStatusline された）なら nil。
 func (o *Orchestrator) statusLineSetting() *statusLineSetting {
-	if o.cfg.RateLimit.Source != ratelimit.SourceStatusline || o.slSocketPath == "" {
+	if o.cfg.RateLimit.Source == ratelimit.SourceNone || !o.statuslineUsable() {
 		return nil
 	}
 	return &statusLineSetting{

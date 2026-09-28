@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/atomicfile"
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -72,14 +73,26 @@ const (
 // maybeStartStatuslineFetch は、巡回の最後に statusline取得を開く条件を見て、満たせば
 // goroutine を起こす。
 //
-// **開く条件。**`source: statusline` で、値が新しくなく、statusline取得が走っておらず、
-// 前回の試行の開始から `refresh_interval_ms` を過ぎていて（起動して最初の巡回は前回の試行を
-// 問わない）、期限内の保管値に 100 の期間が無いこと。**run の画面から値が届いていれば開かない**
-// （値が新しいため）。**期限内の 100 がある間は、上限で断られるだけで値は変わらないので開かない。**
+// **開く条件。**statusline を使え（sl.sock のパスがあり、DisableStatusline されていない）、
+// `source: statusline` か、`source: oauth_usage_api` で usage API から切り替えていて取得止めでなく、
+// 値が新しくなく、statusline取得が走っておらず、前回の試行の開始から新しさの幅を過ぎていて
+// （起動して最初の巡回は前回の試行を問わない）、期限内の保管値に 100 の期間（5時間と1週間全体）が
+// 無く、weekly_scoped が `pause_above_percent` 以下であること。**run の画面から値が届いていれば
+// 開かない**（値が新しいため）。**期限内の 100 がある間は、上限で断られるだけで値は変わらないので
+// 開かない。**
+//
+// **weekly_scoped は判定を分ける**（issue #284）。ステータスラインが運ばないので、開いても値が
+// 変わらない。`pause_above_percent` を超えていれば、開いても着手の判定が変わらないので開かない。
+// 「100 の期間」からは外す（外さないと、weekly_scoped が 100 のあいだ 5時間と1週間全体を
+// 取り直せない。効くのは `pause_above_percent: 100` のときだけである）。
 //
 // ctx: 巡回のコンテキスト。
 func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
-	if o.cfg.RateLimit.Source != ratelimit.SourceStatusline || o.slSocketPath == "" || o.ws == nil {
+	if !o.statuslineUsable() || o.ws == nil {
+		return
+	}
+	source := o.cfg.RateLimit.Source
+	if source != ratelimit.SourceStatusline && source != ratelimit.SourceOAuthUsageAPI {
 		return
 	}
 	if ctx.Err() != nil {
@@ -87,6 +100,11 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 	}
 	now := o.now()
 	o.quotaMu.Lock()
+	if source == ratelimit.SourceOAuthUsageAPI && (!o.quota.apiSwitched || o.quota.fetchStopped) {
+		// **usage API が読めているあいだは開かない。取得止めのあいだも開かない**（issue #284）。
+		o.quotaMu.Unlock()
+		return
+	}
 	if o.quota.fetchRunning || o.quotaFreshLocked(now) {
 		o.quotaMu.Unlock()
 		return
@@ -95,7 +113,7 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 		o.quotaMu.Unlock()
 		return
 	}
-	if snapshotOf(o.quota.windows, now, now).AtFullPercent() {
+	if o.statuslineFetchPointless(now) {
 		o.quotaMu.Unlock()
 		return
 	}
@@ -105,6 +123,35 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 
 	o.wg.Add(1)
 	go o.runStatuslineFetch(ctx)
+}
+
+// statuslineFetchPointless は、開いても着手の判定が変わらないかを返す。o.quotaMu を持って呼ぶ。
+//
+// 期限内の 5時間か1週間全体に 100 がある（上限で断られるだけで値は変わらない）か、
+// weekly_scoped が `pause_above_percent` を超えている（ステータスラインは weekly_scoped を
+// 運ばないので、開いても判定が変わらない）なら true。
+func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
+	for kind, w := range o.quota.windows {
+		if !w.ResetsAt.After(now) {
+			continue
+		}
+		if kind == handoff.LimitKindWeeklyScoped {
+			if w.Percent > o.cfg.RateLimit.PauseAbovePercent {
+				return true
+			}
+			continue
+		}
+		if w.Percent >= 100 {
+			return true
+		}
+	}
+	return false
+}
+
+// statuslineUsable は statusline を使えるかを返す（sl.sock のパスがあり、DisableStatusline
+// されていない。issue #284）。statusLine を書くかと statusline取得を開くかの判定に使う。
+func (o *Orchestrator) statuslineUsable() bool {
+	return o.slSocketPath != "" && !o.slDisabled.Load()
 }
 
 // runStatuslineFetch は statusline取得を1回行う goroutine である。
@@ -153,15 +200,81 @@ func (o *Orchestrator) runStatuslineFetch(parent context.Context) {
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		result, detail := o.statuslineAttempt(fctx, ctx, clone, settingsPath)
+		result, detail, prompted := o.statuslineAttempt(fctx, ctx, clone, settingsPath)
 		if result == fetchAgentNotFound && attempt == 0 && ctx.Err() == nil {
 			// **新しい workspace と新しい UUID で1回だけやり直す。**前の workspace を閉じる
 			// Do は statuslineAttempt の中で返り終えている。
 			o.logger.Info("statusline取得の Claude Code を herdr が見つけられないので、workspace を作り直して1回だけやり直します")
 			continue
 		}
+		if o.maybeStopStatuslineFetch(result, detail, prompted) {
+			return
+		}
 		o.reportStatuslineFetch(result, detail, startup)
 		return
+	}
+}
+
+// maybeStopStatuslineFetch は、値の届かなかった取得のあとに取得止めを立てるかを決める（issue #284）。
+//
+// **立てるのは次の全部を満たすときだけである。**`source: oauth_usage_api`（usage API から
+// 切り替えている）で、haiku に `hello` を送った（AgentPrompt を呼んだ）あとに、値が届かず
+// 止めるときの取り消し以外で終わり、**終わった時点でこの起動のあいだに1度も使用率を読めていない**。
+//
+// **誤りの種類ではなく、話しかけた結果で止める。**課金が起きるのは haiku に話しかけたときだけで、
+// API キーの機械は usage API も成功せず使用率を持つ行も来ないので、1度も読めない。立て直しごとの
+// 課金を1回で止める。Pro / Max の機械は、1度でも読めていれば止まらない（上限で断られても、
+// 期間が明けたあとに取り直せる）。**終わった時点で判定する**（取得の途中で usage API が読めたり、
+// pane の行が届いたりすれば、印が立っていて止めない）。
+//
+// result: 取得の結果。
+// detail: 途中の誤りの文面。
+// prompted: AgentPrompt を呼んだか。
+// 戻り値: 取得止めを立てたら true（呼び出し側は、ふだんの WARN を出さない）。
+func (o *Orchestrator) maybeStopStatuslineFetch(result statuslineFetchResult, detail string, prompted bool) bool {
+	if o.cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI || !prompted {
+		return false
+	}
+	if result == fetchValueArrived || result == fetchCanceled {
+		return false
+	}
+	o.quotaMu.Lock()
+	stop := !o.quota.everRead
+	if stop {
+		o.quota.fetchStopped = true
+	}
+	o.quotaMu.Unlock()
+	if !stop {
+		return false
+	}
+	o.logger.Warn("statusline取得を止めます（haiku に話しかけても使用率が届かず、この起動のあいだに使用率を1度も読めていません）。"+
+		"API キーで Claude Code を使っているなら、rate_limit.source を none にしてください（しないと、continuo を立て直すたびに haiku の会話が1回従量で課金されます）。"+
+		"Pro / Max なら、usage API が読めるか run のステータスラインから使用率が届けば自動で戻ります。戻らなければ continuo を立て直してください",
+		"reason", statuslineFetchResultName(result), "error", detail)
+	return true
+}
+
+// statuslineFetchResultName は結果をログに載せる名前にする。
+func statuslineFetchResultName(result statuslineFetchResult) string {
+	switch result {
+	case fetchValueArrived:
+		return "value_arrived"
+	case fetchBlocked:
+		return "blocked"
+	case fetchAgentNotFound:
+		return "agent_not_found"
+	case fetchNotStarted:
+		return "timeout"
+	case fetchMidwayError:
+		return "midway_error"
+	case fetchNoValue:
+		return "no_value"
+	case fetchNoLine:
+		return "no_line"
+	case fetchCanceled:
+		return "canceled"
+	default:
+		return "unknown"
 	}
 }
 
@@ -171,13 +284,13 @@ func (o *Orchestrator) runStatuslineFetch(parent context.Context) {
 // ctx: 全体の上限を掛ける前のコンテキスト（止めるときに取り消される）。
 // clone: cwd に使う clone のパス。
 // settingsPath: statusline取得用の設定ファイル。
-// 戻り値: 結果と、途中の誤りの文面。
+// 戻り値: 結果と、途中の誤りの文面と、AgentPrompt を呼んだか（取得止めの判定に使う）。
 func (o *Orchestrator) statuslineAttempt(
 	fctx, ctx context.Context, clone, settingsPath string,
-) (statuslineFetchResult, string) {
+) (statuslineFetchResult, string, bool) {
 	uuid, err := NewSessionUUID()
 	if err != nil {
-		return fetchMidwayError, err.Error()
+		return fetchMidwayError, err.Error(), false
 	}
 	name := statuslineAgentName(uuid)
 	watch := newFetchWatch(uuid)
@@ -202,34 +315,39 @@ func (o *Orchestrator) statuslineAttempt(
 			}
 		}
 		if ctx.Err() != nil {
-			return fetchCanceled, ""
+			return fetchCanceled, "", false
 		}
-		return fetchMidwayError, err.Error()
+		return fetchMidwayError, err.Error(), false
 	}
 	if err := o.addStatuslineLeftover(ws.WorkspaceID); err != nil {
 		o.closeStatuslineFetchWorkspace(ctx, ws, fetchMidwayError)
-		return fetchMidwayError, err.Error()
+		return fetchMidwayError, err.Error(), false
 	}
 
-	result, detail := o.startAndWaitStatusline(fctx, ctx, ws, name, uuid, settingsPath, watch)
+	result, detail, prompted := o.startAndWaitStatusline(fctx, ctx, ws, name, uuid, settingsPath, watch)
 	if result == fetchValueArrived {
 		// **閉じるより先に知らせる。**閉じる呼び出しのぶん入札を遅らせない。
 		o.notifyStatusline()
 	}
 	o.closeStatuslineFetchWorkspace(ctx, ws, result)
-	return result, detail
+	return result, detail, prompted
 }
 
 // startAndWaitStatusline は Claude Code を起動し、入力を受け付けるまで待って `hello` を送り、値を待つ。
+//
+// 戻り値の3つ目は、AgentPrompt を呼んだか（haiku に話しかけたか）である。**呼んだ時点から
+// 会話1回ぶん課金されうる**ので、取得止めの判定（maybeStopStatuslineFetch）に使う。
 func (o *Orchestrator) startAndWaitStatusline(
 	fctx, ctx context.Context, ws workspace.StatuslineWorkspace,
 	name normalize.SafeName, uuid, settingsPath string, watch *fetchWatch,
-) (statuslineFetchResult, string) {
-	canceled := func() (statuslineFetchResult, string) {
+) (result statuslineFetchResult, detail string, prompted bool) {
+	// canceled は、止めるときの取り消しなら fetchCanceled、全体の上限の期限切れなら fetchNotStarted を返す。
+	// prompted はそのまま返す（AgentPrompt を呼んだあとの期限切れは、取得止めの判定に数える）。
+	canceled := func() (statuslineFetchResult, string, bool) {
 		if ctx.Err() != nil {
-			return fetchCanceled, ""
+			return fetchCanceled, "", prompted
 		}
-		return fetchNotStarted, ""
+		return fetchNotStarted, "", prompted
 	}
 	args := []string{
 		"--settings", settingsPath,
@@ -251,7 +369,7 @@ func (o *Orchestrator) startAndWaitStatusline(
 		if fctx.Err() != nil {
 			return canceled()
 		}
-		return fetchMidwayError, err.Error()
+		return fetchMidwayError, err.Error(), false
 	}
 
 	startup := time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond
@@ -265,23 +383,23 @@ func (o *Orchestrator) startAndWaitStatusline(
 				notFoundSince = o.now()
 			}
 			if o.now().Sub(notFoundSince) >= startup/2 {
-				return fetchAgentNotFound, ""
+				return fetchAgentNotFound, "", false
 			}
 		case err != nil:
 			if fctx.Err() != nil {
 				return canceled()
 			}
-			return fetchMidwayError, err.Error()
+			return fetchMidwayError, err.Error(), false
 		default:
 			notFoundSince = time.Time{}
 			switch got.Agent.AgentStatus {
 			case herdr.AgentStatusBlocked:
-				return fetchBlocked, ""
+				return fetchBlocked, "", false
 			case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 				ready = got.Agent.InteractiveReady
 			}
 			if !ready && o.now().After(deadline) {
-				return fetchNotStarted, ""
+				return fetchNotStarted, "", false
 			}
 		}
 		if ready {
@@ -293,30 +411,32 @@ func (o *Orchestrator) startAndWaitStatusline(
 		case <-time.After(time.Second):
 		}
 	}
+	// **呼ぶ前に印を立てる。**AgentPrompt が誤りを返しても、送れている場合がある。
+	prompted = true
 	if _, err := o.herdr.AgentPrompt(fctx, herdr.AgentPromptParams{Target: name, Text: statuslineFetchPrompt}); err != nil {
 		if fctx.Err() != nil {
 			return canceled()
 		}
-		return fetchMidwayError, err.Error()
+		return fetchMidwayError, err.Error(), true
 	}
 	timer := time.NewTimer(statuslineValueWait)
 	defer timer.Stop()
 	select {
 	case <-watch.done:
-		return fetchValueArrived, ""
+		return fetchValueArrived, "", true
 	case <-timer.C:
 	case <-fctx.Done():
 		if ctx.Err() != nil {
-			return fetchCanceled, ""
+			return fetchCanceled, "", true
 		}
 	}
 	o.quotaMu.Lock()
 	saw := watch.sawResponse
 	o.quotaMu.Unlock()
 	if saw {
-		return fetchNoValue, ""
+		return fetchNoValue, "", true
 	}
-	return fetchNoLine, ""
+	return fetchNoLine, "", true
 }
 
 // closeStatuslineFetchWorkspace は statusline取得の workspace を閉じ、閉じ残しの一覧を直す。
@@ -358,7 +478,8 @@ func (o *Orchestrator) reportStatuslineFetch(result statuslineFetchResult, detai
 			"使用率が届くのは Pro / Max だけです。それ以外の契約か API キーなら rate_limit.source: none にしてください。上限に当たっている場合もあります）")
 	case fetchNoLine:
 		o.logger.Warn("statusline取得ができません（値が1行も届かなかった: 3分の間に応答が1度もありませんでした。" +
-			"上限に当たっている・組織の managed settings に statusLine が書かれている・古い herdr が確認の画面で入力を受け付けると答えた、のどれかが考えられます）")
+			"上限に当たっている・組織の managed settings に statusLine が書かれている・古い herdr が確認の画面で入力を受け付けると答えた、のどれかが考えられます。" +
+			"API キーで Claude Code を使っているなら rate_limit.source: none にしてください）")
 	default:
 		o.logger.Warn("statusline取得ができません（途中の誤り）", "error", detail)
 	}
@@ -451,13 +572,14 @@ func (o *Orchestrator) writeStatuslineFetchSettings() (string, error) {
 // PrepareStatusline は、daemon が起動時検査のあと・復元の前に呼ぶ（issue #284）。
 //
 //  1. 閉じ残しの statusline取得の workspace を片付ける（`rate_limit.source` によらない）
-//  2. `source: statusline` なら quota.json を読む（sl.sock の受け付けより前）
+//  2. `source` が `none` でなければ quota.json を読む（sl.sock の受け付けと usage API の最初の
+//     読み取りより前）
 //
 // **復元より前に片付ける。**復元の片付けの `worktree.open` が、落ちたあとの閉じ残しを
 // issue の親にしうるためである。
 func (o *Orchestrator) PrepareStatusline(ctx context.Context) {
 	o.cleanupStatuslineLeftovers(ctx)
-	if o.cfg.RateLimit.Source == ratelimit.SourceStatusline {
+	if o.cfg.RateLimit.Source != ratelimit.SourceNone {
 		o.loadQuota()
 	}
 }
