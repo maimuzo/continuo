@@ -396,6 +396,38 @@ func TestStatuslineFetch_workspaceを作れなければ途中の誤りとしてW
 	}
 }
 
+// TestStatuslineFetch_作る応答が届かなくてもherdrが作ったworkspaceを閉じ残しに足す は、
+// 作る呼び出しが誤りで返っても herdr が作っていた workspace を、閉じ残しの一覧へ足すことを確かめる。
+//
+// 目的: 作る呼び出しの応答だけが期限を過ぎたときなど、herdr には statusline取得の workspace が
+// できているのに ID が届かないことがある。**一覧へ足さないと ID を知る者が居なくなり、誰も閉じない。**
+// 与える情報: workspace.create を受けたら、statusline取得の label の workspace（w88）を herdr の一覧へ
+// 足したうえで誤りを返す herdr。
+// 成功条件: 「途中の誤り」の WARN が1行出て、Claude Code を起動せず、閉じ残しの一覧が [w88] であること。
+func TestStatuslineFetch_作る応答が届かなくてもherdrが作ったworkspaceを閉じ残しに足す(t *testing.T) {
+	fx := newFetchFixture(t, nil, nil)
+	fx.AllowLog("途中の誤り")
+	fx.Herdr.Handle(herdr.MethodWorkspaceCreate, func(params map[string]any) (any, *rpcErr) {
+		cwd, _ := params["cwd"].(string)
+		fx.Herdr.AddWorkspace("w88", fakeWorkspace{
+			Checkout: cwd, RepoRoot: cwd, Label: herdr.StatuslineFetchLabel, Created: true,
+		})
+		return nil, &rpcErr{Code: "internal", Message: "応答が届かなかった（テスト用）"}
+	})
+
+	runFetchOnce(t, fx)
+
+	if got := logCount(fx, "途中の誤り"); got != 1 {
+		t.Errorf("「途中の誤り」の WARN が %d 行（want 1）", got)
+	}
+	if got := fx.Herdr.CountSL(herdr.MethodAgentStart); got != 0 {
+		t.Errorf("workspace を作れなかったのに Claude Code を %d 回起動した", got)
+	}
+	if got := leftoverList(t, fx); !slices.Equal(got, []string{"w88"}) {
+		t.Errorf("閉じ残しの一覧 = %v, want [w88]", got)
+	}
+}
+
 // TestStatuslineFetch_設定ファイルを書けなければworkspaceを作らずWARNを出す は、ファイルを書けなかった経路を確かめる。
 //
 // 目的: statusline取得用の設定ファイルを書けなければ、その試行をやめる（途中の誤り）。

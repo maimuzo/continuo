@@ -115,10 +115,14 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 	// **引き継ぎを身元ファイルへ書く handOverRepoWorkspace は仕事の外で行う**（git を呼ぶので、
 	// loop を長く止めない）。
 	var handOver []herdr.Workspace
-	_ = m.run(ctx, "", func(ctx context.Context) error {
+	// **仕事が1度も走らずに返ったとき（順番待ちの間に取り消された・loop が閉じた）も黙らない。**
+	if err := m.run(ctx, "", func(ctx context.Context) error {
 		handOver = m.closeRepoWorkspaceLocked(ctx, repoDir, target)
 		return nil
-	})
+	}); err != nil {
+		m.logger.Warn("herdr の workspace を閉じる順番が来ないまま止まったので、リポジトリ本体の herdr workspace は残ります（手で閉じてください）",
+			"repo", repoDir, "workspace_id", target, "error", err)
+	}
 	if handOver != nil {
 		m.handOverRepoWorkspace(ctx, handOver, repoDir, target)
 	}

@@ -324,6 +324,69 @@ func TestOpenStatuslineWorkspace_cloneをcwdにlabelとfocus偽で作る(t *test
 	}
 }
 
+// 目的: workspace.create が失敗で返っても herdr が workspace を作っていたとき、作る前と後の一覧の差から、
+// 増えた statusline取得の label の workspace を StatuslineCreateError の Orphans に載せて返すことを確かめる
+// （載せないと ID を知る者が居なくなり、誰も閉じない）。
+// 与える情報: 作る前の一覧は statusline取得の label の w30 だけ。workspace.create は誤りを返すか ID の無い応答を返し、
+// 受けた時点で一覧を「w30・w40（statusline取得の label）・w41（別の label）」へ差し替える。
+// 成功条件: 誤りが *workspace.StatuslineCreateError で、Orphans がちょうど [w40] であること
+// （前から在った w30 と、label の違う w41 を載せない）。作る前の一覧が引けないときは Orphans が空であること。
+func TestOpenStatuslineWorkspace_作るのに失敗しても増えたworkspaceを閉じ残しとして返す(t *testing.T) {
+	after := workspaceListResult(
+		statuslineEntry("w30", herdr.StatuslineFetchLabel, ""),
+		statuslineEntry("w40", herdr.StatuslineFetchLabel, ""),
+		statuslineEntry("w41", "octocat/hello-world/issues/1", ""),
+	)
+	cases := []struct {
+		name   string
+		setup  func(fh *fakeHerdr)
+		orphan []string
+	}{
+		{"作る呼び出しが誤りを返した", func(fh *fakeHerdr) {
+			fh.RemoveResult(herdr.MethodWorkspaceCreate)
+		}, []string{"w40"}},
+		{"作る呼び出しが ID の無い応答を返した", func(fh *fakeHerdr) {
+			fh.SetResult(herdr.MethodWorkspaceCreate, workspaceCreateResult("", ""))
+		}, []string{"w40"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newStatuslineFixture(t, fixtureOptions{})
+			fx.Herdr.SetResult(herdr.MethodWorkspaceList, workspaceListResult(
+				statuslineEntry("w30", herdr.StatuslineFetchLabel, ""),
+			))
+			tc.setup(fx.Herdr)
+			fx.Herdr.SetOnRequest(herdr.MethodWorkspaceCreate, func(map[string]any) {
+				fx.Herdr.SetResult(herdr.MethodWorkspaceList, after)
+			})
+			_, err := fx.Manager.OpenStatuslineWorkspace(context.Background(), fx.Repo.Dir)
+			var createErr *workspace.StatuslineCreateError
+			if !errors.As(err, &createErr) {
+				t.Fatalf("誤り = %v（%T）, want *workspace.StatuslineCreateError", err, err)
+			}
+			if !slices.Equal(createErr.Orphans, tc.orphan) {
+				t.Fatalf("Orphans = %v, want %v", createErr.Orphans, tc.orphan)
+			}
+		})
+	}
+	t.Run("作る前の一覧が引けないときは差を取らない", func(t *testing.T) {
+		fx := newStatuslineFixture(t, fixtureOptions{})
+		fx.Herdr.RemoveResult(herdr.MethodWorkspaceList)
+		fx.Herdr.RemoveResult(herdr.MethodWorkspaceCreate)
+		fx.Herdr.SetOnRequest(herdr.MethodWorkspaceCreate, func(map[string]any) {
+			fx.Herdr.SetResult(herdr.MethodWorkspaceList, after)
+		})
+		_, err := fx.Manager.OpenStatuslineWorkspace(context.Background(), fx.Repo.Dir)
+		var createErr *workspace.StatuslineCreateError
+		if !errors.As(err, &createErr) {
+			t.Fatalf("誤り = %v（%T）, want *workspace.StatuslineCreateError", err, err)
+		}
+		if len(createErr.Orphans) != 0 {
+			t.Fatalf("Orphans = %v, want 空（前の一覧が無いので差を取れない）", createErr.Orphans)
+		}
+	})
+}
+
 // ===== 同じ clone の段7 と片付けは、閉じるまで worktree.open を呼ばない =====
 
 // 目的: statusline取得の workspace を開いている間、同じ clone の着手の段7 が `worktree.open` を

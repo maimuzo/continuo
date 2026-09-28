@@ -47,10 +47,6 @@ const statuslineFetchPrompt = "hello"
 // statuslineValueWait は、`hello` を送ってから値を待つ上限である。
 const statuslineValueWait = 3 * time.Minute
 
-// statuslineFetchCloseTimeout は閉じる呼び出しの上限の目安である（ログに出すためだけ）。
-// 閉じる仕事の中の herdr の呼び出しは、呼び出しごとの期限（herdr.read_timeout_ms）で終わる。
-const statuslineFetchCloseTimeout = 10 * time.Second
-
 // statuslineFetchResult は statusline取得1回の結果である。
 type statuslineFetchResult int
 
@@ -194,6 +190,17 @@ func (o *Orchestrator) statuslineAttempt(
 	// **作る仕事は、全体の上限を掛ける前の ctx で呼ぶ**（Manager の中で期限を外し、取り消しは生かす）。
 	ws, err := o.ws.OpenStatuslineWorkspace(ctx, clone)
 	if err != nil {
+		// **herdr が作ったのに応答が届かなかった workspace を、閉じ残しの一覧へ載せる。**
+		// 載せないと ID を知る者が居なくなり、誰も閉じない（次の試行か次の起動で閉じる）。
+		var createErr *workspace.StatuslineCreateError
+		if errors.As(err, &createErr) {
+			for _, id := range createErr.Orphans {
+				if addErr := o.addStatuslineLeftover(id); addErr != nil {
+					o.logger.Warn("statusline取得の workspace を閉じ残しの一覧へ載せられません（herdr の画面で手で閉じてください）",
+						"workspace_id", id, "error", addErr)
+				}
+			}
+		}
 		if ctx.Err() != nil {
 			return fetchCanceled, ""
 		}
@@ -331,7 +338,7 @@ func (o *Orchestrator) closeStatuslineFetchWorkspace(
 		}
 		o.logger.Warn("statusline取得ができません（閉じられなかった: statusline取得の workspace が herdr の画面に残ります。"+
 			"次の試行か起動時に閉じ直します。herdr の画面で手で閉じてもかまいません）",
-			"workspace_id", ws.WorkspaceID, "error", err, "目安の上限", statuslineFetchCloseTimeout)
+			"workspace_id", ws.WorkspaceID, "error", err)
 	}
 }
 

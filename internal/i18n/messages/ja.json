@@ -856,6 +856,7 @@
   "workspace.leftover.prune_skipped": "git の worktree の登録が残っています。実体の無い登録がほかにもあるので git worktree prune は撃ちませんでした（ほかの登録: %s）。移しただけの worktree が無いことを確かめてから叩いてください: git -C %s worktree prune",
   "workspace.leftover.workspace_close_failed": "herdr の workspace %s が開いたままです（%v）。手で閉じてください: herdr workspace close %s",
   "workspace.leftover.workspace_list_failed": "herdr の workspace が開いたままかもしれません（一覧を引けませんでした: %v）。herdr workspace list で確かめてください",
+  "workspace.leftover.workspace_close_not_run": "herdr の workspace が開いたままかもしれません（閉じる順番が来ないまま止まりました: %v）。herdr workspace list で確かめてください",
   "workspace.new.home_dir_unknown": "ホームディレクトリを特定できません（~/.claude.json を読めない）: %w",
   "workspace.new.loop_missing": "herdr のクライアントを渡すのに、herdr の workspace の開け閉めを1つずつ行う loop が渡されていません（組み立ての誤り）",
   "workspace.new.settings_root_not_absolute": "issue ごとの設定ファイルの置き場所 %q が絶対パスではありません（片付けで settings_path がその内側かを判定できない）",

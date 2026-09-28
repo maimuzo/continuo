@@ -468,9 +468,6 @@ const (
 	KeyDoctorTrustDetailUnknown Key = "doctor.trust.detail_unknown"
 )
 
-// doctor の検査「資格情報」。
-const ()
-
 // CLI の共通の文言（複数のサブコマンドが同じ文面を出す）。
 const (
 	// KeyCLIErrGetwd は作業ディレクトリを引けなかったときに出る。
@@ -748,11 +745,6 @@ const (
 	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
 	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
 )
-
-// `continuo allow-keychain-access` の文言（macOS の Keychain へのアクセスを1回許可させる）。
-//
-// **失敗の案内は「何が起きたか・確かめ方・よくある原因・対処」の4行で書く**（設計 3-34b）。
-const ()
 
 // `continuo abandon` の引数とフラグの文言（internal/cli が出す分）。
 const (
@@ -1590,32 +1582,6 @@ const (
 	KeyHookclientCheckPendingCapacityLimitReached Key = "hookclient.check_pending_capacity.limit_reached"
 )
 
-// 枠の判定に使う usage API の読み取り（internal/ratelimit）のエラーの文言。
-const ()
-
-// 枠の判定に使う資格情報の取り出し（internal/ratelimit の token /
-// tokenFromCredentialsFile）の文言。
-//
-// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
-const ()
-
-// 枠の判定に使う資格情報を macOS の Keychain から読むとき（internal/ratelimit の
-// tokenFromKeychain / ProbeKeychain）の文言。
-//
-// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
-// **どれにも読み取った値そのものを載せない。**
-const ()
-
-// 枠の判定の番兵エラー（internal/ratelimit の ErrNoCredentials / ErrKeychainTimeout /
-// ErrKeychainCanceled）の文言。
-//
-// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
-// **引くのは Error() が呼ばれたときである**（internal/ratelimit の lazyError）。
-//
-// **ErrNoCredentials は上の credentials_file.* / keychain.* の先頭の %w に入る。**
-// **`continuo doctor` の `credentials` の行にそのまま出る。**
-const ()
-
 // HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
 //
 // **画面に並べる語は dashboard.* にある。**ここにあるのは、待ち受けの開始と停止、
@@ -1992,6 +1958,8 @@ const (
 	// KeyWorkspaceLeftoverWorkspaceListFailed は、herdr の workspace の一覧を引けず、
 	// 閉じるべき workspace を名指しできなかったときに出る。
 	KeyWorkspaceLeftoverWorkspaceListFailed Key = "workspace.leftover.workspace_list_failed"
+	// KeyWorkspaceLeftoverWorkspaceCloseNotRun は herdr の workspace を閉じる仕事が、順番が来ないまま止まった（取り消された・loop が閉じた）ときに、片付けの結果の残ったものとして出る。
+	KeyWorkspaceLeftoverWorkspaceCloseNotRun Key = "workspace.leftover.workspace_close_not_run"
 	// KeyWorkspaceLeftoverWorkspaceCloseFailed は、herdr の workspace を閉じられなかったときに出る。
 	KeyWorkspaceLeftoverWorkspaceCloseFailed Key = "workspace.leftover.workspace_close_failed"
 	// KeyWorkspaceLeftoverBranchReasonNoIdentity は、身元ファイルに branch が書いていないことを表す。
@@ -3188,6 +3156,7 @@ var allKeys = []Key{
 	KeyWorkspaceLeftoverPruneFailed,
 	KeyWorkspaceLeftoverPruneRepoUnknown,
 	KeyWorkspaceLeftoverWorkspaceListFailed,
+	KeyWorkspaceLeftoverWorkspaceCloseNotRun,
 	KeyWorkspaceLeftoverWorkspaceCloseFailed,
 	KeyWorkspaceLeftoverBranchReasonNoIdentity,
 	KeyWorkspaceLeftoverBranchReasonRepoUnknown,

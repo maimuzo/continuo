@@ -78,8 +78,8 @@ func (s *Snapshot) AtFullPercent() bool {
 // LatestResetOfFullLimits は、使い切っている枠のうち `resets_at` がいちばん遅いものを返す
 // （設計 3-27 の「どの枠の時刻を見るか」）。
 //
-// **`resets_at` が null の枠は判定から外す。**`weekly_scoped` も、モデルを判別せず
-// そのまま見る（continuo は Claude Code が使うモデルを知らない）。
+// **`resets_at` が無い枠は判定から外す。**いまの保管値は `resets_at` の無い期間を取り込まない
+// （issue #284）ので、この分岐は写しを手で組み立てたときのためのものである。
 //
 // 戻り値の1つ目: いちばん遅いリセット時刻。
 // 戻り値の2つ目: 該当する枠が1つでもあれば true。

@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "568a8c36b907cec7ebb78ceb924798c63ed1d673bd5b15419ddff71c5e3d64a7",
+  "_source_sha256": "78176fd556270647afe35f7ee0a876229dd0b50f1f745c1334d2f91750a4dfd3",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -857,6 +857,7 @@
   "workspace.leftover.prune_skipped": "git's worktree registration is left over. There are other registrations with no backing directory, so git worktree prune was not run (other registrations: %[1]s). Make sure none of them are worktrees that were merely moved, then run: git -C %[2]s worktree prune",
   "workspace.leftover.workspace_close_failed": "herdr's workspace %[1]s is still open (%[2]v). Close it by hand: herdr workspace close %[3]s",
   "workspace.leftover.workspace_list_failed": "herdr's workspace may still be open (could not list them: %v). Check with herdr workspace list.",
+  "workspace.leftover.workspace_close_not_run": "a herdr workspace may still be open (its turn to close never came: %v). Check with herdr workspace list",
   "workspace.new.home_dir_unknown": "cannot determine the home directory (cannot read ~/.claude.json): %w",
   "workspace.new.loop_missing": "a herdr client was given without the loop that serializes herdr workspace operations (wiring error)",
   "workspace.new.settings_root_not_absolute": "the location of the per-issue settings file %q is not an absolute path (cleanup cannot tell whether settings_path is inside it)",

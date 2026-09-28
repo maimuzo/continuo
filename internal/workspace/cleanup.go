@@ -1055,10 +1055,17 @@ func (m *Manager) closeWorktreeWorkspace(ctx context.Context, result *CleanupRes
 	// **一覧を引いてから閉じるまでを1つの仕事として loop に通す**（issue #284。serial.go）。
 	// 包むのはここだけで、共用の findWorkspaceIDByPath の中では包まない（resolveWorkspaceID の
 	// 仕事の中からも呼ばれるので、中で包むと loop が自分を待って止まる）。
-	_ = m.run(ctx, "", func(ctx context.Context) error {
+	// **仕事が1度も走らずに返ったとき（順番待ちの間に取り消された・loop が閉じた）も黙らない。**
+	// 一覧を引けなかったときと同じく、herdr workspace が残ることを人間に知らせる。
+	if err := m.run(ctx, "", func(ctx context.Context) error {
 		m.closeWorktreeWorkspaceLocked(ctx, result, worktreePath)
 		return nil
-	})
+	}); err != nil {
+		m.logger.Warn("herdr の workspace を閉じる順番が来ないまま止まったので、herdr workspace は残ります（手で閉じてください）",
+			"worktree", worktreePath, "error", err)
+		result.Leftovers = append(result.Leftovers,
+			i18n.T(i18n.KeyWorkspaceLeftoverWorkspaceCloseNotRun, err))
+	}
 }
 
 // closeWorktreeWorkspaceLocked は closeWorktreeWorkspace の本体である。loop の仕事の中で呼ぶ。

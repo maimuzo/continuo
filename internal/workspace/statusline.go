@@ -32,6 +32,30 @@ type StatuslineWorkspace struct {
 	key string
 }
 
+// StatuslineCreateError は、statusline取得の workspace を作れなかったことを表す。
+//
+// **作るのに失敗しても、herdr が workspace を作っていることがある**（応答が期限に間に合わなかった・
+// ID の無い応答が返った）。その workspace は誰も ID を知らないので、閉じ残しの一覧に載らず、
+// 誰も閉じない。そこで、作る前と後の一覧の差から、増えた statusline取得の label の workspace を
+// Orphans に載せて返す。**呼び出し側は Orphans を閉じ残しの一覧へ足す。**
+//
+// herdr の一覧は workspace の cwd を返さないので、label と差で見分ける。同じ機械の別の continuo
+// （`--id` を分けたもの）が同じ瞬間に statusline取得の workspace を作ったときだけ、それを取り違えうる。
+// 取り違えても、その workspace は次の閉じ残しの片付けで閉じられ、向こうの試行が1回失敗して
+// やり直すだけである。
+type StatuslineCreateError struct {
+	// Err は作れなかった理由である。
+	Err error
+	// Orphans は、作る前には無く、作ったあとに増えていた statusline取得の label の workspace の ID である。
+	Orphans []string
+}
+
+// Error は作れなかった理由を返す。
+func (e *StatuslineCreateError) Error() string { return e.Err.Error() }
+
+// Unwrap は作れなかった理由を返す。
+func (e *StatuslineCreateError) Unwrap() error { return e.Err }
+
 // StatuslineCloseOutcome は、statusline取得の workspace を閉じた結果である。
 type StatuslineCloseOutcome int
 
@@ -78,11 +102,15 @@ func withoutDeadline(parent context.Context) (context.Context, context.CancelFun
 // 処理を置かない（押さえたのに呼び出し側が ID を受け取れないと、押さえが永久に残る）。
 // 閉じ残しの一覧へ足すのは呼び出し側である（ファイルの書き込みは loop の仕事に入れない）。
 //
+// **作る前に一覧を引いておく。**作るのに失敗したら一覧を引き直し、増えた statusline取得の
+// label の workspace を StatuslineCreateError の Orphans に載せて返す（herdr が作ったのに
+// 応答が届かなかったものを、閉じ残しの一覧へ載せるため）。前の一覧を引けなければ差は取らない。
+//
 // ctx: 取り消しに使う（期限は外す。withoutDeadline）。
 // clonePath: cwd に渡す clone のパス。
 // 戻り値の1つ目: 作った workspace。
 // 戻り値の2つ目: 作れなかった理由。herdr が無い・作れなかった・ID が返らなかった・取り消した・
-// loop が閉じた。
+// loop が閉じた。作れなかった・ID が返らなかったときは *StatuslineCreateError である。
 func (m *Manager) OpenStatuslineWorkspace(ctx context.Context, clonePath string) (StatuslineWorkspace, error) {
 	if m.herdr == nil || m.loop == nil {
 		return StatuslineWorkspace{}, i18n.Errorf(i18n.KeyWorkspaceStatuslineHerdrMissing)
@@ -92,17 +120,24 @@ func (m *Manager) OpenStatuslineWorkspace(ctx context.Context, clonePath string)
 	key := cloneKey(clonePath)
 	var ws StatuslineWorkspace
 	err := m.loop.Do(jobCtx, "", func(ctx context.Context, j *loop.Job) error {
+		before, beforeErr := m.statuslineLabelIDs(ctx)
 		focus := false
 		created, err := m.herdr.WorkspaceCreate(ctx, herdr.WorkspaceCreateParams{
 			Cwd:   clonePath,
 			Label: herdr.StatuslineFetchLabel,
 			Focus: &focus,
 		})
-		if err != nil {
-			return i18n.Errorf(i18n.KeyWorkspaceStatuslineCreateFailed, clonePath, err)
+		if err == nil && created.Workspace.WorkspaceID == "" {
+			err = i18n.Errorf(i18n.KeyWorkspaceStatuslineCreateNoID, clonePath)
+		} else if err != nil {
+			err = i18n.Errorf(i18n.KeyWorkspaceStatuslineCreateFailed, clonePath, err)
 		}
-		if created.Workspace.WorkspaceID == "" {
-			return i18n.Errorf(i18n.KeyWorkspaceStatuslineCreateNoID, clonePath)
+		if err != nil {
+			createErr := &StatuslineCreateError{Err: err}
+			if beforeErr == nil {
+				createErr.Orphans = m.statuslineOrphans(ctx, before)
+			}
+			return createErr
 		}
 		ws = StatuslineWorkspace{
 			WorkspaceID: created.Workspace.WorkspaceID,
@@ -118,6 +153,40 @@ func (m *Manager) OpenStatuslineWorkspace(ctx context.Context, clonePath string)
 		return StatuslineWorkspace{}, err
 	}
 	return ws, nil
+}
+
+// statuslineLabelIDs は、いま herdr にある statusline取得の label の workspace の ID を集める。
+// loop の仕事の中で呼ぶ。
+func (m *Manager) statuslineLabelIDs(ctx context.Context) (map[string]struct{}, error) {
+	list, err := m.herdr.WorkspaceList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]struct{}{}
+	for _, ws := range list.Workspaces {
+		if ws.Label == herdr.StatuslineFetchLabel {
+			ids[ws.WorkspaceID] = struct{}{}
+		}
+	}
+	return ids, nil
+}
+
+// statuslineOrphans は、作るのに失敗したあとの一覧から、before に無かった statusline取得の
+// label の workspace の ID を返す。**作る仕事の ctx が取り消されていても引けるよう、
+// 取り消しを外した ctx で引く**（呼び出しごとの期限は herdr のクライアントが掛ける）。
+// 一覧を引けなければ nil を返す。loop の仕事の中で呼ぶ。
+func (m *Manager) statuslineOrphans(ctx context.Context, before map[string]struct{}) []string {
+	after, err := m.statuslineLabelIDs(context.WithoutCancel(ctx))
+	if err != nil {
+		return nil
+	}
+	var orphans []string
+	for id := range after {
+		if _, ok := before[id]; !ok {
+			orphans = append(orphans, id)
+		}
+	}
+	return orphans
 }
 
 // CloseStatuslineWorkspace は、statusline取得の workspace を閉じ、押さえを放す。

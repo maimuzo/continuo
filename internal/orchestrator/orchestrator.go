@@ -153,6 +153,10 @@ type HerdrClient interface {
 	PaneList(ctx context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error)
 	// WorkspaceList は workspace の一覧を引く（設計 3-83c の門4。worktree を開いている workspace を引く）。
 	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
+	// WorktreeOpen は既にある worktree を workspace として開く。
+	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
+	// 着手のときは workspace の Manager が開く。
+	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
 	// PaneRename は pane の label に `owner/repo/issues/N` を書く（設計 3-3）。
 	// **人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
 	PaneRename(ctx context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error)

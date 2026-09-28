@@ -341,14 +341,6 @@ func snapshotOf(windows map[string]quotaWindow, now, fetchedAt time.Time) *ratel
 	return snap
 }
 
-// quotaAtFullNow は、期限内の保管値に 100 の期間があるかを返す（statusline取得を開かない条件）。
-//
-// **上限の最中は断られるだけで値は変わらない**ので、statusline取得を開かない。その期間の
-// resets_at を過ぎると保管値から消え、開く。
-func (o *Orchestrator) quotaAtFullNow() bool {
-	return o.quotaSnapshot().AtFullPercent()
-}
-
 // quotaFileWindow は quota.json の1つの期間である。
 type quotaFileWindow struct {
 	// Percent は使用率である。

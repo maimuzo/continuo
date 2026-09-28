@@ -137,6 +137,11 @@ func (s *stubHerdr) WorkspaceList(_ context.Context) (*herdr.WorkspaceListResult
 	return &herdr.WorkspaceListResult{Type: "workspace_list"}, nil
 }
 
+// WorktreeOpen は workspace を1つ返す。
+func (s *stubHerdr) WorktreeOpen(_ context.Context, _ herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error) {
+	return &herdr.WorktreeOpenResult{Type: "worktree_opened", Workspace: herdr.Workspace{WorkspaceID: "w1"}}, nil
+}
+
 // PaneRename は何もせずに成功を返す。
 func (s *stubHerdr) PaneRename(_ context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error) {
 	return &herdr.PaneRenameResult{Type: "pane_info", Pane: herdr.Pane{PaneID: params.PaneID, Label: params.Label}}, nil
