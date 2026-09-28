@@ -218,7 +218,7 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // 検査）・段0（dispatch 直前の検査）・段1（印を付ける）までである。**段2以降は別の
 // goroutine で回す。**段3〜段10 は git の worktree 作成・利用者が書いた workspace_hooks
 // （既定60秒）・起動の待ち（既定60秒）を順に通るので、既定値と max_concurrent_agents=2 では
-// 1回の巡回が数分返らず、その間 stall 検知も枠の読み取りも止まる。
+// 1回の巡回が数分返らず、その間 stall 検知も statusline取得の要否の判定も止まる。
 //
 // **同じ巡回で印を付けた run は、印を付けた順に1本の goroutine で処理する。**
 // 並行に走らせると、カンバンの並び順どおりに着手したことを外から確かめられなくなる。
@@ -234,7 +234,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
 		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
+			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください"+
+			"（使用率が 100 の期間が残っているときは、上げても値を取り直さないので直りません。"+
+			"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）",
 			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
 		return
 	}

@@ -48,8 +48,6 @@ const (
 	LabelClone = i18n.KeyDoctorLabelClone
 	// LabelTrust は対象リポジトリの clone のパスが `~/.claude.json` で承認済みかの検査である。
 	LabelTrust = i18n.KeyDoctorLabelTrust
-	// LabelCredentials は rate_limit の設定に応じて環境変数かファイルがあるかの検査である。
-	LabelCredentials = i18n.KeyDoctorLabelCredentials
 	// LabelClaudeHome は Claude Code の設定ディレクトリに実際に書けるかの検査である。
 	//
 	// **文字列を組み立てるだけでは足りない。**`~/.claude/session-env/<使い捨ての名前>` を

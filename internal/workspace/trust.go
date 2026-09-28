@@ -81,6 +81,37 @@ func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
 	return CheckTrustForClonePath(clonePath, m.homeDir)
 }
 
+// TrustedClonePath は、そのリポジトリの手元の clone が Claude Code に信頼されていれば、
+// clone のパスを返す（issue #284。statusline取得に使う clone を選ぶ）。
+//
+// **判定は CheckTrust と同じである**（ghq で clone を引き、git の toplevel を鍵に
+// `~/.claude.json` を読む。**書かない**）。**git を起こすので、testing/synctest の
+// bubble の中では呼べない。**
+//
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値の1つ目: 信頼済みの clone のパス。clone が無い・信頼されていないなら空文字。
+// 戻り値の2つ目: 判定できなかった理由（ghq や git を実行できない・`~/.claude.json` を読めないなど）。
+func (m *Manager) TrustedClonePath(owner, repo string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), trustCheckTimeout)
+	defer cancel()
+	clonePath, err := m.clonePath(ctx, owner, repo)
+	if err != nil {
+		return "", err
+	}
+	if clonePath == "" {
+		return "", nil
+	}
+	trusted, _, err := CheckTrustForClonePath(clonePath, m.homeDir)
+	if err != nil {
+		return "", err
+	}
+	if !trusted {
+		return "", nil
+	}
+	return clonePath, nil
+}
+
 // CheckTrustForClonePath は clone の絶対パスを鍵にして、信頼登録を理由つきで判定する
 // （3-6 の「信頼を引く鍵の作り方」の2段と3段）。
 //

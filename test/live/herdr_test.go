@@ -486,3 +486,85 @@ func TestLive_WorktreeRemove_workspace_idで消える(t *testing.T) {
 	// **控えたままにすると、2度目の worktree.remove が失敗して偽の後始末エラーになる。**
 	janitor.Forget(opened.Workspace.WorkspaceID)
 }
+
+// 目的: statusline取得（使用率を受け取るために短い haiku の Claude Code を開くこと。issue #284）が
+// 使う workspace.create の形を本物で固定する。**引数（cwd・label・focus）と応答の形
+// （workspace.workspace_id・root_pane.pane_id）がずれると、statusline取得が1度も開けず、
+// 自動の着手が止まり続ける。**偽 herdr は continuo の想定どおりにしか答えないので、ここで捕まえる。
+// 与える情報: 使い捨てのリポジトリ（clone の代わり）を cwd にし、テスト用の label と focus 偽で
+// workspace.create を呼ぶ。
+// 成功条件: 応答が workspace の ID と root の pane の ID を持つこと。workspace.list に、その ID が
+// 渡した label のまま載り、`worktree` 欄を持たないこと（実測: 2026-09-28。持つと、閉じる判定の
+// 「親にされたか」が作った直後から真になる）。workspace.close で閉じられ、一覧から消えること。
+//
+// **Claude Code は起動しない。**workspace を作って閉じるだけである。
+func TestLive_WorkspaceCreate_statusline取得の形で作って閉じられる(t *testing.T) {
+	client := requireLiveHerdr(t)
+	repo := newLiveRepo(t)
+	ctx := context.Background()
+	focus := false
+	label := liveLabelPrefix + " statusline fetch"
+
+	created, err := client.WorkspaceCreate(ctx, herdr.WorkspaceCreateParams{
+		Cwd:   repo.Path,
+		Label: label,
+		Focus: &focus,
+	})
+	if err != nil {
+		t.Fatalf("本物の herdr で workspace.create が失敗した: %v", err)
+	}
+	id := created.Workspace.WorkspaceID
+	// **アサーションより先に後始末を登録する。**`worktree` 欄を持たない workspace は
+	// 後始末係（worktree のパスで探す）では拾えないので、ID で閉じる。
+	closed := false
+	t.Cleanup(func() {
+		if closed || id == "" {
+			return
+		}
+		cctx, cancel := context.WithTimeout(context.Background(), liveCleanupTimeout)
+		defer cancel()
+		if _, err := client.WorkspaceClose(cctx, herdr.WorkspaceCloseParams{WorkspaceID: id}); err != nil {
+			t.Errorf("後始末に失敗しました。herdr に workspace %s が残っています（手で閉じてください）: %v", id, err)
+		}
+	})
+	if id == "" {
+		t.Fatalf("workspace.create の応答に workspace_id が無い: %+v", created)
+	}
+	if created.RootPane.PaneID == "" {
+		t.Fatalf("workspace.create の応答に root_pane.pane_id が無い: %+v", created)
+	}
+
+	list, err := client.WorkspaceList(ctx)
+	if err != nil {
+		t.Fatalf("本物の herdr で workspace.list が失敗した: %v", err)
+	}
+	var found *herdr.Workspace
+	for i := range list.Workspaces {
+		if list.Workspaces[i].WorkspaceID == id {
+			found = &list.Workspaces[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("作った workspace %s が workspace.list に無い", id)
+	}
+	if found.Label != label {
+		t.Errorf("workspace.list の label が渡したものと違う: got %q, want %q", found.Label, label)
+	}
+	if found.Worktree != nil {
+		t.Errorf("作った直後の workspace が worktree 欄を持っている: %+v", *found.Worktree)
+	}
+
+	if _, err := client.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: id}); err != nil {
+		t.Fatalf("作った workspace を workspace.close で閉じられない: %v", err)
+	}
+	closed = true
+	after, err := client.WorkspaceList(ctx)
+	if err != nil {
+		t.Fatalf("本物の herdr で workspace.list が失敗した: %v", err)
+	}
+	for _, ws := range after.Workspaces {
+		if ws.WorkspaceID == id {
+			t.Errorf("workspace.close のあとも workspace %s が残っている", id)
+		}
+	}
+}

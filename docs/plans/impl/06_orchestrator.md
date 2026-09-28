@@ -30,7 +30,7 @@
 | --- | --- |
 | `internal/orchestrator` | 巡回・dispatch・turn ループ・照合・リトライ・stall 検知 |
 | `internal/orchestrator` | 表明の読み取り（transcript のパース） |
-| `internal/ratelimit` | usage API を読む（`rate_limit.source: none` なら1回も叩かない） |
+| `internal/ratelimit` | 使用率の写しの型（`Snapshot` / `Limit`）。**issue #284 で usage API の読み取りを消した。**使用率は Claude Code のステータスラインから受け取り、`internal/orchestrator` が保管する（設計 3-27） |
 
 **第3段階のアダプタに1つ足す。**
 

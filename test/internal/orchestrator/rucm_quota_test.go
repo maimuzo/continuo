@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "84fe18b373fccaaaa45abd54d35647770fded53bfa246c36c3e7178accdb62d7", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "8331be3f720bd161c8fdf64af4773cea1550a7baeb4f40edd827a37cdf112345", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
@@ -63,7 +63,7 @@ func TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない(t *t
 // **枠を読めないときに「枠待ちかもしれない」と待ち続けると、止まった run を永久に抱える。**
 // 読めないなら枠の判定は諦め、通常の打ち切りとして扱う。
 //
-// 目的: usage API が読めない状態で hook も来なければ、`turn_timeout_ms` で打ち切ること。
+// 目的: 使用率を読めない状態で hook も来なければ、`turn_timeout_ms` で打ち切ること。
 // 与える情報: 枠の判定を無効にした設定（`source: none`）と、hook を1件も送らない run。
 // 成功条件（RUCM の POSTCONDITION）: pane が閉じられ、**印は残り**、
 // Status は `running_state` のままであること（リトライで再開するため）。
