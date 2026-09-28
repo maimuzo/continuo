@@ -399,3 +399,38 @@ v2 は既存の `setAwaitTurnEnd` と `setBusyCheckBeforeSend` を呼ぶだけ�
 `go vet ./...`: 終了コード 0。
 `go test -race -cpu 1,2 -count=10 -run 'TestDirectChat' ./test/internal/orchestrator/`: 直す前は `--- FAIL` 10件（全部 v1 のテスト）、直したあとは終了コード 0、`^--- FAIL` 0件・`^FAIL` 0件。
 **CI の結果は、push したあとメインが確かめる**（この作業では push していない）。
+
+## 実装レビュー5周目で直すもの
+
+**言いたいこと。**判断票（PR #267 の実装レビュー5周目）で「直す」と決めた2件を、直す前に全部並べる。
+
+| # | 指摘 | 直す場所 | 影響範囲と確かめたこと |
+| --- | --- | --- | --- |
+| w1 | 閉じる集合が pane を cwd だけで探す（mid） | `internal/orchestrator/reconcile.go` の `closeOrphanPane` | **`includeUnnamed` が真のときだけ**、`workspace.list` でその worktree を開いている herdr workspace（`checkout_path` をシンボリックリンク解決して照合。門4 の `directChatPanes` と同じ見方）を引き、その workspace に属する pane も cwd を問わず閉じる。着手の段8 の `resolvePane` は workspace の中の1枚を cwd を見ずに使うので、同じ見方で閉じないと、別のディレクトリへ移ったシェルへ `agent.start` が届く。`workspace.list` を引けなければ WARN を出して偽を返す（集合に残し、次の巡回でやり直す）。**`includeUnnamed` が偽の通常の道（3-9 の手順7b）は変えない**（`workspace.list` も投げない）。リポジトリの親 workspace は `checkout_path` がリポジトリ本体なので当たらない。呼び出し元は `reconcileOrphanWorktrees` の1箇所だけ |
+| w2 | FAQ の段2 が門4 の新しい判定を伝えていない（low） | `docs/FAQ.md` の「pane が来ないとき」の段2 | 「その worktree の pane」に、その worktree を開いている herdr の workspace の pane（別のディレクトリへ移ったシェルも含む）も数えることを1文足す |
+
+**hook の規則（CLAUDE.md の6）との当たり。**触るのは `reconcile.go` と `docs/FAQ.md` とテストだけで、検知の網のファイルには触れない見込み。hook の引数・宛先・約束・Claude Code へ返すものは変えない。
+
+### 直した場所（実装レビュー5周目）
+
+| # | どこ |
+| --- | --- |
+| w1 | `internal/orchestrator/reconcile.go` の `closeOrphanPane`（`includeUnnamed` が真のときだけ `workspace.list` を引き、その worktree を開いている workspace の pane も cwd を問わず閉じる。引けなければ偽を返して集合に残す）と、その関数のコメント |
+| w2 | `docs/FAQ.md` の「pane が来ないとき」の段2 |
+
+**行番号のリンク。**`reconcile.go` と `FAQ.md` へ行番号で向くリンクは、`continuo_design.md` の `reconcile.go#L104-L105`（変えた行より前）と `01_inventory_repo.md` の `FAQ.md#L201-L250`（行数は変わらない）だけで、どちらもずれない。
+
+### 足したテスト（実装レビュー5周目）
+
+| テスト | 何を確かめるか | 直しを外すと |
+| --- | --- | --- |
+| `TestDirectChat_閉じる集合はworkspaceの中で別のディレクトリへ移ったシェルも閉じてから着手する` | w1。direct chat のあいだは閉じず、作業中へ戻した巡回で、workspace の中で別のディレクトリへ移ったシェルを閉じてから `agent.start` を投げる | 落ちる（確かめた。`agent.start` の宛先がそのシェル） |
+
+**このテストは、着手が1回目の指示を送り終えるまで待ってから返る。**`agent.start` を見た直後に返す形では、`-race -cpu 1,2 -count=10` の20回に1回、後始末と走っている着手の間でデータ競合が出た（実測 2026-09-28）。待つ形にしてからは、このテストだけの80回と direct chat の全体の20回で0件。
+
+### テストの結果（実装レビュー5周目）
+
+`sh scripts/test-like-ci.sh`（2026-09-28 JST。`-race` あり）: 終了コード 0、`ok` 62件、`grep -c "^FAIL"` = 0、`grep -c "^--- FAIL"` = 0。
+`go vet ./...`: 終了コード 0、出力0行。
+`go test -race -cpu 1,2 -count=10 -run 'TestDirectChat' ./test/internal/orchestrator/`: 終了コード 0、`^FAIL` 0件・`^--- FAIL` 0件。
+**hook の規則。**この周の差分（`docs/FAQ.md`・`docs/plans/impl/issue263_direct_chat.md`・`internal/orchestrator/reconcile.go`・テスト）は検知の網に1本も掛からない。網が返す `cli.go`・`orchestrator.go`・`runstate.go`・`turn.go` は前の周までの commit のもので、この周では触っていない。

@@ -416,6 +416,8 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // （置き場所は解決済みだが、pane の cwd は起動時の文字列がそのまま入りうる。設計 3-4 の段4）。
 //
 // **閉じる集合（設計 3-83f）に入っている worktree では、agent 名の無い pane も閉じる**（`includeUnnamed`）。
+// **そのときは、その worktree を開いている herdr workspace の pane も cwd を問わず閉じる。**門4（設計 3-83c）と
+// 同じ見方である。workspace は `workspace.list` の `checkout_path` で引くので、これも身元ファイルを使わない。
 // **閉じ損ねたら WARN を1行出し、偽を返す。**呼び出し側は集合に残して次の巡回でやり直す
 // （黙って着手されない issue を作らないため）。
 //
@@ -440,13 +442,34 @@ func (o *Orchestrator) closeOrphanPane(
 			"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
 		return false
 	}
+	// **閉じる集合の worktree では、その worktree を開いている herdr workspace の pane も閉じる**（設計 3-83c の門4・3-83f）。
+	// 着手の段8 の `resolvePane` は、workspace の中の1枚を cwd を見ずに使う。cwd だけで探すと、人間がその
+	// workspace の pane で別のディレクトリへ移っていたときに閉じ損ね、そのシェルへ `agent.start` が届く。
+	// **通常の道（`includeUnnamed` が偽）では `workspace.list` を投げない**（3-9 の手順7b は変えない）。
+	worktreeWorkspaces := map[string]bool{}
+	if includeUnnamed {
+		workspaces, err := o.herdr.WorkspaceList(ctx)
+		if err != nil {
+			o.logger.Warn("workspace の一覧を取れないので pane は閉じません",
+				"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
+			return false
+		}
+		for _, ws := range workspaces.Workspaces {
+			if ws.WorkspaceID == "" || ws.Worktree == nil || ws.Worktree.CheckoutPath == "" {
+				continue
+			}
+			if got, ok := resolvePath(ws.Worktree.CheckoutPath); ok && got == want {
+				worktreeWorkspaces[ws.WorkspaceID] = true
+			}
+		}
+	}
 	allClosed := true
 	for _, p := range list.Panes {
 		if p.Agent == "" && !includeUnnamed {
 			continue
 		}
 		got, ok := resolvePath(p.Cwd)
-		if !ok || got != want {
+		if (!ok || got != want) && !worktreeWorkspaces[p.WorkspaceID] {
 			continue
 		}
 		o.logger.Warn("印に入っていない worktree に生きた pane があったので閉じます",

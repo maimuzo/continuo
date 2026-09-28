@@ -799,7 +799,7 @@ tracker:
 | --- | --- | --- |
 | **0** | **担当者が、pane を開きたい PC の continuo が使っている `gh` のアカウントの1人だけかを確かめ、違えば直す** | 担当者の食い違い（continuo を bot のアカウントで動かし、自分の個人アカウントを担当者にしたときなど） |
 | **1** | **最大5分半待つ** | やり直し待ちの issue を continuo が抱えていた場合（待ちが明けると自分で解けます） |
-| **2** | それでも来なければ、**その worktree の pane が残っていれば閉じ**（Claude Code を終了すると pane はシェルに戻って残ります）、**カードを1度 `In Review` か `Blocked` へ動かしてから `Direct Chat` へ戻す**（1巡回、既定30秒で効きます） | pane が消えた場合と、pane はあるが Claude Code が居ない場合 |
+| **2** | それでも来なければ、**その worktree の pane が残っていれば閉じ**（Claude Code を終了すると pane はシェルに戻って残ります。**その worktree を開いている herdr の workspace の pane は、別のディレクトリへ移ったシェルも含めて「その worktree の pane」に数えます**）、**カードを1度 `In Review` か `Blocked` へ動かしてから `Direct Chat` へ戻す**（1巡回、既定30秒で効きます） | pane が消えた場合と、pane はあるが Claude Code が居ない場合 |
 
 **段2 で `Ready` や `In Progress` へ動かさないでください。**そちらへ動かすと continuo が
 指示を送ろうとして失敗し、**さらに最大5分半待つことになります。**

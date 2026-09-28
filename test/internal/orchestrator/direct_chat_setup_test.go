@@ -1173,6 +1173,91 @@ func TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意し
 	})
 }
 
+// TestDirectChat_閉じる集合はworkspaceの中で別のディレクトリへ移ったシェルも閉じてから着手する は、
+// 設計 3-83f の閉じる集合と 3-83c の門4 を確かめる。
+//
+// 目的: 閉じる集合の worktree を作業中の Status へ戻すと、着手の段8 の `resolvePane` は worktree の workspace の中の
+// 1枚を cwd を見ずに使う。**閉じる集合が cwd だけで pane を探すと、人間がその workspace の pane で別のディレクトリへ
+// 移っていたときに閉じ損ねて集合から外し、そのシェルへ `agent.start` が届く。**
+// 与える情報: 印を持たない direct chat の worktree。その workspace に、agent 名が無く cwd が別のディレクトリの pane が1枚ある。
+// 成功条件: direct chat のあいだは閉じないこと。作業中へ戻した巡回で、その pane を閉じてから `agent.start` を投げ、
+// `agent.start` の宛先がその pane でないこと。
+func TestDirectChat_閉じる集合はworkspaceの中で別のディレクトリへ移ったシェルも閉じてから着手する(t *testing.T) {
+	fx := newDirectChatFixture(t, nil)
+	holdPrompt(fx)
+	fx.AllowLog("印に入っていない worktree に生きた pane")
+	issue := sampleIssue(360, humanState)
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	wt := prepareWorktree(t, fx, issue, identityOverride{})
+	if wt.WorkspaceID == "" {
+		t.Fatal("前提が崩れている（worktree の workspace が開かれていない）")
+	}
+	moved := wt.WorkspaceID + ":p9"
+	fresh := wt.WorkspaceID + ":p10"
+	var mu sync.Mutex
+	closed := false
+	fx.Herdr.Handle(herdr.MethodPaneClose, func(params map[string]any) (any, *rpcErr) {
+		if params["pane_id"] == moved {
+			mu.Lock()
+			closed = true
+			mu.Unlock()
+		}
+		return map[string]any{"type": "ok"}, nil
+	})
+	// 人間がその workspace の pane で別のディレクトリへ移っている（Claude Code は居ない）。
+	// 閉じたあとの `worktree.open` の pane は、cwd がその worktree の新しい1枚として返す。
+	other := t.TempDir()
+	fx.Herdr.Handle(herdr.MethodPaneList, func(map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		defer mu.Unlock()
+		pane := map[string]any{"pane_id": moved, "workspace_id": wt.WorkspaceID, "agent_status": "unknown", "cwd": other}
+		if closed {
+			pane = map[string]any{"pane_id": fresh, "workspace_id": wt.WorkspaceID, "agent_status": "unknown", "cwd": wt.Path}
+		}
+		return map[string]any{"type": "pane_list", "panes": []any{pane}}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	if ids := closedPaneIDs(fx); len(ids) != 0 {
+		t.Fatalf("direct chat のあいだに pane を閉じた: %v", ids)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != 0 {
+		t.Fatalf("前提が崩れている（direct chat の pane を用意した）: agent.start %d 回", n)
+	}
+
+	// 人間が作業中の Status へ戻した。
+	fx.Tracker.SetState(issue.ID, "In Progress")
+	waitFor(t, 15*time.Second, "作業中へ戻した巡回で着手する", func() bool {
+		fx.Orc.Tick(context.Background())
+		return fx.Herdr.CountMethod(herdr.MethodAgentStart) > 0
+	})
+	closeAt, startAt := -1, -1
+	for i, r := range fx.Herdr.Requests() {
+		switch r.Method {
+		case herdr.MethodPaneClose:
+			if r.Params["pane_id"] == moved && closeAt < 0 {
+				closeAt = i
+			}
+		case herdr.MethodAgentStart:
+			if startAt < 0 {
+				startAt = i
+				if r.Params["pane_id"] == moved {
+					t.Fatalf("別のディレクトリへ移ったシェルへ agent.start を投げた: %v", r.Params)
+				}
+			}
+		}
+	}
+	if closeAt < 0 || closeAt > startAt {
+		t.Fatalf("別のディレクトリへ移ったシェルを閉じてから着手していない: pane.close %d 番目・agent.start %d 番目", closeAt, startAt)
+	}
+	// **着手が1回目の指示を送り終えるまで待ってから返る。**起動の確認の最中に返すと、走っている着手が
+	// テスト用の herdr を叩いている最中に後始末が走り、`-race` がデータ競合として落とす（20回に1回、実測）。
+	waitFor(t, 15*time.Second, "着手が1回目の指示を送る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+}
+
 // TestDirectChat_用意中に戻されたときClaudeCodeが既に動いていればturnの終わりを待ってから1回目の本文を送る は、
 // 設計 3-83d の外れ方の表の1行目を確かめる。
 //
