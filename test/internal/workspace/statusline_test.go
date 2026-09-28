@@ -600,6 +600,39 @@ func TestStatusline_NoWaitの片付けは押さえられたcloneで何も消さ�
 
 // ===== 閉じる判定と、押さえを放すこと =====
 
+// 目的: `herdr.worktree.create_via_herdr` が偽の人の片付けは、statusline取得の workspace が同じ clone で
+// 開いていても待たないことを確かめる（`worktree.open` を1度も呼ばないので守るものが無い）。
+// 与える情報: create_via_herdr を偽にした Manager で worktree を1つ用意し、statusline取得の workspace を
+// 同じ clone に開いたまま、NoWait の Cleanup を呼ぶ。
+// 成功条件: ErrCloneBusy で戻らずに Removed で返り、`worktree.open` が1度も届かないこと。
+func TestStatusline_create_via_herdrが偽なら片付けは押さえを待たない(t *testing.T) {
+	l := loop.New(nil)
+	l.Start()
+	t.Cleanup(l.Close)
+	fake := newStatuslineHerdr(t)
+	runner := &recordingRunner{inner: l, fake: fake, keyed: make(chan string, 16)}
+	cf := newCleanupFixtureWith(t, fixtureOptions{
+		Herdr:  fake,
+		Loop:   runner,
+		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.CreateViaHerdr = false },
+	})
+	fx := &statuslineFixture{managerFixture: cf.managerFixture, Loop: l, Runner: runner}
+
+	ws, _ := openStatusline(t, fx, cf.Repo.Dir)
+	t.Cleanup(func() { _, _ = cf.Manager.CloseStatuslineWorkspace(context.Background(), ws) })
+
+	result, err := cf.Manager.Cleanup(context.Background(), forceCleanup(cf.Prepared.Path, true))
+	if err != nil {
+		t.Fatalf("create_via_herdr が偽なのに片付けが押さえで止まった: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("片付けたのに Removed が偽: %+v", *result)
+	}
+	if slices.Contains(fake.Methods(), herdr.MethodWorktreeOpen) {
+		t.Fatalf("create_via_herdr が偽なのに worktree.open を送った: %v", fake.Methods())
+	}
+}
+
 // 目的: statusline取得の workspace が issue の親にされ、下に同じ clone の issue の worktree の
 // workspace が居るなら、閉じずに StatuslineParentWithChild を返し、それでも押さえは放すことを確かめる
 // （閉じると herdr 0.8.x では下の issue の pane まで消える）。

@@ -934,6 +934,7 @@ Stop hook を受け取ったとき:
 
 **例外は statusline取得用の workspace だけである**（3-27）。label は `continuo statusline fetch` で、
 **閉じ残しを片付けるときに、閉じ残しの一覧の ID がいまもその workspace を指しているかを label で確かめる。**
+**もう1つ、statusline取得の workspace を作るのに失敗したとき（応答が期限を過ぎた・ID が返らなかった）に、作る前と後の一覧の差から、増えた statusline取得の workspace をこの label で見分けて閉じ残しの一覧へ拾う**（3-4d の表）。
 合わなければ、ID が別の workspace に使い回されているので、閉じずに一覧から外す。
 **continuo が label を書き換えるのは issue の worktree の workspace だけなので**（`workspace.rename`）、
 statusline取得用の label が別の workspace に付くことは無い。**復元には使わない。**
@@ -4200,7 +4201,7 @@ issue ごとの設定ファイルに `statusLine` を書かない。`sl.sock` �
 | 上限に当たったとき 100 が届くかを測っていない | 届かなければ、上限に当たった run は今と同じく `claude.turn_timeout_ms` のあとに stall として止められる |
 | `weekly_scoped` を見ない | モデル別の週次の上限に当たった run は、回復待ちと判定されずに stall として止められうる |
 | 契約を上げた・サーバーが期間の途中で使用率を戻した | 立て直しても、その `resets_at` まで高い値が残る。次の5時間の区切りを過ぎてから `quota.json` を消して立て直せば戻る |
-| アカウントを替えた | 替える前の値が `quota.json` から戻る。替える前のアカウントの 100 が残っていると、その `resets_at`（最長7日）まで着手を止め、statusline取得も開かない。替える前から開いている pane が、期間が切れる時刻かプロンプトキャッシュの期限に、替える前の7日の値を送りうる。どちらも、止めて `quota.json` を消して立て直せば直る |
+| アカウントを替えた | 替える前の値が `quota.json` から戻る。替える前のアカウントの 100 が残っていると、その `resets_at`（最長7日）まで着手を止め、statusline取得も開かない。走っている run も、回復待ち（`quotaAtFull` は新しさを問わない）と判定され続けて stall にならず、枠を占める。閾値を上げても、入札は値を読めずに見送る。替える前から開いている pane が、期間が切れる時刻かプロンプトキャッシュの期限に、替える前の7日の値を送りうる。どちらも、止めて `quota.json` を消して立て直せば直る |
 | statusline取得の workspace が開いている clone | issue の着手が、それが閉じるまで待つ（多くは十数秒、長いと数分）。値が届かない間は、先頭の clone が5分のうち3分あまり押さえられる。同じ巡回で着手する別の clone の issue も待つ。その clone の run が終わるときは、片付けが待つ間スロットを占める（3-4d） |
 | 別のプロセスとは順番を決めない | `--id` を分けた2つ目の continuo・`continuo abandon` が同じ clone で `worktree.open` をすると、親にされうる。閉じずに WARN を出し、子が閉じたあとに閉じる。**「子が居るか」は同じ clone の linked worktree が居るかで見る**（herdr の一覧はどれがどれの子かを返さない）ので、同じ clone の別の issue が走っている間は、子の居なくなった親も閉じない |
 | 値が1つも入らない機械 | Pro / Max 以外・API キー・`--restricted` を持たない古い Claude Code（2.1.248 より前）・`trust.repositories` に信頼済みの clone が無い、のどれかでは、run が無い状態から値が入らず、**自動の着手が止まり続ける。**statusline取得の WARN が理由を出す |

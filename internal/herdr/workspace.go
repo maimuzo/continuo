@@ -14,6 +14,8 @@ import (
 // メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
 // （continuo は送らない。workspace.go）。**`worktree.create` / `worktree.open` / `worktree.list` /
 // `worktree.remove` に任意の `trust_repository` が増えた**（continuo は送らない）。
+// **`workspace.create` は 2026-09-25 に herdr 0.9.1 で確かめた**（statusline取得が使う。issue #284）。
+// 0.8.x で同じ形かは確かめていない。
 
 // MethodWorkspaceList は herdr の workspace の一覧を取るメソッド名である。
 //
@@ -181,7 +183,8 @@ type WorkspaceRenameResult struct {
 
 // WorkspaceRename は workspace.rename を呼び、herdr workspace に label を書く（3-3）。
 // **label は人間が herdr の画面で workspace を見分けるための表示名である。**
-// continuo は読み戻さない（例外は statusline取得用の workspace の片付けの照合だけ。issue #284）。
+// continuo は読み戻さない（例外は statusline取得用の workspace だけで、片付けの照合と、作るのに
+// 失敗したときの拾い上げに読む。issue #284）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // params: workspace の ID と label（2つとも必須）。

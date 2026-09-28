@@ -268,9 +268,14 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 		workspaceID, err = m.resolveWorkspaceID(ctx, resolvedPath, repoDir, identity)
 		return err
 	}
-	if req.NoWait {
+	// **`create_via_herdr` が偽なら loop に積まない。**`worktree.open` を1度も呼ばないので守るものが無く、
+	// 積むと statusline取得の間（最長5分）片付けが待つだけになる（段7 も同じ条件で包む。prepare.go）。
+	switch {
+	case !m.cfg.Herdr.Worktree.CreateViaHerdr:
+		err = resolve(ctx)
+	case req.NoWait:
 		err = m.tryRun(ctx, cloneKey(repoDir), resolve)
-	} else {
+	default:
 		err = m.run(ctx, cloneKey(repoDir), resolve)
 	}
 	if err != nil {

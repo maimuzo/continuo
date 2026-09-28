@@ -234,7 +234,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
 		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
+			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください"+
+			"（使用率が 100 の期間が残っているときは、上げても値を取り直さないので直りません。"+
+			"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）",
 			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
 		return
 	}

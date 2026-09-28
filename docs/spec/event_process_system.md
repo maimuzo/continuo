@@ -102,7 +102,7 @@ flowchart LR
 
 | 何を | どこへ | 誰がいつ読むか |
 | --- | --- | --- |
-| **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:145](../../internal/config/default.go#L145)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
+| **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:151](../../internal/config/default.go#L151)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
 | **hook が socket へ届かなかったときの逃がし先**（設計 3-19） | `pending/<時刻>-<イベント名>.json` | **continuo が次に起動したときに読む。**動いている continuo は読まない |
 | **使用率の保管値**（期間ごとの使用率と `resets_at`。設計 3-4b・3-27） | `<実行時ディレクトリ>/quota.json` | **continuo が次に起動したときに、`sl.sock` を開く前に読む。**動いている continuo は書くだけで読まない。上限の最中に立て直しても、回復待ちの判定を効かせるため |
 | **閉じ残しの statusline取得用の workspace の ID**（設計 3-4b） | `<実行時ディレクトリ>/statusline-fetch/workspaces.json` | **continuo が起動したとき（復元の前）と、statusline取得を始める前に読み、閉じる** |
