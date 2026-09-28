@@ -19,7 +19,7 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 - **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
 - **continuo waits out a spent quota.** When the window resets, it picks the work back up on its own
 - **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
-- **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR` — read [Before you start](#before-you-start)
+- **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR`, and never a comment that an AI marked as its own — read [Before you start](#before-you-start)
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
 - **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
 - **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
@@ -71,7 +71,7 @@ How many issues run at once is a setting (two by default).
 
 **The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default), which is meant to run without asking you. Whether it falls back to a prompt after repeated classifier blocks has not been verified yet (see the `permission_mode: auto` table in [docs/upgrading.md](docs/upgrading.md)). Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
 
-**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The classifier does not read issue comments, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
+**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. A comment whose first line is an AI marker (an HTML comment starting with `<!-- continuo:`, or a review marker) is read as a note, not an instruction, even from those three ([FAQ](docs/FAQ.md)). **That narrows the hole; it does not close it.** The classifier does not read issue comments, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
 
 **On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
 

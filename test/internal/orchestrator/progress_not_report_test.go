@@ -227,6 +227,13 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	if !strings.Contains(sent, "先頭に、囲み付きの") {
 		t.Errorf("先頭に置くなと言っている相手が、囲み付きのほうになっていません:\n%s", sent)
 	}
+	// **run の宣言を名乗る**（issue #245。設計 3-82b）。組み込みの 1 の宣言は compaction で消えうる。
+	// 消えたあとで人間が入れた `continuo-issue-comments` のスキルに従うと、`<!-- continuo:ai -->` を付けて
+	// 印を使わない。スキルは「プロンプトが continuo の run だと言っていれば止まる」ので、ここで名乗らせる。
+	if !strings.Contains(sent, "このセッションは continuo が起動した run です。") ||
+		!strings.Contains(sent, "`continuo-issue-comments` のスキルが見えても従わず") {
+		t.Errorf("書かせ直しの文面が continuo の run だと名乗っていません:\n%s", sent)
+	}
 	// **印そのものを埋めない。**埋めると、写しただけでその報告が途中経過として捨てられる。
 	bare := "continuo:progress"
 	if strings.Contains(sent, "<!-- "+bare+" -->") {

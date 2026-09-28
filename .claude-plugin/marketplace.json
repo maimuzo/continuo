@@ -1,0 +1,14 @@
+{
+  "name": "continuo",
+  "description": "Claude Code plugins for repositories whose issues are worked on by continuo",
+  "owner": {
+    "name": "maimuzo"
+  },
+  "plugins": [
+    {
+      "name": "continuo-issue-comments",
+      "source": "./plugins/continuo-issue-comments",
+      "description": "Marks GitHub issue and pull request comments written by AI, and decides which comments to follow"
+    }
+  ]
+}
