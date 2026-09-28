@@ -4597,7 +4597,7 @@ $ continuo doctor
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
-! 未記入の項目     WORKFLOW.md に書かれていない設定項目があります（2件／雛形は 103件）。書いていないあいだは continuo が持つ既定値が使われます
+! 未記入の項目     WORKFLOW.md に書かれていない設定項目があります（2件／雛形は 104件）。書いていないあいだは continuo が持つ既定値が使われます
                   → 足す差分を読むには: continuo doctor --missing-keys-patch WORKFLOW.md
 
 2件に問題があります（✗ 1件 / ! 1件）
