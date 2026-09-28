@@ -70,7 +70,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **stall の閾値に達したら、枠待ちの判定を先に見る**（設計 3-27 の評価順）
   - 「時計を止める」は `runState.WaitingQuota` を立てて判定を飛ばすこと。`LastSeenAt` は進めない
 - [x] **枠のトークンの出所は `rate_limit.token_source` で決まる**（`claude_credentials` / `keychain` / `env`。設計 3-15）
-  - **macOS の既定は `keychain`。**`security` に10秒の上限を掛け、取れなければ枠の判定を諦めて起動は続ける
+  - **macOS の既定は `keychain`。**`security` に10秒の上限を掛け、取れなければ statusline取得へ切り替え、起動は続ける（一時的な失敗は `poll_interval_ms` のあとに試し直し、恒久的な失敗は立て直すまで試さない）
 - [x] **段2 で書き込む先は `tracker.running_state`（既定 `In Progress`）である。**ハードコードしない
 - [x] **agent 名を設計 3-3 の4段で作る**（32文字に収める。重複したら末尾に連番）
 - [x] **空きスロットの検査が、印を付ける前に走る**（段-1）

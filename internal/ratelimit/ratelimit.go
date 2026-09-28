@@ -349,7 +349,9 @@ func NewReader(opts Options) (*Reader, error) {
 		}
 	}
 	homeDir := opts.HomeDir
-	if homeDir == "" && opts.Config.Source != SourceNone && opts.Config.TokenSource == TokenSourceClaudeCredentials {
+	// **usage API を読む設定のときだけ引く**（statusline と none はトークンを1回も読まないので、
+	// HOME を引けない環境で起動を止めない）。
+	if homeDir == "" && opts.Config.Source == SourceOAuthUsageAPI && opts.Config.TokenSource == TokenSourceClaudeCredentials {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {

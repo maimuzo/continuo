@@ -347,14 +347,17 @@ func validate(cfg *Config) error {
 		// **macOS でだけ選べる。**Keychain を読む `security` は macOS の標準コマンドであり、
 		// ほかの OS には無い。ここで弾かないと、Linux の運用者は起動時ではなく5分ごとの
 		// 取得で毎回失敗し、usage API が黙って読めなくなる（5-5 と同じ理由）。
-		if runtime.GOOS != "darwin" {
+		// **usage API を読む設定のときだけ弾く。**statusline と none はトークンを1回も読まないので、
+		// macOS で作った WORKFLOW.md をほかの OS で共有しても起動を止めない。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && runtime.GOOS != "darwin" {
 			return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 				fmt.Sprintf(`"keychain" は macOS でだけ使える（いまの OS: %s）。"claude_credentials" か "env" にすること`, runtime.GOOS))
 		}
 	case RateLimitTokenSourceEnv:
 		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
 		// 5分ごとの取得が毎回 ErrNoCredentials になり、usage API が黙って読めなくなる（5-5）。
-		if cfg.RateLimit.TokenEnv == "" {
+		// usage API を読む設定のときだけ必須にする（statusline と none は読まない）。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && cfg.RateLimit.TokenEnv == "" {
 			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
 		}
 	default:

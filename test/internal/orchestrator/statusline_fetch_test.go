@@ -730,7 +730,7 @@ func TestStatuslineFetch_開いている間は同じcloneの着手がworktree_op
 	}
 }
 
-// TestSettings_statusLineはsource_statuslineのときだけ入りhookの部分は変わらない は、issue ごとの
+// TestSettings_statusLineはnone以外でstatuslineを使えるときだけ入りhookの部分は変わらない は、issue ごとの
 // 設定ファイルを確かめる（hook の規則。CLAUDE.md の「hook の挙動が変化する変更」に当たらないこと）。
 //
 // 目的: `source` が `none` でなく statusline を使えるときだけ `statusLine` として
@@ -742,7 +742,7 @@ func TestStatuslineFetch_開いている間は同じcloneの着手がworktree_op
 // 成功条件: statusline と oauth_usage_api の設定ファイルにだけ statusLine があり、コマンド行が
 // `'<continuo>' statusline --socket '<sl.sock>'` であること。hooks が、実行時ディレクトリの
 // パスを伏せると一致すること。
-func TestSettings_statusLineはsource_statuslineのときだけ入りhookの部分は変わらない(t *testing.T) {
+func TestSettings_statusLineはnone以外でstatuslineを使えるときだけ入りhookの部分は変わらない(t *testing.T) {
 	read := func(t *testing.T, source string, disable bool) (*fixture, map[string]json.RawMessage) {
 		fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = source

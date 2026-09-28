@@ -451,6 +451,28 @@ func TestLoad_rate_limitのtoken_sourceがenvでtoken_envが空だと落ちる(t
 	assertLoadFailsWith(t, front, "rate_limit.token_env")
 }
 
+// 目的: usage API を読まない設定（`rate_limit.source` が statusline か none）では、
+// `token_source` の OS と `token_env` の検査で起動を止めないことを確かめる（issue #284。PR #294 の
+// 実装レビュー1周目）。macOS で作った WORKFLOW.md（`token_source: keychain`）をほかの OS で
+// 共有しても、トークンを1回も読まない設定なら起動できなければならない。
+// 与える情報: source が statusline / none で、token_source: env・token_env が空の front matter。
+// 成功条件: config.Load が成功すること。知らない token_source（誤字）は source によらず落ちること。
+func TestLoad_usage_APIを読まない設定ならtoken_envが空でも起動する(t *testing.T) {
+	for _, source := range []string{"statusline", "none"} {
+		t.Run(source, func(t *testing.T) {
+			front := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: env\n  token_env: \"\"\n"
+			path := writeWorkflow(t, front, "")
+			if _, err := config.Load(path); err != nil {
+				t.Fatalf("source: %s は usage API を読まないのに token_env の検査で止まった: %v", source, err)
+			}
+			typo := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: keychian\n"
+			assertLoadFailsWith(t, typo, "rate_limit.token_source")
+		})
+	}
+}
+
 // 目的: rate_limit.source に "none" を書いても起動が通ることを確認する（設計 3-27）。
 // 使用率がステータスラインに載るのは Pro / Max だけで、API キーの機械では statusline取得が
 // 従量で課金されうるので、それ以外の契約と API キーの人には "none" が必須の逃げ道である（issue #284）。

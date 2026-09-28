@@ -768,7 +768,7 @@ func TestQuotaAPI_statuslineならweb_APIを叩かずnoneなら何も動かな�
 
 // 目的: oauth_usage_api で statusline を使えない（sl.sock が長すぎて空のパス・開けなくて
 // DisableStatusline）ときは、切り替えても statusline取得を開かないことを確かめる。
-// statusLine を書かないことは TestSettings_statusLineはsource_statuslineのときだけ入りhookの部分は変わらない が見る。
+// statusLine を書かないことは TestSettings_statusLineはnone以外でstatuslineを使えるときだけ入りhookの部分は変わらない が見る。
 //
 // 与える情報: usage API が 401 を返し続け、値が無い。DisableStatusline を呼んだ fixture。
 // 成功条件: 切り替わるが、statusline取得を開かず、WARN は「statusline も使えない」の文であること。
