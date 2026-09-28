@@ -315,7 +315,7 @@ Claude Code の Edit や Write を使ってください。**直す前と後を�
 
 `-u` を落とさないでください。落とすと、この worktree が片付かなくなることがあります。
 
-**`review` または `blocked` を出す前に、必ず commit して push してください。**
+**`review` または `blocked` を出す前に、必ず commit して push してください。**commit するものが無ければ要りません。
 push していない作業は、この worktree が片付くときに失われます。
 `blocked` は人間へ渡す合図なので、そこから先この worktree で作業が続くとは限りません。
 

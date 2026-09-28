@@ -342,8 +342,8 @@ grep -n -E 'oauth_usage_api|^  token_source:|^  token_env:|poll_interval_ms' ~/c
 **`.github/workflows/` に `code-review-result` を持つ検査が無いリポジトリでは、この待ちに入りません。**
 **その検査は `continuo init` が置く `continuo-ci.yaml` を `.github/workflows/` へ移すと入ります。**
 
-**エージェントが pull request を draft で作っている場合は、回し直しが要りません。**
-**レビューが収まるとエージェントが `gh pr ready` で draft を外し、そこで検査が回り直すためです。**
+**途中の周では、エージェントは結果を貼るたびに回し直してから待ちます。**
+**回し直しが要らないのは、レビューが収まって終わり、エージェントが `gh pr ready` で draft を外したときだけです。**そこで検査が回り直すためです。
 
 ### 判断票の形が変わりました。**表が5列から7列になります**
 

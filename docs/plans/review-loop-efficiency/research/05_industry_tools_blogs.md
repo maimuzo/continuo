@@ -347,7 +347,7 @@ Uber は生成役と採点役に別のモデルを使った、と検索結果の
 **制約に当たるか。**当たらない。規則の文面だけで再現できる。
 
 **このリポジトリへの当てはめ（案）。**
-- [CLAUDE.md の「対応表の列」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を Critical や High とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
+- [CLAUDE.md の「対応表の列」](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) はレベル名（Critical / High / Medium / Low / Info）を並べている。**何を CRITICAL や HIGH とするかの基準を、この表の中には見つけていない。他の場所に在るかは、この調査では探していない。**PR #58 のような「blocking の中身の列挙」を置く
 - 3・6・9回目の段（[CLAUDE.md:561](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L561) の「回数を数える」）に、issue #1294 の「前の周に無かった新しい Low を抑える」と、Contrast の「blocking の件数が厳密に減っていなければ収まらない兆候とみなす」を並べる
 
 ---
