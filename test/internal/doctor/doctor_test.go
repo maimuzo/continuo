@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "f8c261b64da41f49b1d0db14edd1009eb5af945eb87c7037fdd2279157eacc69", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // **RUCM は見出し語の並びを `DO`〜`UNTIL` の1周として書いてある**ので、
@@ -44,7 +44,6 @@ var wantLabels = []i18n.Key{
 	doctor.LabelAutomations,
 	doctor.LabelClone,
 	doctor.LabelTrust,
-	doctor.LabelCredentials,
 }
 
 // {"RUCM-PATH": "P001"}
@@ -127,10 +126,6 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
-	credentials := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolUnknown)
-	if !strings.Contains(credentials.Detail, "何を見るべきか決まりません") {
-		t.Fatalf("資格情報の理由が「何を見るべきか決まらない」になっていない: %q", credentials.Detail)
-	}
 	if len(report.Results) != len(wantLabels) {
 		t.Fatalf("1つ落ちたのに残りを検査していない（結果が %d件）", len(report.Results))
 	}
@@ -541,113 +536,45 @@ func TestDoctor_信頼の鍵はcloneのパスでありworktreeのパスではな
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolMissing)
 }
 
-// TestDoctor_資格情報_sourceがnoneならtoken_sourceを見ない は、枠の判定を使わない設定を確かめる。
-//
-// 目的: `rate_limit.source` が `none` なら、`token_source` を見ずに `✓` にすること。
-// 与える情報: `source: none` かつ `token_source: env` で、その環境変数は未設定。
-// 成功条件: 資格情報が `✓` になり、説明が「枠の判定を行わない設定」であること。
-func TestDoctor_資格情報_sourceがnoneならtoken_sourceを見ない(t *testing.T) {
-	fx := newFixture(t)
-	fx.WriteWorkflow(t, "rate_limit:\n  source: none\n  token_source: env\n  token_env: CONTINUO_NO_SUCH_TOKEN\n")
-
-	report := fx.Run(t)
-
-	credentials := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolOK)
-	if !strings.Contains(credentials.Detail, "枠の判定を行わない設定") {
-		t.Fatalf("説明が想定と違う: %q", credentials.Detail)
-	}
-}
-
-// TestDoctor_資格情報_envは環境変数の有無で分ける は、`token_source: env` の扱いを確かめる。
-//
-// 目的: `token_source` が `env` のとき、環境変数があれば `✓`、無ければ `✗` にすること。
-// 与える情報: `source: oauth_usage_api` / `token_source: env` / `token_env: CONTINUO_DOCTOR_TOKEN`。
-// 成功条件: 環境変数が無いと `✗`（説明に環境変数名が入る）、あると `✓` になること。
-func TestDoctor_資格情報_envは環境変数の有無で分ける(t *testing.T) {
-	fx := newFixture(t)
-	fx.WriteWorkflow(t, "rate_limit:\n  source: oauth_usage_api\n  token_source: env\n  token_env: CONTINUO_DOCTOR_TOKEN\n")
-
-	missing := fx.Run(t)
-	res := assertSymbol(t, missing, doctor.LabelCredentials, doctor.SymbolMissing)
-	if !strings.Contains(res.Detail, "CONTINUO_DOCTOR_TOKEN") {
-		t.Fatalf("説明に環境変数名が入っていない: %q", res.Detail)
-	}
-	if missing.ExitCode() != 1 {
-		t.Fatalf("✗ があるのに終了コードが %d だった", missing.ExitCode())
-	}
-
-	fx.Env["CONTINUO_DOCTOR_TOKEN"] = "dummy"
-	present := fx.Run(t)
-	assertSymbol(t, present, doctor.LabelCredentials, doctor.SymbolOK)
-	if present.ExitCode() != 0 {
-		t.Fatalf("すべて通ったのに終了コードが %d だった\n%s", present.ExitCode(), renderReport(t, present))
-	}
-}
-
 // {"RUCM-PATH": "P143"}
 //
-// TestDoctor_token_envの書き漏らしは設定ファイルの検査で足りないと出る は、
-// 設定の書き漏らしがどこで捕まるかを固定する。
+// TestDoctor_消したrate_limitのtoken_envが残っていれば設定ファイルの検査で足りないと出る は、
+// 版を上げた利用者の WORKFLOW.md に残った古いキーがどこで捕まるかを固定する。
 //
-// 目的: `rate_limit.token_source` が `env` なのに `token_env` が空なら、continuo は
-// 起動できない。**その書き漏らしを doctor が見逃さないこと**を確かめる
-// （判定は `config.Load` が持ち、doctor はその結果を記号にする。設計 3-32）。
-// 与える情報: `token_env: ""` を明示した設定。
-// 成功条件: 設定ファイルが `✗` になり、説明が `rate_limit.token_env` を指すこと。
-// 下流の資格情報は `!`（設定を読めていないので確かめられない）で、終了コードは 1 であること。
-func TestDoctor_token_envの書き漏らしは設定ファイルの検査で足りないと出る(t *testing.T) {
+// **issue #284 で `rate_limit.token_source` / `token_env` を消した。**使用率は Claude Code の
+// ステータスラインから受け取るので、continuo はトークンを読まない。**古いキーを書いたままの
+// WORKFLOW.md は、未知のキーとして `config.Load` が弾き、continuo は起動できない。**
+// その状態を doctor が見逃さないことを確かめる（判定は `config.Load` が持ち、doctor はその結果を
+// 記号にする。設計 3-32）。
+//
+// 目的: `rate_limit.token_env` が残った設定で、設定ファイルの検査が `✗` になり、どのキーかを示すこと。
+// 与える情報: 雛形どおりの設定の `rate_limit:` の直下へ、消したキー `token_env: ""` を
+// 1行差し込んだ WORKFLOW.md（WriteWorkflow は雛形に無いキーを足さないので、書いたあとに差し込む）。
+// 成功条件: 設定ファイルが `✗` になり、説明が `token_env` を指し、
+// 設定に依存する検査（例: カンバン）が `!` で、終了コードが 1 であること。
+func TestDoctor_消したrate_limitのtoken_envが残っていれば設定ファイルの検査で足りないと出る(t *testing.T) {
 	fx := newFixture(t)
-	fx.WriteWorkflow(t, "rate_limit:\n  source: oauth_usage_api\n  token_source: env\n  token_env: \"\"\n")
+	data, err := os.ReadFile(fx.WorkflowPath)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	if !strings.Contains(string(data), "\nrate_limit:\n") {
+		t.Fatalf("雛形に rate_limit の節がありません")
+	}
+	stale := strings.Replace(string(data), "\nrate_limit:\n", "\nrate_limit:\n  token_env: \"\"\n", 1)
+	if err := os.WriteFile(fx.WorkflowPath, []byte(stale), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
 
 	report := fx.Run(t)
 
 	res := assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
 	if !strings.Contains(res.Detail, "token_env") {
-		t.Fatalf("説明が token_env の未設定を指していない: %q", res.Detail)
+		t.Fatalf("説明が消したキー token_env を指していない: %q", res.Detail)
 	}
-	assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolUnknown)
+	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	if report.ExitCode() != 1 {
 		t.Fatalf("✗ があるのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
-	}
-}
-
-// TestDoctor_資格情報_claude_credentialsはファイルの有無で分ける は、Keychain を触らないことを含めて確かめる。
-//
-// 目的: `token_source` が `claude_credentials` のとき、`~/.claude/.credentials.json` が
-// あれば `✓`、無ければ `!` にすること（**Keychain は読まない。**読むと確認の画面が出て固まる）。
-// 与える情報: `source: oauth_usage_api` / `token_source: claude_credentials` と、
-// 一時ディレクトリのホーム（最初はファイルなし、次にファイルあり）。
-// 成功条件: ファイルが無いと `!` で終了コードが 0、直し方に「起動には影響しません」が入り、
-// ファイルがあると `✓` になること。
-func TestDoctor_資格情報_claude_credentialsはファイルの有無で分ける(t *testing.T) {
-	fx := newFixture(t)
-	fx.WriteWorkflow(t, "rate_limit:\n  source: oauth_usage_api\n  token_source: claude_credentials\n")
-
-	absent := fx.Run(t)
-	res := assertSymbol(t, absent, doctor.LabelCredentials, doctor.SymbolUnknown)
-	if !strings.Contains(res.Detail, "Keychain") {
-		t.Fatalf("説明に Keychain の案内が入っていない: %q", res.Detail)
-	}
-	if !strings.Contains(strings.Join(res.Remedies, "\n"), "起動には影響しません") {
-		t.Fatalf("直し方に「起動には影響しません」が入っていない: %v", res.Remedies)
-	}
-	if absent.ExitCode() != 0 {
-		t.Fatalf("! だけなのに終了コードが %d だった\n%s", absent.ExitCode(), renderReport(t, absent))
-	}
-
-	claudeDir := filepath.Join(fx.Home, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
-		t.Fatalf("資格情報の置き場所を作れません: %v", err)
-	}
-	credentials := filepath.Join(claudeDir, ".credentials.json")
-	if err := os.WriteFile(credentials, []byte(`{"claudeAiOauth":{"accessToken":"dummy"}}`), 0o600); err != nil {
-		t.Fatalf("資格情報のファイルを書けません: %v", err)
-	}
-
-	present := fx.Run(t)
-	got := assertSymbol(t, present, doctor.LabelCredentials, doctor.SymbolOK)
-	if !strings.Contains(got.Detail, credentials) {
-		t.Fatalf("説明にファイルのパスが入っていない: %q", got.Detail)
 	}
 }
 
@@ -680,7 +607,6 @@ func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
-	assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolOK)
 	if report.ExitCode() != 1 {
 		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}

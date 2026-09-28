@@ -26,6 +26,12 @@ const MaxPathLen = 103
 // HookSocketFileName は hook を受ける socket のファイル名である。
 const HookSocketFileName = "hooks.sock"
 
+// StatuslineSocketFileName は使用率を受ける socket のファイル名である（issue #284）。
+//
+// **hook の socket とは別にする。**hook の socket に判別子を足して同じ socket で受けると、
+// 判別子を知らない古い本体が使用率の行を hook として受け取る。hook の socket の決め方は変えない。
+const StatuslineSocketFileName = "sl.sock"
+
 // RuntimeDir は hook を受ける socket を置くディレクトリを、設計 3-23 の探索順で決める。
 //
 // 探索順（上から順に、最初に見つかったものを使う）:
@@ -149,6 +155,19 @@ func checkPathLen(path string) error {
 // 戻り値: <dir>/hooks.sock の絶対パス。MaxPathLen バイトを超える場合はエラーを返す。
 func Resolve(dir string) (string, error) {
 	p := filepath.Join(dir, HookSocketFileName)
+	if err := checkPathLen(p); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+// ResolveStatusline は dir の下に置く使用率の socket（sl.sock）の絶対パスを組み立て、
+// パス長を検査する（issue #284）。
+//
+// dir: 実行時ディレクトリ（hook の socket を置いているディレクトリ）。
+// 戻り値: <dir>/sl.sock の絶対パス。MaxPathLen バイトを超える場合はエラーを返す。
+func ResolveStatusline(dir string) (string, error) {
+	p := filepath.Join(dir, StatuslineSocketFileName)
 	if err := checkPathLen(p); err != nil {
 		return "", err
 	}

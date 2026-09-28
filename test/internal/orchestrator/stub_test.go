@@ -14,6 +14,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/prompt"
@@ -44,6 +45,50 @@ type stubHerdr struct {
 	// prompts は AgentPrompt に渡された本文である。
 	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-83）。
 	prompts []string
+
+	// sl は statusline取得の agent（名前が `sl-` で始まるもの）に対する台本である（issue #284）。
+	// **issue の run の台本と分ける。**nil の欄は、起動できて入力を受け付ける状態を返す。
+	sl stubSLScript
+	// slStarts は statusline取得の agent に渡した agent.start の params である。
+	slStarts []herdr.AgentStartParams
+	// slPrompts は statusline取得の agent に送った文である。
+	slPrompts []string
+}
+
+// stubSLScript は、statusline取得の agent に対する stub の台本である（issue #284）。
+type stubSLScript struct {
+	// Start は agent.start の応答を決める。nil なら起動できたことにする。
+	Start func(ctx context.Context, params herdr.AgentStartParams) (*herdr.AgentStartResult, error)
+	// Get は agent.get の応答を決める。nil なら idle かつ入力を受け付ける状態を返す。
+	Get func(ctx context.Context, params herdr.AgentGetParams) (*herdr.AgentGetResult, error)
+	// Prompt は agent.prompt の応答を決める。nil なら idle を返す（値は届かない）。
+	Prompt func(ctx context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error)
+}
+
+// SetSL は statusline取得の agent に対する台本を入れる。
+func (s *stubHerdr) SetSL(script stubSLScript) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sl = script
+}
+
+// SLStarts は statusline取得の agent に渡した agent.start の params を渡した順に返す。
+func (s *stubHerdr) SLStarts() []herdr.AgentStartParams {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]herdr.AgentStartParams(nil), s.slStarts...)
+}
+
+// SLPrompts は statusline取得の agent に送った文を送った順に返す。
+func (s *stubHerdr) SLPrompts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.slPrompts...)
+}
+
+// isSLName は agent の名前が statusline取得のものかを返す。
+func isSLName(name string) bool {
+	return strings.HasPrefix(name, statuslineAgentPrefix)
 }
 
 // newStubHerdr は stub を作る。
@@ -112,8 +157,17 @@ func (s *stubHerdr) PaneClose(_ context.Context, params herdr.PaneCloseParams) (
 
 // AgentStartWithRetry は起動できたことにする。
 func (s *stubHerdr) AgentStartWithRetry(
-	_ context.Context, params herdr.AgentStartParams, _, _ time.Duration,
+	ctx context.Context, params herdr.AgentStartParams, _, _ time.Duration,
 ) (*herdr.AgentStartResult, error) {
+	if isSLName(params.Name.String()) {
+		s.mu.Lock()
+		s.slStarts = append(s.slStarts, params)
+		fn := s.sl.Start
+		s.mu.Unlock()
+		if fn != nil {
+			return fn(ctx, params)
+		}
+	}
 	return &herdr.AgentStartResult{
 		Type:  "agent_started",
 		Agent: herdr.Agent{Name: params.Name.String(), AgentStatus: herdr.AgentStatusIdle, PaneID: params.PaneID},
@@ -130,7 +184,20 @@ func (s *stubHerdr) Prompts() []string {
 }
 
 // AgentPrompt は現在の状態のまま返る（turn を終わらせない）。
-func (s *stubHerdr) AgentPrompt(_ context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
+func (s *stubHerdr) AgentPrompt(ctx context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
+	if isSLName(params.Target.String()) {
+		s.mu.Lock()
+		s.slPrompts = append(s.slPrompts, params.Text)
+		fn := s.sl.Prompt
+		s.mu.Unlock()
+		if fn != nil {
+			return fn(ctx, params)
+		}
+		return &herdr.AgentPromptResult{
+			Type:  "agent_prompted",
+			Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: herdr.AgentStatusIdle},
+		}, nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prompts = append(s.prompts, params.Text)
@@ -151,7 +218,21 @@ func (s *stubHerdr) AgentWait(_ context.Context, params herdr.AgentWaitParams) (
 }
 
 // AgentGet は現在の状態を返す。
-func (s *stubHerdr) AgentGet(_ context.Context, params herdr.AgentGetParams) (*herdr.AgentGetResult, error) {
+func (s *stubHerdr) AgentGet(ctx context.Context, params herdr.AgentGetParams) (*herdr.AgentGetResult, error) {
+	if isSLName(params.Target.String()) {
+		s.mu.Lock()
+		fn := s.sl.Get
+		s.mu.Unlock()
+		if fn != nil {
+			return fn(ctx, params)
+		}
+		return &herdr.AgentGetResult{
+			Type: "agent_info",
+			Agent: herdr.Agent{
+				Name: params.Target.String(), AgentStatus: herdr.AgentStatusIdle, InteractiveReady: true,
+			},
+		}, nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return &herdr.AgentGetResult{
@@ -187,6 +268,12 @@ type stubFixture struct {
 	Herdr *stubHerdr
 	// Config は Orchestrator に渡した設定である。
 	Config config.Config
+	// Root は実行時ディレクトリである（quota.json と statusline取得の作業ディレクトリを置く）。
+	Root string
+	// Logs はログの出力先である。stubFixtureOptions.Logs を渡したときだけ入る。
+	Logs *syncLog
+	// Loop は workspace の Manager に渡した loop である（WorkspaceHerdr を渡したときだけ入る）。
+	Loop *loop.Loop
 }
 
 // stubFixtureOptions は newStubFixture の任意の入力である。
@@ -195,8 +282,19 @@ type stubFixtureOptions struct {
 	Mutate func(cfg *config.Config)
 	// AgentStatus は stub が返す agent の状態である。空なら idle。
 	AgentStatus herdr.AgentStatus
-	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
-	RateLimit *ratelimit.Reader
+	// Logs を真にすると、ログを syncLog へ溜める（stubFixture.Logs）。偽なら捨てる。
+	Logs bool
+	// Root は実行時ディレクトリである。空なら t.TempDir() を使う。
+	// **2つの fixture で同じ quota.json を読み書きするときに渡す**（issue #284）。
+	Root string
+	// WorkspaceHerdr は workspace の Manager に渡す herdr である（issue #284）。
+	// **渡すと本物の loop も渡す**（statusline取得の workspace の開け閉めを確かめるため）。
+	// nil なら Manager は herdr も loop も持たない（いままでどおり）。
+	WorkspaceHerdr workspace.HerdrClient
+	// GhqList は `ghq list -p -e` の偽物である。nil なら clone が無いと答える。
+	GhqList workspace.GhqListFunc
+	// HomeDir は `~/.claude.json` を読むホームディレクトリである。空なら Root を使う。
+	HomeDir string
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck func(ctx context.Context) error
 	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
@@ -231,46 +329,101 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		ft = newFakeTracker(time.Now)
 	}
 
-	root := t.TempDir()
+	root := opts.Root
+	if root == "" {
+		root = t.TempDir()
+	}
 	cfg := *config.DefaultConfig()
 	cfg.Workspace.Root = filepath.Join(root, "wt")
 	cfg.Claude.TurnTimeoutMs = 60000
 	// **入札の締め切りを待たない**（設計 3-77）。
 	cfg.Tracker.Provider.Handoff.BidWindowMs = 0
-	cfg.RateLimit.Source = "none"
+	cfg.RateLimit.Source = ratelimit.SourceNone
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	mgr, err := workspace.New(workspace.Options{
+	var logs *syncLog
+	var logOut io.Writer = io.Discard
+	if opts.Logs {
+		logs = &syncLog{}
+		logOut = logs
+	}
+	logger := slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ghq := opts.GhqList
+	if ghq == nil {
+		ghq = func(context.Context, string, string) (string, error) { return "", nil }
+	}
+	home := opts.HomeDir
+	if home == "" {
+		home = root
+	}
+	wsOpts := workspace.Options{
 		Config:  cfg,
 		Logger:  logger,
-		HomeDir: root,
-		GhqList: func(context.Context, string, string) (string, error) { return "", nil },
-	})
+		HomeDir: home,
+		GhqList: ghq,
+	}
+	var lp *loop.Loop
+	if opts.WorkspaceHerdr != nil {
+		// **本物の loop を渡す**（issue #284）。bubble の中で起こした goroutine は、
+		// bubble が終わる前に止める必要があるので、呼び出し側が Close する（stubFixture.Close）。
+		lp = loop.New(logger)
+		lp.Start()
+		wsOpts.Herdr = opts.WorkspaceHerdr
+		wsOpts.Loop = lp
+	}
+	mgr, err := workspace.New(wsOpts)
 	if err != nil {
 		t.Fatalf("workspace.New に失敗した: %v", err)
 	}
+	// **使用率を読む設定なら、本番と同じく sl.sock のパスを渡す**（issue #284。listen はしない）。
+	slSocket := ""
+	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+		slSocket = filepath.Join(root, "sl.sock")
+	}
 
 	orc, err := orchestrator.New(orchestrator.Options{
-		Config:         cfg,
-		Prompt:         prompt.Build(samplePromptTemplate, "/tmp/WORKFLOW.md"),
-		Tracker:        ft,
-		Herdr:          stub,
-		Workspace:      mgr,
-		RateLimit:      opts.RateLimit,
-		HookSocketPath: filepath.Join(root, "hooks.sock"),
-		ContinuoPath:   "/opt/continuo/bin/continuo",
-		Logger:         logger,
-		GHAuthCheck:    opts.GHAuthCheck,
+		Config:               cfg,
+		Prompt:               prompt.Build(samplePromptTemplate, "/tmp/WORKFLOW.md"),
+		Tracker:              ft,
+		Herdr:                stub,
+		Workspace:            mgr,
+		StatuslineSocketPath: slSocket,
+		HookSocketPath:       filepath.Join(root, "hooks.sock"),
+		ContinuoPath:         "/opt/continuo/bin/continuo",
+		Logger:               logger,
+		GHAuthCheck:          opts.GHAuthCheck,
 		// **本物の `gh` を起動させない**（設計 3-65）。
 		GHLogin: ghLoginForTest(opts.GHLogin),
 	})
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)
 	}
-	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg}
+	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg, Root: root, Logs: logs, Loop: lp}
+}
+
+// Close は orchestrator を閉じ、loop があれば閉じる（issue #284）。
+//
+// **`testing/synctest` の bubble の中では、bubble が終わる前に呼ぶこと。**statusline取得の
+// goroutine と loop の goroutine が残ると、bubble が終わらない。
+// **orchestrator を先に閉じる**（statusline取得の閉じる仕事が loop を使うため。daemon と同じ順）。
+func (fx *stubFixture) Close() {
+	fx.Orc.Close()
+	if fx.Loop != nil {
+		fx.Loop.Close()
+	}
+}
+
+// countLog は、溜めたログのうち substr を含む行の数を返す（Logs を真にしたときだけ使える）。
+func (fx *stubFixture) countLog(substr string) int {
+	n := 0
+	for _, line := range strings.Split(fx.Logs.String(), "\n") {
+		if strings.Contains(line, substr) {
+			n++
+		}
+	}
+	return n
 }
 
 // adoptRun は turn を送らずに run を印の集合へ入れる（設計 3-4 の段6 と同じ入口）。

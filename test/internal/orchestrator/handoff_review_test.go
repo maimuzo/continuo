@@ -3,17 +3,14 @@
 // **見張っているのは3点である。**
 //
 //	着手をやめたときの後始末  … 書いた担当者を消し戻す。**残すと18時間塞がる**
-//	枠の写しの寿命           … 読めなくなったら入札しない。**古い値で入札し続けない**
+//	使用率の値の寿命         … 古くなったら入札しない。**古い値で入札し続けない**
 //	巡回を塞がないこと        … コメントを読む issue の数に上限を置く
 package orchestrator_test
 
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -96,59 +93,49 @@ func TestHandoff_信頼していないリポジトリには担当者を書かな
 	}
 }
 
-// 目的: 一度読めた枠が読めなくなったら、そこから先は入札しないことを確認する（設計 3-77i）。
+// 目的: 使用率の値が古くなったら、そこから先は入札しないことを確認する（設計 3-77i。issue #284）。
 //
-// **無効にしないと、資格情報が切れた機械は切れる直前の「使用率 5%」を1日中返し続け、
-// 正直に読めている機械に必ず勝つ。**勝った機械は着手できないので、**その issue は誰にも進まない。**
+// **古い値で入札させない。**止まったセッションや statusline取得が届かない機械は、最後に
+// 届いた「使用率 5%」を持ち続ける。**それで入札すると、正直に読めている機械に必ず勝つ。**
+// 勝った機械は着手できないので、**その issue は誰にも進まない。**
+// 新しさは「`rate_limits` を持つ新しい応答の行を最後に受けた時刻」から `refresh_interval_ms`
+// までである（計画の「値の保管と読み方」）。
 //
-// 与える情報: 1回目だけ枠を返し、2回目からは 500 を返す偽の usage API。
-// 巡回1回目で issue 188 に入札させ、2回目の巡回の前に issue 189 を足す。
+// 与える情報: 手で進める時計。ステータスラインから 5% の新しい応答の行を受けたあと、
+// 巡回1回目で issue 188 に入札させる。時計を `refresh_interval_ms` より進め、
+// 2回目の巡回の前に issue 189 を足す。trust.repositories は空（statusline取得は
+// 「使える clone が無い」で終わる）。
 // 成功条件: issue 188 には入札があり、**issue 189 には入札が1件も無い**こと。
-func TestHandoff_枠が読めなくなったら入札を止める(t *testing.T) {
-	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	var mu sync.Mutex
-	calls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		mu.Lock()
-		calls++
-		n := calls
-		mu.Unlock()
-		if n >= 2 {
-			// **2回目からは読めない。**資格情報が切れた機械と同じ状態である。
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"limits":[{"kind":"session","percent":5,"resets_at":"` + resetsAt + `","severity":"normal"}]}`))
-	}))
-	t.Cleanup(srv.Close)
-
+func TestHandoff_値が古くなったら入札を止める(t *testing.T) {
+	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
-		RateLimit: newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_STALE"),
+		Now: clock.Now,
 		Mutate: func(cfg *config.Config) {
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 			// **締め切りを待たせる。**待たせないと1回目の巡回で担当者になり、
 			// スロットが埋まって2回目の候補を見なくなる。
 			cfg.Tracker.Provider.Handoff.BidWindowMs = 3600000
 		},
 	})
 	holdPrompt(fx)
-	fx.AllowLog("枠の読み取りに失敗しました")
+	// **値が古くなると statusline取得を開き、使える clone が無いので WARN を出す。**
+	// その状況はこのテストが作っている（trust.repositories を空にしている）。
+	fx.AllowLog("使える clone が無い")
+	feedFreshQuota(fx.Orc, "pane-a", clock.Now(), 5, 10)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
 	fx.Orc.Tick(context.Background())
 	if got := len(fx.Tracker.MarkedHandoffCommentsOf(issueNode(188), config.HandoffBidMarker)); got != 1 {
-		t.Fatalf("枠を読めているのに入札していない: %d 件", got)
+		t.Fatalf("値が新しいのに入札していない: %d 件", got)
 	}
 
-	// **枠の読み取りの間隔を跨がせてから、次の候補を足す。**
+	// **新しさの上限を跨がせてから、次の候補を足す。**
+	clock.Advance(time.Duration(fx.Config.RateLimit.RefreshIntervalMs)*time.Millisecond + time.Second)
 	fx.Tracker.AddIssue(sampleIssue(189, "Ready"))
-	time.Sleep(5 * time.Millisecond)
 	fx.Orc.Tick(context.Background())
 
 	if got := len(fx.Tracker.MarkedHandoffCommentsOf(issueNode(189), config.HandoffBidMarker)); got != 0 {
-		t.Errorf("枠を読めなくなったのに古い写しで入札している: %d 件", got)
+		t.Errorf("値が古くなったのに古い写しで入札している: %d 件", got)
 	}
 }
 

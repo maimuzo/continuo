@@ -2,7 +2,7 @@
 
 - 対象: `docs/spec/usecases/particular_case/issue を1件処理する.rucm.md`
 - 作成日 / 作成モデル: 2026-08-20 / Claude Opus 5 (1M context)
-- 参照した根拠資料: `docs/plans/continuo_design.md`（3-2 / 3-3 / 3-3b / 3-5 / 3-6 / 3-8 / 3-15 / 3-16 / 3-16b / 3-18 / 3-21 / 3-23 / 3-25 / 3-29 / 3-34 / 4-1）、`internal/orchestrator/dispatch.go`、`internal/orchestrator/failure.go`、`internal/orchestrator/turn.go`、`internal/orchestrator/hookinput.go`、`internal/orchestrator/lifecycle.go`、`internal/orchestrator/reconcile.go`、`internal/orchestrator/comment.go`、`internal/orchestrator/signal.go`、`internal/workspace/prepare.go`、`internal/tracker/adapter.go`、`internal/tracker/query.go`
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-2 / 3-3 / 3-3b / 3-4c / 3-4f / 3-5 / 3-6 / 3-8 / 3-15 / 3-16 / 3-16b / 3-18 / 3-21 / 3-23 / 3-25 / 3-29 / 3-34 / 4-1）、`internal/orchestrator/dispatch.go`、`internal/orchestrator/failure.go`、`internal/orchestrator/turn.go`、`internal/orchestrator/hookinput.go`、`internal/orchestrator/lifecycle.go`、`internal/orchestrator/reconcile.go`、`internal/orchestrator/comment.go`、`internal/orchestrator/signal.go`、`internal/workspace/prepare.go`、`internal/tracker/adapter.go`、`internal/tracker/query.go`
 
 ## 判断一覧
 
@@ -15,9 +15,9 @@
 | --- | --- | --- | --- | --- | --- |
 | 1 | USE CASE NAME | issue を1件処理する | 依頼で指定された名前をそのまま使う。動詞で終わる名詞句の規則も満たす | 依頼文 | 100% |
 | 2 | 配置ディレクトリ | `particular_case/` | 「1件の issue を dispatch して turn を回し、表明で Status を動かす」という単一目的の操作単位である。複数ユースケースを跨ぐ時系列ではない | rucm スキルの粒度ガイド | 95% |
-| 3 | BRIEF DESCRIPTION | 巡回・候補の取得・着手・turn ループ・表明の反映の5文 | 設計の「1つの turn で何が起きるか」の図をそのまま5文へ落とした。R12（単文のみ）を守るために文を分けた | `docs/plans/continuo_design.md#3-5` | 90% |
+| 3 | BRIEF DESCRIPTION | 巡回・候補の取得・着手・turn ループ・表明の反映の5文に、巡回は statusline取得の値が届いた知らせでも起きることを添えた | 設計の「1つの turn で何が起きるか」の図をそのまま5文へ落とした。R12（単文のみ）を守るために文を分けた。**巡回を起こすのは巡回タイマーの刻みだけではない。**statusline取得で値が届くと巡回を1回すぐ回す（issue #284）ので、その契機を2文目に添えた | `docs/plans/continuo_design.md#3-5`、`#3-4f` | 90% |
 | 4 | PRECONDITION | 常駐している。flock を取っている。選択肢名が設定と一致する。dispatch_state に issue が1件以上ある。herdr が待ち受けている | 起動時の検査を全部通ってからでないと巡回が始まらない。選択肢名が合わないと GraphQL がエラーを出さずに0件を返す | `docs/plans/continuo_design.md#3-6`、`#3-17` | 90% |
-| 5 | PRIMARY ACTOR | 巡回タイマー | このユースケースを起こすのは人間ではなく、`poll_interval_ms` ごとに走る巡回である。**利用者を主アクターにすると、実在しない「人間が dispatch を要求する」経路を記述することになる** | `docs/plans/continuo_design.md#3-8`（巡回のループがやることは3つだけである）、`internal/orchestrator/orchestrator.go` の `Run` と `Tick` | 70% |
+| 5 | PRIMARY ACTOR | 巡回タイマー | このユースケースを起こすのは人間ではなく、`polling.interval_ms` ごとに走る巡回である（statusline取得の値が届いた知らせで回る巡回も、同じ巡回である。設計 3-4f）。**利用者を主アクターにすると、実在しない「人間が dispatch を要求する」経路を記述することになる** | `docs/plans/continuo_design.md#3-8`（巡回のループがやることは3つだけである）、`internal/orchestrator/orchestrator.go` の `Run` と `Tick` | 70% |
 | 6 | SECONDARY ACTORS | GitHub Projects v2、herdr、Claude Code | ボードを読み書きし、pane を操作し、turn を送る相手がこの3つである。git は `workspace` の内部で使うだけなのでこのユースケースでは挙げない | `docs/plans/continuo_design.md#3-1` | 85% |
 | 7 | DEPENDENCY | なし | 他の particular_case を取り込まない。INCLUDE を持つのは scenario 側である | rucm スキルのファイル規約 | 95% |
 | 8 | GENERALIZATION | なし | 汎化関係にあるユースケースが無い | - | 90% |
@@ -144,6 +144,7 @@
 | 129 | 入札の段を空きスロットの検査より後に置いたこと | 空きスロット・信頼登録・worktree・branch の検査を先、入札をあと | **入札は既定3分（`bid_window_ms`）待つ。**枠が空いていない機械や、そもそも着手できない機械が3分待ってから降りるのは無駄である | `docs/plans/continuo_design.md#3-77`（`bid_window_ms` の既定は3分） | 85% |
 | 130 | 走っている最中に担当を確かめ直す段を足した位置 | turn ループの中、「transcript から表明の行を読む」の直後に2段（コメントの取り直し・担当者の検査）を置いた | 設計は「**その turn の終わりで止まる**」と決めている。**Claude Code は turn の途中で止められない**ので、止められる場所は turn の終わりしかない | `docs/plans/continuo_design.md#3-77c`（1時間ごと、走っている最中も issue の担当者を読み直す） | 90% |
 | 131 | フロー `担当が移った` の後始末 | 記録に残す → **branch へ push しない** → after_run → pane を閉じる → 印を外す → ABORT。Status は running_state のまま動かさない | **担当はもう他人のものなので、Status を落とすとその機械の作業まで failure に見える。**push しないことを1つの段として置いたのは、設計が明示的に禁じているためである | `docs/plans/continuo_design.md#3-77c`（担当を外された機械は、その branch へ push してはならない） | 90% |
+| 132 | statusline取得の workspace が閉じるのを待つことを、段を足さずに書いたこと | 「workspace として開く」の段と、`コメントの取り戻し` の「workspace として開き直す」の段の文に、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待つことを書き足した | **待つのは開く前の順番だけで、開いた結果もそのあとの段も変わらない。**段を足しても分かれ道は増えず、判断56 と同じく振り直しの害のほうが大きい。**待たずに開くと、その workspace が issue の親にされて閉じられなくなる**（issue #284。herdr 0.9.1 の実測）。取り戻しの段も `Prepare` を通るので、同じ文にした | `docs/plans/continuo_design.md#3-4c`、`internal/workspace/serial.go` の `cloneKey` と `run`、`internal/workspace/prepare.go` の `Prepare`、`internal/orchestrator/comment.go` | 85% |
 
 ## 重なりを疑った5組の判定
 

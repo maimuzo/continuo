@@ -588,30 +588,23 @@ type CleanupConfig struct {
 
 // RateLimitConfig は Claude Code のレートリミット待機の挙動を決める（3-27。仕様の範囲外）。
 type RateLimitConfig struct {
-	// Source はレートリミットの値をどこから取るかである。"oauth_usage_api" か "none" のどちらか。
-	// "none" なら usage API を1回も叩かず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
-	// usage API がトークンを消費するかどうかを判別できていないため、"none" は必須の逃げ道である。
+	// Source は使用率の値をどこから取るかである。"statusline"（既定）か "none" のどちらか（issue #284）。
+	//
+	//	statusline … continuo が起動する Claude Code のステータスラインが運ぶ使用率を、
+	//	             `continuo statusline` から `sl.sock` で受けて使う。値が古ければ、
+	//	             trust.repositories の信頼済みの clone の中で短い haiku を起動して取りに行く
+	//	             （statusline取得）。使用率が届くのは Pro / Max だけである（公式文書）
+	//	none       … 使用率を読まず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
+	//	             Pro / Max 以外の契約と API キーの人はこちらにする
 	Source string `yaml:"source"`
-	// TokenSource はレートリミットを読むための認証情報の出所である（3-27）。
-	//
-	// 想定する値は3つである。
-	//
-	//	claude_credentials … `~/.claude/.credentials.json` を読む
-	//	keychain           … macOS の Keychain を `security` で読む（**macOS でだけ選べる**）
-	//	env                … 下の TokenEnv に書いた環境変数を読む
-	//
-	// **既定は OS で分かれる**（macOS は keychain。default.go の defaultRateLimitTokenSource）。
-	// macOS の Claude Code は資格情報を Keychain に置き、ファイルは無いのが普通である。
-	//
-	// **読み取りだけで、書き換えない**（`~/.claude.json` を書き換えないという絶対制約に従う）。
-	TokenSource string `yaml:"token_source"`
-	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
-	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
-	TokenEnv string `yaml:"token_env"`
 	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
 	PauseAbovePercent int `yaml:"pause_above_percent"`
-	// PollIntervalMs はレートリミットの値を確認する間隔（ミリ秒）である。
-	PollIntervalMs int `yaml:"poll_interval_ms"`
+	// RefreshIntervalMs は、入札に使ってよい使用率の値の古さの上限（ミリ秒）で、
+	// statusline取得の間隔でもある（issue #284。既定 300000 = 5分）。
+	//
+	// **`polling.interval_ms` より長くすること**（source が statusline のとき起動時に確かめる）。
+	// 短いと巡回のたびに statusline取得が走る。**走行中は読み直さない**（reload.go）。
+	RefreshIntervalMs int `yaml:"refresh_interval_ms"`
 }
 
 // TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 3-33 / 4-3）。
@@ -627,8 +620,9 @@ type TrustConfig struct {
 	// 並べるが、**要らない行を消すのは人間である。**カンバンは他人が編集できるので、
 	// 拾った一覧をそのまま登録すると、issue を足せる人が信頼させるリポジトリを増やせてしまう。
 	//
-	// **巡回のループはここを読まない。**dispatch の直前の検査は `~/.claude.json` を
-	// 読むだけであり（4-3）、この列挙を参照する経路を持たない。
+	// **statusline取得に使う clone を選ぶのにも読む**（issue #284。上から見て、手元に clone があり
+	// 信頼されている最初の1つ）。dispatch の直前の検査は `~/.claude.json` を読むだけである（4-3）。
+	// **走行中は読み直さない**ので、書き換えたら continuo を立て直すこと。
 	Repositories []string `yaml:"repositories"`
 }
 
