@@ -13067,7 +13067,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:332-379](../../internal/prompt/builtin.md#L332-L379) の
+**採る形。**[internal/prompt/builtin.md:335-382](../../internal/prompt/builtin.md#L335-L382) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。

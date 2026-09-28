@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:415](../../../internal/orchestrator/prompt.go#L415) が書いているとおり
+[internal/orchestrator/prompt.go:422](../../../internal/orchestrator/prompt.go#L422) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
@@ -1169,7 +1169,7 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
 **別のリポジトリの PR は `closingIssuesReferences` で issue に紐づかない**ので、
 **push した branch の名前で引く口を1つ足す。**
 
-**足す段落**（節の先頭。[internal/scaffold/template.go:292](../../../internal/scaffold/template.go#L292) の直後）。
+**足す段落**（節の先頭。[internal/scaffold/template.go:306](../../../internal/scaffold/template.go#L306) の直後）。
 
 ```text
 **PR を探す相手は {{.pr_target}} です。**この issue のリポジトリとは限りません。
