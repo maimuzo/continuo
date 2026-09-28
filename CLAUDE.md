@@ -117,7 +117,7 @@ os.Rename(tmp.Name(), path)
 >
 > **既に履歴へ入ってしまったものは、そのままでよい。**書き換えのために履歴を作り直さない。
 
-### 6. continuo で continuo 自身を直すとき、hook の挙動が変化する変更を実装する前に、その変更によりどんな影響があるかを深く検討し、実装してよいか人間に確認する
+### 6. continuo で continuo 自身を直すとき、hook の挙動が変化する変更を実装する前に、その変更によりどんな影響があるかを深く検討し、実装してよいか人間に確認する（`continuo statusline` も同じ）
 
 **この項目は、continuo に continuo 自身の issue をやらせるときにしか効かない。**
 他のプロジェクトを continuo に任せている人には関係が無い。
@@ -152,13 +152,30 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 | **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:144](internal/orchestrator/quota.go#L144) の `OnStatusline`） |
 | **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**固定の1行** `continuo`（[internal/statuslineclient/client.go:31](internal/statuslineclient/client.go#L31)。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
 
-**hook と違うところ。**ステータスラインは hook ではない。**壊れても turn の終わりの判定には効かない。**
-効くのは使用率である。動いている本体へ値が1行も届かなくなり、入札を見送り続けて、自動の着手が進まなくなる。
-**人間が観測できる症状は、WARN「statusline取得ができません（値が1行も届かなかった: …）」が
-`rate_limit.refresh_interval_ms`（既定5分）ごとに繰り返し出ることである。**
+**hook と違うところ。**ステータスラインは hook ではない。**壊れても、hook が届けている turn の終わりには効かない。**
+効くのは使用率である。動いている本体へ値が届かなくなり、次の2つが起きる。
 
-**実測（2026-09-28）。**サブコマンド名を変えたのと同じ状態を作って叩くと、**終了コード 2 が返り、標準出力は空になる**
+- **新しい着手が進まない。**値が古いまま入札を見送り続ける
+- **走っている run が打ち切られうる。**上限に当たっても保管値が 100 にならないので、枠待ち（`isQuotaWaiting`）と判定されず、画面の止まった run が stall として打ち切られ、やり直しに積まれる
+
+**人間が観測できる症状は、statusline取得の WARN が `rate_limit.refresh_interval_ms`（既定5分）ごとに繰り返し出ることである。**
+どの WARN が出るかは、壊し方で変わる。
+
+- サブコマンド名・`--socket`・`sl.sock` のパス・`session_id` / `api_ms` の欄を変えた → 「statusline取得ができません（値が1行も届かなかった: …）」
+- 期間の欄（`five_hour` / `seven_day`）の名前を変えた → 「…（応答はあったが値が無い: …）」。**この文面は `rate_limit.source: none` を勧めるが、この場合は当たらない。**直すのは実行ファイルと本体の食い違いである
+
+**実測（2026-09-28）。**サブコマンド名を変えたのと同じ状態を作って、ビルドした実行ファイルを叩くと、**終了コード 2 が返り、標準出力は空になる**
 （`flag provided but not defined: -socket` と使い方は標準エラーへ出る）。いまの名前なら、`continuo` の1行を出して 0 で終わる。
+
+```
+$ go build -o /tmp/continuo-x ./cmd/continuo
+$ /tmp/continuo-x statusline-renamed --socket /tmp/x.sock </dev/null; echo "exit=$?"
+flag provided but not defined: -socket
+（Usage とサブコマンド一覧は標準エラーへ出る。標準出力は 0 バイト）
+exit=2
+```
+
+**`go run ./cmd/continuo statusline-renamed …` で叩くと `$?` は 1 になる**（2 は標準エラーの最後の `exit status 2` に出る）。
 **ステータスラインのコマンドが 2 を返したときに Claude Code が何をするかは、測っていない。**
 
 **やること。**
@@ -209,21 +226,21 @@ exit status 2
 **`runHook` だけが 1 を返す例外である。**「ばらついているので揃える」は自然な思いつきで、
 **上の3つの定義を全部すり抜ける。**
 
-**逆に、これら4つが1つも変わらないなら、下のパスに触れていても止まらない。**
+**逆に、これら4つ（`continuo statusline` なら、上の statusline の表の4つ）が1つも変わらないなら、下のパスに触れていても止まらない。**
 **例。**`internal/cli/cli.go` の別のサブコマンドへ処理を足す。ログの文言を直す。コメントを直す。
 **そういう変更は、深く検討したうえで「挙動は変わらない」と判断できたなら、そのまま進めてよい。**
 
 **判断した結果は、pull request の本文へ1段落で書くこと。**
 **「触ったが挙動は変わらない」と書いておかないと、次に読む人が同じ検討をやり直す。**
 
-**検知のしかた。**まずパスで拾う。**拾ったものを、上の4つに当てて判定する。**
+**検知のしかた。**まずパスで拾う。**拾ったものを、上の4つ（hook の表と statusline の表）に当てて判定する。**
 
 **この網は、定義そのものではない。**下の grep は「受ける側の解釈」を実装している
 [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go)（届いた hook を捨てる判定）・
 [internal/orchestrator/turn.go](internal/orchestrator/turn.go)（turn の終わりを決める場所）・
 [internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) も拾うが、
 **拾えるのはファイル単位までである。**その中のどこを触ったかは見ていない。
-**網に掛からないファイルでも、上の4つに当たると思ったら止まること。**
+**網に掛からないファイルでも、上の4つ（hook の表と statusline の表）に当たると思ったら止まること。**
 
 ```bash
 git fetch origin -q
@@ -248,7 +265,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 **そもそも手元に `main` が無い checkout では `fatal: ambiguous argument` になって、grep には何も渡らない。**
 これも「触っていない」と見分けが付かない（[docs/releasing.md:351](docs/releasing.md#L351) と同じ理由である）。
 
-**1行でも返ったら、上の4つに当てて判定する。当たれば止まる。**
+**1行でも返ったら、上の4つ（hook の表と statusline の表）に当てて判定する。当たれば止まる。**
 それぞれ、どの定義に当たりうるかは次のとおり。
 
 | 触った場所 | どの定義に当たりうるか |
@@ -274,12 +291,12 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | --- | --- |
 | **深く検討した影響** | **走っている run のどれが、いつ、どう壊れるか。**既に書かれている issue ごとの設定ファイル（statusline なら statusline取得用の設定ファイルも）が、新しい実行ファイルで通るか。**壊れたときに人間が観測できる症状は何か** |
 | **どのファイルのどこを触るか** | 上の `git diff --name-only` の出力と、変える関数名・フラグ名 |
-| **hook のどの経路に効くか** | 上の表のどの行に当たるか。issue ごとの設定ファイルのどこが変わるか |
+| **hook のどの経路に効くか**（statusline なら statusline のどの経路か） | 上の表のどの行に当たるか。issue ごとの設定ファイル（statusline なら statusline取得用の設定ファイルも）のどこが変わるか |
 | **止まったまま何もしないと何が起きるか** | **その issue が進まないだけである。**動いている continuo は壊れない |
 | **進めて壊れたときの戻し方** | 下の4段。**古い実行ファイルへ戻すところまで書く** |
 
 **戻す先の commit の見つけ方。****いま入っている実行ファイルを作った時刻から引く。**
-その時刻に HEAD が指していた commit が、hook が動いていた commit である。
+その時刻に HEAD が指していた commit が、hook（と statusline）が動いていた commit である。
 
 ```bash
 stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.local/bin/continuo   # 実行ファイルを作った時刻（macOS の stat）
@@ -296,6 +313,7 @@ hook の引数を触る前の commit を人が選ぶ。
 ```bash
 # 1. 動いている continuo を止める。hook が届かないので1回目の Ctrl+C は待たされる。
 #    待たずに終わらせたいときは、もう一度 Ctrl+C を押す
+#    （statusline だけが壊れたときは hook は届いているので、待たされない）
 # 2. hook が動いていた commit を、別の worktree として取り出す
 OLD=$(git rev-parse "HEAD@{$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.local/bin/continuo)}")
 ROLLBACK="$(mktemp -d)/continuo-rollback"
