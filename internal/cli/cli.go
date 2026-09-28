@@ -677,7 +677,7 @@ func countLines(s string) int {
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
-// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
+// continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当て、`scaffold.StatusKeyNames` が返す9つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
 //
@@ -845,8 +845,24 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdated, result.Path))
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKeysNote))
+	skipped := map[string]bool{}
+	for _, k := range result.SkippedKeys {
+		skipped[k] = true
+	}
 	for _, k := range scaffold.StatusKeyNames() {
+		if skipped[k] {
+			// **書けなかったキーを「書き換えた」の一覧へ混ぜない**（設計 3-83）。
+			continue
+		}
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKey, k))
+	}
+	// **書けなかったキーは名指しで出す**（設計 3-83k）。
+	// **黙って捨ててはならない。**利用者はその役割に答えている。
+	// **足す行の見本は、親のキーの下にそのまま貼れる形で出す**（`  direct_chat_state: "<選んだ値>"`）。
+	for _, k := range result.SkippedKeys {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupKeyNotWritten,
+			k, result.Path, scaffold.StatusKeyLine(k, assignment.Statuses())))
 	}
 	return 0
 }

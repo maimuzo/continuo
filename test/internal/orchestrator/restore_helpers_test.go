@@ -175,6 +175,11 @@ type livePane struct {
 	// **引き継ぎの照合には使わない**（照合は Cwd で行う。設計 3-3）。
 	// 旧い形の label が付いた pane でも引き継げることを固定するために置いてある。
 	Label string
+	// NoAgentKind を真にすると、`pane.list` の `agent` を空にする（設計 3-83f）。
+	//
+	// **Claude Code を終了して pane がシェルへ戻った状態・人間が分けたシェルの再現に使う。**
+	// 取り残しの処理（3-9 の手順7b）はこの pane を飛ばし、閉じる集合だけが閉じる。
+	NoAgentKind bool
 }
 
 // installPanes はテスト用herdr mock の `pane.list` と `agent.list` を、生きている pane の台本で置き換える。
@@ -196,6 +201,9 @@ func installPanes(fx *fixture, panes ...livePane) {
 				"cwd":          p.Cwd,
 				"agent_status": string(p.AgentStatus),
 				"agent":        "claude",
+			}
+			if p.NoAgentKind {
+				delete(pane, "agent")
 			}
 			if p.Label != "" {
 				pane["label"] = p.Label

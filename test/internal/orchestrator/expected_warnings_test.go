@@ -152,7 +152,7 @@ var expectedWarnings = map[string][]string{
 	"TestRestore_agent名の無いpaneは閉じてworktreeとStatusを残す":                   {"pane に agent 名が無いので、この Claude Code へはもう送れません"},
 	"TestRestore_socketのパスが前回と違えば引き継がずpaneを閉じる":                         {"hook を受ける socket のパスが前回と違うので引き継ぎません"},
 	"TestRestore_取り直しで見つからないrunはpaneもworktreeも残して印から外す":                 {"取り直しで見つからなかったので何もしません"},
-	"TestRestore_取り直しに失敗しても起動を続けpaneを閉じる":                               {"取り直しに失敗したので引き継ぎません", "復元のための取り直しに失敗しました"},
+	"TestRestore_取り直しに失敗しても起動を続けpaneは閉じない":                              {"取り直しに失敗したので引き継ぎません", "復元のための取り直しに失敗しました"},
 	"TestRestore_同じissueのworktreeが2つあるとき新しいほうを採り古いほうのpaneを段4で閉じる":       {"同じ issue の worktree が2つあるので created_at が新しいほうを採ります", "同じ issue の2つ目の worktree に pane があったので閉じます"},
 	"TestRestore_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ残りを閉じる":                  {"同じ worktree に pane が2つあります", "同じ worktree に2つ目の pane があったので閉じます"},
 	"TestRestore_壊れた身元ファイルは無視してログに出す":                                   {"身元ファイルを読めない worktree を飛ばしました"},

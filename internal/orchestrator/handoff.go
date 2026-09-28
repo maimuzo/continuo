@@ -904,6 +904,10 @@ func (o *Orchestrator) logReleasedRecord(
 // newAccount: いま担当になっているアカウントのログイン名。
 // **呼び出し元は `verifyHandoff` が真を返したときだけここへ来る**ので、必ず1文字以上ある。
 func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newAccount string) {
+	// **先に direct chat を抜けさせてから閉じる**（設計 3-83f の印を外す道の6本目・3-83h の手を離す経路の段1）。
+	// 担当者が別の人に替わっているので、人間が direct chat へ入れていても手を離すのが正しい。
+	// **抜けさせないと `stopWorker` の門で止まり、pane を閉じずに印だけ外れる。**
+	rs.leaveDirectChatMode()
 	if !rs.claimTerminal(ctx) {
 		return
 	}

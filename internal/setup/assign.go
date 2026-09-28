@@ -45,7 +45,9 @@ var (
 	ErrLineTooLong = errors.New("1行が長すぎます")
 )
 
-// Assignment は5つの役割へ割り当てた Status の選択肢名である。
+// Assignment は役割へ割り当てた Status の選択肢名である。
+//
+// **飛ばせる役割は空文字のままになりうる**（設計 3-83 の `direct_chat_state`）。
 type Assignment struct {
 	// names は役割ごとに割り当てた選択肢名である。添字は Role の値。
 	names [RoleCount]string
@@ -67,11 +69,12 @@ func (a Assignment) Name(r Role) string {
 // 戻り値: scaffold.UpdateStatuses に渡す値。
 func (a Assignment) Statuses() scaffold.Statuses {
 	return scaffold.Statuses{
-		Dispatch: a.names[RoleDispatch],
-		Running:  a.names[RoleRunning],
-		Review:   a.names[RoleReview],
-		Blocked:  a.names[RoleBlocked],
-		Done:     a.names[RoleDone],
+		Dispatch:   a.names[RoleDispatch],
+		Running:    a.names[RoleRunning],
+		Review:     a.names[RoleReview],
+		Blocked:    a.names[RoleBlocked],
+		Done:       a.names[RoleDone],
+		DirectChat: a.names[RoleDirectChat],
 	}
 }
 
@@ -87,7 +90,8 @@ type AssignOptions struct {
 	Out io.Writer
 }
 
-// Assign は5つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる。
+// Assign は6つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる
+// （6つ目の direct chat は番号 0 で飛ばせる。設計 3-83）。
 //
 // **役割の名前より先に「continuo がその Status で何をするか」を出してから番号を待つ。**
 // 初見の利用者は、どの Status がどの役割かを知らないためである。
@@ -104,7 +108,7 @@ type AssignOptions struct {
 // ctx: 中断を受け取るコンテキスト。**Ctrl+C はこれを取り消して伝える**
 // （呼び出し側が signal.NotifyContext で作る）。
 // opts: 選択肢と入出力。
-// 戻り値の1つ目: 5つの役割すべてが埋まった割り当て。エラーのときはゼロ値。
+// 戻り値の1つ目: 必ず要る5つの役割が埋まった割り当て（direct chat は飛ばしたなら空）。エラーのときはゼロ値。
 // 戻り値の2つ目: ErrTooFewOptions / ErrNoSuitableOption / ErrInterrupted / ErrInputClosed、
 // または入力を読めなかった理由。**なぜ止まったかの説明は Out へ出し終えている。**
 func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
@@ -119,8 +123,11 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 
 	// **尋ねる前に選択肢の数を確かめる**（RUCM の基本フロー5）。足りないまま尋ねると、
 	// 何回か答えさせたあとで必ず行き止まる。利用者に無駄な入力をさせない。
-	if len(opts.Options) < RoleCount {
-		fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortTooFew, fieldName, len(opts.Options), RoleCount, RoleCount))
+	// **数えるのは `RequiredRoleCount` である**（設計 3-83）。`RoleCount` で数えると、
+	// **選択肢がちょうど5つのカンバンで1問も尋ねずに終わる。**飛ばせる役割の選択肢が
+	// 無くても、残りは割り当てきれる。
+	if len(opts.Options) < RequiredRoleCount {
+		fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortTooFew, fieldName, len(opts.Options), RequiredRoleCount, RequiredRoleCount))
 		writeAddOptionRemedy(out)
 		return Assignment{}, ErrTooFewOptions
 	}
@@ -141,6 +148,9 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 		for {
 			fmt.Fprintln(out)
 			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAsk, turn+1, RoleCount, role.ConfigKey(), role.Description()))
+			if role.IsOptional() {
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupSkipOptional))
+			}
 			fmt.Fprint(out, i18n.T(i18n.KeySetupPromptInput))
 
 			line, err := reader.read(ctx)
@@ -176,8 +186,16 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 				continue
 			}
 			if n == noOptionInput {
+				if role.IsOptional() {
+					// **飛ばせる役割では、0 は「飛ばす」である**（設計 3-83）。
+					// **打ち切ってはならない。**選択肢が無くても continuo は起動するので、
+					// **ここで打ち切ると、この機能を使わない利用者から
+					// `continuo setup` そのものを奪うことになる。**
+					fmt.Fprintln(out, i18n.T(i18n.KeySetupSkippedOptional, role.ConfigKey()))
+					break
+				}
 				fmt.Fprintln(out)
-				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.ConfigKey(), RoleCount))
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.ConfigKey(), RequiredRoleCount))
 				writeAddOptionRemedy(out)
 				return Assignment{}, ErrNoSuitableOption
 			}
@@ -218,11 +236,17 @@ func writeOptionList(out io.Writer, fieldName string, options []string) {
 // writeSummary は決まった割り当てを役割ごとに並べる。
 //
 // out: 出力先。
-// a: 5つの役割が全部埋まった割り当て。
+// a: 必ず要る5つの役割が埋まった割り当て（direct chat は飛ばしたなら空）。
 func writeSummary(out io.Writer, a Assignment) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryHeader, RoleCount))
 	for _, role := range roleOrder {
+		if a.names[role] == "" {
+			// **飛ばした役割は、飛ばしたと書く**（設計 3-83）。
+			// 空の引用符だけを出すと、割り当て損ねたのか飛ばしたのかが読めない。
+			fmt.Fprintln(out, i18n.T(i18n.KeySetupSummarySkipped, role.ConfigKey()))
+			continue
+		}
 		fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryLine, role.ConfigKey(), a.names[role]))
 	}
 }

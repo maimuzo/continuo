@@ -41,6 +41,9 @@ type stubHerdr struct {
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
 	sentKeys [][]string
+	// prompts は AgentPrompt に渡された本文である。
+	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-83）。
+	prompts []string
 }
 
 // newStubHerdr は stub を作る。
@@ -84,6 +87,11 @@ func (s *stubHerdr) PaneList(_ context.Context, params herdr.PaneListParams) (*h
 	}, nil
 }
 
+// WorkspaceList は workspace を1つも返さない（direct chat の門4 が引く。設計 3-83c）。
+func (s *stubHerdr) WorkspaceList(_ context.Context) (*herdr.WorkspaceListResult, error) {
+	return &herdr.WorkspaceListResult{Type: "workspace_list"}, nil
+}
+
 // WorktreeOpen は workspace を1つ返す。
 func (s *stubHerdr) WorktreeOpen(_ context.Context, _ herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error) {
 	return &herdr.WorktreeOpenResult{Type: "worktree_opened", Workspace: herdr.Workspace{WorkspaceID: "w1"}}, nil
@@ -112,10 +120,20 @@ func (s *stubHerdr) AgentStartWithRetry(
 	}, nil
 }
 
+// Prompts は AgentPrompt に渡された本文を返す。
+func (s *stubHerdr) Prompts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.prompts))
+	copy(out, s.prompts)
+	return out
+}
+
 // AgentPrompt は現在の状態のまま返る（turn を終わらせない）。
 func (s *stubHerdr) AgentPrompt(_ context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.prompts = append(s.prompts, params.Text)
 	return &herdr.AgentPromptResult{
 		Type:  "agent_prompted",
 		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
@@ -186,6 +204,10 @@ type stubFixtureOptions struct {
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する
 	// （bubble の中では外部プロセスを起こせない）。
 	GHLogin func(ctx context.Context) (string, error)
+	// Tracker は使うテスト用トラッカー mock である。nil なら新しく作る。
+	//
+	// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-83h の書く経路）。
+	Tracker *fakeTracker
 }
 
 // newStubFixture は通信を行わない検査対象を組み立てる。
@@ -204,7 +226,10 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		status = herdr.AgentStatusIdle
 	}
 	stub := newStubHerdr(status)
-	ft := newFakeTracker(time.Now)
+	ft := opts.Tracker
+	if ft == nil {
+		ft = newFakeTracker(time.Now)
+	}
 
 	root := t.TempDir()
 	cfg := *config.DefaultConfig()
