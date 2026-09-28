@@ -108,6 +108,139 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.1.16 へ
 
+### 枠の使用率を、Claude Code のステータスラインから受け取るようになりました。**`rate_limit` の節を書き換えないと起動しません**
+
+**v0.1.15 までは、枠の使用率を Anthropic の usage API から読んでいました。**
+そのために、OAuth のトークンを macOS の Keychain・`~/.claude/.credentials.json`・環境変数のどれかから読んでいました。
+**usage API が 429 を返し続けると、入札が止まり、上限に当たった run の回復待ちの判定も効かなくなっていました。**
+
+**この版から、使用率は Claude Code のステータスラインから受け取ります。**
+continuo が起動する Claude Code の設定に `statusLine` を足し、描き直すたびに届く使用率を保管します。
+**直近の `rate_limit.refresh_interval_ms`（既定5分）に値が届いていなければ、continuo は statusline取得をします。**
+`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を短く起動し、`hello` を1回送り、値が届いたら閉じます。
+**値が届くまで、その issue への入札は見送ります。**値が届いたら、すぐ巡回を1回回して入札します。
+
+| 何 | v0.1.15 まで | v0.1.16 から |
+| --- | --- | --- |
+| **使用率の出どころ** | usage API | **Claude Code のステータスライン** |
+| **`rate_limit.source` の値** | `oauth_usage_api` / `none` | **`statusline`（既定）/ `none`** |
+| **`rate_limit.token_source` / `token_env` / `poll_interval_ms`** | あった | **無くなりました** |
+| **`rate_limit.refresh_interval_ms`** | 無かった | **足しました**（既定 `300000`） |
+| **`continuo allow-keychain-access`** | あった | **無くなりました** |
+| **`continuo doctor` の `資格情報`** | あった（18個） | **無くなりました（17個）** |
+| **資格情報の読み取り** | Keychain か `~/.claude/.credentials.json` か環境変数 | **読みません** |
+
+#### 何もしないとどうなるか
+
+**v0.1.15 までの `continuo init` が書いた `WORKFLOW.md` では、continuo は起動しません。**
+雛形が `source: oauth_usage_api` と `token_source` / `token_env` / `poll_interval_ms` を書いていたためです。
+**どれか1つでも残っていると、起動の前に止まります。**実際に叩いた出力です（パスは省きました。`[167:3]` の行と桁は、あなたの `WORKFLOW.md` で変わります）。
+
+```text
+エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.source の値 oauth_usage_api が不正です: "statusline" か "none" のどちらか（設計 3-27）
+```
+
+```text
+エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: [167:3] unknown field "token_source"
+```
+
+**`continuo doctor` も `設定ファイル` が `✗` になります。**直すまで `--missing-keys-patch` も当てられないので、先に下の書き換えをしてください。
+
+#### どう直すか
+
+**`rate_limit` の節を、次の形へ書き換えてください。**
+
+```yaml
+# v0.1.15 までの雛形
+rate_limit:
+  source: oauth_usage_api
+  token_source: claude_credentials    # macOS で continuo init を叩いたなら keychain
+  token_env: CLAUDE_CODE_OAUTH_TOKEN
+  pause_above_percent: 95
+  poll_interval_ms: 300000
+```
+
+```yaml
+# v0.1.16 から
+rate_limit:
+  source: statusline              # Pro / Max 以外の契約と API キーは none
+  refresh_interval_ms: 300000     # 入札に使ってよい値の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
+  pause_above_percent: 95
+```
+
+| あなたの契約 | `source` に書く値 |
+| --- | --- |
+| **Pro / Max** | **`statusline`** |
+| **それ以外の契約・API キー** | **`none`**（公式文書によると、ステータスラインが使用率を返すのは Pro / Max だけです） |
+
+**`token_source` / `token_env` / `poll_interval_ms` の3行は消してください。**書き換え先はありません。
+**`tracker.provider` の下の `token_source` / `token_env`（GitHub のトークンの読み方）は別物です。**そちらは消さないでください。
+
+**`refresh_interval_ms` は、入札に使ってよい使用率の古さの上限です。statusline取得の間隔でもあります。**
+**`polling.interval_ms`（既定30秒）より長くしてください。**短いと、次のように出て起動しません。
+
+```text
+エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.refresh_interval_ms の値 30000 が不正です: polling.interval_ms（30000）より長くすること
+```
+
+**書かなければ既定の5分です。**Pro で消費を抑えたいなら伸ばしてください（statusline取得の回数が減るかわりに、入札が遅れやすくなります）。
+
+#### statusline取得には、信頼済みの clone が1つ要ります
+
+**`source: statusline` では、`trust.repositories` に書いたリポジトリのうち、
+手元に clone があって `continuo trust` で信頼させたものが1つ要ります。**
+continuo は上から見て、最初に見つかった1つを使います。**1つも無いと、次の `WARN` が出て、使用率が入りません。**
+**走っている issue が無い間は、値が1つも入らないので、自動の着手が止まり続けます。**
+
+```text
+statusline取得ができません（使える clone が無い: trust.repositories に、手元に clone があって信頼済みのリポジトリが1つもありません。1つ書いて continuo trust を叩き、continuo を立て直してください）
+```
+
+**`trust.repositories` は走行中に読み直しません。**書き換えたら、continuo を立て直してください。
+
+**雛形の `trust.repositories` のコメントにあった「巡回のループはここを読まない。continuo trust だけが読む」は、この版から正しくありません。**
+**あなたの `WORKFLOW.md` のコメントは、continuo が書き換えないので古いまま残ります。**statusline取得の clone を選ぶのにも読みます。
+
+#### `continuo allow-keychain-access` を消しました
+
+**叩いても、Keychain は読みません。**知らないサブコマンドは設定ファイルのパスとして扱われるので、
+「設定ファイルの読み込みに失敗しました（…/allow-keychain-access）」と出て、終了コード 1 で終わります。
+**自動化したスクリプトやセットアップの手順に書いているなら、その行を消してください。**
+
+**以前 Keychain の確認のダイアログで「常に許可」を選んだなら、continuo にはその許可はもう要りません。**
+**許可を受けたのは continuo ではなく、continuo が起動した macOS の `security` コマンドです。**
+外したいときは、macOS の「キーチェーンアクセス」で `Claude Code-credentials` の項目を開き、「アクセス制御」の一覧から `security` を外してください。
+**ほかの道具が同じ許可に頼っていることがあるので、心当たりが無ければ残しておいてかまいません。**
+**項目そのものは消さないでください。**Claude Code のログインの情報です。消すと Claude Code のログインが切れます。
+
+#### 確かめた版
+
+| 何 | 確かめたこと | 確かめていないこと |
+| --- | --- | --- |
+| **Claude Code** | **macOS の 2.1.282〜2.1.283** で、ステータスラインから使用率が届き、statusline取得が動くこと | **Linux。**statusline取得は `--restricted` を使うので、**それを持たない 2.1.248 より前の版では起動しません**（「起動しなかった」の `WARN` が出ます） |
+| **herdr** | **0.9.1** で statusline取得が動くこと（herdr の `workspace.create` を使います） | **0.8.x** |
+
+#### 版を上げる前から走っている run
+
+**版を上げる前から走っている run は、`statusLine` の無い設定のまま動き続けます。**
+その run の pane からは使用率が届きません（statusline取得が補います）。
+**その run が上限に当たると、いまと同じく回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。**
+気になるなら、走っている run が終わってから版を上げてください。
+
+#### 古い版へ戻すとき
+
+**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit` の節も戻してください。**
+古い版は `source: statusline` も `refresh_interval_ms` も知らないので、起動しません。
+
+**確かめ方。**
+
+```bash
+grep -n -E 'oauth_usage_api|^  token_source:|^  token_env:|poll_interval_ms' ~/continuo-work/WORKFLOW.md
+```
+
+**何も出なければ、古い `rate_limit` の行は残っていません。**
+`tracker.provider` の `token_source:` / `token_env:` は字下げが深いので、この検索には当たりません。
+
 ### レビューの回し方が組み込みのプロンプトへ入りました。**subagent が毎周2つ立ちます**
 
 **この版から、エージェントはレビューのたびに subagent を2つ並列に立てます。**

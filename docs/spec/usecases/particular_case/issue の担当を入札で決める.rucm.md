@@ -7,10 +7,15 @@
 - `docs/plans/continuo_design.md#3-77a`（入札のコメントの形と、エージェントへ渡す前に外すこと）
 - `docs/plans/continuo_design.md#3-77b`（担当は assignee で持ち、期限は hold のコメントで持つ。見えているものと、その扱い）
 - `docs/plans/continuo_design.md#3-77c`（期限が切れたときに担当が移る先と、そのとき失われるもの）
-- `docs/plans/continuo_design.md#3-27`（枠の読み方と `rate_limit.pause_above_percent`）
+- `docs/plans/continuo_design.md#3-27`（使用率の受け取り方・保管値の規則・statusline取得と `rate_limit.pause_above_percent`）
+- `docs/plans/continuo_design.md#3-77i`（値が新しくなければ入札しない。値が古ければ statusline取得をして、届いてから入札する）
+- `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
 - `docs/plans/continuo_design.md#3-16`（着手の段の順番。担当が決まったあとに続く段）
-- `internal/ratelimit/ratelimit.go` の `Reader.Fetch`、`Snapshot`、`Snapshot.MaxPercent`
-- `internal/orchestrator/orchestrator.go` の `dispatchPaused`
+- `internal/ratelimit/ratelimit.go` の `Snapshot`、`Snapshot.MaxPercent`
+- `internal/orchestrator/quota.go` の `quotaForBid`、`quotaFreshLocked`
+- `internal/orchestrator/handoff.go` の `evaluateBid`
+- `internal/handoff/handoff.go` の `Evaluate`、`WeeklyPercent`
+- `internal/orchestrator/orchestrator.go` の `Run`、`dispatchPaused`
 - `internal/tracker/query.go` の `rawUserConn`（`assignees` を運んでいる）、`commentsQueryTemplate`、`defaultCommentsPerFetch`
 - `internal/config/default.go` の `Marker`、`SelfMarker`（エージェントへ渡すコメントの目印）
 
@@ -18,10 +23,10 @@
 
 ```rucm
 USE CASE NAME: issue の担当を入札で決める
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。システムは候補の先頭の issue の担当者を読み、担当者がいなければ枠の余裕値から判定スコアを出して入札のコメントを1件書く。システムは締め切りまで待って届いた入札をすべて読み、判定スコアがいちばん大きい機械が自分であれば自分を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者が自分の issue には入札せず、そのまま着手と引き継ぎへ渡す。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは候補の先頭の issue の担当者を読み、担当者がいなければ枠の余裕値から判定スコアを出して入札のコメントを1件書く。システムは締め切りまで待って届いた入札をすべて読み、判定スコアがいちばん大きい機械が自分であれば自分を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者が自分の issue には入札せず、そのまま着手と引き継ぎへ渡す。
 PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの dispatch_state の Status に issue が1件以上ある。同じボードを見張っている機械が1台以上ある。
 PRIMARY ACTOR: 巡回タイマー
-SECONDARY ACTORS: GitHub Projects v2、Claude の usage API、ほかの機械
+SECONDARY ACTORS: GitHub Projects v2、ほかの機械
 DEPENDENCY: なし
 GENERALIZATION: なし
 
@@ -32,8 +37,8 @@ BASIC FLOW:
 4. システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。
 5. システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。
 6. IF 先頭の issue に担当者が1人もいない THEN
-7.   システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。
-8.   システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。
+7.   システムは VALIDATES THAT Claude Code のステータスラインから最後に使用率を受けてから rate_limit.refresh_interval_ms を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。
+8.   システムは1週間全体の枠の使用率を1週間の使用率にする。
 9.   システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。
 10.   システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。
 11.   システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。
@@ -169,7 +174,7 @@ continuo が取り上げることはない。
 ## 判定スコアの出し方と、投稿しない条件
 
 **言いたいこと。**余裕値は使用率から作る。**使用率は「0% が未使用、100% が使い切り」で、
-usage API が返す値そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`）。
+Claude Code のステータスラインが運ぶ `used_percentage` そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`。設計 3-27）。
 
 ```
 5時間余裕値  = 100 − 5時間の使用率 − 5時間マージン
@@ -177,19 +182,30 @@ usage API が返す値そのものである**（`internal/ratelimit/ratelimit.go
 判定スコア   = 5時間余裕値 × 2 + 1週間余裕値
 ```
 
-**1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る**（ステップ8）。
-モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない。**
-最大を採れば自動的にそうなる。
+**1週間の使用率は、1週間全体の枠（`seven_day`）を採る**（ステップ8）。
+**モデル別の枠（`weekly_scoped`）はステータスラインが運ばないので、判定に入らない**（設計 3-77）。
+判定の式は、1週間全体の枠とモデル別の枠のうち最大を採る形のまま変えていない（`internal/handoff/handoff.go` の `WeeklyPercent`）。
 
 **投稿しない条件は3つある。どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
 
 | 投稿しない条件 | どこで受けるか | なぜ投稿しないか |
 | --- | --- | --- |
-| 枠を読めなかった | `枠を読めない` | **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう** |
+| 枠を読めなかった（保管値が無い、または古い） | `枠を読めない` | **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう**。古い値も同じで、正直に読めている機械に必ず勝つ（設計 3-77i） |
 | どれかの枠の使用率が `rate_limit.pause_above_percent`（既定95）を超えた | `枠の使い過ぎ` | **この機械は入札に勝っても着手しない。**勝ったのに動かない機械が出ると、issue が誰にも着手されないまま止まる |
 | 5時間余裕値と1週間余裕値のどちらかがマイナス | `余裕値がマイナス` | 処理する余裕が無いという意味である |
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
+
+## 値が古ければ statusline取得をして、届いてから入札する
+
+**言いたいこと。**巡回は使用率を取りに行かない。**保管値が新しいときだけ入札する**（ステップ7。設計 3-77i）。
+
+| 何を | どうするか |
+| --- | --- |
+| 「値が新しい」とは | 新しさの時刻（使用率を持つ新しい応答の行を最後に受けた時刻）から `rate_limit.refresh_interval_ms`（既定5分）を過ぎておらず、保管値のどの期間もリセット時刻を過ぎていないこと（`internal/orchestrator/quota.go` の `quotaFreshLocked`） |
+| 値が新しくないとき | その巡回では入札しない（`枠を読めない`）。巡回の最後に開く条件を見て、statusline取得を開く（`maybeStartStatuslineFetch`） |
+| statusline取得の値が届いたとき | 巡回のループへ知らせ、巡回を1回すぐ回して入札する（設計 3-4f） |
+| `rate_limit.source: none` のとき | 枠を見ずに入札する。**「読めなかった」とはみなさない**（`internal/orchestrator/handoff.go` の `evaluateBid`） |
 
 ## 締め切りと勝者の決め方
 
@@ -331,8 +347,8 @@ flowchart TD
     B4{"4. VALIDATES THAT 担当者が1人以下である"}
     B5{"5. VALIDATES THAT 担当者が1人もいないか、担当者がこの機械の投稿者である"}
     B6{"6. IF 担当者が1人もいない"}
-    B7{"7. VALIDATES THAT 5時間の枠と1週間の枠の使用率を読める"}
-    B8["8. 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る"]
+    B7{"7. VALIDATES THAT 保管している5時間の枠と1週間の枠の使用率が新しい"}
+    B8["8. 1週間全体の枠の使用率を1週間の使用率にする"]
     B9{"9. VALIDATES THAT どの枠も pause_above_percent を超えていない"}
     B10["10. 5時間余裕値を求める"]
     B11["11. 1週間余裕値を求める"]
@@ -418,7 +434,6 @@ sequenceDiagram
     actor T as 巡回タイマー
     participant S as システム
     participant GH as GitHub Projects v2
-    participant Q as Claude の usage API
     participant M as ほかの機械
 
     T->>S: 巡回の開始を要求する
@@ -442,13 +457,11 @@ sequenceDiagram
     else 担当者がこの機械の投稿者1人
         S->>S: 入札のコメントも hold のコメントも書かない
     else 担当者が1人もいない
-        S->>Q: 5時間の枠と1週間の枠の使用率を要求する
-        alt 枠を読めない
-            Q-->>S: 読み取りの失敗を応答する
+        S->>S: 保管している5時間の枠と1週間の枠の使用率が新しいかを確かめる
+        alt 保管値が無いか古い
             Note over S: ABORT 投稿しない。読めない機械は必ず勝ってしまう
-        else 枠を読める
-            Q-->>S: 使用率とリセット時刻を応答する
-            S->>S: 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る
+        else 保管値が新しい
+            S->>S: 1週間全体の枠の使用率を1週間の使用率にする
             alt どれかの枠が pause_above_percent を超えている
                 Note over S: ABORT 投稿しない
             else どの枠も閾値以内

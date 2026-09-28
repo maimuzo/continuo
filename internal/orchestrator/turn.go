@@ -689,7 +689,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
-		o.pollQuota(ctx)
+		// **使用率は読みに行かない。**ステータスラインから届いた保管値を読むだけである（issue #284）。
 		if !o.quotaAtFull() {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)

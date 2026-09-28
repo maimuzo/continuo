@@ -29,6 +29,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/lock"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -770,6 +771,7 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 	mgr, err := workspace.New(workspace.Options{
 		Config:       loaded.Config,
 		Herdr:        fake.Client(),
+		Loop:         loop.Inline{},
 		HomeDir:      filepath.Join(root, "home"),
 		GhqList:      func(_ context.Context, _, _ string) (string, error) { return ghq.Path, nil },
 		SettingsRoot: settingsRoot,

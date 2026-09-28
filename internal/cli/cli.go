@@ -18,10 +18,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/config"
@@ -32,9 +30,9 @@ import (
 	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/prompt"
-	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/statuslineclient"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -64,7 +62,7 @@ func runVersion(stdout io.Writer) int {
 // Deps は CLI が外部へ繋ぐ処理をまとめたものである。
 //
 // **これを引数で渡せるようにしてあるのが、この package の作りの要点である。**
-// GitHub・herdr・Keychain・ホームディレクトリへ実際に繋ぐ処理をここに集め、
+// GitHub・herdr・ホームディレクトリへ実際に繋ぐ処理をここに集め、
 // 検査ではそれぞれを偽物へ向ける。**この形にする前は `package main` に実体があり、
 // 引数の受け取り方も終了コードも検査できなかった**（設計 6-4）。
 //
@@ -92,16 +90,11 @@ type Deps struct {
 	TrustPlan func(ctx context.Context, opts trust.Options) (*trust.Report, error)
 	// TrustApply は `~/.claude.json` を書き換える。**検査では必ず差し替える。**
 	TrustApply func(ctx context.Context, opts trust.Options, report *trust.Report) (*trust.ApplyResult, error)
-	// ProbeKeychain は macOS の Keychain を読めるかを確かめる。
-	ProbeKeychain func(ctx context.Context, timeout time.Duration) (ratelimit.KeychainProbe, error)
 	// ScaffoldDetect は owner とカンバンの番号を `gh` から引く。
 	ScaffoldDetect func(ctx context.Context, opts scaffold.DetectOptions) scaffold.Detection
 	// AbandonRun は着手した issue を着手する前の状態へ戻す。
 	// **worktree と branch と pane を消すので、検査では必ず差し替える。**
 	AbandonRun func(ctx context.Context, opts abandon.Options) int
-	// GOOS は動いている OS である。`continuo allow-keychain-access` は macOS 専用なので、
-	// **macOS 以外での応答を検査するために差し替えられるようにしてある。**空なら runtime.GOOS。
-	GOOS string
 	// ForceExit は2回目の割り込みでプロセスを叩き落とす。**空なら os.Exit。**
 	//
 	// **ここだけは Run の戻り値を経由できない。**2回目の Ctrl+C は「後始末を待たない」
@@ -135,17 +128,11 @@ func (d Deps) withDefaults() Deps {
 	if d.TrustApply == nil {
 		d.TrustApply = trust.Apply
 	}
-	if d.ProbeKeychain == nil {
-		d.ProbeKeychain = ratelimit.ProbeKeychain
-	}
 	if d.ScaffoldDetect == nil {
 		d.ScaffoldDetect = scaffold.Detect
 	}
 	if d.AbandonRun == nil {
 		d.AbandonRun = abandon.Run
-	}
-	if d.GOOS == "" {
-		d.GOOS = runtime.GOOS
 	}
 	if d.ForceExit == nil {
 		d.ForceExit = os.Exit
@@ -185,6 +172,8 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 		switch args[0] {
 		case "hook":
 			return runHook(args[1:], stdin, stderr)
+		case "statusline":
+			return runStatusline(args[1:], stdin, stdout)
 		case "init":
 			return runInit(d, args[1:], stdout, stderr)
 		case "setup":
@@ -197,8 +186,6 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 			return runTrust(d, args[1:], stdout, stderr)
 		case "abandon":
 			return runAbandon(d, args[1:], stdout, stderr)
-		case "allow-keychain-access":
-			return runAllowKeychainAccess(d, args[1:], stdout, stderr)
 		case "version":
 			return runVersion(stdout)
 		}
@@ -1140,89 +1127,6 @@ func runTrust(d Deps, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runAllowKeychainAccess は `continuo allow-keychain-access` サブコマンドである。
-//
-// **Keychain へのアクセスを人間に1回だけ許可させるためにある。**macOS の Keychain は、
-// 初めて読む実行ファイルに対して確認のダイアログを出す。**無人で走る continuo が
-// そのダイアログに当たると、答える人がいないまま枠の判定の期限が切れる。**
-// 人間が端末にいるうちに1回読んでおき、「常に許可」を選ばせるのがこのコマンドの仕事である。
-//
-// **読むのは項目の名前だけである。**トークンの値は画面にもログにも出さない
-// （internal/ratelimit の ProbeKeychain）。
-//
-// **設定ファイルは読まない。**読む先は `rate_limit.token_source` の値によらず Keychain の
-// 1項目に決まっており、WORKFLOW.md がまだ無い段階でも叩けたほうがよい。
-//
-// args: `continuo allow-keychain-access` に続く引数（**位置引数は受け付けない**）。
-// stdout / stderr: 出力先。案内と結果は stdout へ、引数の誤りは stderr へ出す。
-// 戻り値: 終了コード。**macOS 以外は 0**（何もしない）、読めたら 0、
-// 読めなかった・期限内に返らなかったら 1、引数の指定が誤っていれば 2（--help / -h なら 0）。
-func runAllowKeychainAccess(d Deps, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("continuo allow-keychain-access", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return parseErrorExitCode(err)
-	}
-
-	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
-	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
-	positional := fs.Args()
-	if len(positional) > 0 {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAllowKeychainAccessErrTooManyPositional, len(positional), positional))
-		return 2
-	}
-
-	// **macOS 以外では何もしない。**`security` はほかの OS に無く、
-	// 「失敗した」と出すのは誤った案内になる（前提が違うだけである）。
-	if d.GOOS != "darwin" {
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessNotDarwin, d.GOOS))
-		return 0
-	}
-
-	// **読みに行く前に案内を出す。**ダイアログが出てから何を選べばよいかを探させない。
-	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessBefore, ratelimit.KeychainService))
-	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessBeforeDialog))
-
-	// **人間がダイアログに答えるのを待つので、無人の経路より長い上限を使う**
-	// （ratelimit.AllowAccessTimeout）。
-	probe, err := d.ProbeKeychain(context.Background(), ratelimit.AllowAccessTimeout)
-	switch {
-	case errors.Is(err, ratelimit.ErrKeychainTimeout):
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessTimeoutHeadline, ratelimit.AllowAccessTimeout))
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessTimeoutHowTo))
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessTimeoutCauses))
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessTimeoutRemedy))
-		return 1
-	case err != nil:
-		printKeychainFailure(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessErrHeadline, ratelimit.KeychainService, err))
-		return 1
-	case !probe.HasAccessToken:
-		// **読めた項目は出す。**何が入っていたのかが分かると、人間は次に何を疑えばよいか判断できる。
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessFields, strings.Join(probe.Fields, ", ")))
-		printKeychainFailure(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessNoAccessToken, ratelimit.KeychainService))
-		return 1
-	default:
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessOK, ratelimit.KeychainService))
-		// **出すのは名前だけである。**値（トークン）は1つも出さない。
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIAllowKeychainAccessFields, strings.Join(probe.Fields, ", ")))
-		return 0
-	}
-}
-
-// printKeychainFailure は Keychain を読めなかったときの案内を、原因と対処つきで出す（設計 3-34b）。
-//
-// **1行だけ出して終わらない。**読んだ人が次に何をすればよいかを、確かめ方・よくある原因・
-// 対処の3つで書く。
-//
-// w: 出力先。
-// headline: 1行目（何が起きたか）。
-func printKeychainFailure(w io.Writer, headline string) {
-	fmt.Fprintln(w, headline)
-	fmt.Fprintln(w, i18n.T(i18n.KeyCLIAllowKeychainAccessErrHowTo, ratelimit.KeychainService))
-	fmt.Fprintln(w, i18n.T(i18n.KeyCLIAllowKeychainAccessErrCauses))
-	fmt.Fprintln(w, i18n.T(i18n.KeyCLIAllowKeychainAccessErrRemedy))
-}
-
 // runDoctor は `continuo doctor` サブコマンドである（設計 3-32）。
 //
 // **前提を見出し語ごとに検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
@@ -1717,6 +1621,32 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 	logger.Info("continuo を終了しました")
 	return 0
+}
+
+// runStatusline は `continuo statusline` サブコマンドである（issue #284）。
+//
+// **人間が直接叩くものではない。**continuo が issue ごとの設定ファイルと statusline取得用の
+// 設定ファイルの `statusLine` に書き、Claude Code がステータスラインを描き直すたびに実行する。
+// 標準入力の使用率を `--socket` の `sl.sock` へ1行で送り、固定の1行 `continuo` を出す。
+//
+// **どんな失敗でも終了コード 0 で終える。**引数が読めないときも、何も送らずに固定の1行を出す。
+// **使うフラグは `--socket` だけである。**フラグを足したり名前を変えたりすると、新しい本体が
+// 書いた設定ファイルを古い実行ファイルが読めなくなる（hook と同じく、描き直すたびに実行ファイルを
+// exec する約束である）。
+//
+// args: `statusline` より後ろの引数。
+// stdin: ステータスラインの入力。
+// stdout: ステータスラインの出力先。
+// 戻り値: 終了コード。いつも 0。
+func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
+	fs := flag.NewFlagSet("continuo statusline", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	socketFlag := fs.String("socket", "", "")
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil || *socketFlag == "" || !filepath.IsAbs(*socketFlag) {
+		fmt.Fprintln(stdout, statuslineclient.Output)
+		return 0
+	}
+	return statuslineclient.Run(stdin, stdout, *socketFlag)
 }
 
 // runHook は `continuo hook` サブコマンドである（設計 3-2）。

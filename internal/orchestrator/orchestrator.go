@@ -142,10 +142,6 @@ type Tracker interface {
 type HerdrClient interface {
 	// PaneList は workspace の pane を引く（設計 3-16 の段8）。
 	PaneList(ctx context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error)
-	// WorktreeOpen は既にある worktree を workspace として開く。
-	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
-	// 着手のときは workspace の Manager が開く。
-	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
 	// PaneRename は pane の label に `owner/repo/issues/N` を書く（設計 3-3）。
 	// **人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
 	PaneRename(ctx context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error)
@@ -225,8 +221,10 @@ type Options struct {
 	Herdr HerdrClient
 	// Workspace は worktree の用意と片付けである。必須。
 	Workspace *workspace.Manager
-	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない（`none` と同じ動き）。
-	RateLimit *ratelimit.Reader
+	// StatuslineSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。
+	// issue ごとの設定ファイルと statusline取得用の設定ファイルの `statusLine` に埋め込む。
+	// **空なら statusLine を書かず、statusline取得も開かない**（テストの多くは渡さない）。
+	StatuslineSocketPath string
 	// HookSocketPath は hook を受ける socket の絶対パスである（設定ファイルに埋め込む）。必須。
 	HookSocketPath string
 	// ContinuoPath は `continuo hook` を起動する実行ファイルの絶対パスである。
@@ -267,15 +265,16 @@ type Orchestrator struct {
 	tracker         Tracker
 	herdr           HerdrClient
 	ws              *workspace.Manager
-	rl              *ratelimit.Reader
-	socketPath      string
-	runtimeDir      string
-	continuoPath    string
-	transcriptRoot  string
-	logger          *slog.Logger
-	now             func() time.Time
-	newSessionUUID  func() (string, error)
-	ghAuthCheck     GHAuthCheckFunc
+	// slSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。空なら使わない。
+	slSocketPath   string
+	socketPath     string
+	runtimeDir     string
+	continuoPath   string
+	transcriptRoot string
+	logger         *slog.Logger
+	now            func() time.Time
+	newSessionUUID func() (string, error)
+	ghAuthCheck    GHAuthCheckFunc
 	// ghLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	ghLogin tracker.GHLoginFunc
 	// ghLoginAttemptMu は取得そのものを1本に絞る。**外部プロセスを同時に何本も起こさない。**
@@ -337,7 +336,22 @@ type Orchestrator struct {
 	// 保存したまま席を立つと、同じ WARN が永久に流れる。
 	reloadNote string
 
-	// mu は runs / sessions / notified / tickCount / quota を守る。
+	// quotaMu は使用率の保管値（quota）を守る（issue #284。quota.go）。
+	// **mu とは別にする。**hook の受け取りと錠を取り合わない。錠の順は mu → quotaMu と、
+	// quotaWriteMu → quotaMu だけである。
+	quotaMu sync.Mutex
+	// quota は使用率の保管値である。
+	quota quotaStore
+	// quotaWriteMu は quota.json の書き込みを1本にする（最後に書かれるのが最新の写しになる）。
+	quotaWriteMu sync.Mutex
+	// quotaPath は quota.json の絶対パスである。空なら置かない。
+	quotaPath string
+	// statuslineNotify は、statusline取得で値が届いたことを巡回のループへ知らせる（容量1）。
+	statuslineNotify chan struct{}
+	// fetchListMu は statusline取得の閉じ残しの一覧の読み書きを1本にする。
+	fetchListMu sync.Mutex
+
+	// mu は runs / sessions / notified / tickCount を守る。
 	mu sync.Mutex
 	// runs は「自分が取った」印であり「実行中の一覧」でもある（設計 3-10 / 3-25）。
 	// キーは project item の ID。
@@ -393,17 +407,6 @@ type Orchestrator struct {
 	tokenLedger map[string]tokenLedgerEntry
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
-	// quota は最後に読んだ枠の状態である。nil なら読めていない。
-	quota *ratelimit.Snapshot
-	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
-	quotaFetchedAt time.Time
-	// quotaStale は、最後に試した枠の読み取りが失敗したかである（設計 3-77）。
-	//
-	// **失敗したら写しを使わせない。**資格情報が切れた機械は、切れる直前の
-	// 「使用率 5%」を1日中返し続ける。**入札はそれを「いちばん暇な機械」と読み、
-	// 正直に読めている機械に必ず勝つ。**
-	// **「読めなかったら入札しない」を、初回だけでなく常に効かせる。**
-	quotaStale bool
 	// viewer はいま使っているトークンの持ち主である（設計 3-77b）。
 	//
 	// **一度取れたら取り直さない。**持ち主が変わるのは `gh auth switch` を人間が
@@ -433,7 +436,7 @@ type Orchestrator struct {
 
 // New は Orchestrator を組み立てる。
 //
-// opts: 設定・トラッカー・herdr・workspace・枠の読み取り・socket のパス・ログ。
+// opts: 設定・トラッカー・herdr・workspace・socket のパス・ログ。
 // 戻り値: 組み立てた Orchestrator。Tracker / Herdr / Workspace が nil の場合、
 // **Config に Status 名が1つも無い場合**、HookSocketPath が空または絶対パスでない場合、
 // `continuo` の実行ファイルの場所を決められない場合はエラーを返す。
@@ -525,7 +528,7 @@ func New(opts Options) (*Orchestrator, error) {
 		tracker:         opts.Tracker,
 		herdr:           opts.Herdr,
 		ws:              opts.Workspace,
-		rl:              opts.RateLimit,
+		slSocketPath:    opts.StatuslineSocketPath,
 		socketPath:      opts.HookSocketPath,
 		runtimeDir:      filepath.Dir(opts.HookSocketPath),
 		continuoPath:    continuoPath,
@@ -551,6 +554,13 @@ func New(opts Options) (*Orchestrator, error) {
 		tokenLedger:    map[string]tokenLedgerEntry{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
+
+		quota:            newQuotaStore(),
+		statuslineNotify: make(chan struct{}, 1),
+	}
+	// **quota.json は実行時ディレクトリに置く**（issue #284）。使用率を読む設定のときだけ。
+	if opts.Config.RateLimit.Source == ratelimit.SourceStatusline && opts.HookSocketPath != "" {
+		orc.quotaPath = filepath.Join(orc.runtimeDir, quotaFileName)
 	}
 	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
 	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
@@ -596,14 +606,44 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// **巡回を呼ぶのはこの goroutine だけである**（起動直後の1回も同じ goroutine）。
+	// 2つの巡回が同時に走ることは無い。
+	o.drainStatuslineNotify()
 	o.Tick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			// **巡回を回す前に知らせを空にする。**巡回より前に溜まった知らせは、この巡回1回に
+			// 畳まれる。巡回の途中に届いた知らせは残るので、巡回のあとにもう1回回る。
+			o.drainStatuslineNotify()
 			o.Tick(ctx)
+		case <-o.statuslineNotify:
+			// **statusline取得で値が届いた。巡回を1回すぐ回して入札する**（issue #284）。
+			// 巡回のあとで30秒の刻みを数え直す（直後にふだんの巡回が続けて回らないように）。
+			// **刻みで回した巡回のあとは数え直さない**（巡回の間隔は今と同じ）。
+			o.drainStatuslineNotify()
+			o.Tick(ctx)
+			ticker.Reset(interval)
 		}
+	}
+}
+
+// drainStatuslineNotify は、溜まっている statusline取得の知らせを捨てる。
+func (o *Orchestrator) drainStatuslineNotify() {
+	select {
+	case <-o.statuslineNotify:
+	default:
+	}
+}
+
+// notifyStatusline は、statusline取得で値が届いたことを巡回のループへ知らせる。
+// **容量1で、置いてあれば足さない。**知らせが巡回の途中に何度届いても、巡回のあとに1回だけ回る。
+func (o *Orchestrator) notifyStatusline() {
+	select {
+	case o.statuslineNotify <- struct{}{}:
+	default:
 	}
 }
 
@@ -628,7 +668,7 @@ func (o *Orchestrator) Close() {
 //     （**バックオフ明けの再 dispatch より前。**再 dispatch も段0 から入り直す dispatch
 //     なので、検査に落ちた巡回では見送る）
 //  2. バックオフが明けた run を拾う（**候補の取得より前。**空きスロットの計算に効く）
-//  3. 枠を読む（poll_interval_ms に1回。`rate_limit.source: none` なら1回も叩かない）
+//  3. （使用率は読みに行かない。ステータスラインから届いた保管値を読むだけ。issue #284）
 //  4. 候補を取る                 ← 巡回の GraphQL リクエスト 1本目
 //  5. 実行中の Status を照合する  ← 2本目
 //  6. worktree を照合する         ← 3本目
@@ -657,7 +697,6 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	dispatchAllowed := o.verifyPeriodically(ctx, tick)
 
 	o.resumeBackoff(ctx, dispatchAllowed)
-	o.pollQuota(ctx)
 
 	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.cfg.Tracker.ActiveStates)
 	if err != nil {
@@ -680,6 +719,10 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	}
 
 	o.wakeRuns(ctx)
+
+	// **巡回の最後に、statusline取得の要否を判定する**（issue #284。statuslinefetch.go）。
+	// 巡回の中で値を待たない。待つあいだ、止まった run の検知・ほかの issue の着手が止まる。
+	o.maybeStartStatuslineFetch(ctx)
 }
 
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
@@ -810,74 +853,6 @@ func (o *Orchestrator) ghLoginName() string {
 	o.ghLoginMu.Lock()
 	defer o.ghLoginMu.Unlock()
 	return o.selfLogin
-}
-
-// pollQuota は枠を読む（設計 3-27）。
-//
-// **`rate_limit.source: none` なら1回も叩かない**（Reader.Enabled が偽になる）。
-// 読む間隔は `rate_limit.poll_interval_ms`（既定5分）である。
-//
-// ctx: 呼び出しに適用するコンテキスト。
-func (o *Orchestrator) pollQuota(ctx context.Context) {
-	if o.rl == nil || !o.rl.Enabled() {
-		return
-	}
-	interval := time.Duration(o.cfg.RateLimit.PollIntervalMs) * time.Millisecond
-	now := o.now()
-
-	o.mu.Lock()
-	last := o.quotaFetchedAt
-	o.mu.Unlock()
-	if !last.IsZero() && interval > 0 && now.Sub(last) < interval {
-		return
-	}
-
-	snap, err := o.rl.Fetch(ctx)
-	if err != nil {
-		// **写しを古いままにしない**（設計 3-77）。入札は枠の写しで判定するので、
-		// **読めなくなった機械が、最後に読めた「暇な」値で入札し続ける。**
-		// **止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
-		// 最後に読めた値を使い続ける（読めないことを理由に走行中の run を捨てない）。
-		o.mu.Lock()
-		o.quotaStale = true
-		o.mu.Unlock()
-		o.logger.Warn("枠の読み取りに失敗しました（読めるまで入札しません）", "error", err)
-		return
-	}
-
-	o.mu.Lock()
-	o.quotaFetchedAt = now
-	o.quotaStale = false
-	if snap != nil {
-		o.quota = snap
-	}
-	o.mu.Unlock()
-}
-
-// quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77）。
-//
-// **最後の読み取りに失敗していたら nil を返す。**`handoff.Evaluate` は nil を
-// 「枠を読めなかった」と読み、**入札そのものを取りやめる。**
-// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
-// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
-//
-// 戻り値: 枠の状態。読めていない・最後の読み取りに失敗していれば nil。
-func (o *Orchestrator) quotaForBid() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.quotaStale {
-		return nil
-	}
-	return o.quota
-}
-
-// quotaSnapshot は最後に読んだ枠の状態を返す。
-//
-// 戻り値: 枠の状態。読めていなければ nil。
-func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.quota
 }
 
 // dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。

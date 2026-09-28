@@ -179,7 +179,7 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // 検査）・段0（dispatch 直前の検査）・段1（印を付ける）までである。**段2以降は別の
 // goroutine で回す。**段3〜段10 は git の worktree 作成・利用者が書いた workspace_hooks
 // （既定60秒）・起動の待ち（既定60秒）を順に通るので、既定値と max_concurrent_agents=2 では
-// 1回の巡回が数分返らず、その間 stall 検知も枠の読み取りも止まる。
+// 1回の巡回が数分返らず、その間 stall 検知も statusline取得の要否の判定も止まる。
 //
 // **同じ巡回で印を付けた run は、印を付けた順に1本の goroutine で処理する。**
 // 並行に走らせると、カンバンの並び順どおりに着手したことを外から確かめられなくなる。

@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "3bc4fd7becc782829840a4b7e7ed19c5c372f074c41021ccff290ff5da72e4bb"
+    "rucm_block_sha256": "491751ebba48a6a46626d6921bb81acded8ee4414eec395f0ce9301e23aa8dac"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -72,7 +72,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。"
+      "statement": "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。"
     },
     {
       "id": "BASIC FLOW-3",
@@ -358,13 +358,13 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "true",
-      "condition": "Claude の usage API から枠の使用率とリセット時刻を読み取れる"
+      "condition": "Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している"
     },
     {
       "from": "BASIC FLOW-2",
       "to": "枠を読めない-1",
       "kind": "false",
-      "condition": "NOT Claude の usage API から枠の使用率とリセット時刻を読み取れる"
+      "condition": "NOT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している"
     },
     {
       "from": "BASIC FLOW-3",
@@ -613,7 +613,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -661,7 +661,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -710,7 +710,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -751,7 +751,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -785,7 +785,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -819,7 +819,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -851,7 +851,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "システムはこの巡回で新規の dispatch を止める。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -887,7 +887,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -934,7 +934,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -982,7 +982,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -1022,7 +1022,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -1055,7 +1055,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -1088,7 +1088,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -1119,7 +1119,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
         "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
         "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
@@ -1146,8 +1146,8 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
-        "CONDITION: NOT Claude の usage API から枠の使用率とリセット時刻を読み取れる",
+        "システムは VALIDATES THAT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している。",
+        "CONDITION: NOT Claude Code のステータスラインから受けた枠の使用率とリセット時刻のうち、リセット時刻を過ぎていないものを保管している",
         "システムは枠待ちと無音を区別しない。",
         "システムは turn_timeout_ms のあいだ待つ。",
         "システムは herdr の pane を閉じる。",

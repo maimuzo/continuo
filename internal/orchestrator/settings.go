@@ -12,6 +12,7 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -76,6 +77,34 @@ type claudeSettings struct {
 	// **環境変数はここにしか書けない。**`worktree.open` にも `agent.start` にも env の
 	// 引数が無い（設計 3-2 / 3-12。2026-08-19 に実測で確認済み）。
 	Env map[string]string `json:"env,omitempty"`
+	// StatusLine はステータスラインのコマンドである（issue #284）。
+	// **`rate_limit.source: statusline` のときだけ入れる**（none なら書かず、利用者の
+	// ステータスラインがそのまま出る）。hook の組み立ては変えない。
+	StatusLine *statusLineSetting `json:"statusLine,omitempty"`
+}
+
+// statusLineSetting は設定ファイルの statusLine である（issue #284）。
+type statusLineSetting struct {
+	// Type は "command" である。
+	Type string `json:"type"`
+	// Command は `continuo statusline --socket <sl.sock>` のコマンド行である。
+	Command string `json:"command"`
+}
+
+// statusLineSetting は、設定ファイルへ書く statusLine を組み立てる（issue #284）。
+//
+// **コマンド行は hook と同じ shellQuote で引用する。**パスに空白が入っても割れないようにする。
+// **使うフラグは `--socket` だけである**（internal/cli の runStatusline）。
+//
+// 戻り値: statusLine。`source: statusline` でないか、sl.sock のパスが無ければ nil。
+func (o *Orchestrator) statusLineSetting() *statusLineSetting {
+	if o.cfg.RateLimit.Source != ratelimit.SourceStatusline || o.slSocketPath == "" {
+		return nil
+	}
+	return &statusLineSetting{
+		Type:    "command",
+		Command: fmt.Sprintf("%s statusline --socket %s", shellQuote(o.continuoPath), shellQuote(o.slSocketPath)),
+	}
 }
 
 // claudeSettingsPermissions は設定ファイルの permissions である。
@@ -390,7 +419,8 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
 			Allow: o.cfg.Claude.Permissions.Allow,
 			Deny:  o.cfg.Claude.Permissions.Deny,
 		},
-		Env: o.cfg.Claude.Env,
+		Env:        o.cfg.Claude.Env,
+		StatusLine: o.statusLineSetting(),
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

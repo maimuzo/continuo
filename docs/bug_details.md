@@ -469,8 +469,6 @@ branch は push してあれば残りますが、エージェントが何を考�
 - **引き継ぎを設計するときは、何が機械に貼り付いているかを先に列挙してください。**
   worktree・会話の記録・設定ファイル・herdr の workspace と pane・agent 名の5つです。
 - **`WORKFLOW.md` を複数の機械で共有するなら、機械ごとに違う値を洗い出してください。**
-  とくに `rate_limit.token_source` は OS で違います（macOS は Keychain、
-  Linux は `~/.claude/.credentials.json`）。
   **一覧と、配るときの手順は [FAQ.md](FAQ.md) の
   「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」にあります。**
 - **身元ファイルはエージェントが書き換えられます。**worktree の直下にあり、

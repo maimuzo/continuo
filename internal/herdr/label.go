@@ -9,6 +9,7 @@ import "fmt"
 //
 // **label は人間が herdr の画面で見分けるためのものである。**continuo は読み戻さない
 // （復元の照合は pane の cwd と worktree のパスで行う。設計 3-3）。
+// **例外は statusline取得用の workspace だけである**（StatuslineFetchLabel。issue #284）。
 // したがって形を変えても復元は壊れない。
 //
 // **draft issue のためにガードを置く。**着手の経路では
@@ -25,3 +26,11 @@ func IssueLabel(owner, repo string, number int) string {
 	}
 	return fmt.Sprintf("%s/%s/issues/%d", owner, repo, number)
 }
+
+// StatuslineFetchLabel は、statusline取得（使用率を受け取るために短い haiku の Claude Code を
+// 開くこと。issue #284）の workspace に貼る label である。
+//
+// **continuo は、この label だけは読み戻す。**閉じ残しの statusline取得の workspace を
+// 片付けるとき、閉じ残しの一覧の ID が、いまも statusline取得の workspace を指しているかを
+// この label で確かめる（ID が別の workspace に使い回されていたら閉じない）。
+const StatuslineFetchLabel = "continuo statusline fetch"

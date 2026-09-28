@@ -317,6 +317,8 @@ type Workspace struct {
 	Number uint `json:"number"`
 	// Label は workspace に貼られたラベルである。**`owner/repo/issues/N` を書く**（3-3）。
 	// **人間が herdr の画面で workspace を見分けるための表示名である。**continuo は読み戻さない。
+	// **例外は statusline取得用の workspace だけである**（issue #284）。閉じ残しを片付けるとき、
+	// 別の workspace を閉じないよう label（StatuslineFetchLabel）を照合する。
 	// 書き込みは WorkspaceRename で行う。
 	Label string `json:"label"`
 	// Focused は workspace がフォーカスされているかどうかである。

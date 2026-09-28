@@ -98,14 +98,14 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 | --- | --- |
 | OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
 | [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.9.1 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない。`WORKFLOW.md` の `herdr.protocol` は `22`） |
-| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.266 で動作を確認 |
+| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.283 で動作を確認。**ステータスラインが枠の使用率を返すのは Pro / Max だけ。**それ以外の契約と API キーでは `rate_limit.source: none` にする |
 | [`gh`](https://cli.github.com/) | `gh auth login -s project` でログイン済みであること。2.97.0 で動作を確認 |
 | [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と、clone の場所の解決に使う |
 | [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |
 
 **カンバンには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — カンバンの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` は18の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / **プロンプトの変数** / claude / **agent teams** / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / **自動化** / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` は17の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / **プロンプトの変数** / claude / **agent teams** / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / **自動化** / clone / 信頼登録。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
 **`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
 **ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**
@@ -165,7 +165,6 @@ continuo init      # WORKFLOW.md と continuo-ci.yaml を置く。owner とカ�
 continuo setup                    # カンバンの Status を continuo の5つの役割に対応づける（対話）
 continuo trust --dry-run          # 何を信頼登録するかを、実行せずに表示する
 continuo trust                    # 対象リポジトリを信頼登録する。clone が無ければ取ってくる
-continuo allow-keychain-access    # macOS だけ。定額プランの枠を読むために1回
 continuo doctor                   # 前提が揃っているか調べる
 
 continuo                          # 常駐を始める
