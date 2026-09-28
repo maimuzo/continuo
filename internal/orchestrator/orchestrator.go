@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,6 +238,9 @@ type Options struct {
 	Herdr HerdrClient
 	// Workspace は worktree の用意と片付けである。必須。
 	Workspace *workspace.Manager
+	// RateLimit は usage APIの読み取りである（`rate_limit.source: oauth_usage_api`
+	// のとき。issue #284）。**nil なら usage API を読まない**（テストの多くは渡さない）。
+	RateLimit *ratelimit.Reader
 	// StatuslineSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。
 	// issue ごとの設定ファイルと statusline取得用の設定ファイルの `statusLine` に埋め込む。
 	// **空なら statusLine を書かず、statusline取得も開かない**（テストの多くは渡さない）。
@@ -281,8 +285,13 @@ type Orchestrator struct {
 	tracker         Tracker
 	herdr           HerdrClient
 	ws              *workspace.Manager
+	// rl は usage API の読み取りである（issue #284）。nil なら読まない。
+	rl *ratelimit.Reader
 	// slSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。空なら使わない。
-	slSocketPath   string
+	slSocketPath string
+	// slDisabled は statusline を使えなくした印である（sl.sock を開けなかったとき。DisableStatusline）。
+	// **立っていれば statusLine を書かず、statusline取得も開かない**（issue #284）。
+	slDisabled     atomic.Bool
 	socketPath     string
 	runtimeDir     string
 	continuoPath   string
@@ -574,6 +583,7 @@ func New(opts Options) (*Orchestrator, error) {
 		tracker:         opts.Tracker,
 		herdr:           opts.Herdr,
 		ws:              opts.Workspace,
+		rl:              opts.RateLimit,
 		slSocketPath:    opts.StatuslineSocketPath,
 		socketPath:      opts.HookSocketPath,
 		runtimeDir:      filepath.Dir(opts.HookSocketPath),
@@ -609,9 +619,20 @@ func New(opts Options) (*Orchestrator, error) {
 		quota:            newQuotaStore(),
 		statuslineNotify: make(chan struct{}, 1),
 	}
-	// **quota.json は実行時ディレクトリに置く**（issue #284）。使用率を読む設定のときだけ。
-	if opts.Config.RateLimit.Source == ratelimit.SourceStatusline && opts.HookSocketPath != "" {
+	// **quota.json は実行時ディレクトリに置く**（issue #284）。使用率を読む設定（`none` 以外）のときだけ。
+	if opts.Config.RateLimit.Source != ratelimit.SourceNone && opts.HookSocketPath != "" {
 		orc.quotaPath = filepath.Join(orc.runtimeDir, quotaFileName)
+	}
+	// **`oauth_usage_api` で refresh_interval_ms が polling.interval_ms 以下なら、起動時に1回だけ知らせる**
+	// （issue #284）。起動は止めず、polling.interval_ms の2倍として扱う（quotaRefreshInterval）。
+	// **設定の読み直しでは出さない**（rate_limit は読み直さない）。
+	if rl := opts.Config.RateLimit; rl.Source == ratelimit.SourceOAuthUsageAPI &&
+		rl.RefreshIntervalMs <= opts.Config.Polling.IntervalMs {
+		logger.Warn("rate_limit.refresh_interval_ms が polling.interval_ms 以下なので、polling.interval_ms の2倍として扱います"+
+			"（短いと、usage API が読めないあいだ巡回のたびに statusline取得が走ります）。refresh_interval_ms を polling.interval_ms より長くしてください",
+			"rate_limit.refresh_interval_ms", rl.RefreshIntervalMs,
+			"polling.interval_ms", opts.Config.Polling.IntervalMs,
+			"扱う値_ms", 2*opts.Config.Polling.IntervalMs)
 	}
 	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
 	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
@@ -719,7 +740,8 @@ func (o *Orchestrator) Close() {
 //     （**バックオフ明けの再 dispatch より前。**再 dispatch も段0 から入り直す dispatch
 //     なので、検査に落ちた巡回では見送る）
 //  2. バックオフが明けた run を拾う（**候補の取得より前。**空きスロットの計算に効く）
-//  3. （使用率は読みに行かない。ステータスラインから届いた保管値を読むだけ。issue #284）
+//  3. usage API で使用率を読む（`source: oauth_usage_api` のとき、次に試してよい時刻を過ぎていれば。
+//     issue #284。pollAPI）。ステータスラインから届いた値は受け口が保管値へ入れる
 //  4. 候補を取る                 ← 巡回の GraphQL リクエスト 1本目
 //  5. 実行中の Status を照合する  ← 2本目
 //  6. worktree を照合する         ← 3本目
@@ -748,6 +770,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	dispatchAllowed := o.verifyPeriodically(ctx, tick)
 
 	o.resumeBackoff(ctx, dispatchAllowed)
+	o.pollAPI(ctx)
 
 	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.candidateStates())
 	if err != nil {
@@ -971,6 +994,156 @@ func (o *Orchestrator) ghLoginName() string {
 	o.ghLoginMu.Lock()
 	defer o.ghLoginMu.Unlock()
 	return o.selfLogin
+}
+
+// DisableStatusline は statusline を使えなくする（issue #284）。
+//
+// **daemon が sl.sock を開けなかったときに呼ぶ**（`source: oauth_usage_api` のときだけ。
+// `statusline` なら起動を止める）。立てたあとは、issue ごとの設定ファイルに statusLine を書かず、
+// statusline取得も開かない。**復元が設定ファイルを書く前に呼ぶこと。**
+func (o *Orchestrator) DisableStatusline() {
+	o.slDisabled.Store(true)
+}
+
+// apiMaxRetryAfter は Retry-After に掛ける上限である（issue #284）。
+//
+// **これより長い値は、この長さに丸める。**壊れた値や極端な値で、usage API を何日も試さなく
+// ならないようにする。
+const apiMaxRetryAfter = 24 * time.Hour
+
+// pollAPI は usage API で使用率を読む（`rate_limit.source: oauth_usage_api` のとき。issue #284）。
+//
+// **巡回の中で同期で叩く**（錠の外。全体の上限は30秒。ba24db63 までと同じ）。読めた値は
+// OnAPISnapshot が保管値の錠の下で入れる。次に試してよい時刻・切り替え・恒久的な失敗で
+// 諦めた印は、保管値の錠の下で持つ。
+//
+//	読めた（200 で session か weekly_all が1件以上）… 次は poll_interval_ms のあと。切り替えを解く
+//	トークンが恒久的に読めない … 切り替える。立て直すまで usage API を試さない
+//	トークンが一時的に読めない … 切り替える。次は poll_interval_ms のあと
+//	401 / 403                  … 切り替える。次は poll_interval_ms のあと（401 は一時的でもありうる）
+//	429 / 5xx / 通信の失敗 / session も weekly_all も無い 200 … 切り替える。
+//	                             次は max(poll_interval_ms, Retry-After) のあと（上限24時間）
+//
+// **止めるときの取り消しは先に判定する。**トークンでも HTTP でも、切り替えず WARN も出さない。
+// **WARN は切り替えた1回だけである**（恒久的な失敗へ変わったときはもう1回）。戻ったら INFO を1行。
+//
+// ctx: 巡回のコンテキスト。
+func (o *Orchestrator) pollAPI(ctx context.Context) {
+	if o.rl == nil || !o.rl.Enabled() || o.cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI {
+		return
+	}
+	now := o.now()
+	o.quotaMu.Lock()
+	skip := o.quota.apiGaveUp || now.Before(o.quota.apiNextAt)
+	o.quotaMu.Unlock()
+	if skip {
+		return
+	}
+
+	snap, err := o.rl.Fetch(ctx)
+	if ctx.Err() != nil {
+		// **止めるときの取り消しは、読めなかったことにしない。**
+		return
+	}
+	if err == nil && snap == nil {
+		return
+	}
+	poll := o.apiPollInterval()
+	if err == nil {
+		o.OnAPISnapshot(snap)
+		now = o.now()
+		o.quotaMu.Lock()
+		wasSwitched := o.quota.apiSwitched
+		o.quota.apiSwitched = false
+		o.quota.apiLastOK = true
+		o.quota.apiNextAt = now.Add(poll)
+		o.quotaMu.Unlock()
+		if wasSwitched {
+			o.logger.Info("usage API で使用率を読めたので、statusline取得への切り替えを解きます")
+		}
+		return
+	}
+
+	wait := poll
+	var credErr *ratelimit.CredentialError
+	var limited *ratelimit.RateLimitedError
+	permanent := false
+	switch {
+	case errors.As(err, &credErr):
+		permanent = credErr.Permanent
+	case errors.As(err, &limited):
+		ra := limited.RetryAfter
+		if !limited.RetryAt.IsZero() {
+			ra = limited.RetryAt.Sub(o.now())
+		}
+		if ra > apiMaxRetryAfter {
+			ra = apiMaxRetryAfter
+		}
+		if ra > wait {
+			wait = ra
+		}
+	}
+	now = o.now()
+	o.quotaMu.Lock()
+	wasSwitched := o.quota.apiSwitched
+	wasGaveUp := o.quota.apiGaveUp
+	o.quota.apiSwitched = true
+	o.quota.apiLastOK = false
+	o.quota.apiNextAt = now.Add(wait)
+	if permanent {
+		o.quota.apiGaveUp = true
+	}
+	o.quotaMu.Unlock()
+
+	if wasSwitched && (!permanent || wasGaveUp) {
+		o.logger.Debug("usage API で使用率を読めません（statusline取得へ切り替えたままです）",
+			"error", err, "next_attempt_at", now.Add(wait))
+		return
+	}
+	o.warnAPISwitched(err, credErr, permanent, now.Add(wait))
+}
+
+// warnAPISwitched は、usage API から statusline取得へ切り替えたことを WARN で1回知らせる（issue #284）。
+//
+// **Keychain の案内は、トークンの読み取りの失敗（恒久的・一時的）の WARN だけに出す。**
+//
+// err: usage API の誤り。
+// credErr: トークンの読み取りの失敗なら、その誤り（それ以外は nil）。
+// permanent: 恒久的な失敗か。
+// next: 次に試す時刻。
+func (o *Orchestrator) warnAPISwitched(err error, credErr *ratelimit.CredentialError, permanent bool, next time.Time) {
+	var why string
+	var statusErr *ratelimit.StatusError
+	keychain := o.cfg.RateLimit.TokenSource == ratelimit.TokenSourceKeychain
+	switch {
+	case credErr != nil && permanent:
+		why = "usage API のトークンを読めないので、continuo を立て直すまで usage API を試しません。" +
+			"rate_limit.token_source と rate_limit.token_env を確かめてください。" +
+			"API キーで Claude Code を使っているなら rate_limit.source を none にしてください"
+		if keychain {
+			why += "。macOS の Keychain から読むなら、continuo allow-keychain-access を1回実行して「常に許可」を選んでから立て直してください"
+		}
+	case credErr != nil:
+		why = "usage API のトークンを期限内に読めませんでした（Keychain の確認のダイアログに誰も答えていないかもしれません）。" +
+			"rate_limit.poll_interval_ms のあとに試し直します"
+		if keychain {
+			why += "。continuo allow-keychain-access を1回実行して「常に許可」を選ぶと、ダイアログは出なくなります"
+		}
+	case errors.As(err, &statusErr) &&
+		(statusErr.StatusCode == http.StatusUnauthorized || statusErr.StatusCode == http.StatusForbidden):
+		why = "usage API が使用率を返しませんでした（401 はトークンの更新の途中など一時的なこともあります）。" +
+			"rate_limit.poll_interval_ms のあとに試し直します。API キーで Claude Code を使っているなら rate_limit.source を none にしてください"
+	default:
+		why = "usage API で使用率を読めません。次に試す時刻のあとに試し直します"
+	}
+	if o.statuslineUsable() {
+		o.logger.Warn("usage API から statusline取得へ切り替えます（"+why+"）",
+			"error", err, "next_attempt_at", next)
+		return
+	}
+	o.logger.Warn("usage API で使用率を読めず、statusline も使えないので、usage API が読めるまで新しい値が入りません"+
+		"（値が古くなると入札を見送ります。"+why+"）",
+		"error", err, "next_attempt_at", next)
 }
 
 // dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。

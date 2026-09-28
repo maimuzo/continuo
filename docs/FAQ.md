@@ -7,7 +7,7 @@
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
 未記入の項目 / プロンプトの変数 / claude / agent teams / hook の置き場所 / Claude の設定 /
 worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / 自動化 / clone /
-信頼登録の17個を調べます。
+信頼登録 / 資格情報の18個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -44,8 +44,9 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを17の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
+| `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
 `continuo hook` は Claude Code の hook から、`continuo statusline` は Claude Code のステータスラインから呼ばれるもので、どちらも人間が直接叩くものではありません。
@@ -267,8 +268,8 @@ pull request のコメントに、レビュー結果を貼ってください
 | 何 | 中身 |
 | --- | --- |
 | **指摘の受け取り方** | **命令ではなく情報として受け取ります。**根拠が成り立つかを確かめ、同じ誤りが他に無いかを確かめ、利用者にとってどうするのがよいかを考えて直し方を決めます |
-| **いつ終わってよいか** | **critical と high が0件**になったとき。mid と low は何件あってもよい |
-| **重さの付け方** | 4つ（critical / high / mid / low）。**`Medium` `Low` ではありません。**レビュワーが付けた重さは、受け取った側が付け直します |
+| **いつ終わってよいか** | **CRITICAL と HIGH が0件**になったとき。MEDIUM と LOW は何件あってもよい |
+| **重さの付け方** | 4つ（CRITICAL / HIGH / MEDIUM / LOW）。**すべて大文字で書きます。**レビュワーが付けた重さは、受け取った側が付け直します |
 | **issue に無いものを削る** | **毎周、実装と issue を突き合わせます**（収まった周も同じ）。issue が求めていないものは削除し、**削除内容を issue のコメントへ残します** |
 | **誰に見せるか** | **差分を読む役と、関連処理まで見る役を毎周2つ並列に。**心配な場所があるときは3つ目 |
 | **直す前に何を書くか** | **判断票と同じコメントへ6つ書きます**（別のファイルは作りません）。**とくに「止まるようになるもの」「通るようになるもの」。**直す箇所は全部並べてから、一気に直します |
@@ -335,16 +336,17 @@ language: ja
 **`ja` と書いておく意味。**書かずにいると、`LANG` を持たない環境（CI・コンテナ・`env -i`）では
 英語になります。**日本語で使い続けたいなら書いてください。**
 
-**`language:` を読まないコマンドが4つあります。**
+**`language:` を読まないコマンドが5つあります。**
 
 | コマンド | なぜ読まないか |
 | --- | --- |
 | `continuo init` | **`WORKFLOW.md` をこれから作るコマンドです。**読む相手がまだありません |
 | `continuo hook` | Claude Code が呼ぶもので、人間が直接叩くものではありません |
 | `continuo version` | 版を1行出すだけです |
+| `continuo allow-keychain-access` | macOS で1回だけ叩くものです |
 | `continuo statusline` | Claude Code のステータスラインが呼ぶもので、人間が直接叩くものではありません。画面に出すのは固定の `continuo` の1語だけです |
 
-**この4つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
+**この5つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
 
 **残りのコマンドは `language:` に従います**（`continuo setup` の対話も、`continuo doctor` の検査結果も、
 `continuo abandon` も、常駐プロセスも同じです）。
@@ -922,7 +924,7 @@ tracker:
 | --- | --- | --- |
 | **1** | **代表の1人** | 共有するリポジトリの根で `continuo init` を叩く |
 | **2** | **同じ人** | `continuo setup` を叩いて、カンバンの Status の割り当てを入れる |
-| **3** | **同じ人** | **Pro / Max 以外の契約か API キーの人が1人でも混ざるなら、`rate_limit.source` を `none` にする**（下の「枠の使用率が届かない人が混ざるとき」） |
+| **3** | **同じ人** | **OS が混ざるチームなら、`rate_limit.token_source` の行を消す**（下の「OS が混ざるときの1行」）。**API キーの機械が1台でも混ざるなら、`rate_limit.source` を `none` にする**（下の「API キーの機械が混ざるとき」） |
 | **4** | **同じ人** | `trust.repositories` から、continuo に触らせないリポジトリの行を消す |
 | **5** | **同じ人** | front matter の下の本文に、チームの決まりを書く |
 | **6** | **同じ人** | commit して push する |
@@ -944,18 +946,50 @@ tracker:
 （`ghq get`）、その機械の `~/.claude.json` を書き換えます。
 **共有すると、代表が残した行の判断が、メンバー全員の機械に効きます。**
 
-##### 枠の使用率が届かない人が混ざるとき — `rate_limit.source`
+##### OS が混ざるときの1行 — `rate_limit.token_source`
 
-**全員が Pro / Max なら、この節は読み飛ばしてかまいません。**既定の `statusline` のままで動きます。
+**全員が同じ OS なら、この節は読み飛ばしてかまいません。**そのままで動きます。
 
-**枠の使用率は、Claude Code のステータスラインから受け取ります。公式文書によると、それが届くのは Pro / Max だけです。**
-**それ以外の契約や API キーの機械は、使用率が1つも入らないので、入札を黙って見送り続けます。**
+**`continuo init` は、叩いた機械の OS の既定を書き込みます。**
+
+| どの OS で `continuo init` を叩いたか | 書かれる値 | Linux / WSL の機械 | macOS の機械 |
+| --- | --- | --- | --- |
+| **macOS** | `keychain` | **起動しません。**「`keychain` は macOS でだけ使える」で止まります | 動きます |
+| **Linux / WSL** | `claude_credentials` | 動きます | **起動はします。**ただし macOS では `~/.claude/.credentials.json` が無いのが普通なので、**usage API から枠を読めなくなります** |
+
+**下の段が危ないほうです。**usage API から枠を読めない機械は、Claude Code のステータスラインへ切り替えて枠を読みます。
+**そのあいだ、値が古くなるたびに statusline取得（haiku の Claude Code を短く起動して使用率を取ること）をするので、使用量を少し消費します。**
+**モデル別の週次枠も見られなくなります。**気づける手がかりは2つです。
+
+| どこで気づくか | 何が出るか |
+| --- | --- |
+| **`continuo doctor`** | 資格情報の行に `!` |
+| **continuo のログ** | usage API から枠を読めないので statusline へ切り替える、という `WARN`（切り替えたときに1回。既定のログレベルでも出ます） |
+
+**直し方は2つあります。**
+
+| どうするか | 中身 | 損得 |
+| --- | --- | --- |
+| **その1行を消す**（勧めます） | 書かなければ、読むときに走っている OS の既定が入ります | **各機械で何もしなくて済みます。**ただし `continuo doctor` が「未記入の項目」として出し続けます |
+| **`env` にする** | `rate_limit.token_source: env` と `token_env: CLAUDE_CODE_OAUTH_TOKEN` を書き、各自がその環境変数を置きます | **どの OS でも通ります。**ただし**そのトークンをどう配るかは、この文書の外です。**既に CI などで配っているチーム向けです |
+
+**消したあとの注意。****`continuo doctor --missing-keys-patch … | patch` を当てると、
+その1行が `claude_credentials` として書き戻ります。****当てたら、その1行だけもう一度消してください。**
+
+##### API キーの機械が混ざるとき — `rate_limit.source`
+
+**全員が定額プランでログインしているなら、この節は読み飛ばしてかまいません。**既定の `oauth_usage_api` のままで動きます。
+
+**API キーで Claude Code を動かしている機械は、枠の使用率を読めません。**usage API は定額プランのログインを使い、
+ステータスラインが使用率を返すのも Pro / Max だけ（公式文書）だからです。
+**その機械は使用率が1つも入らないので、入札を黙って見送り続けます。**
 **その機械だけ `none` にすると、今度はその機械が使用率0として常に入札し、勝ち続けます**（下の表の `rate_limit.source`）。
 
 **だから、1人でも混ざるなら全員 `none` にしてください。**枠の余裕で担当を決めることはできなくなり、
 先に入札した機械が取るようになります。
+**`none` にしないと、API キーの機械では、continuo を起動するたびに haiku の会話が最大1回従量で課金されます**（下の「枠の使用率の読み方を知りたいとき」）。
 
-**各機械では、`trust.repositories` の信頼済みの clone が1つ要ります**（`source: statusline` のとき）。
+**各機械では、`trust.repositories` の信頼済みの clone が1つ要ります**（usage API が読めないあいだ statusline取得に使います）。
 手順の段10 の `continuo trust` を叩いていれば揃っています。
 
 ##### 揃っていないと壊れるキー
@@ -982,10 +1016,11 @@ tracker:
 **見分けるのは、その機械の `gh` がログインしている GitHub アカウントです。**
 だから、共有する1枚に機械ごとの値を書き分ける必要はありません。
 
-**機械ごとに違う値になりうるのは1つだけです。**
+**機械ごとに違う値になりうるのは2つだけです。**
 
 | キー | なぜ |
 | --- | --- |
+| **`rate_limit.token_source`** | 走っている OS で既定が変わります（上の節） |
 | **`claude.hook_bridge.listen`** | 書くなら絶対パスで、権限が 0700 でなければ起動しません。**既定の `null` のままなら continuo が決めるので、共有してかまいません** |
 
 ##### `continuo setup` を、あとから各自が叩いてよいか
@@ -1136,25 +1171,27 @@ tracker:
 
 | 理由 | 何が起きているか |
 | --- | --- |
-| **枠を読めない** | 直近の `rate_limit.refresh_interval_ms`（既定5分）に、枠の使用率が1つも届いていません。**値が古いまま入札すると、実際より暇に見えて勝ちうるので、見送ります** |
+| **枠を読めない** | 枠の使用率が古くなっています。usage API から読めていれば次の読み取りまで、読めていなければ直近の `rate_limit.refresh_interval_ms`（既定5分）に値が届いていません。**値が古いまま入札すると、実際より暇に見えて勝ちうるので、見送ります** |
 | **枠の使い過ぎ** | 5時間・1週間のどちらかの枠が `rate_limit.pause_above_percent`（既定95）を超えています |
 | **余裕値がマイナス** | `100 − 使用率 − マージン` がマイナスです。`five_hour_margin_percent` / `weekly_margin_percent`（既定10）が大きすぎるか、実際の使用率が高すぎます |
 
 **黙って見送るだけなので、issue にも画面にも何も出ません。**Ready のまま何も起きていないように見えます。
 
-**「枠を読めない」は、たいてい一時的です。**値が古いと、continuo は statusline取得（haiku の Claude Code を短く起動して使用率を取ること）をし、
+**「枠を読めない」は、たいてい一時的です。**usage API が読めなくなると、continuo は Claude Code のステータスラインへ切り替えます。
+値が古いと statusline取得（haiku の Claude Code を短く起動して使用率を取ること）をし、
 **値が届いたらすぐ巡回を1回回して入札します。**ふつうは十数秒で済みます（下の「枠の使用率の読み方を知りたいとき」）。
-**続くのは、statusline取得が値を取れていないときです。**
+**続くのは、usage API も statusline取得も値を取れていないときです。**
+**期間（5時間か7日）の区切りの直後にも、usage API の次の読み取り（最長 `rate_limit.poll_interval_ms`。既定5分）まで見送ります。**
 
-**確かめ方。**まず、continuo のログで「statusline取得ができません」を探してください。
-**これは `WARN` なので、既定のログレベル（`info`）でも出ます。**失敗するたびに毎回出ます。
+**確かめ方。**まず、continuo のログで usage API と statusline取得の `WARN` を探してください。
+**どちらも `WARN` なので、既定のログレベル（`info`）でも出ます。**
 
 ```bash
-grep 'statusline取得ができません' <ログの出力先>
+grep -E 'usage API|statusline取得' <ログの出力先>
 ```
 
-**出ていれば、括弧の中の理由を「枠の使用率を読めないとき」の見出しから引いてください。**
-理由ごとに原因と直し方があります（トラブルシューティングの「枠の使用率を読めないとき」）。
+**出ていれば、トラブルシューティングの「枠の使用率を読めないとき」の見出しから引いてください。**
+理由ごとに原因と直し方があります。
 
 出ていなければ、`--log-level debug` で起動し直し、「入札しません」の行を探してください。**理由がそこに出ます。**
 
@@ -1166,7 +1203,7 @@ cd ~/continuo-work && continuo --log-level debug
 
 | 理由 | 直し方 |
 | --- | --- |
-| **枠を読めない** | 上の「statusline取得ができません」の理由から直してください。**Pro / Max 以外の契約か API キーなら、`rate_limit.source: none` にしてください**（公式文書によると、使用率が届くのは Pro / Max だけです）。**`continuo doctor` はこれを検査しません** |
+| **枠を読めない** | 上の `WARN` の理由から直してください。資格情報が読めないなら `continuo doctor` の `資格情報` の行を確認してください。**API キーの機械なら、`rate_limit.source: none` にしてください**（usage API もステータスラインも、使用率を返しません） |
 | **枠の使い過ぎ** | 待つか、`rate_limit.pause_above_percent` を上げてください。**上げると、枠を使い切る手前まで dispatch も続けます**（この閾値は持ち回りの入札と dispatch の一時停止の両方に効きます） |
 | **余裕値がマイナス** | `WORKFLOW.md` の `five_hour_margin_percent` / `weekly_margin_percent` を下げてください |
 
@@ -1177,14 +1214,25 @@ cd ~/continuo-work && continuo --log-level debug
 
 #### continuo は、枠の使用率をどこから読んでいる？
 
-**Claude Code のステータスラインからです**（`rate_limit.source: statusline`。既定）。
-continuo が起動する Claude Code の設定に `statusLine` を足しておき、描き直すたびに届く使用率を受け取ります。
-**5時間と7日の期間ごとに値を1つ持ち、実行時ディレクトリの `quota.json` にも置きます。**立て直しても、上限の最中かどうかを覚えています。
+**主に、Anthropic の usage API からです**（`rate_limit.source: oauth_usage_api`。既定）。
+Claude Code の資格情報（macOS は Keychain、ほかの OS は `~/.claude/.credentials.json`）を読み、`rate_limit.poll_interval_ms`（既定5分）ごとに読みます。
+**5時間・7日・モデル別の週次の上限（`weekly_scoped`）の期間ごとに値を1つ持ち、実行時ディレクトリの `quota.json` にも置きます。**立て直しても、上限の最中かどうかを覚えています。
 
+**usage API が誤りを返しているあいだは（どの誤りでも）、Claude Code のステータスラインへ切り替えます。**
+切り替えたときに `WARN` を1回出し、次に読んでよい時刻（429 なら `Retry-After` との長いほう）に読み直して、読めたら戻ります（戻ったときに `INFO` を1行）。
+**資格情報のファイルが無い・壊れている、Keychain に項目が無いなどで読めないときは、continuo を立て直すまで usage API を読み直しません。**直したら立て直してください。
+
+**ステータスラインの値は、continuo が起動した Claude Code から受け取ります。**
+continuo が起動する Claude Code の設定に `statusLine` を足しておき、描き直すたびに届く使用率を受け取ります（`oauth_usage_api` でも受け取ります。費用はかかりません）。
 **公式文書によると、ステータスラインが使用率を返すのは Pro / Max だけです。**
-それ以外の契約と API キーでは、`rate_limit.source: none` にしてください（「枠の使用率を読めないとき」の「応答はあったが値が無い」）。
 
-**入札に使うのは、最長で `rate_limit.refresh_interval_ms`（既定5分）前の値です。**
+| `rate_limit.source` | 何から読むか |
+| --- | --- |
+| **`oauth_usage_api`（既定）** | usage API。誤りのあいだはステータスライン |
+| `statusline` | ステータスラインだけ（usage API も資格情報も読みません。`weekly_scoped` は見ません） |
+| `none` | 読みません。使用率0として常に入札します |
+
+**usage API が誤りのあいだ、入札に使うのは、最長で `rate_limit.refresh_interval_ms`（既定5分）前の値です。**
 **それより古ければ、continuo は statusline取得をします。**`trust.repositories` を上から見て、手元に clone があって信頼済みの最初の1つの中で
 haiku の Claude Code を短く起動し、`hello` を1回送って、値が届いたら閉じます。
 **値が届くまで、その issue への入札は見送ります。**届いたらすぐ巡回を1回回して入札します。
@@ -1192,14 +1240,31 @@ haiku の Claude Code を短く起動し、`hello` を1回送って、値が届�
 
 | 何 | 値 |
 | --- | --- |
-| **回数** | **何もしていない機械で最大5分に1回、1日最大288回** |
+| **回数** | **usage API が誤りのあいだ、何もしていない機械で最大5分に1回、1日最大288回**（`source: statusline` ではいつも） |
 | **1回の量** | haiku に `hello` を1回。**入力は約600トークン**（システムプロンプトを差し替え、道具を外しています。実測） |
 | **減らしたいとき** | `rate_limit.refresh_interval_ms` を伸ばしてください（`polling.interval_ms` より長く）。**伸ばすと、値が古くなりやすく、入札が遅れやすくなります** |
 
-**上限に当たっている間（どれかの期間が 100 のまま）は、statusline取得をしません。**上限で断られるだけで値は変わらないためです。
+**上限に当たっている間（5時間か7日の期間が 100 のまま）は、statusline取得をしません。**上限で断られるだけで値は変わらないためです。
+**`weekly_scoped` が `rate_limit.pause_above_percent` を超えているあいだも、しません。**ステータスラインはこの上限を運ばないので、取り直しても判定が変わらないためです。
 
-**`weekly_scoped`（モデル別の週次の上限）は見ません。**ステータスラインが運ばないためです。
+**`weekly_scoped` は usage API だけが運びます。**usage API が誤りのあいだは更新されません。
 **上限に当たったとき、ステータスラインが 100 を運ぶかは確かめていません**（「枠の使用率を読めないとき」の「上限に当たった run が、回復を待たずに `Blocked` になった」）。
+
+#### API キーの機械で、haiku の会話が課金された
+
+**`rate_limit.source` を `none` にしていないからです。**API キーの機械では usage API が読めないので、continuo はステータスラインへ切り替え、
+statusline取得で haiku に `hello` を送ります。**API キーでは、この会話が従量で課金されます。**
+
+**`oauth_usage_api`（既定）では、課金は continuo を起動するたびに最大1回で止まります。**
+起動してから1度も使用率を読めていない機械で、statusline取得が値を受け取れずに終わると、それ以後 statusline取得をしないためです（取得止め。「枠の使用率を読めないとき」）。
+**`statusline` にしていると止まらず、何もしていない機械で最大5分に1回課金されます。**
+
+**直し方。**`WORKFLOW.md` の `rate_limit.source` を `none` にして、continuo を立て直します。
+
+```yaml
+rate_limit:
+  source: none
+```
 
 #### herdr の画面に `continuo statusline fetch` という workspace が現れては消える
 
@@ -1211,12 +1276,13 @@ pane には「Transcript saving is off」と出ます。
 
 **残ったものは、herdr の画面で手で閉じてかまいません。**continuo も、次の statusline取得の前か、次に起動したときに閉じ直します。
 
+**usage API が読めていれば、出ません。**出たなら、usage API が誤りを返しているあいだです（「枠の使用率を読めないとき」）。
 **出したくないなら `rate_limit.source: none` にしてください。**枠を見なくなります。
 
 #### continuo の pane で、自分のステータスラインが出なくなった
 
 **continuo が、その pane の Claude Code の `statusLine` を自分のものに差し替えているからです。**
-ステータスラインには固定の `continuo` の1語が出ます。**使用率を受け取るための仕掛けなので、`source: statusline` では外せません。**
+ステータスラインには固定の `continuo` の1語が出ます。**使用率を受け取るための仕掛けなので、`rate_limit.source` が `oauth_usage_api`（既定）か `statusline` なら外せません。**
 
 **あなたが自分で起動した Claude Code は変わりません。**差し替えるのは continuo が起動した Claude Code だけです。
 **`rate_limit.source: none` にすると、continuo の pane でもあなたのステータスラインが出ます。**
@@ -1267,6 +1333,7 @@ statusline取得の起動はこれに当たるので、掃除は走らないは�
 #### Claude Code のアカウントを替えた・契約を上げた
 
 **アカウントを替えたら、continuo を止めて `quota.json` を消し、立て直してください。**
+**usage API が読めていれば、次の読み取り（最長 `rate_limit.poll_interval_ms`）で新しいアカウントの値に置き換わりますが、読めないあいだと `source: statusline` では置き換わりません。**
 **立て直すだけでは直らないことがあります。**`quota.json` には替える前のアカウントの値が残っており、立て直すと読み戻されます。
 **その値に 100% の期間があると、continuo は新しい着手を止めたうえで、その期間が明けるまで statusline取得もしません**（上限の最中に取りに行っても、値は下がらず消費だけするためです）。
 **替える前のアカウントが上限に当たっていたなら、最長で7日の期間が明けるまで1件も着手しません。**
@@ -1708,6 +1775,39 @@ continuo trust ~/continuo-work
 claude --version && ls -la ~/.claude.json
 ```
 
+#### `✗ 資格情報  Keychain の項目 "Claude Code-credentials" を読めません`（macOS）
+
+**原因。**Keychain の読み取りを1回も許可していません。
+または claude でログインしていない / 別のユーザーのログイン Keychain に入っている /
+ログイン Keychain がロックされている / ダイアログで「許可しない」を選んだ、のどれかです。
+
+**直し方。**1回だけ許可します。**確認のダイアログでは「常に許可」を選んでください**（「許可」だけだと次にまた出ます）。
+
+```bash
+continuo allow-keychain-access
+```
+
+**読めないままでも continuo は起動します。**usage API から枠を読めないので、Claude Code のステータスラインへ切り替えて動きます（上の「枠の使用率を読めないとき」）。
+やめるなら `WORKFLOW.md` の `rate_limit.token_source` を `env` にして `token_env` に環境変数名を書くか、
+`rate_limit.source` を `statusline`（usage API を読まない）か `none`（枠を見ない）にします。
+
+項目そのものを確かめたいときは次を叩きます。**`-w` は付けないでください**（トークンが端末に出ます）。
+
+```bash
+security find-generic-password -s "Claude Code-credentials"
+```
+
+#### `continuo allow-keychain-access` が返ってこない
+
+**原因。**Keychain の確認のダイアログが出たまま、誰も答えていません。
+**別のウィンドウの裏に隠れていることがあります。**
+
+**直し方。**画面のダイアログを探して「常に許可」を選び、もう一度叩きます。
+
+```bash
+continuo allow-keychain-access
+```
+
 #### `✗ herdr  herdr の protocol 版が設定と一致しません`
 
 **原因。**continuo が想定している herdr の socket の protocol 版と、入っている herdr の版が食い違っています。
@@ -1821,17 +1921,55 @@ cd ~/continuo-work && continuo prompt --show
 
 ### 枠の使用率を読めないとき
 
-**言いたいこと。**`rate_limit.source: statusline`（既定）では、値が古いと continuo が statusline取得をします。
+**言いたいこと。**`rate_limit.source: oauth_usage_api`（既定）では、continuo は usage API から枠の使用率を読みます。
+**usage API が誤りを返すと、Claude Code のステータスラインへ切り替えた `WARN` が1回出ます**（下の「usage API から枠を読めない」）。
+切り替えているあいだと `rate_limit.source: statusline` では、値が古いと continuo が statusline取得をします。
 **statusline取得は、`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を短く起動し、`hello` を1回送って、ステータスラインが運ぶ使用率を受け取ることです。**
 **取れなかったときは、理由を括弧に入れた `WARN` が毎回出ます。**下の見出しは、その括弧の中の理由で引けます。
 **取れない間は、入札を見送ります。**走っている issue が無い機械では値が1つも入らないので、自動の着手が止まり続けます。
 
 ```bash
-grep 'statusline取得' <ログの出力先>
+grep -E 'usage API|statusline取得' <ログの出力先>
 ```
 
 **どの理由でも、枠を見ずに動かすなら `rate_limit.source: none` にできます。**そのときは使用率0として常に入札します
 （複数の機械で見張っているなら、全員を揃えてください。「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」）。
+
+#### usage API から枠を読めない（ステータスラインへ切り替えた `WARN` が出る）
+
+**原因。**usage API がどれかの誤りを返しました。**誤りの種類を問わず、ステータスラインへ切り替えます。**
+
+| 誤り | 何が起きているか | 次に読み直すのは |
+| --- | --- | --- |
+| **429** | usage API が混んでいるか、扱いを変えた。**2026-09-24 から 429 を返し続けたことがあります** | `rate_limit.poll_interval_ms` と `Retry-After` の長いほう（最長24時間） |
+| **5xx・通信の失敗・使用率の無い 200** | usage API の側の不調 | 同上 |
+| **401・403** | トークンが失効している。**API キーの機械で、以前 claude.ai でログインしたときのトークンが残っているとき**にも出ます | `rate_limit.poll_interval_ms` のあと |
+| **Keychain の読み取りが期限内に終わらない** | 確認のダイアログに誰も答えていない | `rate_limit.poll_interval_ms` のあと（答えるまで、そのたびにダイアログが出えます） |
+| **資格情報のファイルが無い・壊れている、Keychain に項目が無い、`token_env` の環境変数が空、など** | 資格情報を読めない | **立て直すまで読み直しません** |
+
+**直し方。**429・5xx・通信の失敗なら、対処は要りません。読めるようになれば戻り、`INFO` が1行出ます。
+資格情報が読めないなら、`continuo doctor` の `資格情報` の行の案内に従い、continuo を立て直してください。
+**Keychain のダイアログが原因なら、`continuo allow-keychain-access` を叩いて「常に許可」を選んでください**（下の「`✗ 資格情報  Keychain の項目 "Claude Code-credentials" を読めません`」）。
+**API キーの機械なら、`rate_limit.source` を `none` にしてください**（上の「API キーの機械で、haiku の会話が課金された」）。
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+#### statusline取得を止めた `WARN` が出て、それ以後 statusline取得をしない
+
+**原因。**usage API から読めずにステータスラインへ切り替えているあいだに、statusline取得が haiku に `hello` を送ったのに使用率を受け取れずに終わり、
+しかも continuo を起動してから使用率を1度も読めていません。**API キーの機械では、ここで止めないと会話が5分ごとに課金されるので、止めています**（取得止め）。
+
+**直し方。**
+
+| あなたの機械 | どうするか |
+| --- | --- |
+| **API キーで動かしている** | `rate_limit.source` を `none` にして、continuo を立て直してください |
+| **Pro / Max で、起動した直後に上限に当たっていた** | 上限の最中は、statusline取得の最初の応答が断られるので、API キーの機械と見分けられません。**usage API が読めるようになるか、走っている issue の pane から使用率が届けば、自動で解けます。**走っている issue も無ければ、上限が明けてから continuo を立て直してください |
+| **それ以外** | usage API の `WARN` と、その直前の statusline取得の `WARN` の理由を直してから、continuo を立て直してください |
+
+**一度でも使用率を読めていれば、取得止めにはなりません。**`rate_limit.source: statusline` でもなりません。
 
 #### 「statusline取得ができません（使える clone が無い: …）」と出る
 
@@ -1883,7 +2021,7 @@ rate_limit:
   source: none
 ```
 
-**API キーの機械で `statusline` のままにしておくと、statusline取得の会話（1回の入力は約600トークン）が、何もしていなくても最大5分に1回、従量で課金されます。**
+**API キーの機械で `none` にしていないと、statusline取得の会話（1回の入力は約600トークン）が従量で課金されます。**`oauth_usage_api`（既定）なら continuo を起動するたびに最大1回、`statusline` なら何もしていなくても最大5分に1回です。
 
 #### 「statusline取得ができません（値が1行も届かなかった: …）」と出る
 
@@ -1940,12 +2078,13 @@ workspace を作ってから控えるまでの間に continuo が落ちたとき
 #### 上限に当たった run が、回復を待たずに `Blocked` になった
 
 **原因。**continuo は、上限に当たった run を「回復待ち」として待たせ、明けたら続けさせます。
-**その判定に、ステータスラインから届いた使用率（100）を使います。**3つの場合に、判定が効かないことがあります。
+**その判定に、usage API とステータスラインから届いた使用率（100）を使います。**usage API が読めていれば、次の読み取り（最長 `rate_limit.poll_interval_ms`）で 100 が入ります。
+**usage API が誤りのあいだは、3つの場合に、判定が効かないことがあります。**
 
 | 場合 | 何が起きているか |
 | --- | --- |
 | **上限に当たったとき、ステータスラインが 100 を運ぶか** | **確かめていません。**運ばなければ、回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められます |
-| **モデル別の週次の上限に当たった** | **ステータスラインはモデル別の週次の上限（`weekly_scoped`）を運ばないので、continuo はそれを見ません。**回復待ちと判定されず、stall として止められることがあります |
+| **モデル別の週次の上限に当たった** | **ステータスラインはモデル別の週次の上限（`weekly_scoped`）を運びません。**usage API が誤りのあいだ（と `rate_limit.source: statusline`）は、回復待ちと判定されず、stall として止められることがあります |
 | **版を上げる前から走っていた run** | その run は `statusLine` の無い設定のまま動いているので、pane から使用率が届きません（[upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」） |
 
 **直し方。**issue のコメントを読み、期間が明けてから、その issue を `Ready` へ戻してください（「issue が急に `Blocked` になった」）。
@@ -1979,7 +2118,7 @@ grep -E '枠が閾値を超えている|空きスロットが尽きた|必須の
 | **必須のラベルが揃っていないので飛ばします** | `tracker.required_labels` に書いたラベルが、その issue に付いていません。**足りないラベルの名前が全部、同じ行に出ます** | **ラベルを付けるか、`required_labels` を見直してください**。この行は**足りないラベルの組み合わせごとに1回だけ**出ます（1つ付けて、まだ足りなければもう1回出ます） |
 
 **3つとも出ていないときは、まず入札を疑ってください。**
-**`statusline取得ができません` の `WARN` が出ていれば、枠の使用率が入っていないので入札していません**（「枠の使用率を読めないとき」）。
+**usage API か `statusline取得` の `WARN` が出ていれば、枠の使用率が入っていないので入札していないことがあります**（「枠の使用率を読めないとき」）。
 
 **枠の余裕が足りないとき、continuo は入札しません。**その判定は `pause_above_percent` より手前で働きます。
 
@@ -2832,9 +2971,16 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-fil
 
 ### issue が勝手に止まる・戻るとき
 
+#### 計画を書いたところで、どの issue も `Blocked` になる
+
+**正常です。**エージェントは計画を書いたら、設計レビューへ進む前に、あなたの確認を待って止まります。
+**了承するときは、了承することを issue のコメントにはっきり書いてから `Ready` へ戻してください。**Status を戻すだけでは進みません。
+**レビューの途中で質問して止まったときは、回答を issue のコメントに書いてから `Ready` へ戻してください。**
+
 #### issue が急に `Blocked` になった
 
 **原因。**エージェントが判断を仰いだか、打ち切られました。
+**計画を書いた直後に `Blocked` になるのは、毎回の正常な動きです**（上の「計画を書いたところで、どの issue も `Blocked` になる」）。
 打ち切りは、**herdr が見ている画面の版が変わらないまま** `claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
 
 **直し方。****issue のコメントを開いてください。**何が起きたか・どう確かめるか・どう直すかが書いてあります。

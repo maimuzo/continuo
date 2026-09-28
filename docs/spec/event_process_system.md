@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | **continuo 本体** | **ロックファイル1本につき1つ**（`flock(2)` で二重起動を止める。`--id <名前>` を付けるとロックが分かれ、1台で2本以上動く。設計 3-17b） | 巡回・表明の読み取り・後片付けを、**同じプロセスの中の goroutine で回す** |
 | **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送るだけ |
-| **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source: statusline` のときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送り、標準出力へ固定の `continuo` を出すだけ |
+| **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送り、標準出力へ固定の `continuo` を出すだけ |
 
 **Claude Code がイベントのたびに `continuo hook` を exec する。**
 
@@ -44,6 +44,9 @@ issue ごとの設定ファイルへ書く。
 **`continuo statusline` は hook の socket へ送らない。**hook の socket は、`session_id` が知っている run のものなら stall の時計を進め直すので、
 ステータスラインの行を混ぜると、固まった run を止められなくなる（設計 3-23）。**逃がし先も持たない。**送れなければ何も書かずに終了コード 0 で終わる。
 
+**usage API はプロセスを増やさない。**`rate_limit.source: oauth_usage_api`（既定）では、continuo 本体の巡回が、その先頭で usage API を HTTPS で読む（`poll_interval_ms` ごと）。
+**ステータスラインは、usage API が誤りのあいだの受け口である**（設計 3-27）。issue の pane の値は、どの状態でも同じ保管値へ入る。statusline取得を開くのは、usage API が誤りで値が古いときだけである。
+
 ---
 
 ## 2. 全体の絵
@@ -59,11 +62,14 @@ flowchart LR
         SS["使用率の受け口<br/>statuslineserver"]
         Q[("保管値<br/>（期間ごとの使用率）")]
         SF["statusline取得<br/>値が古いときだけ"]
+        UA["usage API の読み取り<br/>巡回の先頭"]
         L["herdr の workspace の<br/>開け閉めの loop"]
         R <--> M
         T <--> M
         HS --> T
         SS --> Q
+        R --> UA
+        UA --> Q
         R --> Q
         R --> SF
         SF --> L
@@ -90,6 +96,7 @@ flowchart LR
     WF -.->|"次の起動時と試行の前に読む"| P1
     SF -.->|"試行のたびに書く"| SJ[("statusline-fetch/<br/>settings.json")]
     L <-->|"workspace.create / worktree.open /<br/>workspace.close など"| HD["herdr"]
+    UA <-->|"HTTPS<br/>poll_interval_ms ごと"| API["usage API<br/>api.anthropic.com"]
     R <-->|"GraphQL"| K["カンバン<br/>GitHub Projects v2"]
     T <-->|"GraphQL"| K
 ```

@@ -1,13 +1,16 @@
-// Package ratelimit_test は internal/ratelimit（使用率の写しを運ぶ型）を検証する。
+// Package ratelimit_test は internal/ratelimit（usage API の読み取りと、使用率の写しを運ぶ型）を検証する。
 //
-// **internal/ratelimit は値を取りに行かない。**値はステータスラインから届き、
-// orchestrator が保管して `Snapshot` に組み立てる（issue #284）。
-// ここで見るのは、組み立てた `Snapshot` を突き合わせる判定（設計 3-27）だけである。
+// **本物の usage API と Keychain は叩かない。**偽のサーバーと偽の `security` を使う（issue #284）。
 package ratelimit_test
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
@@ -91,5 +94,42 @@ func TestSnapshot_nilに対して安全な既定値を返す(t *testing.T) {
 	}
 	if _, ok := snap.LatestResetOfFullLimits(); ok {
 		t.Fatalf("nil の LatestResetOfFullLimits が見つかったと返した")
+	}
+}
+
+// 目的: エラーメッセージへ載せる応答本文が、多バイト文字の途中で割れないことを確認する
+// （レビュー指摘「truncate がバイト単位で切るので日本語が壊れる」の回帰テスト）。
+// 与える情報: 日本語だけの長い本文を返す 500 応答。
+// 成功条件: 返るエラーメッセージが妥当な UTF-8 であり、置換文字（U+FFFD）を含まないこと。
+func TestFetch_エラー本文の切り詰めで日本語が壊れない(t *testing.T) {
+	body := strings.Repeat("枠の読み取りに失敗しました。", 60)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	writeCredentials(t, home, `{"claudeAiOauth":{"accessToken":"ok"}}`)
+
+	reader, err := ratelimit.NewReader(ratelimit.Options{
+		Config:   usageConfig(),
+		Endpoint: srv.URL,
+		HomeDir:  home,
+	})
+	if err != nil {
+		t.Fatalf("NewReader が失敗した: %v", err)
+	}
+
+	_, err = reader.Fetch(context.Background())
+	if err == nil {
+		t.Fatalf("500 なのにエラーが返らなかった")
+	}
+	msg := err.Error()
+	if !utf8.ValidString(msg) {
+		t.Fatalf("エラーメッセージが妥当な UTF-8 でない（多バイト文字が割れている）: %q", msg)
+	}
+	if strings.ContainsRune(msg, '�') {
+		t.Fatalf("エラーメッセージに壊れた文字が入っている: %q", msg)
 	}
 }

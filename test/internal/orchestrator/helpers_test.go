@@ -1923,6 +1923,8 @@ func (fx *fixture) unexpectedLogLines() []string {
 type fixtureOptions struct {
 	// Mutate は設定を書き換える関数である。nil なら既定のまま。
 	Mutate func(cfg *config.Config)
+	// RateLimit は usage API の読み取りである（issue #284）。nil なら usage API を読まない。
+	RateLimit *ratelimit.Reader
 	// Untrusted を真にすると、リポジトリを信頼登録しない
 	// （dispatch の段0 で必ず弾かれる状態を作る）。
 	Untrusted bool
@@ -2104,7 +2106,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Timeline:     tl,
 	}
 
-	if cfg.RateLimit.Source == ratelimit.SourceStatusline {
+	if cfg.RateLimit.Source != ratelimit.SourceNone {
 		fx.StatuslineSocketPath = filepath.Join(runtimeDir, "sl.sock")
 	}
 
@@ -2159,6 +2161,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Tracker:    ft,
 		Herdr:      fake.Client(),
 		Workspace:  mgr,
+		RateLimit:  opts.RateLimit,
 		// **使用率を読む設定なら、本番と同じく sl.sock のパスを渡す**（issue #284）。
 		// listen はしない。行はテストが OnStatusline で直に入れる。
 		StatuslineSocketPath: fx.StatuslineSocketPath,

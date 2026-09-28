@@ -72,6 +72,7 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 		{"herdr.read_timeout_msが負", validFrontMatter + "herdr:\n  read_timeout_ms: -5\n", "herdr.read_timeout_ms"},
 		{"herdr.startup_timeout_msが0", validFrontMatter + "herdr:\n  startup_timeout_ms: 0\n", "herdr.startup_timeout_ms"},
 		{"agent.max_retry_backoff_msが負", validFrontMatter + "agent:\n  max_retry_backoff_ms: -1\n", "agent.max_retry_backoff_ms"},
+		{"rate_limit.poll_interval_msが負", validFrontMatter + "rate_limit:\n  poll_interval_ms: -1\n", "rate_limit.poll_interval_ms"},
 		{"rate_limit.refresh_interval_msが負", validFrontMatter + "rate_limit:\n  refresh_interval_ms: -1\n", "rate_limit.refresh_interval_ms"},
 		{"workspace_hooks.timeout_msが負", validFrontMatter + "workspace_hooks:\n  timeout_ms: -1\n", "workspace_hooks.timeout_ms"},
 		{"tracker.verify_states_everyが負", trackerFrontMatter("  verify_states_every: -1\n"), "tracker.verify_states_every"},
@@ -440,9 +441,48 @@ func TestLoad_状態の重なりは大文字小文字を無視して見る(t *te
 	assertLoadFailsWith(t, front, "tracker.failure_state")
 }
 
+// 目的: rate_limit.token_source が env なのに token_env が空だと起動が止まることを確認する。
+// 空のまま通すと、枠の取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される。
+// tracker.provider.token_env は同じ条件を検査しているので、片側だけ抜けている状態を防ぐ。
+// 与える情報: rate_limit.token_source に env、token_env に空文字を書いた front matter。
+// 成功条件: config.Load がエラーを返し、その文に "rate_limit.token_env" が含まれること。
+func TestLoad_rate_limitのtoken_sourceがenvでtoken_envが空だと落ちる(t *testing.T) {
+	front := validFrontMatter + "rate_limit:\n  token_source: env\n  token_env: \"\"\n"
+	assertLoadFailsWith(t, front, "rate_limit.token_env")
+}
+
+// 目的: usage API を読まない設定（`rate_limit.source` が statusline か none）では、
+// `token_source` の OS と `token_env` の検査で起動を止めないことを確かめる（issue #284。PR #294 の
+// 実装レビュー1周目）。macOS で作った WORKFLOW.md（`token_source: keychain`）をほかの OS で
+// 共有しても、トークンを1回も読まない設定なら起動できなければならない。
+// 与える情報: source が statusline / none で、token_source: env・token_env が空の front matter。
+// 成功条件: config.Load が成功すること。知らない token_source（誤字）は source によらず落ちること。
+func TestLoad_usage_APIを読まない設定ならtoken_envが空でも起動する(t *testing.T) {
+	for _, source := range []string{"statusline", "none"} {
+		t.Run(source, func(t *testing.T) {
+			front := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: env\n  token_env: \"\"\n"
+			path := writeWorkflow(t, front, "")
+			if _, err := config.Load(path); err != nil {
+				t.Fatalf("source: %s は usage API を読まないのに token_env の検査で止まった: %v", source, err)
+			}
+			typo := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: keychian\n"
+			assertLoadFailsWith(t, typo, "rate_limit.token_source")
+			// **macOS で作った WORKFLOW.md の keychain も、どの OS でも起動する**（OS の検査は
+			// oauth_usage_api のときだけ）。macOS 以外の CI でこの行が本来の確かめになる。
+			keychain := validFrontMatter + "rate_limit:\n  source: " + source +
+				"\n  refresh_interval_ms: 600000\n  token_source: keychain\n"
+			if _, err := config.Load(writeWorkflow(t, keychain, "")); err != nil {
+				t.Fatalf("source: %s は usage API を読まないのに token_source: keychain で止まった: %v", source, err)
+			}
+		})
+	}
+}
+
 // 目的: rate_limit.source に "none" を書いても起動が通ることを確認する（設計 3-27）。
-// 使用率がステータスラインに載るのは Pro / Max だけなので、それ以外の契約と API キーの人には
-// "none" が必須の逃げ道である（issue #284）。
+// 使用率がステータスラインに載るのは Pro / Max だけで、API キーの機械では statusline取得が
+// 従量で課金されうるので、それ以外の契約と API キーの人には "none" が必須の逃げ道である（issue #284）。
 // 与える情報: rate_limit.source に none を書いた front matter。
 // 成功条件: config.Load が成功し、値が "none" のまま読めること。
 func TestLoad_rate_limitのsourceにnoneを書ける(t *testing.T) {

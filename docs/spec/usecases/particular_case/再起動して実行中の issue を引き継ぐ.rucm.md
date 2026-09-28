@@ -4,7 +4,7 @@
 
 - `docs/plans/continuo_design.md#3-3`（run を指す識別子。セッション UUID は `--resume` で戻す）
 - `docs/plans/continuo_design.md#3-4`（状態は in-memory。再起動時の復元手順の段1 から段9。起動から復元までの順序の段3a と段3b）
-- `docs/plans/continuo_design.md#3-27`（使用率の受け取り方・`quota.json`・statusline取得）
+- `docs/plans/continuo_design.md#3-27`（usage API と statusline の切り替え・使用率の受け取り方・`quota.json`・statusline取得・statusline を使えないとき）
 - `docs/plans/continuo_design.md#3-6`（起動時の検査。落ちても pane を閉じない）
 - `docs/plans/continuo_design.md#3-17`（二重起動は flock で防ぐ）
 - `docs/plans/continuo_design.md#3-18`（身元ファイルと引き継いだ回数）
@@ -20,6 +20,7 @@
 - `internal/orchestrator/sweep.go` の `SweepOnStartup`、`sweepFinishedWorktrees`
 - `internal/daemon/daemon.go` の `Run`（起動の段3b）と `close`（後始末の段2 で `sl.sock` を hook の受け口より先に閉じる）
 - `internal/orchestrator/statuslinefetch.go` の `PrepareStatusline`、`cleanupStatuslineLeftovers`
+- `internal/orchestrator/orchestrator.go` の `DisableStatusline`
 - `internal/orchestrator/quota.go` の `loadQuota`
 - `internal/workspace/sweep.go` の `SweepOrphanBranches`
 
@@ -39,7 +40,7 @@ BASIC FLOW:
 2. システムは VALIDATES THAT ロックファイルの flock を取れる。
 3. システムは VALIDATES THAT 起動時の検査をすべて通る。
 4. システムは閉じ残しの一覧にある statusline取得用の herdr の workspace を閉じる。
-5. システムは rate_limit.source が statusline なら quota.json を読んでから sl.sock の listen を始める。
+5. システムは rate_limit.source が none でなければ quota.json を読んでから sl.sock の listen を始める。
 6. システムは worktree の置き場所を4階層まで走査する。
 7. システムは worktree の中の身元ファイルを読む。
 8. システムは VALIDATES THAT 身元ファイルを読めない worktree を、置き場所と herdr の pane の label とボードから復元できる。
@@ -244,11 +245,13 @@ worktree として復元させられる。**
 | ステップ | なぜ復元より前か |
 | --- | --- |
 | 4. 閉じ残しの statusline取得用の workspace を閉じる | 残したまま復元の片付けが同じ clone で `worktree.open` をすると、その workspace が issue の親にされ、閉じられなくなる。**`rate_limit.source` によらず閉じる** |
-| 5. `quota.json` を読んでから `sl.sock` の listen を始める | 上限の最中に立て直しても、復元した run の枠待ちの判定を効かせるため。`quota.json` を先に読むのは、届いたばかりの新しい値を読み込みで上書きしないため |
+| 5. `quota.json` を読んでから `sl.sock` の listen を始める | 上限の最中に立て直しても、復元した run の枠待ちの判定を効かせるため。`quota.json` を先に読むのは、届いたばかりの新しい値を読み込みで上書きしないため。**`rate_limit.source` が `oauth_usage_api`（既定）でも `statusline` でも行う。**`weekly_scoped` を読み戻すのは `oauth_usage_api` のときだけ（`statusline` では更新されないので、読み戻すと古い値が居座る） |
 
 **どちらも IF を立てずに1段で書いた。**閉じられなかった workspace は一覧に残して起動を続け、
-`quota.json` が読めなければ捨てて起動を続ける。**`sl.sock` を開けないときだけは起動を止める**
-（`internal/daemon/daemon.go` の `Run`）が、この記述の経路には入れていない。
+`quota.json` が読めなければ捨てて起動を続ける。**`sl.sock` のパスが長すぎる・開けないときは、`statusline` なら起動を止める。
+`oauth_usage_api` なら WARN を出して起動を続け、statusline を使わずに usage API だけで動く**
+（`internal/daemon/daemon.go` の `Run` が `DisableStatusline` を呼ぶ。復元が issue ごとの設定ファイルを書く前に呼ぶので、
+開いていない `sl.sock` を statusLine に書かない）。どちらもこの記述の経路には入れていない。
 
 ## 起動時の掃除は、引き継ぎが終わってから走らせる
 
@@ -279,7 +282,7 @@ flowchart TD
     B2{"2. VALIDATES THAT flock を取れる"}
     B3{"3. VALIDATES THAT 起動時の検査をすべて通る"}
     B4["4. 閉じ残しの statusline取得の workspace を閉じる"]
-    B5["5. statusline なら quota.json を読み sl.sock の listen を始める"]
+    B5["5. none でなければ quota.json を読み sl.sock の listen を始める"]
     B6["6. 置き場所を4階層まで走査する"]
     B7["7. 身元ファイルを読む"]
     B8{"8. VALIDATES THAT 読めない身元ファイルを手掛かりから復元できる"}
@@ -436,7 +439,7 @@ sequenceDiagram
             Note over S: ABORT pane は1つも閉じない
         else 検査を通る
             S->>H: 閉じ残しの statusline取得の workspace の close を要求する
-            opt rate_limit.source が statusline である
+            opt rate_limit.source が none でない
                 S->>S: quota.json を読んでから sl.sock の listen を始める
             end
             S->>S: 置き場所を走査して身元ファイルを読む

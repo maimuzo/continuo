@@ -39,9 +39,7 @@
 | `未記入の項目` | 雛形の front matter のキーが `WORKFLOW.md` に全部書かれているか（記号は `!` だけ。内訳は足りない項目の名前だけを10件まで。設計 3-75） |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
-
-**`資格情報`（Claude の資格情報）の見出し語は、issue #284 で消した。**使用率は Claude Code のステータスラインから受け取るので、
-continuo は Claude Code の OAuth トークンも Keychain も読まない（設計 3-27・3-32）。
+| `資格情報` | `rate_limit.source` が `oauth_usage_api` のときだけ、`token_source` に応じて環境変数かファイルか Keychain から取れるか（`statusline` と `none` なら `✓`） |
 
 **`claude` と `hook の置き場所` と `Claude の設定` は、設定ファイルが `✗` でも走る**（設計 6-11）。
 前の2つは既定値で成立し、`Claude の設定` は設定を1バイトも読まない。
@@ -68,6 +66,11 @@ continuo は Claude Code の OAuth トークンも Keychain も読まない（�
   - **読むのは `Active account: true` の行を持つブロックだけ**（同じホストに複数のアカウントを持てる）
   - **カンマで区切り、各要素の前後の空白と引用符を落としてから照合する**
   - **該当ブロックが1つも無ければ `✗`**（未ログイン）。「`gh auth login -s project` を実行してください」と出す
+- [ ] **資格情報。**`rate_limit.source` と `token_source` に応じて記号を分ける（設計 3-32 の表）
+  - **`source` が `statusline` か `none` なら `✓`**（`token_source` は見ない）
+  - **`token_source` が `env` で環境変数が無ければ `✗`**、`claude_credentials` でファイルが無ければ `!`
+  - **`token_source` が `keychain` で読めなければ `✗`**（`accessToken` が無いときも同じ）
+  - **設定そのものが読めないときは `!`**（何を見るべきか決まらない）
 - [ ] **対象リポジトリが0件のとき、`clone` と `信頼登録` は `!` にする。**終了コードには影響しない
   - **カンバンが空なのは設定の誤りではない**（設計 3-32）
 - [ ] **リポジトリの信頼登録。**`~/.claude.json` の `hasTrustDialogAccepted` が `true` か（**読むだけ**）
@@ -76,10 +79,15 @@ continuo は Claude Code の OAuth トークンも Keychain も読まない（�
 - [ ] **設定ファイル。**`WORKFLOW.md` が読めて、front matter が検証を通るか
 - [ ] **カンバンを読めるか。**`Bootstrap` を呼び、`active_states` の選択肢名が全部あるかを照合する
   - **選択肢名の不一致は `✗`。**巡回が無言で0件を返す原因になる
+- [ ] **Claude の資格情報。**`token_source` が指す先から取れれば `✓`
+  - **`keychain` のときは Keychain を読む**（設計 3-32）。**この項目に10秒の上限を掛ける。**期限内に返らなければ `!`
+  - **読めない・`accessToken` が無いなら `✗`。**直し方に `continuo allow-keychain-access` を出す
+  - `claude_credentials` でファイルが無ければ `!`。**macOS なら `token_source: keychain` へ移る道も出す**
 - [ ] **1つ失敗しても残りを全部検査する。**最初の失敗で止めない
 - [ ] **足りないものごとに「どう直すか」を出す**
 - [ ] **出力の形と終了コードが設計 3-32 のとおりである**（`✓` / `✗` / `!` と、`✗` があれば終了コード 1）
 - [ ] **信頼の検査は `internal/workspace` の関数を呼ぶ**（第5段階で作るもの。二重に実装しない）
+- [ ] **`rate_limit.token_source` が `env` なら、`token_env` の環境変数を見る。**無ければ `✗`（設計 3-32）
 - [ ] **カンバンを読めなかったときの記号は落ち方で分ける**（設計 3-32）。**レートリミットだけ `!`、他は `✗`**
 - [ ] **上流が `✗` か `!` なら、下流を `!` にして理由を出す**（設計 3-32 の依存の表）
 - [ ] **`ghq list -p -e <owner>/<repo>` を使う**（`-p` でパスを出す。設計 3-6 の3段と同じ呼び方）

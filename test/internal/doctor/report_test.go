@@ -25,10 +25,10 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 			Remedies: []string{"ghq get octocat/hello-world を実行してください"},
 		},
 		{
-			Label:    doctor.LabelTrust,
+			Label:    doctor.LabelCredentials,
 			Symbol:   doctor.SymbolUnknown,
-			Detail:   "clone が見つからないため確かめられません",
-			Remedies: []string{"clone の検査を先に直してください"},
+			Detail:   "資格情報のファイルがありません（macOS では Keychain に入っています）",
+			Remedies: []string{"判定を飛ばしました。continuo の起動には影響しません"},
 		},
 	}}
 
@@ -54,7 +54,7 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 	if !strings.Contains(lines[3], "→ ghq get octocat/hello-world を実行してください") {
 		t.Fatalf("直し方の行が `→ ` で続いていない: %q", lines[3])
 	}
-	if !strings.HasPrefix(lines[4], "! "+doctor.LabelText(doctor.LabelTrust)+" ") {
+	if !strings.HasPrefix(lines[4], "! "+doctor.LabelText(doctor.LabelCredentials)+" ") {
 		t.Fatalf("5行目が ! の行になっていない: %q", lines[4])
 	}
 	if lines[6] != "" {

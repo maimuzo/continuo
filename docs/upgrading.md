@@ -108,12 +108,10 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.1.16 へ
 
-**この版には、破壊的変更が2種類あります。**
+**破壊的変更が2つあります。****`Direct Chat` という名前を、設定かカンバンで既に使っている人だけが当たります。**
 
-- **全員が当たるもの。**`rate_limit` の節を書き換えないと、continuo は起動しません（下の「枠の使用率を、Claude Code のステータスラインから受け取るようになりました」の節）
-- **`Direct Chat` という名前を、設定かカンバンで既に使っている人だけが当たるもの。**すぐ下に書きます
-
-**`Direct Chat` の破壊的変更は2つあります。****`Direct Chat` という名前を、設定かカンバンで既に使っている人だけが当たります。**
+**API キーで Claude Code を動かしている機械は、`rate_limit.source` を `none` にしてください**（下の「枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました」の節）。
+**しないと、continuo を起動するたびに haiku の会話が最大1回、従量で課金されます。**
 
 **当たる人は2通りです。**
 
@@ -165,105 +163,70 @@ continuo setup       # 選び直させます。重なる名前は書き込みま
 
 | 何が変わったか | 当てる必要 |
 | --- | --- |
-| **枠の使用率を、Claude Code のステータスラインから受け取るようになりました** | **要ります。全員が `rate_limit` の節を書き換えます。**書き換えないと起動しません（下の節） |
+| **枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました** | **要りません。**v0.1.15 の `WORKFLOW.md` のまま起動します。**API キーの機械だけ、`rate_limit.source: none` にします**（下の節） |
 | **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
 | **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **カンバンに `Direct Chat` という列を既に持っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足し、**使う issue の担当者を自分1人にします**（下の節） |
 | **レビューの回し方・判断票の形・subagent へ渡すものが、組み込みのプロンプトへ入りました** | **止まりはしません。**`WORKFLOW.md` の `### レビューを頼む subagent` に名前を2つ書くと、関連処理まで見る役が立ちます（下の節） |
 
-**`WORKFLOW.md` から消すキーは、`rate_limit` の3行だけです**（下の節）。`tracker` に足すキーが1つあるのは、`Direct Chat` の2つの破壊的変更に当たる人だけです。
+**`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の2つの破壊的変更に当たる人だけです。
 
-**ただし `rate_limit` の節を下のとおり書き換えたあとも、`continuo doctor` の `未記入の項目` が1つ増えます。**雛形に `tracker.direct_chat_state` が
+**ただし `continuo doctor` の `未記入の項目` が2つ増えます。**雛形に `tracker.direct_chat_state` と `rate_limit.refresh_interval_ms` が
 増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
-**書かなくても、いままでどおり動きます**（書かなければ Go が持つ既定の `Direct Chat` が使われますが、
-**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**）。
-気になるなら、次のコマンドが足す1行を作ります。
+**書かなくても、いままでどおり動きます**（書かなければ Go が持つ既定が使われます。`Direct Chat` は、
+**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**。`refresh_interval_ms` は既定の5分です）。
+気になるなら、次のコマンドが足す2行を作ります。
 
 ```bash
 continuo doctor --missing-keys-patch ~/continuo-work
 ```
 
-### 枠の使用率を、Claude Code のステータスラインから受け取るようになりました。**`rate_limit` の節を書き換えないと起動しません**
+### 枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました
 
-**v0.1.15 までは、枠の使用率を Anthropic の usage API から読んでいました。**
-そのために、OAuth のトークンを macOS の Keychain・`~/.claude/.credentials.json`・環境変数のどれかから読んでいました。
+**v0.1.15 までは、枠の使用率を Anthropic の usage API からだけ読んでいました。**
+**読めないと（資格情報が無い・401・403 など）枠の判定を諦め、429 や 5xx のあいだは巡回のたびに叩き直していました。**
 **usage API が 429 を返し続けると、入札が止まり、上限に当たった run の回復待ちの判定も効かなくなっていました。**
 
-**この版から、使用率は Claude Code のステータスラインから受け取ります。**
-continuo が起動する Claude Code の設定に `statusLine` を足し、描き直すたびに届く使用率を保管します。
-**直近の `rate_limit.refresh_interval_ms`（既定5分）に値が届いていなければ、continuo は statusline取得をします。**
-`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を短く起動し、`hello` を1回送り、値が届いたら閉じます。
-**値が届くまで、その issue への入札は見送ります。**値が届いたら、すぐ巡回を1回回して入札します。
+**この版から、usage API が誤りを返すあいだ（どの誤りでも）は、Claude Code のステータスラインから使用率を受け取ります。**
+usage API はいままでどおり主に使い、読めるようになれば戻ります。**v0.1.15 の `WORKFLOW.md` のまま起動します。**
 
 | 何 | v0.1.15 まで | v0.1.16 から |
 | --- | --- | --- |
-| **使用率の出どころ** | usage API | **Claude Code のステータスライン** |
-| **`rate_limit.source` の値** | `oauth_usage_api` / `none` | **`statusline`（既定）/ `none`** |
-| **`rate_limit.token_source` / `token_env` / `poll_interval_ms`** | あった | **無くなりました** |
-| **`rate_limit.refresh_interval_ms`** | 無かった | **足しました**（既定 `300000`） |
-| **`continuo allow-keychain-access`** | あった | **無くなりました** |
-| **`continuo doctor` の `資格情報`** | あった（18個） | **無くなりました（17個）** |
-| **資格情報の読み取り** | Keychain か `~/.claude/.credentials.json` か環境変数 | **読みません** |
+| **usage API が誤りのとき** | 資格情報の誤り・401・403 では枠の判定を諦める。429・5xx は巡回のたび（30秒ごと）に叩き直す | **Claude Code のステータスラインへ切り替える。**`rate_limit.poll_interval_ms` と `Retry-After` の長いほうのあとに読み直し、読めたら戻る |
+| **`rate_limit.source` の値** | `oauth_usage_api`（既定）/ `none` | **`oauth_usage_api`（既定）/ `statusline` / `none`**。`statusline` は usage API を読まず、ステータスラインだけを使う |
+| **`rate_limit.refresh_interval_ms`** | 無かった | **足しました**（既定 `300000`）。usage API が誤りのあいだ、入札に使ってよい値の古さの上限で、statusline取得の間隔でもあります |
+| **continuo が起動した pane のステータスライン** | あなたのステータスライン | **固定の `continuo` の1語**（使用率を受け取るため） |
+| **`continuo allow-keychain-access` と `continuo doctor` の `資格情報`** | あった | **いままでどおりです** |
+
+**`WORKFLOW.md` から消すキーはありません。**書き換えなくても起動します。
 
 #### 何もしないとどうなるか
 
-**v0.1.15 までの `continuo init` が書いた `WORKFLOW.md` では、continuo は起動しません。**
-雛形が `source: oauth_usage_api` と `token_source` / `token_env` / `poll_interval_ms` を書いていたためです。
-**どれか1つでも残っていると、起動の前に止まります。**実際に叩いた出力です（パスは省きました。`[167:3]` の行と桁は、あなたの `WORKFLOW.md` で変わります）。
+**usage API が読めているあいだは、いままでと同じに動きます。**違うのは次の3つです。
 
-```text
-エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.source の値 oauth_usage_api が不正です: "statusline" か "none" のどちらか（設計 3-27）
-```
-
-```text
-エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: [167:3] unknown field "token_source"
-```
-
-**`continuo doctor` も `設定ファイル` が `✗` になります。**直すまで `--missing-keys-patch` も当てられないので、先に下の書き換えをしてください。
-
-#### どう直すか
-
-**`rate_limit` の節を、次の形へ書き換えてください。**
-
-```yaml
-# v0.1.15 までの雛形
-rate_limit:
-  source: oauth_usage_api
-  token_source: claude_credentials    # macOS で continuo init を叩いたなら keychain
-  token_env: CLAUDE_CODE_OAUTH_TOKEN
-  pause_above_percent: 95
-  poll_interval_ms: 300000
-```
-
-```yaml
-# v0.1.16 から
-rate_limit:
-  source: statusline              # Pro / Max 以外の契約と API キーは none
-  refresh_interval_ms: 300000     # 入札に使ってよい値の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
-  pause_above_percent: 95
-```
-
-| あなたの契約 | `source` に書く値 |
+| 何が起きるか | いつ |
 | --- | --- |
-| **Pro / Max** | **`statusline`** |
-| **それ以外の契約・API キー** | **`none`**（公式文書によると、ステータスラインが使用率を返すのは Pro / Max だけです） |
+| **continuo が起動した pane で、あなたのステータスラインが固定の `continuo` の1語に替わる** | いつも。**あなたが自分で起動した Claude Code は変わりません** |
+| **haiku の Claude Code が短く起動する**（statusline取得。herdr の画面に `continuo statusline fetch` という workspace がしばらく現れて消える） | usage API が誤りを返していて、使用率が `rate_limit.refresh_interval_ms`（既定5分）より古いとき。**何もしていない機械で最大5分に1回、1回の入力は約600トークン**です |
+| **`continuo doctor` の `未記入の項目` が1つ増える**（`rate_limit.refresh_interval_ms`） | いつも。書かなければ既定の5分が使われます。**`continuo doctor --missing-keys-patch` で足せます**（上） |
 
-**`token_source` / `token_env` / `poll_interval_ms` の3行は消してください。**書き換え先はありません。
-**`tracker.provider` の下の `token_source` / `token_env`（GitHub のトークンの読み方）は別物です。**そちらは消さないでください。
+#### API キーの機械は、`rate_limit.source: none` にしてください
 
-**`refresh_interval_ms` は、入札に使ってよい使用率の古さの上限です。statusline取得の間隔でもあります。**
-**`polling.interval_ms`（既定30秒）より長くしてください。**短いと、次のように出て起動しません。
+**API キーで Claude Code を動かしている機械では、usage API もステータスラインも使用率を返しません。**
+**そのままだと、usage API の誤りでステータスラインへ切り替え、statusline取得の haiku の会話が従量で課金されます。**
+**課金は continuo を起動するたびに最大1回で止まります**（起動してから1度も使用率を読めていない機械では、値を受け取れなかった statusline取得を1回したところで、それ以後 statusline取得をしません）。
 
-```text
-エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.refresh_interval_ms の値 30000 が不正です: polling.interval_ms（30000）より長くすること
+```yaml
+rate_limit:
+  source: none
 ```
 
-**書かなければ既定の5分です。**Pro で消費を抑えたいなら伸ばしてください（statusline取得の回数が減るかわりに、入札が遅れやすくなります）。
+**`none` にすると、使用率0として常に入札します**（v0.1.15 と同じです）。複数の機械で見張っているなら、全員を揃えてください（[FAQ.md](FAQ.md) の「API キーの機械が混ざるとき」）。
 
 #### statusline取得には、信頼済みの clone が1つ要ります
 
-**`source: statusline` では、`trust.repositories` に書いたリポジトリのうち、
+**usage API が誤りのあいだ、statusline取得には、`trust.repositories` に書いたリポジトリのうち、
 手元に clone があって `continuo trust` で信頼させたものが1つ要ります。**
-continuo は上から見て、最初に見つかった1つを使います。**1つも無いと、次の `WARN` が出て、使用率が入りません。**
+continuo は上から見て、最初に見つかった1つを使います。**1つも無いと、次の `WARN` が出て、usage API が読めるまで使用率が入りません。**
 **走っている issue が無い間は、値が1つも入らないので、自動の着手が止まり続けます。**
 
 ```text
@@ -275,17 +238,15 @@ statusline取得ができません（使える clone が無い: trust.repositori
 **雛形の `trust.repositories` のコメントにあった「巡回のループはここを読まない。continuo trust だけが読む」は、この版から正しくありません。**
 **あなたの `WORKFLOW.md` のコメントは、continuo が書き換えないので古いまま残ります。**statusline取得の clone を選ぶのにも読みます。
 
-#### `continuo allow-keychain-access` を消しました
+#### `rate_limit.refresh_interval_ms` を書くとき
 
-**叩いても、Keychain は読みません。**知らないサブコマンドは設定ファイルのパスとして扱われるので、
-「設定ファイルの読み込みに失敗しました（…/allow-keychain-access）」と出て、終了コード 1 で終わります。
-**自動化したスクリプトやセットアップの手順に書いているなら、その行を消してください。**
+**`polling.interval_ms`（既定30秒）より長くしてください。**
+`source: oauth_usage_api` で短く書くと、continuo は起動し、`polling.interval_ms` の2倍として扱って、起動時に `WARN` を1回出します。
+`source: statusline` で短く書くと、次のように出て起動しません。
 
-**以前 Keychain の確認のダイアログで「常に許可」を選んだなら、continuo にはその許可はもう要りません。**
-**許可を受けたのは continuo ではなく、continuo が起動した macOS の `security` コマンドです。**
-外したいときは、macOS の「キーチェーンアクセス」で `Claude Code-credentials` の項目を開き、「アクセス制御」の一覧から `security` を外してください。
-**ほかの道具が同じ許可に頼っていることがあるので、心当たりが無ければ残しておいてかまいません。**
-**項目そのものは消さないでください。**Claude Code のログインの情報です。消すと Claude Code のログインが切れます。
+```text
+エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.refresh_interval_ms の値 30000 が不正です: polling.interval_ms（30000）より長くすること
+```
 
 #### 確かめた版
 
@@ -297,23 +258,22 @@ statusline取得ができません（使える clone が無い: trust.repositori
 #### 版を上げる前から走っている run
 
 **版を上げる前から走っている run は、`statusLine` の無い設定のまま動き続けます。**
-その run の pane からは使用率が届きません（statusline取得が補います）。
-**その run が上限に当たると、いまと同じく回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。**
+その run の pane からは使用率が届きませんが、usage API が読めていれば困りません。
+**usage API が誤りのあいだにその run が上限に当たると、回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。**
 気になるなら、走っている run が終わってから版を上げてください。
 
 #### 古い版へ戻すとき
 
-**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit` の節も戻してください。**
-古い版は `source: statusline` も `refresh_interval_ms` も知らないので、起動しません。
+**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit.refresh_interval_ms` の行を消してください。**
+古い版はこのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
 
 **確かめ方。**
 
 ```bash
-grep -n -E 'oauth_usage_api|^  token_source:|^  token_env:|poll_interval_ms' ~/continuo-work/WORKFLOW.md
+grep -n -E 'refresh_interval_ms|source: statusline' ~/continuo-work/WORKFLOW.md
 ```
 
-**何も出なければ、古い `rate_limit` の行は残っていません。**
-`tracker.provider` の `token_source:` / `token_env:` は字下げが深いので、この検索には当たりません。
+**何も出なければ、v0.1.15 が読めない行は残っていません。**
 
 ### レビューの回し方が組み込みのプロンプトへ入りました。**subagent が毎周2つ立ちます**
 
@@ -342,9 +302,8 @@ grep -n -E 'oauth_usage_api|^  token_source:|^  token_env:|poll_interval_ms' ~/c
 **`.github/workflows/` に `code-review-result` を持つ検査が無いリポジトリでは、この待ちに入りません。**
 **その検査は `continuo init` が置く `continuo-ci.yaml` を `.github/workflows/` へ移すと入ります。**
 
-**pull request を draft で作っている場合は、回し直しが要りません。**
-**`WORKFLOW.md` の 4-4 に「レビューを通したら draft を外す」と書いてあれば、`gh pr ready` で検査が回り直すためです。**
-**4-4 に draft のことが1行も書いていないと、エージェントはこの経路に入らず、回し直します。**
+**途中の周では、エージェントは結果を貼るたびに回し直してから待ちます。**
+**回し直しが要らないのは、レビューが収まって終わり、エージェントが `gh pr ready` で draft を外したときだけです。**そこで検査が回り直すためです。
 
 ### 判断票の形が変わりました。**表が5列から7列になります**
 
@@ -674,6 +633,17 @@ grep -c 'OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と' ~/co
 **どちらも `0` なら、本文に古い決まりは残っていません。**
 
 ---
+
+### 計画を書いたところで、どの issue も一度 `Blocked` で止まる
+
+**エージェントは計画を書いたら、設計レビューへ進む前に `Blocked` で止まり、あなたの確認を待ちます。**これは正常です。
+**了承するときは、了承することを issue のコメントにはっきり書いてから `Ready` へ戻してください。**Status を戻すだけでは進みません。
+**レビューの途中で質問して止まったときは、回答を issue のコメントに書いてから `Ready` へ戻してください。**
+
+**エージェントが draft で作った pull request は、レビューが収まるとエージェントが draft を外します。**
+`WORKFLOW.md` の 4-4 やリポジトリの決まりに「draft で作る」とだけ書いていた場合も同じです。
+
+詳しくは [docs/FAQ.md](FAQ.md) の「計画を書いたところで、どの issue も `Blocked` になる」にあります。
 
 ## v0.1.14 から v0.1.15 へ
 

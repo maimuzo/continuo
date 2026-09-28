@@ -457,7 +457,7 @@ func containsFoldStr(values []string, target string) bool {
 //
 // 目的: **カードが `direct_chat_state` になった最初の巡回で、pane も印も触らない**ことを示す。
 //
-// **この検査は、実装レビュー2周目で出た Critical そのものは再現していない。**
+// **この検査は、実装レビュー2周目で出た CRITICAL そのものは再現していない。**
 // あれは「pane の用意が走っている最中は印を立てない」という印を足していたときにだけ起きた。
 // **その印はやめたので、いまは `updateDirectChatMode` が同じ巡回の中で印を立てる。**
 // **だから印で判定してもカードの Status で判定しても、この検査は通る。**

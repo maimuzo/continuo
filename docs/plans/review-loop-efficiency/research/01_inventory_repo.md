@@ -1,7 +1,7 @@
 # レビューループを定義している箇所（リポジトリ側の一覧）
 
 **言いたいこと。**レビューループの定義は、開発者向けの5ファイル（約880行・約60KB）に、写しを含めて散らばっている。
-**収束の判定（Critical と High が0件）を支える「重大度の決め方」は、利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) が4段の表として持っている**（`origin/main` の時点から在る。2026-09-22 に数え直した）。
+**収束の判定（CRITICAL と HIGH が0件）を支える「重大度の決め方」は、利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) が4段の表として持っている**（`origin/main` の時点から在る。2026-09-22 に数え直した）。
 **開発者向けの [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) には無い。書く側が最初のレビューへ出す前の自己点検は、どちらにも無い。**
 **必須の道具 `/code-review` には、1回で全部挙げさせる指示も、前の周の対応表も、effort level も渡っておらず、機械の関門は目印と投稿者しか見ていない。**
 
@@ -36,7 +36,7 @@
 
 | 発見 | 根拠の在りか |
 | --- | --- |
-| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は Critical と High が0件のこと（[CLAUDE.md:568](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L568)）だが、何を Critical / High にするかの基準が [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) に無い。**利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には4段の表として在る**（2026-09-22 に数え直した）。付けるのはレビュワーである | 3-2 |
+| **収束の判定が、定義の無いラベルに乗っている。**「収まっている」は CRITICAL と HIGH が0件のこと（[CLAUDE.md:568](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L568)）だが、何を CRITICAL / HIGH にするかの基準が [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) に無い。**利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には4段の表として在る**（2026-09-22 に数え直した）。付けるのはレビュワーである | 3-2 |
 | **書く側が最初のレビューへ出す前の自己点検の段が無い。**「同じものを数える」（worker-briefing 2-5）は、指摘を受けてから・指摘する前に効くもので、指摘が無ければ発火しない | 3-1 |
 | **必須の道具 `/code-review` に、徹底度の指示も前の周の対応表も effort level も渡っていない。**規則自身が「渡さないと同じものが必ずまた挙がり、周だけが増える」と書いている | [.claude/rules/design-review.md:143-146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L146)、[.claude/skills/pr-review-and-merge/SKILL.md:99-103](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L99-L103)、3-3 |
 | **機械の関門は、目印が先頭にあるかと投稿者しか見ない。**周回数・重大度の件数・「数えた件数」の行は、どの機械も検査しない | 2-5 の表と、その下の grep |
@@ -93,7 +93,7 @@
 | --- | --- | --- | --- |
 | [CLAUDE.md:520-532](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L520-L532) | 手順5段。表を書く前に数える、件数を添える、数えた全部を直す、人間へ報告 | 「段1で数えた件数の全部を直す（1箇所だけ直さない）」 | 開発者向け |
 | [CLAUDE.md:534-543](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534-L543) | 対応表の6列（短縮名・レベル・指摘内容・直す/直さない・合理的理由・分類） | 「Critical / High / Medium / Low / Info」 | 開発者向け |
-| [CLAUDE.md:545-551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545-L551) | Critical と High は直す。それ以下は簡単なら直し、設計に触るなら follow-up の issue | 「「この pull request の範囲外である」は否定ではない。」 | 開発者向け |
+| [CLAUDE.md:545-551](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545-L551) | CRITICAL と HIGH は直す。それ以下は簡単なら直し、設計に触るなら follow-up の issue | 「「この pull request の範囲外である」は否定ではない。」 | 開発者向け |
 | [.claude/rules/design-review.md:124-149](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124-L149) | 合理的根拠を否定できるなら直さない | 「否定できるなら直さない。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:211-254](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L211-L254) | 直したあとに数えるもの（言い換え・戻り値の説明・移した節を指す文・版・後ろのリンク）。前提を1文にしてから探す | 「数えるのは「前提」である。」 | 開発者向け |
 | [.claude/skills/worker-briefing/SKILL.md:105-121](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L105-L121)（2-1） | 3回で収まらないのは設計があやふやだから。1件ずつ潰すのをやめる | 「指摘を1件ずつ潰すのをやめて、設計を疑う。」 | 開発者向け |
@@ -113,7 +113,7 @@
 | 場所 | 何を定義しているか | 原文の引用 | 区分 |
 | --- | --- | --- | --- |
 | [CLAUDE.md:566-571](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566-L571) | 「収まっている」の定義（正） | 「Critical と High が0件であることをいう。」 | 開発者向け |
-| [CLAUDE.md:573-611](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573-L611) | 収まったあとは最大1周。Medium / Low を直したら最後に1回。最後の周の Medium / Low は直さない | 「そこから先は最大1周である。」 | 開発者向け |
+| [CLAUDE.md:573-611](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573-L611) | 収まったあとは最大1周。MEDIUM / LOW を直したら最後に1回。最後の周の MEDIUM / LOW は直さない | 「そこから先は最大1周である。」 | 開発者向け |
 | [CLAUDE.md:613-639](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L613-L639) | 収まらないときの数え方。最後の1回も10回に数える | 「10回を超えて回してはならない。」 | 開発者向け |
 | [CLAUDE.md:640-661](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L640-L661) | 3・6・9回目の6段（目的の確認役 → 理由をまとめる → 説得 → 削除と記録 → 報告 → 設計レビューへ戻る） | 「実装を止めて設計内容を敵対的レビューし、実装し直してから次のレビューを回す。」 | 開発者向け |
 | [CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) | 設計と実装を別に数える。人間の方針変更でリセット。止まったときに人間へ見せる4項目 | 「足して20回まで、という意味ではない。」 | 開発者向け |
@@ -183,7 +183,7 @@
 
 **言いたいこと。**開発者向けには無い。[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) には Critical / High / Medium / Low / Info の名前だけがあり、何をどれにするかを決めていない。
 **利用者向けの [internal/prompt/builtin.md](../../../../internal/prompt/builtin.md) には、4段の表として在る**（2026-09-22 に数え直した）。
-**それでも「収まっている」は Critical と High の件数だけで決まり、設計レビューにも同じ判定が効く**（[CLAUDE.md:665](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L665)）。
+**それでも「収まっている」は CRITICAL と HIGH の件数だけで決まり、設計レビューにも同じ判定が効く**（[CLAUDE.md:665](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L665)）。
 
 | 検索パターン | 対象パス | 出たもの |
 | --- | --- | --- |
@@ -270,7 +270,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 | **実装レビューの道具が2通り** | [CLAUDE.md:396](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L396)「必ず `/code-review` でレビューする。」と [.claude/rules/design-review.md:15](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L15) の段7 | [.claude/rules/design-review.md:115-118](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L115-L118)「実装レビューでは `maimuzo-from-ecc:architect` を使わない。…Bash を持つエージェント（`general-purpose` など）を立てること。」。**どちらを毎周使うかを決めた箇所は無い**（[.claude/skills/pr-review-and-merge/SKILL.md:119-120](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L119-L120) は両方の場合を書き分けるだけ） |
 | **前の周の対応表を渡す、と渡せない** | [.claude/rules/design-review.md:143-144](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L143-L144)「渡さないと同じものが必ずまた挙がり、周だけが増える。」 | [.claude/rules/design-review.md:146](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L146)「`/code-review` では渡せない。」。**必須の道具のほうで、規則自身が挙げた「周だけが増える」条件が毎周成り立つ** |
 | **1回で全部挙げさせる、と渡せない** | [.claude/skills/worker-briefing/SKILL.md:260](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L260)「まったく同じ結果になるくらい徹底的に洗い出すこと。」 | [.claude/skills/pr-review-and-merge/SKILL.md:102-103](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L102-L103)「2-6（1回で全部挙げる）と 2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。」 |
-| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:232](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L232) の見本「直さない \| この issue の範囲外」（Low） | [CLAUDE.md:545-546](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545-L546)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
+| **範囲外で直さない（対象が違うので矛盾ではなく差）** | [internal/prompt/builtin.md:232](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/internal/prompt/builtin.md#L232) の見本「直さない \| この issue の範囲外」（LOW） | [CLAUDE.md:545-546](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L545-L546)「設計に触るなら follow-up の issue へ切り出す。」。**利用者向けには、follow-up を切り出す指示が無い** |
 
 ---
 
@@ -298,7 +298,7 @@ CLAUDE.md:613:****そのとき、Medium と Low は直さない。**そのまま
 
 ## 7. 開いている PR が、レビューループの定義をどう変えようとしているか
 
-**言いたいこと。**収束の定義（Critical と High が0件、最大1周、3・6・9、10回）を変える PR は無い。
+**言いたいこと。**収束の定義（CRITICAL と HIGH が0件、最大1周、3・6・9、10回）を変える PR は無い。
 **PR #267 は「前の周の否定を知らないまま直す / 判定する」経路を塞ぐ段を、書く側とレビュワーの両方に足す。PR #272 は人間の方向調整の原文を CLAUDE.md から外す。**
 
 拾い方: `gh pr list --state open --limit 100 --json number,title,headRefName,isDraft,files` で、CLAUDE.md・.claude/・review-gate.yml・check-release-ready.sh・docs/releasing.md・builtin.md を触る PR を出した。6本だった。

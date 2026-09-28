@@ -30,7 +30,8 @@ import (
 
 // 枠の種別である（設計 3-77）。
 //
-// **値の出どころは Claude Code のステータスラインである**（issue #284）。orchestrator の保管値が
+// **値の出どころは usage API（Claude の usage API）と Claude Code のステータスラインである**
+// （issue #284）。orchestrator の保管値が、usage API の `kind` をそのまま、ステータスラインの
 // `rate_limits.five_hour` を session、`rate_limits.seven_day` を weekly_all として写す。
 const (
 	// LimitKindSession は5時間の枠である。
@@ -39,8 +40,8 @@ const (
 	LimitKindWeeklyAll = "weekly_all"
 	// LimitKindWeeklyScoped は1週間のモデル別の枠である。
 	//
-	// **ステータスラインはこの枠を載せないので、保管値には入らない**（issue #284）。
-	// 種別の名前は、過去の版が書いた入札を読むためと、判定の形を変えないために残す。
+	// **usage API だけが運ぶ**（ステータスラインは載せない。issue #284）。`rate_limit.source` が
+	// `oauth_usage_api` で usage API が読めたときだけ保管値に入る。**一定量を使うまで現れない。**
 	// 現れないものは判定に入らない（最大を採れば自動的にそうなる）。
 	LimitKindWeeklyScoped = "weekly_scoped"
 )
@@ -176,7 +177,7 @@ func (r SkipReason) String() string {
 // WeeklyPercent は1週間の使用率を返す（設計 3-77）。
 //
 // **1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-// モデル別の枠はいまの保管値には入らないので（ステータスラインが載せない。issue #284）、
+// モデル別の枠は usage API だけが運び、一定量を使うまで現れないので（issue #284）、
 // **現れないものは判定に入らない**（最大を採れば自動的にそうなる）。
 //
 // snap: 読み取った枠の一覧。
