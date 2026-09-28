@@ -76,7 +76,7 @@
 
 | 何を | 中身 |
 | --- | --- |
-| **何が起きているか** | `/code-review` と設計レビューで Critical と High が収まらない。人間の観測では20周ほど回る。直すときに同じ種類の箇所を確かめないので、次の周で修正漏れとして挙がる |
+| **何が起きているか** | `/code-review` と設計レビューで CRITICAL と HIGH が収まらない。人間の観測では20周ほど回る。直すときに同じ種類の箇所を確かめないので、次の周で修正漏れとして挙がる |
 | **なぜ困るか** | 1周ごとにレートリミットと時間を使う。直しが新しい欠陥を持ち込む機会も増える（[CLAUDE.md:611](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L611) の実例: 8周目の Critical が7周目の直しから生まれた） |
 | **この文書で何を決めるか** | 決めない。公式が紹介している方法を、4つの観点（レビュワー側・書く側・ループの制御・修正漏れ）に分けて並べる |
 
@@ -168,7 +168,7 @@ Claude Code Security の記事は "Claude re-examines each result, attempting to
 
 **当てはめうる場所（案であって決定ではない）。**
 
-- [CLAUDE.md:520](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L520) の「手順」の段1（対応表を書く前）に段を足す。Critical と High の指摘1件ごとに検証役を立て、指摘の文と PR の意図だけを渡す。返させるのは「再現できる file:line と、壊れる筋書き」である。返せなかった指摘は「直さない」とし、理由欄に「検証役が再現できなかった」と書く。
+- [CLAUDE.md:520](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L520) の「手順」の段1（対応表を書く前）に段を足す。CRITICAL と HIGH の指摘1件ごとに検証役を立て、指摘の文と PR の意図だけを渡す。返させるのは「再現できる file:line と、壊れる筋書き」である。返せなかった指摘は「直さない」とし、理由欄に「検証役が再現できなかった」と書く。
 - [.claude/rules/design-review.md:124](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124) の「否定できるなら直さない」を、受け取る側の頭の中ではなく、この検証役にやらせる。
 
 ### 3-2. 見つける段では重大度で絞らず全部挙げさせ、絞り込みは別の段で行う
@@ -312,19 +312,19 @@ evals の記事は "A good task is one where two domain experts would independen
 人間が 2026-09-04 に求めた「同じ内容を別のレビュワーに依頼したらまったく同じ内容になる」は、公式の書き方ではレビュワーの努力ではなく、**判定の基準が曖昧でないこと**で担保されている。
 
 **効果の実測。**示されていない（"cuts false positives" は主張であって数値ではない）。
-**効く観点。**レビュワー側。ループの制御にも効く。[CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の「収まっている」は Critical と High の件数だけで決まるので、何を High と呼ぶかがぶれると判定もぶれる。
+**効く観点。**レビュワー側。ループの制御にも効く。[CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の「収まっている」は CRITICAL と HIGH の件数だけで決まるので、何を HIGH と呼ぶかがぶれると判定もぶれる。
 **制約。**REVIEW.md は `/code-review` に届かない（3-4）。Agent のレビュワーには渡せる。
 
 **当てはめうる場所（案）。**
 
-- [CLAUDE.md:534](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) の「対応表の列」の「レベル」に、日本語の規則文書と Go のコードそれぞれで Critical と High に入る種類を列挙した定義を足す。
-  文書の例: 「書かれたとおりに従うと、利用者か AI が壊れる操作をする」だけを High 以上にする。この例は worker が作ったもので、公式の記述ではない。
+- [CLAUDE.md:534](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L534) の「対応表の列」の「レベル」に、日本語の規則文書と Go のコードそれぞれで CRITICAL と HIGH に入る種類を列挙した定義を足す。
+  文書の例: 「書かれたとおりに従うと、利用者か AI が壊れる操作をする」だけを HIGH 以上にする。この例は worker が作ったもので、公式の記述ではない。
 - 「この PR より前から在る」を別の印にし、[CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の件数から外すかを検討する（3-7）。
 
 ### 3-6. 2回目以降のレビューでは、新しい軽微な指摘を出させず、件数に上限を置く
 
 **何をするか。**1回目のあとは Important（直してからマージ）だけを出させる。Nit の件数には上限を置く。
-**いまの規則と同じ向きか。**同じ向き。2026-09-05 の人間の指示（[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573)）が、Medium と Low について近いことを決めている。
+**いまの規則と同じ向きか。**同じ向き。2026-09-05 の人間の指示（[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573)）が、MEDIUM と LOW について近いことを決めている。
 公式はさらに「最初のレビューのあと」から、軽微な指摘を出すこと自体を止める。
 
 | 出典 | 発行元・日付 | 取り方 | 一次 / 二次 |
@@ -352,8 +352,8 @@ code-review.md:18 は、Claude が既にコメントした PR ならレビュー
 
 **当てはめうる場所（案）。**
 
-- [CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573) の節を「2周目からは Critical と High だけを出させる」へ広げる。
-- `/code-review` の出力に2周目以降も Medium と Low が混ざったら、受け取る側は対応表に載せず、件数だけ書く。
+- [CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573) の節を「2周目からは CRITICAL と HIGH だけを出させる」へ広げる。
+- `/code-review` の出力に2周目以降も MEDIUM と LOW が混ざったら、受け取る側は対応表に載せず、件数だけ書く。
 
 ### 3-7. レビューの範囲を「この変更が持ち込んだもの」に絞り、既存の欠陥は別枠にする
 
@@ -420,7 +420,7 @@ Prompting Claude Opus 5 は "Claude Opus 5 can also expand the scope of a task, 
 **当てはめうる場所（案）。**
 
 - [.claude/rules/design-review.md:101](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L101) の4つの観点に「正しさか、issue に書かれた要件に効かない抜けは挙げない」を足す。
-- Academy の「修正が大きな変更に育ったら再レビュー」を、[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573) の周回の判断に取り込めるか検討する。いまは Critical か High を直したら、必ず次の周を回す。
+- Academy の「修正が大きな変更に育ったら再レビュー」を、[CLAUDE.md:573](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L573) の周回の判断に取り込めるか検討する。いまは CRITICAL か HIGH を直したら、必ず次の周を回す。
 
 ### 3-9. 書く前に「完了の条件」と「範囲外」を合意し、レビュワーはそれに照らして判定する
 
@@ -459,7 +459,7 @@ Effective harnesses は "Only mark features as 'passing' after careful testing."
 **当てはめうる場所（案）。**
 
 - [.claude/rules/design-review.md:3](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L3) の段2で書く設計コメントに、「完了の条件（1行ずつ機械か目で確かめられる形）」と「範囲外」を必須にする。実装レビューのレビュワーにもそれを渡す。
-- 範囲外の指摘は Critical と High に数えない。これは [CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の定義を変えることになる。
+- 範囲外の指摘は CRITICAL と HIGH に数えない。これは [CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の定義を変えることになる。
 
 ### 3-10. 書く側に、機械で合否が出る検査を持たせ、レビューに出す前に通す
 
@@ -576,7 +576,7 @@ grader.md:9 は "A passing grade on a weak assertion is worse than useless — i
 
 **当てはめうる場所（案）。**
 
-- 別の worker が集めている周ごとのデータから、「レビュワーは Critical か High としたが、対応表で根拠を否定して直さなかった」事例を拾う。それを 3-4 の一覧と、[.claude/rules/design-review.md:101](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L101) の観点の例に足す。
+- 別の worker が集めている周ごとのデータから、「レビュワーは CRITICAL か HIGH としたが、対応表で根拠を否定して直さなかった」事例を拾う。それを 3-4 の一覧と、[.claude/rules/design-review.md:101](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L101) の観点の例に足す。
 - [worker-briefing 2-7](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L277) に「確かめきれない指摘は重大度を付けず『未確認』で返してよい」という逃げ道を足す。
 
 ### 3-13. 同じ観点を独立に複数見させ、まとめてから確かめる
@@ -640,7 +640,7 @@ Academy は "A long session carries everything it has read and decided. … it's
 **制約。**無い。
 **当てはめうる場所（案）。**[CLAUDE.md:613](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L613) と [:663](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L663) の「3・6・9回目」の段に、次の条件を足す。
 
-> Critical と High の件数が2周続けて減らなかったら、その時点で修正を止め、対応表から学んだことを入れた設計で、新しい文脈の書き手に書き直させる。
+> CRITICAL と HIGH の件数が2周続けて減らなかったら、その時点で修正を止め、対応表から学んだことを入れた設計で、新しい文脈の書き手に書き直させる。
 
 いまの6段（[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md) 以下）には「実装を止める → 設計を敵対的レビューする → 実装し直す」が既にある。**入る時点を早めるだけで足りるかを検討する。**
 
@@ -704,7 +704,7 @@ Code Review 文書は REVIEW.md について "Length has a cost: a long `REVIEW.
 | --- | --- | --- |
 | **自分の成果物を自分で評価させると甘くなる。**"agents tend to respond by confidently praising the work—even when, to a human observer, the quality is obviously mediocre."（人から見て明らかに凡庸でも、自信を持って褒める） | [Harness design](https://www.anthropic.com/engineering/harness-design-long-running-apps)（要約モデル経由） | 書き手の自己点検でレビューを代替できない |
 | **Opus 5 では、検証や再確認の指示が逆効果になる。**"instructions like these cause over-verification on Claude Opus 5, and removing them reduces wasted tokens with no loss in quality."（こうした指示は過剰な検証を起こし、消しても品質は落ちずに無駄なトークンが減る）。"Avoid instructing re-checks it already performs … these compound with the model's own behavior and add cost without improving results." | [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5)（全文）、[What's new in Claude Opus 5](https://platform.claude.com/docs/en/models/opus-5/whats-new-opus-5)（全文） | 規則の「念のため再確認せよ」は、Opus 5 では周の品質を上げずに費用を増やしうる。**他のモデルでは逆で、Prompting best practices は "Before you finish, verify your answer against [test criteria]." が "catches errors reliably" と書く。**この worker は Opus 5 で走っている（システムの表示）。オーケストレーターと `/code-review` のモデルは確かめていない |
-| **抜けを探せと頼まれたレビュワーは、作業が健全でも何か挙げる。** | [Best practices](https://code.claude.com/docs/en/best-practices)（全文。3-8 に引用） | 「Critical と High が0件になるまで回す」は、レビュワーが何かを High と呼び続ける限り収束しない形になりうる |
+| **抜けを探せと頼まれたレビュワーは、作業が健全でも何か挙げる。** | [Best practices](https://code.claude.com/docs/en/best-practices)（全文。3-8 に引用） | 「CRITICAL と HIGH が0件になるまで回す」は、レビュワーが何かを HIGH と呼び続ける限り収束しない形になりうる |
 | **LLM を判定役にするのは頑健でない。**"This is generally not a very robust method, and can have heavy latency tradeoffs"（一般に頑健な方法ではなく、遅延の代償も大きい） | [Building agents with the Claude Agent SDK](https://claude.com/blog/building-agents-with-the-claude-agent-sdk)（要約モデル経由） | 判定を機械の検査に寄せる理由になる（3-10） |
 | **モデルの判定役は非決定的である。** | [Demystifying evals](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)（要約モデル経由） | 1体のレビュワーへの指示だけで「別のレビュワーでも同じ結果」は保証されない。記事は判定役一般について書いており、コードレビューの測定ではない |
 | **修正を重ねた長い会話は、書き直した新しい会話に負ける。** | [Best practices](https://code.claude.com/docs/en/best-practices)（全文。3-14 に引用） | 同じ文脈で10周まで直し続ける形は、公式の推奨と逆である |
@@ -727,7 +727,7 @@ Code Review 文書は REVIEW.md について "Length has a cost: a long `REVIEW.
 | ローカルの `/code-review` が中で何体の agent を使い、どのモデルで走るか | Code Review 文書、ultrareview 文書、skills 文書 | code.claude.com | 書かれていない。skills 文書は `/code-review` を「forked subagent として走る skill」と書く。同じ文書は `context: fork` の skill について "The subagent doesn't see your conversation history"（会話の履歴は見えない）と書き、CLAUDE.md は agent の型に応じて読むとしている |
 | 前の周からの差分だけを再レビューさせる公式の手順 | Code Review 文書 | code.claude.com | 見つからない。管理サービスは push ごとにレビューし、直った指摘のスレッドを自動で閉じる、とだけある |
 | 書き手が「直さない」と判断する基準 | Best practices、Academy | code.claude.com、academy.claude.com | Academy の3つの山と、Best practices の「残りは任意」だけ（3-8） |
-| このリポジトリで Critical と High の中身を定義した行 | `git grep -n 'Critical' -- CLAUDE.md .claude/rules .claude/skills` | HEAD `df36f9d7` | 23行が返り、定義の行は無い（3-5） |
+| このリポジトリで CRITICAL と HIGH の中身を定義した行 | `git grep -n 'Critical' -- CLAUDE.md .claude/rules .claude/skills` | HEAD `df36f9d7` | 23行が返り、定義の行は無い（3-5） |
 
 ---
 

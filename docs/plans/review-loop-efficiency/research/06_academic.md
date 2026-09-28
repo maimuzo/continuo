@@ -133,7 +133,7 @@
 | 実証が効くと示した手段 | 当てはめうる場所 | 主な出典 |
 | --- | --- | --- |
 | 同じ周の中で独立したレビューを複数並列に回し、和集合を取って重複を除く | [worker-briefing 2-6](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L256)（1人に全部を求める形の補い）、[pr-review-and-merge 段2](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/pr-review-and-merge/SKILL.md#L93)（`/code-review` を1本ずつ直列に回す形） | SWR-Bench、Lu ほか、Snyk、Basili ほか |
-| Critical と High を、指摘を出していない別の文脈で検証してから数える | [CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の「収まっている」とは何か | BitsAI-CR、Lu ほか、Refute-or-Promote、CoVe |
+| CRITICAL と HIGH を、指摘を出していない別の文脈で検証してから数える | [CLAUDE.md:566](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L566) の「収まっている」とは何か | BitsAI-CR、Lu ほか、Refute-or-Promote、CoVe |
 | 指摘に位置・再現手順・失敗するテストを持たせる | [worker-briefing 2-7](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/skills/worker-briefing/SKILL.md#L277) | Tyen ほか、Olausson ほか、Stechly ほか |
 | 実装者の反論をレビュワー本人と往復させず、別の文脈で判定する | [.claude/rules/design-review.md:124](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/design-review.md#L124) | FlipFlop、Who Flips、Choi ほか |
 | 独立したレビュー同士の重なりで残りを見積もり、次の周の要否を決める | [CLAUDE.md:561](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md#L561) の「回数を数える」 | Petersson ほか、Briand ほか |
@@ -287,7 +287,7 @@
 - **原文（訳、要約経由）**: 「true positives were usually stable, while extra non-reference reports were much noisier」（本物はたいてい安定し、正解に無い余分な報告はずっと揺れた）
 - **答える問い**: 問い1（ばらつき）、問い4（安定性を偽陽性の目印にする）
 - **持ち込める限界**: セキュリティの監査で、PR のレビューではない。正解に無い指摘がすべて偽陽性とは限らない。effort level を上げても安定するとは限らない（Opus 4.6 は Medium が High より安定、Sonnet 4.6 は High が Medium より安定）
-- **当てはめうる場所（案）**: 同じ周の複数回で1回しか出なかった Critical・High を、検証の段へ優先して回す
+- **当てはめうる場所（案）**: 同じ周の複数回で1回しか出なかった CRITICAL・HIGH を、検証の段へ優先して回す
 
 #### 温度0でもレビューの出力は揺れる
 
@@ -310,7 +310,7 @@
 - **主張と実測**: 日次利用者約4億人の企業の推薦サービス（C++）で、実際に損失を出したバグの merge request を使った。役割は Reviewer・Meta-Reviewer（複数の Reviewer の集約）・Validator・Translator。コードスライスで文脈を取ると key bug inclusion が23.70%（差分だけ）→37.04%（Left Flow）。Reviewer を1人→3人で26.67%→31.11%、誤警報率も83.26%→87.81%に上がる。Validator は誤警報を下げるが key bug inclusion も下げる（Full Flow・3人で 31.11%→20.00%）。検証の質問は「些細な指摘か」「偽の問題か」「どれほど重大か」
 - **答える問い**: 問い1、問い3、問い4
 - **持ち込める限界**: LLaMA 3.1 405B などのオープンモデル。誤警報率が75%を超えており、そのまま運用できる水準ではない
-- **当てはめうる場所（案）**: 集約と検証の2段の間の釣り合い（recall と誤警報）を、Critical・High の数え方に入れる
+- **当てはめうる場所（案）**: 集約と検証の2段の間の釣り合い（recall と誤警報）を、CRITICAL・HIGH の数え方に入れる
 
 ### 3-D. 並列・集約・合議
 
@@ -351,7 +351,7 @@
 - **主張と実測**: 5言語で219のレビュー規則。検出（RuleChecker）57.03% → 検証（ReviewFilter）を足して65.59%、18週で本番の precision 75.0%。検証の出力形式は「結論だけ」63.27%（1.7秒）、「理由を先」65.80%（31.0秒）、「結論を先・理由を後」77.09%（1.7秒）。似たコメントは埋め込みの類似度でまとめて1件だけ残す。recall より precision を優先し、その理由を「alert fatigue に似て、コメントが多いと開発者は全部を無視する」と書く。オフラインの recall は約39.77%
 - **答える問い**: 問い4
 - **持ち込める限界**: 社内の規則分類と大量のデータで回した微調整モデル。Go の変更で「Outdated Rate」（指摘された行が1週間以内に書き換えられた割合）26.7%
-- **当てはめうる場所（案）**: Critical・High を数える前に、「結論を先に書かせる」形式の検証の段を置く
+- **当てはめうる場所（案）**: CRITICAL・HIGH を数える前に、「結論を先に書かせる」形式の検証の段を置く
 
 #### LLM 批評役は LLM のバグを捕まえる（CriticGPT）
 
@@ -360,7 +360,7 @@
 - **原文（訳）**: 「models which hallucinate bugs more often are also more likely to catch human inserted and previously detected bugs. We see this as analogous to precision and recall」（でっち上げのバグを多く出すモデルほど、入れたバグも見つけやすい。これは precision と recall の関係に似ている）。「longer critiques are, however, also more likely to include hallucinations and nitpicks」（長い批評ほど、でっち上げと些細な指摘を含みやすい）。「the rate of nitpicks and hallucinated bugs is much higher for models than for humans」（些細な指摘とでっち上げの率は、人間よりモデルのほうがはるかに高い）
 - **答える問い**: 問い1、問い4（網羅と偽陽性の釣り合い。長さの調整＝FSBS で釣り合いを取る）
 - **持ち込める限界**: 訓練した専用の批評役。単一ファイル・短い課題で、複数ファイルやリポジトリの移動を含まないと著者が限界に書いている
-- **当てはめうる場所（案）**: `/code-review` の effort level が高いほど「uncertain findings」を含むという説明と同じ向きの証拠として、Critical・High の真偽を別に確かめる
+- **当てはめうる場所（案）**: `/code-review` の effort level が高いほど「uncertain findings」を含むという説明と同じ向きの証拠として、CRITICAL・HIGH の真偽を別に確かめる
 
 #### 敵対的な段で候補を落とす（Refute-or-Promote）
 
