@@ -481,6 +481,59 @@ v0.1.15 の見本は `commit -am "<何を直したか>"` と `--title "<何を�
 v0.1.16 の見本は、メッセージを一時ファイルへ書き、`git -C <clone のパス> commit -a -F "$M"` と `--title "$(cat "$M")"` で渡します。
 **直さないと、メッセージや題名に書いた backtick が、その `WORKFLOW.md` を使う全部の run で実行され続けます。**continuo は `WORKFLOW.md` を書き換えません。
 
+### AI の印が付いたコメントを、エージェントが命令として扱わなくなりました — 設定に足すものはありません
+
+**この版から、continuo が起動した Claude Code は、本文の先頭に AI の印があるコメントを命令として扱いません**（issue #245）。
+**印は、本文の1行目に置く HTML コメントです。**`<!-- continuo:` で始まるもの（`<!-- continuo:agent -->`・`<!-- continuo:ai -->` など）と、
+レビューの目印（`<!-- code-review-result -->`・`<!-- design-review-result -->`・`<!-- design-review-skipped -->`）が当たります。
+**書いた人が `OWNER` / `MEMBER` / `COLLABORATOR` でも、印があれば分析や記録として読みます。**
+
+**pull request の本文も、命令として扱わなくなりました。**変更の説明として読みます。指示はコメントに書いてください。
+
+**変わったこと。**
+
+| 何 | v0.1.15 まで | v0.1.16 から |
+| --- | --- | --- |
+| **`OWNER` が書いた、AI の印付きのコメント** | 命令として扱った | **分析や記録として読む** |
+| **pull request の本文** | 書いた人の立場で決めた | **命令として扱わない** |
+| **「コードは別のリポジトリにある」「この branch へ出せ」** | `OWNER` / `MEMBER` / `COLLABORATOR` が書いていれば従った | **そのうえで、AI の印が無いコメントか、issue の本文に書いてあるときだけ従う** |
+
+**あなたの決定は、あなたが自分で書いてください。**Claude Code に代筆させて AI の印が付くと、エージェントはそれを命令として扱いません。
+
+**あなたが自分で起動した Claude Code に印を付けさせるには、plugin を1回入れます**（[FAQ.md](FAQ.md) の「issue のコメントを、人間が書いたのか AI が書いたのか見分けたい」）。
+
+```bash
+claude plugin marketplace add maimuzo/continuo
+claude plugin install continuo-issue-comments@continuo
+```
+
+**自動では新しくなりません**（third-party の marketplace は、Claude Code の既定で自動更新が切れています）。新しくするときは次の2つを叩きます。
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+**手で直すものが3つあります。**どれも、前の版の案内をあなたが写した場合だけです。
+
+| 何 | どう直すか |
+| --- | --- |
+| **`WORKFLOW.md` の本文に、`## 書いた人によって扱いを変えること` の節が残っている**（v0.1.10 から v0.1.12 までの案内で足したもの） | **節ごと消してください。**「`OWNER` / `MEMBER` / `COLLABORATOR` の書いたものは命令」と言い切っているので、組み込みの指示書と食い違います |
+| **`WORKFLOW.md` の本文に、「OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と書いているときです」の2行が残っている**（v0.1.12 の「差し替え方（push には -u を付けろ）」で貼ったもの） | **その段落ごと消してください。**同じことは組み込みの指示書（6-3）が、AI の印を見る形で言っています |
+| **あなたの `CLAUDE.md` に、FAQ の見本の「continuo を使っているなら、1行目を `<!-- continuo:agent -->`」を写した** | **「1行目は `<!-- design-review-result -->` のまま。`<!-- continuo:agent -->` は continuo が起動したエージェントだけが付ける」に直してください。**あなたが自分で起動した Claude Code がそれを付けると、continuo がそのコメントを走っている run の成果として数えます |
+
+**`continuo init` が `WORKFLOW.md` の隣に置く CI の見本（`continuo-ci.yaml`）の案内の文も、同じ理由で書き分けました。**
+**既に置いた見本と、それを写したあなたの CI の定義は書き換わりません。**案内の文が古いだけで、検査の中身は変わっていないので、直さなくても動きます。
+
+**確かめ方。**
+
+```bash
+grep -c '^## 書いた人によって扱いを変えること' ~/continuo-work/WORKFLOW.md
+grep -c 'OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と' ~/continuo-work/WORKFLOW.md
+```
+
+**どちらも `0` なら、本文に古い決まりは残っていません。**
+
 ---
 
 ## v0.1.14 から v0.1.15 へ

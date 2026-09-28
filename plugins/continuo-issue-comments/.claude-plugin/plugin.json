@@ -1,0 +1,7 @@
+{
+  "name": "continuo-issue-comments",
+  "description": "Marks GitHub issue and pull request comments written by AI, and decides which comments to follow",
+  "author": {
+    "name": "maimuzo"
+  }
+}

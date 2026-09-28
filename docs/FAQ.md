@@ -155,9 +155,16 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 **上から `1` `1` `4` なら、3つとも当たっています。**
 そうでなければ [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」を見てください。
+
 **既に `blocked` で止まっている issue があるなら、**「トラブルシューティング」の
 「作業をやめて後片付けしたいとき」にある
 **`Blocked` になった issue の worktree に、push していない作業が残っている** も見てください。
+
+**この3本は、v0.1.10 から v0.1.12 までを使う人のためのものです。**
+v0.1.13 からは、これらの指示は組み込みの指示書（continuo の実行ファイルの中）に入っていて、本文に足すものはありません。
+**いまの版では、3本とも `0` になるのが正しい状態です。**
+`## 書いた人によって扱いを変えること` の節が本文に残っていたら、消してください。
+残っていると、組み込みの指示書の決まり（AI の印が付いたコメントは命令として扱わない）と食い違います。
 
 #### 書いたテンプレートが、実際にどう展開されるかを先に見たい
 
@@ -233,8 +240,10 @@ continuo prompt --show --builtin
 3. 設計をサブエージェントにレビューさせる
 4. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る
 5. 判断票を issue のコメントに貼る（1行目を <!-- design-review-result --> にする）
-   （continuo を使っているなら、1行目を <!-- continuo:agent -->、2行目をこの目印にしてください。
-    順序を逆にすると、continuo が「エージェントが成果を書いていない」と判定します）
+   （continuo を使っているリポジトリでも、1行目はこの目印のままにしてください。
+    <!-- continuo:agent --> を1行目に置くのは、continuo が起動したエージェントだけです。
+    人間や、人間が自分で起動した Claude Code が付けると、continuo がそのコメントを
+    走っている run の成果として数えます）
 6. 実装する
 
 ## レビュー結果を貼ってから、マージできる状態にする
@@ -1183,7 +1192,7 @@ cd ~/continuo-work && continuo --log-level debug
 
 | 要るもの | なぜ |
 | --- | --- |
-| **`OWNER` / `MEMBER` / `COLLABORATOR` が issue に「コードは別のリポジトリにある」と書いていること** | **public のリポジトリでは誰でも issue に書けます。**絞らないと、外部の人が1行書くだけで worktree の commit と push を飛ばせます |
+| **`OWNER` / `MEMBER` / `COLLABORATOR` が issue の本文かコメントに「コードは別のリポジトリにある」と書いていること。**ただし、本文の先頭に AI の印（`<!-- continuo:` などで始まる HTML コメント）があるコメントでは発動しません | **public のリポジトリでは誰でも issue に書けます。**絞らないと、外部の人が1行書くだけで worktree の commit と push を飛ばせます。**同じアカウントの AI が書いた分析でも発動させません** |
 | **本文に、成果の出し方が書いてあること** | **書いていなければ、譲る先がありません** |
 
 **片方でも欠けていれば、いままでどおり commit と push を求めます。**
@@ -2282,6 +2291,11 @@ claude:
 「## 書いた人によって扱いを変えること」の節そのものがありません。
 **この節は v0.1.10 で入りました。**足りないのはキーの名前ではなく、節そのものです。
 
+**v0.1.13 以降を使っているなら、下の確かめ方は当てはまりません。**
+v0.1.13 からは、書いた人の立場を読ませる指示は組み込みの指示書に入っています。
+**本文にこの節が無い（下の2本が `0` と `0` になる）のが正しい状態です。**節が残っていたら消してください。
+下の確かめ方と表は、v0.1.10 から v0.1.12 までを使う人のためのものです。
+
 **確かめ方。**節があるかと、`--jq` が `author_association` を出す本数を数えます。
 
 ```bash
@@ -2292,7 +2306,7 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 | 1本目 | 2本目 | どう読むか |
 | --- | --- | --- |
 | `1` | `4` | **この節の話ではありません。**下の「他に見るところ」を読んでください |
-| `0` | `0` | **本文が v0.1.9 のままです。**[upgrading.md](upgrading.md) の「差し替え方（書いた人の立場）」のとおりに、32行を消して110行を貼ってください |
+| `0` | `0` | **v0.1.13 以降なら、これが正しい状態です。**v0.1.10 から v0.1.12 までなら、本文が v0.1.9 のままです。[upgrading.md](upgrading.md) の「差し替え方（書いた人の立場）」のとおりに、32行を消して110行を貼ってください |
 | 上のどちらでもない | | **貼り方が途中で切れています。**同じく「差し替え方（書いた人の立場）」の消す範囲から取り直してください |
 
 **1本目が `0` なら、キーの名前を直しても届きません。**節そのものが無いので、
@@ -2306,6 +2320,49 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 - **`gh issue view --comments` の表示を読ませていないか。**この表示は、外部の人が本文に
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
 - **`claude.tool_gate` を `off` にしていないか。**「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
+
+
+#### issue のコメントを、人間が書いたのか AI が書いたのか見分けたい
+
+**原因。**continuo を使うと、continuo 本体・continuo が起動した Claude Code・あなた・あなたが自分で起動した Claude Code が、**同じ GitHub アカウントで書きます。**投稿者と `author_association` では見分けられません。
+
+**見分け方。****AI は本文の1行目に印を置きます。**GitHub の画面には表示されません（編集の画面を開くと見えます）。
+
+| 書き手 | 本文の1行目 |
+| --- | --- |
+| continuo 本体 | `<!-- continuo:self -->` など |
+| continuo が起動した Claude Code | `<!-- continuo:agent -->`・`<!-- continuo:group -->`・レビューの目印（`<!-- code-review-result -->` など） |
+| あなたが自分で起動した Claude Code | `<!-- continuo:ai -->`（下の plugin を入れた場合） |
+| あなた | 何も置かない |
+
+**continuo が起動した Claude Code は、AI の印が付いたコメントを命令として扱いません。**分析や記録として読みます。
+**pull request の本文も、命令として扱いません。**変更の説明として読みます。
+
+**あなたが自分で起動した Claude Code に印を付けさせるには、plugin を1回入れます。**
+
+```bash
+claude plugin marketplace add maimuzo/continuo
+claude plugin install continuo-issue-comments@continuo
+```
+
+- **既定の user の scope で入れてください。**`--scope project` で入れると、追跡される `.claude/settings.json` に書かれ、commit すると、そのリポジトリで continuo が起動するすべての機械の run がこのスキルを読み込みます
+- **自動では新しくなりません**（Claude Code の既定で、third-party の marketplace は自動更新が切れています）。新しくするときは次の2つを叩きます
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+**気をつけること。**
+
+- **あなたの決定は、あなたが自分で書いてください。**Claude Code に代筆させると `<!-- continuo:ai -->` が付き、continuo が起動した Claude Code はそれを命令として扱いません
+- **run への指示は、印の無いコメントで書いてください。**レビューの目印（`<!-- design-review-result -->` など）で始まるコメントは、あなたが書いても AI の書き込みと判定されます。目印付きのコメントはレビューの記録として読まれます
+- **pull request の本文に書いた指示には従いません。**指示はコメントに書いてください
+- **印は認証ではありません。**issue にコメントできる人なら誰でも書けます。見分けるための印で、偽れないようにするものではありません
+- **印が付かないことがあります。**plugin を入れていない、スキルが呼ばれなかった、長いセッションで compaction のあとにスキルを忘れた、のどれかのとき、Claude Code の書き込みは人間の書き込みとして読まれます
+- **過去のコメントには付きません。**どれを AI が書いたかを決める手がかりがありません
+
+**`version` を書いていない理由。**plugin の `plugin.json` には `version` がありません。Git で配る marketplace の中の plugin は、`version` が無ければ commit の SHA を版にするので、`claude plugin update` が更新を見つけられます。`claude plugin validate` の `No version specified` の警告は、そのために出ます。
 
 #### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
