@@ -106,7 +106,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 	waitCtx, waitCancel := context.WithCancel(ctx)
 	defer waitCancel()
 	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
-	// **人間が引き取ったら、herdr の待ちだけをやめる**（設計 3-82）。
+	// **人間が引き取ったら、herdr の待ちだけをやめる**（設計 3-83）。
 	// **`pane.close` は呼ばない。**呼ぶと、人間が話している画面が消える。
 	// **読むのはここで1回だけである。**このあと `leaveDirectChatMode` が張り直したものは、
 	// 次に立つ turn ループが読む。
@@ -116,7 +116,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		if ctx.Err() != nil || !rs.currentWorker(epoch) {
 			return
 		}
-		// **direct chat では1文字も送らない**（設計 3-82）。
+		// **direct chat では1文字も送らない**（設計 3-83）。
 		// **`max_dispatch_turns` の判定より前に置く。**あとに置くと、上限に達している run が
 		// `finishRun(failure_state)` へ落ちて pane を閉じにいく。
 		if rs.inDirectChatMode() {
@@ -124,7 +124,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", rs.issue().Identifier)
 			return
 		}
-		// **控えの Status が `direct_chat_state` でも送らない**（`wakeRuns` と同じ理由。設計 3-82f）。
+		// **控えの Status が `direct_chat_state` でも送らない**（`wakeRuns` と同じ理由。設計 3-83f）。
 		// 印はまだ立っていないので、**送る印を立て直してから抜ける。**起こされたときに `wakeRuns` が
 		// 下ろしているので、立て直さないと、作業中へ戻したときに指示が1つも届かない。
 		if o.cardInDirectChat(rs) {
@@ -151,7 +151,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		// 残す理由が「Stop hook が届かなかった」という別の話にすり替わる。
 		var sendErr error
 		// **direct chat から作業中の Status へ戻した run は、送る直前に応答を書いている最中かを見る**
-		// （設計 3-82b の段4・3-82g）。人間が話しかけた直後に戻すのは自然な操作で、そこへ投げると
+		// （設計 3-83b の段4・3-83g）。人間が話しかけた直後に戻すのは自然な操作で、そこへ投げると
 		// turn が混ざる（設計 3-4 の段5a2 が復元で同じ判断をしている）。
 		// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ1つも指示を受け取らない。
 		if !awaitFirst && rs.takeBusyCheckBeforeSend() {
@@ -222,7 +222,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", snap.Identifier)
 			return
 		}
-		// **待っている間に人間が引き取った**（設計 3-82）。**run は諦めない。pane も閉じない。**
+		// **待っている間に人間が引き取った**（設計 3-83）。**run は諦めない。pane も閉じない。**
 		//
 		// **`switch outcome` より手前に置くことが要である。**あとに置くと、
 		// `turnBlocked` が esc を送って `finishRun(failure_state)` を呼び、
@@ -250,7 +250,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 					"identifier", snap.Identifier)
 				return
 			}
-			// **esc を送る直前に、direct chat への引き取りをもう1度見る**（設計 3-82f）。
+			// **esc を送る直前に、direct chat への引き取りをもう1度見る**（設計 3-83f）。
 			// **送られた esc は取り消せない。**subagent を待つあいだ（最大 `claude.poll_wait_ms`）に
 			// direct chat へ入ると待ちがすぐ切れるので、ここで見ないと人間の画面へ esc が届く。
 			if rs.inDirectChatMode() {

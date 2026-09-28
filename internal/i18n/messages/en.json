@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "991db45ef4c9e2372627f6ba90307ad7585ec6d79230c9d050c5463669bda8f1",
+  "_source_sha256": "aff10f202514873977d58aea882eb92f32f6b3ef65b55dee93661c5c35ad225b",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -260,7 +260,7 @@
   "config.placeholder.remaining": "%d config values are not filled in. Fill in the values: %s",
   "config.resolve_path.work_dir_not_absolute": "cannot resolve WORKFLOW.md's location as an absolute path: the base working directory %q is not absolute",
   "config.validate.branch_template_needs_issue_number": "Always include %s. Without the issue number, different issues get the same branch name, and cleanup for a missing worktree would delete the branch of a different issue than the one named",
-  "config.validate.direct_chat_state_conflict": "Use a Status name different from %s (this Status is set only while a human keeps talking to the agent in the pane, so overlapping with another role makes the same card count as both \"let go\" and \"start work\"; see 3-82k). If tracker.direct_chat_state is not written in this WORKFLOW.md, the default \"Direct Chat\" is in effect. If you do not use this feature, write direct_chat_state: \"\" under tracker:",
+  "config.validate.direct_chat_state_conflict": "Use a Status name different from %s (this Status is set only while a human keeps talking to the agent in the pane, so overlapping with another role makes the same card count as both \"let go\" and \"start work\"; see 3-83k). If tracker.direct_chat_state is not written in this WORKFLOW.md, the default \"Direct Chat\" is in effect. If you do not use this feature, write direct_chat_state: \"\" under tracker:",
   "config.validate.handoff_bid_window_range": "Use 0 or greater (0 decides the winner without waiting for a deadline)",
   "config.validate.handoff_idle_timeout_range": "Use 0 or greater (0 uses the default of 18 hours)",
   "config.validate.handoff_progress_interval_range": "Use 60000 (one minute) or greater. The value is handed to the agent in minutes, so anything up to 59999 becomes \"do not stay silent for more than 0 minutes\"",

@@ -557,7 +557,7 @@ func FormatHold(h Hold) string {
 }
 
 // FormatDirectChatHold は、direct chat から作業中の Status へ戻したときの hold のコメントの本文を組み立てる
-// （設計 3-82h の「戻したときに hold を書く」）。
+// （設計 3-83h の「戻したときに hold を書く」）。
 //
 // **先頭の印と JSON は `FormatHold` と同じである。**`ParseHold` は JSON を読めないと hold として数えず、
 // `LatestHoldFor` は `assignee` で絞り、期限切れで外すときは `branch` を使うので、

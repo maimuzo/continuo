@@ -27,7 +27,7 @@ import (
 // rs: 対象の run。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
-	// **人間が引き取っていたら、この turn の表明を1行も読まない**（設計 3-82）。
+	// **人間が引き取っていたら、この turn の表明を1行も読まない**（設計 3-83）。
 	//
 	// **turn ループの手前の検査と2重になっているが、外してはならない。**すり抜けると
 	// `applySignals` が走り、**人間がさっき動かしたカードが `Blocked` へ書き換えられる。**
@@ -82,14 +82,14 @@ func (o *Orchestrator) decideAfterTurn(
 ) bool {
 	switch {
 	case config.IsDirectChatState(o.cfg.Tracker, current.State):
-		// **人間が引き取った**（設計 3-82f）。**巡回より先に turn の終わりが来ただけである。**
+		// **人間が引き取った**（設計 3-83f）。**巡回より先に turn の終わりが来ただけである。**
 		//
 		// **引き渡しとして扱ってはならない。**`default` へ落とすと `finishRun` が
 		// 引き渡しの通知を投稿し、`ensureAgentComment` が人間の pane へ指示を送り、
 		// **pane を閉じる。**カードを動かしてから話しかけた利用者が、そのまま踏む。
 		//
-		// **ここでは direct chat へ入れない**（設計 3-82b）。turn の後始末をせずに戻るだけで、
-		// **入れるのは次の巡回の段1 である。**担当者の判定（3-82h）を当てる場所を1つに保つためである。
+		// **ここでは direct chat へ入れない**（設計 3-83b）。turn の後始末をせずに戻るだけで、
+		// **入れるのは次の巡回の段1 である。**担当者の判定（3-83h）を当てる場所を1つに保つためである。
 		//
 		// **送る印は立てておく。**ここで turn ループは終わるので、次の巡回より先に人間が作業中の Status へ
 		// 戻すと、ループも送る印も無い run が残り、戻しても指示が1つも届かない。
@@ -603,7 +603,7 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
-	// **送る印を下ろす**（設計 3-82f）。turn の終わりが direct chat を見て立てたものが残っている
+	// **送る印を下ろす**（設計 3-83f）。turn の終わりが direct chat を見て立てたものが残っている
 	// ことがある。`wakeRuns` は終わらせている run を起こさないが、残すと打ち切りで run が続いたあとに読まれる。
 	rs.takeNeedsPrompt()
 	o.wg.Add(1)
@@ -620,7 +620,7 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
-	// **人間が direct chat へ引き取っていたら、終わらせる処理をやめる**（設計 3-82f）。
+	// **人間が direct chat へ引き取っていたら、終わらせる処理をやめる**（設計 3-83f）。
 	// **入口の1回だけでは足りない。**長い待ち（バックグラウンド処理・`ensureAgentComment`・`after_run`）の
 	// あいだに人間がカードを動かすのが、この機能のいちばん普通の使い方である。
 	// だから入口・通知の直前・`ensureAgentComment` を抜けた直後・`release` の直前で見る。
@@ -646,7 +646,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 			o.logger.Warn("Status を落とせません",
 				"identifier", rs.issue().Identifier, "遷移先", failureState, "error", err)
 		}
-		// **`postHandoffComment` の直前にも見る**（設計 3-82f）。待っている間に人間が引き取っていたら、
+		// **`postHandoffComment` の直前にも見る**（設計 3-83f）。待っている間に人間が引き取っていたら、
 		// 事実と違う引き渡しの通知を投稿しない（Status は `protectedStates` が守っている）。
 		if o.abortTerminalForHuman(ctx, rs, reason) {
 			return
@@ -666,7 +666,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。ここで見るのは `State` だけであり、
 	// **`rs.setIssue` でも控えない**ので、記録を読む経路へ空の写しが流れることも無い。
 	current, ok, _ := o.refreshIssue(ctx, rs, false)
-	// **`release` の直前にも見る**（設計 3-82f）。`after_run` のあいだに引き取られていたら、印を外さない。
+	// **`release` の直前にも見る**（設計 3-83f）。`after_run` のあいだに引き取られていたら、印を外さない。
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
 	}
@@ -679,7 +679,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 // protectedStates は「この Status になっていたら Status を書き込まない」一覧を返す
 // （`tracker.UpdateStatus` の `blockedStates`）。
 //
-// **`tracker.terminal_states` に `tracker.direct_chat_state` を足したものである**（設計 3-82）。
+// **`tracker.terminal_states` に `tracker.direct_chat_state` を足したものである**（設計 3-83）。
 //
 // **人間が引き取ったカードの上へ書いてはならない。**書くと Status がdirect chat から外れ、
 // **次の巡回が pane を閉じにいく。**とくに危ないのは表明の適用（`applySignals`）である。
@@ -727,7 +727,7 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	if !rs.claimTerminal(ctx) {
 		return
 	}
-	// **人間が direct chat へ引き取っていたら、失敗として扱うのをやめる**（設計 3-82f）。
+	// **人間が direct chat へ引き取っていたら、失敗として扱うのをやめる**（設計 3-83f）。
 	// 入口・通知の直前・`ensureAgentComment` を抜けた直後・`release` の直前で見る（`finishRunClaimed` と同じ理由）。
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
@@ -740,7 +740,7 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	// **失敗は issue 単位で数える**（設計 3-16）。印はこのあと release で消えるので、
 	// 印の中の RetryCount では次の巡回が0回目として拾い直してしまう。
 	o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
-	// **`postHandoffComment` の直前にも見る**（設計 3-82f。`finishRunClaimed` と同じ理由）。
+	// **`postHandoffComment` の直前にも見る**（設計 3-83f。`finishRunClaimed` と同じ理由）。
 	// 書き込みを待っている間に人間が引き取っていたら、事実と違う引き渡しの通知を投稿しない
 	// （Status は `protectedStates` が守っている）。
 	if o.abortTerminalForHuman(ctx, rs, reason) {
@@ -810,7 +810,7 @@ func (o *Orchestrator) abandonRunAsync(ctx context.Context, rs *runState, reason
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reason string) {
-	// **人間が direct chat へ引き取っていたら、打ち切るのをやめる**（設計 3-82f）。
+	// **人間が direct chat へ引き取っていたら、打ち切るのをやめる**（設計 3-83f）。
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
 	}
@@ -829,7 +829,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		}
 		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
 		o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
-		// **`postHandoffComment` の直前にも見る**（設計 3-82f。`finishRunClaimed` と同じ理由）。
+		// **`postHandoffComment` の直前にも見る**（設計 3-83f。`finishRunClaimed` と同じ理由）。
 		if o.abortTerminalForHuman(ctx, rs, reason) {
 			return
 		}
@@ -848,7 +848,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 	}
 
 	o.runAfterRun(ctx, rs)
-	// **リトライが残る枝は `ensureAgentComment` も `release` も通らない**（設計 3-82f）。
+	// **リトライが残る枝は `ensureAgentComment` も `release` も通らない**（設計 3-83f）。
 	// **`after_run` のあと、`addRetry` の直前に見る。**当たったら、バックオフへ入れずに
 	// `PaneID` の判定で終える。生きた pane を持ったままバックオフへ入ると、明けたときの
 	// 着手の段2 で印が外れ、誰も管理しない pane が残る。
@@ -878,7 +878,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
-	// **人間が引き取っている run は、印からも外さない**（設計 3-82）。
+	// **人間が引き取っている run は、印からも外さない**（設計 3-83）。
 	//
 	// **ここへ来る道が1つある。**巡回が「この issue はカンバンから見えなくなった」と
 	// 判断したときである（`reconcileRunning` の最後のループ）。**item を archive しただけでも、
@@ -895,7 +895,7 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
-	// **送る印を下ろす**（`finishRunAsync` と同じ理由。設計 3-82f）。
+	// **送る印を下ろす**（`finishRunAsync` と同じ理由。設計 3-83f）。
 	rs.takeNeedsPrompt()
 	o.wg.Add(1)
 	go func() {
@@ -913,7 +913,7 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 		defer cancel()
 		o.runAfterRun(cleanupCtx, rs)
 		o.stopWorker(cleanupCtx, rs)
-		// **`release` の直前にも見る**（設計 3-82f）。入口は断るが、入口のあと `after_run` の最中に
+		// **`release` の直前にも見る**（設計 3-83f）。入口は断るが、入口のあと `after_run` の最中に
 		// direct chat へ動かすと、印だけ外れる。
 		if o.abortTerminalForHuman(cleanupCtx, rs, "worker を止めて印から外すところでした") {
 			return
@@ -1048,7 +1048,7 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
-	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-82）。
+	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-83）。
 	//
 	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは12箇所あり、
 	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
@@ -1083,7 +1083,7 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// `ensureAgentComment` の段2 / `failCommentRecovery` / コメントが書けたので閉じる道 /
 	// 知らない Status / 担当が移った / 着手をやめた）。
 	// **direct chat の用意に失敗した道は、ここを通らない**（`closeDirectChatSetupPane` が
-	// pane ID を直接閉じる。設計 3-82）。
+	// pane ID を直接閉じる。設計 3-83）。
 	// **待つのは1つだけだが、道連れにするのは全部だからである。**
 	if left := rs.runningBackgroundTasks(); len(left) > 0 {
 		o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",

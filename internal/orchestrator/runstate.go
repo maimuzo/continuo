@@ -328,15 +328,15 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
-	// directChatMode は「人間が pane で直接エージェントと話している」ことを表す（設計 3-82）。
+	// directChatMode は「人間が pane で直接エージェントと話している」ことを表す（設計 3-83）。
 	//
 	// **立っているあいだ、continuo はこの run に手を出さない。**turn を送らず、
 	// 表明も読まず、stall 検知の対象にもせず、**`pane.close` を1回も呼ばない。**
 	//
-	// **印を持つ run が direct chat へ入る入口は3つある**（設計 3-82b）。巡回の段1・用意の段3・
-	// 復元の段5a。**下ろすのは巡回の段2 と、手を離す経路の段1 である**（設計 3-82h）。
+	// **印を持つ run が direct chat へ入る入口は3つある**（設計 3-83b）。巡回の段1・用意の段3・
+	// 復元の段5a。**下ろすのは巡回の段2 と、手を離す経路の段1 である**（設計 3-83h）。
 	directChatMode bool
-	// directChatPauseCtx は、direct chat へ入ったときに終わるコンテキストである（設計 3-82）。
+	// directChatPauseCtx は、direct chat へ入ったときに終わるコンテキストである（設計 3-83）。
 	//
 	// **turn ループはこれで herdr の待ちだけを打ち切る。**`workerStopCtx` を流用しては
 	// ならない。あちらは「continuo が pane を閉じた」という意味で、`selfStoppedTurn` が
@@ -348,38 +348,38 @@ type runState struct {
 	// 切られるかが実行のたびに変わる。
 	directChatPauseCtx    context.Context
 	directChatPauseCancel context.CancelFunc
-	// preparing は「direct chat の pane を用意している最中」の記録である（設計 3-82d の用意の段1）。
+	// preparing は「direct chat の pane を用意している最中」の記録である（設計 3-83d の用意の段1）。
 	//
 	// **立てるのは用意の段1、下ろすのは用意の段3 だけである。**
 	// **立っているあいだ、巡回は印の出し入れだけを行い、後始末は用意の段3 に任せる**
-	// （設計 3-82b の段1〜段5）。用意の段2 が使っている pane を巡回が閉じないためである。
+	// （設計 3-83b の段1〜段5）。用意の段2 が使っている pane を巡回が閉じないためである。
 	//
-	// **判定は `o.mu` の中で行う**（設計 3-82b の段2）。巡回の段2 と用意の段3 が
+	// **判定は `o.mu` の中で行う**（設計 3-83b の段2）。巡回の段2 と用意の段3 が
 	// 同じロックの中で読み書きするので、非同期に立つ値を巡回が読む隙間ができない。
 	// **値そのものは `rs.mu` が守る**（ロックの順は `o.mu` → `rs.mu`）。
 	preparing bool
-	// preparingSeenState は、用意中に巡回が見た Status である（設計 3-82b の段2）。
+	// preparingSeenState は、用意中に巡回が見た Status である（設計 3-83b の段2）。
 	// **巡回ごとに上書きする。**`direct_chat_state` を見たときも書く。
 	preparingSeenState string
 	// preparingSeenAt は preparingSeenState を見た時刻である。
-	// **用意の段3 は、自分の取り直しとこれの新しいほうで判定する**（設計 3-82d）。
+	// **用意の段3 は、自分の取り直しとこれの新しいほうで判定する**（設計 3-83d）。
 	preparingSeenAt time.Time
-	// startedPaneID は `agent.start` が成功した pane の ID である（設計 3-82f。判断票6周目）。
+	// startedPaneID は `agent.start` が成功した pane の ID である（設計 3-83f。判断票6周目）。
 	//
 	// **打ち切りの終え方を決めるためだけに持つ。**`PaneID` が空でなく、これと一致するときだけ
 	// 「その pane で Claude Code が起動済み」と読む。**着手の段8 と `ensureAgentComment` の段4 は
 	// `agent.start` の前に `PaneID` を立てるので、`PaneID` だけでは Claude Code が居るかを決められない。**
 	// **復元で引き取った run は、引き取った pane の ID を入れる**（`Adopt`）。
 	startedPaneID string
-	// directExitToTerminal は「direct chat から `terminal_states` へ直接抜けた」印である（設計 3-82g）。
+	// directExitToTerminal は「direct chat から `terminal_states` へ直接抜けた」印である（設計 3-83g）。
 	//
 	// **立っていたら `ensureAgentComment` は入口で抜ける。**人間が Claude Code を終了させてから
 	// `Done` へ動かすのは人間が名指しした出口であり、書かせに行くと終了させたものを
-	// `--resume` で立て直すことになる。**direct chat へ入るときに下ろす**（設計 3-82b の段1。
+	// `--resume` で立て直すことになる。**direct chat へ入るときに下ろす**（設計 3-83b の段1。
 	// 打ち切りで run が続いたあと、後の正常な終わりで成果のコメントの確認を飛ばさないため）。
 	directExitToTerminal bool
 	// busyCheckBeforeSend は「次の turn を送る直前に、応答を書いている最中かを見る」印である
-	// （設計 3-82b の段4・3-82g）。
+	// （設計 3-83b の段4・3-83g）。
 	//
 	// **direct chat から作業中の Status へ戻した run にだけ立てる。**立っていたら turn ループは
 	// 送る直前に `agent.get` を1本投げ、`working` なら送らずに turn の終わりを待つ。
@@ -479,7 +479,7 @@ func (rs *runState) clearStopSeen() {
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
-	// **direct chat の ctx は必ずここで張る**（設計 3-82）。張り忘れると turn ループの
+	// **direct chat の ctx は必ずここで張る**（設計 3-83）。張り忘れると turn ループの
 	// `context.AfterFunc(nil, …)` が panic する。
 	humanCtx, humanCancel := context.WithCancel(context.Background())
 	return &runState{
@@ -564,7 +564,7 @@ type runSnapshot struct {
 	State            string
 	Title            string
 	URL              string
-	// DirectChatMode は「人間が pane で直接続けている」ことを表す（設計 3-82）。
+	// DirectChatMode は「人間が pane で直接続けている」ことを表す（設計 3-83）。
 	// **stall の判定はこれが真の run を飛ばす。**
 	DirectChatMode   bool
 	Tokens           TokenUsage
@@ -1692,7 +1692,7 @@ func (rs *runState) stoppedByContinuo() bool {
 	return rs.workerStopped
 }
 
-// resetStallClock は stall 検知の時計を、いまから数え直させる（設計 3-82）。
+// resetStallClock は stall 検知の時計を、いまから数え直させる（設計 3-83）。
 //
 // **direct chat を抜けた瞬間に呼ぶ。**呼ばないと、**人間が3時間黙って話していただけで
 // 「画面が止まっている」と読まれ、戻した巡回で pane が閉じ `failure_state` が書かれる。**
@@ -1710,7 +1710,7 @@ func (rs *runState) resetStallClock(now time.Time) {
 	rs.LastRevision = 0
 }
 
-// clearSendFirstPrompt は「次の turn は1回目の本文（5-3）である」印を下ろす（設計 3-82）。
+// clearSendFirstPrompt は「次の turn は1回目の本文（5-3）である」印を下ろす（設計 3-83）。
 //
 // **direct chat の用意でだけ呼ぶ。**着手の段5b（`beginAttempt`）がこの印を立て、
 // 下ろすのは段11 を通る `beginTurn` だけである。**direct chat は段11 を踏まないので、
@@ -1725,7 +1725,7 @@ func (rs *runState) clearSendFirstPrompt() {
 	rs.SendFirstPrompt = false
 }
 
-// enterDirectChatMode は「人間が pane で直接続けている」印を立てる（設計 3-82）。
+// enterDirectChatMode は「人間が pane で直接続けている」印を立てる（設計 3-83）。
 //
 // **turn ループへ「待つのをやめろ」と伝える。**伝えないと、`agent.prompt` の待ち受けは
 // `claude.turn_timeout_ms`（既定1時間）まで返らず、その間に人間が話しかけると
@@ -1742,7 +1742,7 @@ func (rs *runState) enterDirectChatMode() bool {
 		return false
 	}
 	rs.directChatMode = true
-	// **「直接抜けた」印は、入るときに下ろす**（設計 3-82b の段3）。打ち切りで run が続いたあと、
+	// **「直接抜けた」印は、入るときに下ろす**（設計 3-83b の段3）。打ち切りで run が続いたあと、
 	// 後の正常な終わりで成果のコメントの確認を飛ばさないためである。
 	rs.directExitToTerminal = false
 	cancel := rs.directChatPauseCancel
@@ -1753,7 +1753,7 @@ func (rs *runState) enterDirectChatMode() bool {
 	return true
 }
 
-// leaveDirectChatMode はdirect chat の印を下ろし、次に入るためのコンテキストを張り直す（設計 3-82）。
+// leaveDirectChatMode はdirect chat の印を下ろし、次に入るためのコンテキストを張り直す（設計 3-83）。
 //
 // **印を下ろすのと張り直すのを同じ mutex の中で行う。**割れると、素早く往復したときに
 // turn ループが読む ctx が「既に切れているもの」か「これから切るもの」かが実行のたびに変わる。
@@ -1771,9 +1771,9 @@ func (rs *runState) leaveDirectChatMode() bool {
 		rs.directChatPauseCancel()
 	}
 	rs.directChatPauseCtx, rs.directChatPauseCancel = context.WithCancel(context.Background())
-	// **捨てるもの3つを、印を下ろすのと同じ区間で捨てる**（設計 3-82i）。
+	// **捨てるもの3つを、印を下ろすのと同じ区間で捨てる**（設計 3-83i）。
 	rs.discardTurnBoundaryLocked()
-	// **turn の終わりを待つ印も下ろす**（設計 3-82g）。direct chat へ入る前の turn ループが
+	// **turn の終わりを待つ印も下ろす**（設計 3-83g）。direct chat へ入る前の turn ループが
 	// 一時的な失敗で立てたものが残ると、戻したあと `wakeRuns` が送る印より先にこれを取り、
 	// 指示を送らずに待つだけの turn ループを起こす（約1時間後に stall で打ち切られる）。
 	// **応答を書いている最中かは、送る直前の確認（`busyCheckBeforeSend`）が受け持つ。**
@@ -1781,7 +1781,7 @@ func (rs *runState) leaveDirectChatMode() bool {
 	return true
 }
 
-// discardTurnBoundaryLocked は、turn の終わりの判定へ持ち込んではならない3つを捨てる（設計 3-82i）。
+// discardTurnBoundaryLocked は、turn の終わりの判定へ持ち込んではならない3つを捨てる（設計 3-83i）。
 //
 // **`rs.mu` を持ったまま呼ぶこと。**
 //
@@ -1803,7 +1803,7 @@ func (rs *runState) discardTurnBoundaryLocked() {
 	}
 }
 
-// beginPreparing は「direct chat の pane を用意している最中」の記録を立てる（設計 3-82d の用意の段1）。
+// beginPreparing は「direct chat の pane を用意している最中」の記録を立てる（設計 3-83d の用意の段1）。
 func (rs *runState) beginPreparing() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -1812,7 +1812,7 @@ func (rs *runState) beginPreparing() {
 	rs.preparingSeenAt = time.Time{}
 }
 
-// notePreparingSeen は、用意中の run について巡回が見た Status を記録する（設計 3-82b の段2）。
+// notePreparingSeen は、用意中の run について巡回が見た Status を記録する（設計 3-83b の段2）。
 //
 // **`o.mu` を持ったまま呼ぶこと。**用意の段3 の判定と同じロックの中で行う。
 //
@@ -1830,7 +1830,7 @@ func (rs *runState) notePreparingSeen(state string, at time.Time) bool {
 	return true
 }
 
-// finishPreparing は「用意中」の記録を下ろし、巡回がその間に見た Status を返す（設計 3-82d の用意の段3）。
+// finishPreparing は「用意中」の記録を下ろし、巡回がその間に見た Status を返す（設計 3-83d の用意の段3）。
 //
 // **`o.mu` を持ったまま呼ぶこと。**
 //
@@ -1850,7 +1850,7 @@ func (rs *runState) isPreparing() bool {
 	return rs.preparing
 }
 
-// setStartedPane は、その pane で `agent.start` が成功したことを控える（設計 3-82f。判断票6周目）。
+// setStartedPane は、その pane で `agent.start` が成功したことを控える（設計 3-83f。判断票6周目）。
 //
 // paneID: `agent.start` が成功した pane の ID。
 func (rs *runState) setStartedPane(paneID string) {
@@ -1859,7 +1859,7 @@ func (rs *runState) setStartedPane(paneID string) {
 	rs.startedPaneID = paneID
 }
 
-// paneState は、打ち切りの終え方を決めるための pane の状態を返す（設計 3-82f）。
+// paneState は、打ち切りの終え方を決めるための pane の状態を返す（設計 3-83f）。
 //
 // 戻り値の1つ目: いまの `PaneID`（空なら、この run の `stopWorker` が閉じたあとである）。
 // 戻り値の2つ目: その pane で `agent.start` が済んでいれば true。
@@ -1869,28 +1869,28 @@ func (rs *runState) paneState() (string, bool) {
 	return rs.PaneID, rs.PaneID != "" && rs.PaneID == rs.startedPaneID
 }
 
-// setDirectExitToTerminal は「direct chat から `terminal_states` へ直接抜けた」印を立てる（設計 3-82g）。
+// setDirectExitToTerminal は「direct chat から `terminal_states` へ直接抜けた」印を立てる（設計 3-83g）。
 func (rs *runState) setDirectExitToTerminal() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.directExitToTerminal = true
 }
 
-// exitedDirectlyToTerminal は「direct chat から `terminal_states` へ直接抜けた」かを返す（設計 3-82g）。
+// exitedDirectlyToTerminal は「direct chat から `terminal_states` へ直接抜けた」かを返す（設計 3-83g）。
 func (rs *runState) exitedDirectlyToTerminal() bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.directExitToTerminal
 }
 
-// setBusyCheckBeforeSend は「送る直前に応答を書いている最中かを見る」印を立てる（設計 3-82g）。
+// setBusyCheckBeforeSend は「送る直前に応答を書いている最中かを見る」印を立てる（設計 3-83g）。
 func (rs *runState) setBusyCheckBeforeSend() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.busyCheckBeforeSend = true
 }
 
-// takeBusyCheckBeforeSend は「送る直前に応答を書いている最中かを見る」印を下ろして返す（設計 3-82g）。
+// takeBusyCheckBeforeSend は「送る直前に応答を書いている最中かを見る」印を下ろして返す（設計 3-83g）。
 //
 // 戻り値: 立っていたら true。
 func (rs *runState) takeBusyCheckBeforeSend() bool {
@@ -1901,7 +1901,7 @@ func (rs *runState) takeBusyCheckBeforeSend() bool {
 	return was
 }
 
-// inDirectChatMode はdirect chat かどうかを返す（設計 3-82）。
+// inDirectChatMode はdirect chat かどうかを返す（設計 3-83）。
 //
 // 戻り値: 人間が引き取っていれば true。
 func (rs *runState) inDirectChatMode() bool {
@@ -1910,7 +1910,7 @@ func (rs *runState) inDirectChatMode() bool {
 	return rs.directChatMode
 }
 
-// directChatPauseContext は、direct chat へ入ったときに終わるコンテキストを返す（設計 3-82）。
+// directChatPauseContext は、direct chat へ入ったときに終わるコンテキストを返す（設計 3-83）。
 //
 // **turn ループは起動時に1回だけ読む。**読んだあとに `leaveDirectChatMode` が張り直しても、
 // その turn ループが見張るのは読んだ時点のものである（新しい turn ループが新しいものを読む）。

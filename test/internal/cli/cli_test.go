@@ -870,7 +870,7 @@ func TestRunSetup_選択肢が5つ未満なら尋ねずに落とす(t *testing.T
 //
 // 目的: 選択肢が5つあるカンバンで、必ず要る5問に答え、飛ばせる1問を飛ばしたら書き換えること。
 //
-// **6問目は direct chat である**（設計 3-82）。**選択肢が5つしか無いので、当てる相手がいない。**
+// **6問目は direct chat である**（設計 3-83）。**選択肢が5つしか無いので、当てる相手がいない。**
 // **そこで打ち切ってはならない。**打ち切ると、この機能を使わない人から
 // `continuo setup` そのものを奪うことになる。
 //
@@ -900,7 +900,7 @@ func TestRunSetup_必ず要る5つに答えればWORKFLOWmdへ書き込む(t *te
 	}
 }
 
-// TestRunSetup_direct_chat_stateが無いWORKFLOWmdでも止めず貼れる1行を出す は、設計 3-82k を確かめる。
+// TestRunSetup_direct_chat_stateが無いWORKFLOWmdでも止めず貼れる1行を出す は、設計 3-83k を確かめる。
 //
 // 目的: `tracker.direct_chat_state` はあとから足したキーなので、それより前に作った WORKFLOW.md には無い。
 // **書き込みを断らず、書けなかったことを名指しし、`tracker:` の下にそのまま貼れる1行を見本に出す。**

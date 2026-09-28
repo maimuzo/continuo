@@ -1575,7 +1575,7 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 }
 
 // 目的: `--park` にdirect chat の状態（tracker.direct_chat_state の値）を渡したとき、
-// **ボードへ1文字も書かずに**止まることを確認する（設計 3-82）。
+// **ボードへ1文字も書かずに**止まることを確認する（設計 3-83）。
 // **direct chat の Status は `tracker.active_states` に入っていないので、
 // 1つ上の検査を素通りする。**だが動かした先で continuo は `pane.close` を1回も呼ばないので、
 // **pane が閉じるのを待つ段（3-37 の段1 の後半）が待ち切れず、結局何も消せない。**
@@ -1604,7 +1604,7 @@ func TestAbandon_parkがdirectChatの状態なら書く前に止まる(t *testin
 	}
 }
 
-// 目的: `--to` に direct chat の状態を渡したとき、**何も消さずに**止まることを確認する（設計 3-82k）。
+// 目的: `--to` に direct chat の状態を渡したとき、**何も消さずに**止まることを確認する（設計 3-83k）。
 // **そこへ動かすと、次に continuo が起動したとき、いま消したばかりの issue の worktree と pane を作り直す。**
 // **文面は `--park` と分ける。**1つの文言を使い回すと、`--to` を叩いた人が `--park` の説明を読むことになる。
 // 与える情報: 継続監視が動いていない状態で、`tracker.direct_chat_state` を設定したうえで `--to` にその値。
@@ -1625,7 +1625,7 @@ func TestAbandon_toがdirectChatの状態なら何も消さずに止まる(t *te
 	}
 }
 
-// 目的: いまの Status が direct chat のカードは、**`--force` を付けても**片付けないことを確認する（設計 3-82k）。
+// 目的: いまの Status が direct chat のカードは、**`--force` を付けても**片付けないことを確認する（設計 3-83k）。
 // **`--force` を付けると worktree は消えるが、カードは direct chat のままなので、巡回はその run を毎回飛ばし、
 // 印は永久に外れない。**消えた worktree を指したまま枠を1つ持ち続け、ログにも issue にも何も出ない。
 // 与える情報: 継続監視が動いていない状態で、ボードの Status が direct chat の issue に `--force`。

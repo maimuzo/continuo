@@ -702,7 +702,7 @@ func (r *runner) reportToSkipped() {
 // running: 継続監視が動いているか（park の先を確かめるかどうかがこれで決まる）。
 // 戻り値: 続けてよければ ExitOK、確かめられなかった場合・値が誤っている場合は ExitStopped。
 func (r *runner) verifyTargets(ctx context.Context, running bool) int {
-	// **direct chat が絡む3つは、`--force` でも通さない**（設計 3-82k）。
+	// **direct chat が絡む3つは、`--force` でも通さない**（設計 3-83k）。
 	// **`--force` は「pane が生きていても片付ける」ための逃げ道であって、「印が残ったままでよい」という
 	// 意味ではない。****理由は3つとも別々なので、文面も3つに分ける。**1つの文言を使い回すと、
 	// `--to` を叩いた人が `--park` の説明を読むことになる。
@@ -721,7 +721,7 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 	}
 	var targets []string
 	if target := strings.TrimSpace(r.opts.ToState); target != "" {
-		// **`--to` の先を direct chat の Status にしてはならない**（設計 3-82k）。
+		// **`--to` の先を direct chat の Status にしてはならない**（設計 3-83k）。
 		// 片付けは通るが、**次に continuo が起動したとき、いま消したばかりの issue の worktree と pane を
 		// 作り直す**（巡回が direct chat の候補として拾い、pane が無いので用意する）。
 		// 巡回のたびに作り直されるので、抜け出すにはカードを手で動かすしかない。
@@ -738,7 +738,7 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkActive, park))
 			return ExitStopped
 		}
-		// **park の先を direct chat の Status にしてはならない**（設計 3-82k）。
+		// **park の先を direct chat の Status にしてはならない**（設計 3-83k）。
 		// **そこは「作業中の状態」ではないので上の検査を素通りするが、動かした先で
 		// continuo は pane を1回も閉じない。**この関数のあとに続く段1 の後半は
 		// 「その worktree を cwd に持つ pane が消えるまで待つ」ので、**待ち切れずに

@@ -259,7 +259,7 @@
   "config.placeholder.remaining": "埋めていない設定が %d 件あります。値を埋めてください: %s",
   "config.resolve_path.work_dir_not_absolute": "WORKFLOW.md の場所を絶対パスで決められません: 基準にする作業ディレクトリ %q が絶対パスではありません",
   "config.validate.branch_template_needs_issue_number": "%s を必ず含めること。issue の番号が入っていないと、別の issue でも同じ branch 名になり、worktree が無いときの片付けが、名指しした issue とは別の issue の branch を消す",
-  "config.validate.direct_chat_state_conflict": "%s と違う Status 名にすること（人間が pane で直接続けるあいだだけ置く Status なので、他の役割と重なると、同じカードが「手を離す」と「着手する」の両方に当たる。3-82k）。tracker.direct_chat_state をこの WORKFLOW.md に書いていない場合は、既定値の \"Direct Chat\" が使われている。この機能を使わないなら、tracker: の下に direct_chat_state: \"\" と書くこと",
+  "config.validate.direct_chat_state_conflict": "%s と違う Status 名にすること（人間が pane で直接続けるあいだだけ置く Status なので、他の役割と重なると、同じカードが「手を離す」と「着手する」の両方に当たる。3-83k）。tracker.direct_chat_state をこの WORKFLOW.md に書いていない場合は、既定値の \"Direct Chat\" が使われている。この機能を使わないなら、tracker: の下に direct_chat_state: \"\" と書くこと",
   "config.validate.handoff_bid_window_range": "0以上にすること（0 なら締め切りを待たずに勝者を決める）",
   "config.validate.handoff_idle_timeout_range": "0以上にすること（0 なら既定の18時間を使う）",
   "config.validate.handoff_margin_range": "0以上100以下にすること",

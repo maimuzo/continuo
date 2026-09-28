@@ -297,7 +297,7 @@ const (
 	// hold のコメントの2行目に出る。
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffHoldDirectChatReturned は、direct chat から作業中の Status へ戻したときの hold の
-	// 人間向けの1行目に出る（設計 3-82h。自分のログイン名を差し込む）。
+	// 人間向けの1行目に出る（設計 3-83h。自分のログイン名を差し込む）。
 	// **印と JSON は入札の hold と同じにする。**人間向けの文だけが違う。
 	KeyHandoffHoldDirectChatReturned Key = "handoff.hold.direct_chat_returned"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
@@ -612,25 +612,25 @@ const (
 	KeySetupRoleBlockedDesc Key = "setup.role.blocked_desc"
 	// KeySetupRoleDoneDesc は完了の役割の説明に出る。
 	KeySetupRoleDoneDesc Key = "setup.role.done_desc"
-	// KeySetupRoleDirectChatDesc は direct chat の役割の説明に出る（設計 3-82）。
+	// KeySetupRoleDirectChatDesc は direct chat の役割の説明に出る（設計 3-83）。
 	KeySetupRoleDirectChatDesc Key = "setup.role.direct_chat_desc"
-	// KeySetupSkipOptional は、飛ばせる役割で番号 0 を入力できることを案内する（設計 3-82）。
+	// KeySetupSkipOptional は、飛ばせる役割で番号 0 を入力できることを案内する（設計 3-83）。
 	KeySetupSkipOptional Key = "setup.prompt.skip_optional"
-	// KeySetupSkippedOptional は、飛ばせる役割を飛ばしたときに出る（設計 3-82）。
+	// KeySetupSkippedOptional は、飛ばせる役割を飛ばしたときに出る（設計 3-83）。
 	KeySetupSkippedOptional Key = "setup.skipped_optional"
-	// KeySetupSummarySkipped は、まとめで飛ばした役割の行に出る（設計 3-82）。
+	// KeySetupSummarySkipped は、まとめで飛ばした役割の行に出る（設計 3-83）。
 	KeySetupSummarySkipped Key = "setup.summary.skipped"
 	// KeyDoctorStatusNamesDirectChatMissing は tracker.direct_chat_state の Status が
-	// カンバンに無いときに出る（設計 3-82）。
+	// カンバンに無いときに出る（設計 3-83）。
 	KeyDoctorStatusNamesDirectChatMissing Key = "doctor.status_names.direct_chat_missing"
-	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-82）。
+	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-83）。
 	KeyDoctorStatusNamesRemedyDirectChat Key = "doctor.status_names.remedy_direct_chat"
 	// KeyDoctorStatusNamesDirectChatConflict は tracker.direct_chat_state が他の役割と重なっているときに出る
-	// （設計 3-82k）。**重なった相手のキー名を埋める。**
+	// （設計 3-83k）。**重なった相手のキー名を埋める。**
 	KeyDoctorStatusNamesDirectChatConflict Key = "doctor.status_names.direct_chat_conflict"
-	// KeyDoctorStatusNamesRemedyDirectChatConflict はその直し方に出る（設計 3-82k）。
+	// KeyDoctorStatusNamesRemedyDirectChatConflict はその直し方に出る（設計 3-83k）。
 	KeyDoctorStatusNamesRemedyDirectChatConflict Key = "doctor.status_names.remedy_direct_chat_conflict"
-	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-82）。
+	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-83）。
 	KeyCLISetupKeyNotWritten Key = "cli.setup.key_not_written"
 )
 
@@ -936,9 +936,9 @@ const (
 	// 指定されたときに出る。**そこへ動かすと継続監視は pane を1回も閉じない。**
 	KeyAbandonErrParkDirectChat Key = "abandon.err_park_direct_chat"
 	// KeyAbandonErrToDirectChat は `--to` に direct chat の状態（tracker.direct_chat_state の値）が
-	// 指定されたときに出る（設計 3-82k）。**次に continuo が起動したとき、消した worktree と pane を作り直す。**
+	// 指定されたときに出る（設計 3-83k）。**次に continuo が起動したとき、消した worktree と pane を作り直す。**
 	KeyAbandonErrToDirectChat Key = "abandon.err_to_direct_chat"
-	// KeyAbandonErrCurrentDirectChat は、いまの Status が direct chat のときに出る（設計 3-82k）。
+	// KeyAbandonErrCurrentDirectChat は、いまの Status が direct chat のときに出る（設計 3-83k）。
 	// **`--force` でも通さない。**印が永久に外れず、枠を1つ持ち続ける。
 	KeyAbandonErrCurrentDirectChat Key = "abandon.err_current_direct_chat"
 	// KeyAbandonErrUnknownState は `--to` や `--park` の値がカンバンの Status の
@@ -1393,7 +1393,7 @@ const (
 	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
 	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
 	// KeyConfigValidateDirectChatStateConflict は `tracker.direct_chat_state` が他の役割の Status と
-	// 重なっているときに出る（設計 3-82）。**重なった相手のキー名を埋める。**
+	// 重なっているときに出る（設計 3-83）。**重なった相手のキー名を埋める。**
 	KeyConfigValidateDirectChatStateConflict Key = "config.validate.direct_chat_state_conflict"
 	// KeyConfigValidateHandoffProgressIntervalRange は
 	// tracker.provider.handoff.progress_interval_ms が 0 以下のときの理由である。
@@ -2423,16 +2423,16 @@ const (
 	// 走っている turn の終わりを待つ。
 	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
 	// KeyOrchestratorDirectChatReady は、direct chat の pane を用意したときに issue へ書く案内である
-	// （設計 3-82d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
+	// （設計 3-83d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
 	KeyOrchestratorDirectChatReady Key = "orchestrator.direct_chat.ready"
 	// KeyOrchestratorDirectChatAssigneesInvalid は、direct chat のカードの担当者が1人ではないので
-	// failure_state へ動かしたときに issue へ書く（設計 3-82h）。人数・担当者の一覧・
+	// failure_state へ動かしたときに issue へ書く（設計 3-83h）。人数・担当者の一覧・
 	// direct_chat_state・failure_state を差し込む。
 	KeyOrchestratorDirectChatAssigneesInvalid Key = "orchestrator.direct_chat.assignees_invalid"
-	// KeyOrchestratorDirectChatNoAssignees は、担当者の一覧が空のときに一覧の代わりに出る（設計 3-82h）。
+	// KeyOrchestratorDirectChatNoAssignees は、担当者の一覧が空のときに一覧の代わりに出る（設計 3-83h）。
 	KeyOrchestratorDirectChatNoAssignees Key = "orchestrator.direct_chat.no_assignees"
 	// KeyOrchestratorDirectChatSetupLimit は、direct chat の用意が上限まで続けて落ちたので
-	// failure_state へ動かしたときに issue へ書く（設計 3-82h）。回数・最後の理由・
+	// failure_state へ動かしたときに issue へ書く（設計 3-83h）。回数・最後の理由・
 	// direct_chat_state・failure_state を差し込む。**担当者を直せとは書かない。**
 	KeyOrchestratorDirectChatSetupLimit Key = "orchestrator.direct_chat.setup_limit"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて

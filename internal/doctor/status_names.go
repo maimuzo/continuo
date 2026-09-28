@@ -24,7 +24,7 @@ const (
 	stateOriginDispatchState = "tracker.dispatch_state"
 	// stateOriginFailureState は `tracker.failure_state` に書いた名前である。
 	stateOriginFailureState = "tracker.failure_state"
-	// stateOriginDirectChatState は `tracker.direct_chat_state` に書いた名前である（設計 3-82）。
+	// stateOriginDirectChatState は `tracker.direct_chat_state` に書いた名前である（設計 3-83）。
 	stateOriginDirectChatState = "tracker.direct_chat_state"
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
@@ -84,7 +84,7 @@ type confusingPair struct {
 // boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string, boardSymbol Symbol) Result {
-	// **`tracker.direct_chat_state` が他の役割と重なっているかを、いちばん先に見る**（設計 3-82k）。
+	// **`tracker.direct_chat_state` が他の役割と重なっているかを、いちばん先に見る**（設計 3-83k）。
 	//
 	// **下の `!cfg.OK` より前に置く。**重なりがあると `config.Load` がエラーを返し、下の分岐は
 	// この見出し語を `?`（設定が読めません）で返してそこで戻る。**重なりが無いときにしか動かない検査を、
@@ -110,7 +110,7 @@ func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string
 		}
 	}
 
-	// **direct chat の選択肢が無いことは、ここで `!` として出す**（設計 3-82）。
+	// **direct chat の選択肢が無いことは、ここで `!` として出す**（設計 3-83）。
 	//
 	// **`✗` にしない。**この Status がカンバンに無くても continuo は起動するし、
 	// 巡回も dispatch も止まらない。**止まる `✗` と同じ記号にすると、区別が付かなくなる。**
@@ -161,7 +161,7 @@ func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string
 		i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
 	}
 	if directChatMissing != "" {
-		// **紛らわしい組があるときも、direct chat の直し方を落とさない**（設計 3-82）。
+		// **紛らわしい組があるときも、direct chat の直し方を落とさない**（設計 3-83）。
 		// **この Status は起動時の照合から外してあるので、`continuo doctor` が
 		// 直し方を出す唯一の場所である。**
 		remedies = append(remedies, i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChat))
@@ -175,7 +175,7 @@ func checkStatusNames(cfg loadedConfig, configPath string, boardOptions []string
 	}
 }
 
-// checkDirectChatConflict は、`tracker.direct_chat_state` が他の役割と重なっているかを見る（設計 3-82k）。
+// checkDirectChatConflict は、`tracker.direct_chat_state` が他の役割と重なっているかを見る（設計 3-83k）。
 //
 // **重なりを見る相手の一覧は `config.DirectChatConflicts` の1箇所だけにある。**起動時の検査も同じものを読む。
 //
@@ -206,7 +206,7 @@ func checkDirectChatConflict(configPath string) (Result, bool) {
 }
 
 // directChatOptionMissing は、`tracker.direct_chat_state` に書いた名前がカンバンの
-// 選択肢に無いときだけ、その名前を返す（設計 3-82）。
+// 選択肢に無いときだけ、その名前を返す（設計 3-83）。
 //
 // **空文字を書いてある（この機能を使わない）ときは、何も返さない。**
 // **比べ方は SPEC.md 11.3 に合わせる**（大文字小文字と前後の空白を無視する）。
@@ -265,10 +265,10 @@ func configuredStates(cfg config.Config) []configuredState {
 	add(stateOriginRunningState, cfg.Tracker.RunningState)
 	add(stateOriginDispatchState, cfg.Tracker.DispatchState)
 	add(stateOriginFailureState, cfg.Tracker.FailureState)
-	// **`tracker.direct_chat_state` も含める**（設計 3-82）。空なら `add` が捨てる。
+	// **`tracker.direct_chat_state` も含める**（設計 3-83）。空なら `add` が捨てる。
 	// **この Status は起動を止めない**（`config.RequiredBoardStates` が起動時の照合から
 	// 差し引いている）。**起動時の巡回も同じことを WARN で1回出すので、
-	// 気づける場所が doctor しか無いわけではない**（設計 3-82k）。**それでも載せる。**
+	// 気づける場所が doctor しか無いわけではない**（設計 3-83k）。**それでも載せる。**
 	// **doctor だけを黙らせると、5つの役割と揃わない。**
 	// **紛らわしい組の検査に載せ、選択肢が無いこと自体は `directChatOptionMissing` が別に見る。**
 	add(stateOriginDirectChatState, cfg.Tracker.DirectChatState)

@@ -15,7 +15,7 @@ func PermissionRemedyTextForTest(mode string) string {
 }
 
 // DispatchBlockedStatesForTest は dispatchBlockedStates を test/internal/orchestrator から
-// 呼ぶための入り口である（設計 3-82）。
+// 呼ぶための入り口である（設計 3-83）。
 //
 // **着手の段2 の拒否リストは、外から観測する手立てが無い。**
 // **`direct_chat_state` が入っているかどうかは、その1件が抜けただけで
@@ -27,7 +27,7 @@ func (o *Orchestrator) DispatchBlockedStatesForTest() []string {
 }
 
 // AbortTerminalForHumanForTest は、印を持つ run を direct chat へ入れ、その pane の状態を差し替えてから、
-// 終わらせる処理の打ち切り（`abortTerminalForHuman`）を1回通す（設計 3-82f）。
+// 終わらせる処理の打ち切り（`abortTerminalForHuman`）を1回通す（設計 3-83f）。
 //
 // **打ち切りの終え方は `PaneID` と「その pane で `agent.start` が済んでいるか」で分かれる。**
 // **その2つを外から作る手立てが無い**（着手の段8 と `ensureAgentComment` の段4 のあいだの一瞬にしか現れない）

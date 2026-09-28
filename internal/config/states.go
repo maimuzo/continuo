@@ -13,12 +13,12 @@ import (
 // **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
 // `failure_state` / `direct_chat_state` / `status_signal_map` の遷移先**を、書かれた順に集める。
 //
-// **`direct_chat_state` は空でなければ入れる**（設計 3-82）。**入れないと、その Status へ
+// **`direct_chat_state` は空でなければ入れる**（設計 3-83）。**入れないと、その Status へ
 // 動かされた issue が「知らない Status」として扱われ、猶予のあとで worker が止まる
 // （＝pane が閉じてチャットが切れる）。**
 //
 // **ただし「カンバンに実在しなければ起動を止める」一覧には入れない。**そちらは
-// `RequiredBoardStates` が持つ。**この一覧をそのまま使ってはならない**（設計 3-82）。
+// `RequiredBoardStates` が持つ。**この一覧をそのまま使ってはならない**（設計 3-83）。
 //
 // **`automated_state_rewrite` は、キーも値もここへ入れない**（設計 3-54 / 3-55）。
 //
@@ -29,7 +29,7 @@ import (
 //
 // **起動時に「カンバンに実在しなければ起動を止める」一覧は、これではない。**
 // `RequiredBoardStates` が、この一覧から `direct_chat_state` だけを差し引いて返す
-// （設計 3-82）。**キーも含む一覧が要るのは、カンバン側の選択肢が設定に出てくるかを
+// （設計 3-83）。**キーも含む一覧が要るのは、カンバン側の選択肢が設定に出てくるかを
 // 見るときだけである**（`NamedStates`）。
 //
 // **集めるのはこの1箇所だけである。**同じ処理を tracker と orchestrator の両方に書くと、
@@ -126,7 +126,7 @@ func NamedStates(cfg TrackerConfig) []string {
 	return out
 }
 
-// RequiredBoardStates は「カンバンに実在しなければ起動を止める」Status 名を返す（設計 3-82）。
+// RequiredBoardStates は「カンバンに実在しなければ起動を止める」Status 名を返す（設計 3-83）。
 //
 // **`KnownStates` から `direct_chat_state` だけを差し引いたものである。**
 // **それ以外は1つも差し引かない。**
@@ -160,7 +160,7 @@ func RequiredBoardStates(cfg TrackerConfig) []string {
 	return out
 }
 
-// DirectChatConflicts は、`tracker.direct_chat_state` と同じ名前を書いている役割のキー名を返す（設計 3-82k）。
+// DirectChatConflicts は、`tracker.direct_chat_state` と同じ名前を書いている役割のキー名を返す（設計 3-83k）。
 //
 // **重なりを見る相手の7つの一覧は、この1箇所だけに置く。**起動時の検査（`Validate`）と
 // `continuo doctor` の `Status の名前` が同じものを読む。**別々に持つと、どれか1つだけが古くなる。**
@@ -206,7 +206,7 @@ func DirectChatConflicts(cfg Config) []string {
 }
 
 // DirectChatConflictsInFile は、WORKFLOW.md の原文を読み直して `DirectChatConflicts` を当てる
-// （設計 3-82k。`continuo doctor` が使う）。
+// （設計 3-83k。`continuo doctor` が使う）。
 //
 // **`Load` を通さない。**重なりがあると `Load` は検証でエラーを返すので、**重なりが無いときにしか
 // 動かない検査を、重なりのために置くことになる。**そこで front matter を検証せずに読み直す
@@ -233,7 +233,7 @@ func DirectChatConflictsInFile(path string) ([]string, string, error) {
 	return DirectChatConflicts(*cfg), cfg.Tracker.DirectChatState, nil
 }
 
-// IsDirectChatState は、その Status が「人間が pane で直接続けている」を表すかを返す（設計 3-82）。
+// IsDirectChatState は、その Status が「人間が pane で直接続けている」を表すかを返す（設計 3-83）。
 //
 // **判定をこの1箇所に置く。**呼ぶ側で書くと、前後の空白の扱いが場所ごとにずれる。
 //

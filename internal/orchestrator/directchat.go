@@ -14,13 +14,13 @@ import (
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
-// directChatSetupFailure は、direct chat の用意（設計 3-82d の用意の段2）が落ちた記録である。
+// directChatSetupFailure は、direct chat の用意（設計 3-83d の用意の段2）が落ちた記録である。
 //
-// **通常の着手の失敗の記録（`failureNote`）とは別の器である**（設計 3-82d）。
+// **通常の着手の失敗の記録（`failureNote`）とは別の器である**（設計 3-83d）。
 type directChatSetupFailure struct {
 	// Count は続けて落ちた回数である。
 	Count int
-	// LastAt は最後に落ちた時刻である（次に試すまでの間隔の起点。設計 3-82c の門7）。
+	// LastAt は最後に落ちた時刻である（次に試すまでの間隔の起点。設計 3-83c の門7）。
 	LastAt time.Time
 	// Reason は最後に落ちた理由の要約である（上限を超えたときのコメントに載せる）。
 	Reason string
@@ -31,7 +31,7 @@ type directChatSetupFailure struct {
 	Writing bool
 }
 
-// assigneeVerdict は、direct chat のカードの担当者を 3-82h の判定の表に当てた答えである。
+// assigneeVerdict は、direct chat のカードの担当者を 3-83h の判定の表に当てた答えである。
 type assigneeVerdict int
 
 const (
@@ -45,7 +45,7 @@ const (
 	assigneeSelf
 )
 
-// judgeDirectChatAssignees は、direct chat のカードの担当者を 3-82h の判定の表に当てる（設計 3-82h）。
+// judgeDirectChatAssignees は、direct chat のカードの担当者を 3-83h の判定の表に当てる（設計 3-83h）。
 //
 // **direct chat に入れるかを決めるのはここだけである。**
 // **上から順に当てる。**担当者の人数の判定はログイン名を要らないので、先に行う。
@@ -71,7 +71,7 @@ func (o *Orchestrator) judgeDirectChatAssignees(ctx context.Context, issue track
 	return assigneeOther
 }
 
-// splitDirectChatCandidates は、候補を direct chat のものとそれ以外に分ける（設計 3-82b）。
+// splitDirectChatCandidates は、候補を direct chat のものとそれ以外に分ける（設計 3-83b）。
 //
 // **並び順は保つ。**どちらの側も、カンバンの並び順のまま処理する。
 //
@@ -90,9 +90,9 @@ func (o *Orchestrator) splitDirectChatCandidates(candidates []tracker.Issue) ([]
 	return directChat, others
 }
 
-// prepareDirectChatPanes は direct chat の候補について pane を用意するかを決める（設計 3-82b / 3-82c）。
+// prepareDirectChatPanes は direct chat の候補について pane を用意するかを決める（設計 3-83b / 3-83c）。
 //
-// **「いつ pane を用意するか」を決めるのは、この関数の門だけである**（設計 3-82c）。
+// **「いつ pane を用意するか」を決めるのは、この関数の門だけである**（設計 3-83c）。
 // **上から順に見て、1つでも当たったら次の候補へ移る。**
 //
 //	門1 既に印を持っている                 … 何も出さない（巡回の側が direct chat へ入れる）
@@ -104,25 +104,25 @@ func (o *Orchestrator) splitDirectChatCandidates(candidates []tracker.Issue) ([]
 //	門6 着手の直前の検査（`preflight`）      … `preflight` が自分で出す
 //	門7 用意が直前に落ちてから間隔が空いていない … Debug
 //
-// **この一覧に無い門は1つも通らない**（設計 3-82d の「この一覧に無い門」）。
+// **この一覧に無い門は1つも通らない**（設計 3-83d の「この一覧に無い門」）。
 // `rate_limit.pause_above_percent`・担当の持ち回り（`handoffGate`）・`skipByFailure`・
 // `tracker.required_labels`・`Dispatchable` である。
 //
-// **issue のコメントを1本も読まない。**コメントを読む枠には触らない（設計 3-82b）。
+// **issue のコメントを1本も読まない。**コメントを読む枠には触らない（設計 3-83b）。
 //
 // **飛ばすたびに関門の記録を消す**（`clearGate`。設計 6-1）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: Status が `direct_chat_state` の候補（カンバンの並び順）。
 func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []tracker.Issue) {
-	// **専用の記録は、この巡回の候補に無い issue の分を消す**（設計 3-82d の用意の段2）。
+	// **専用の記録は、この巡回の候補に無い issue の分を消す**（設計 3-83d の用意の段2）。
 	// **このパスが走った巡回でだけ消す。**候補の取得に失敗した巡回では、ここへ来ない。
 	o.forgetDirectChatSetupFailuresNotIn(candidates)
 	if len(candidates) == 0 {
 		return
 	}
 
-	// **pane の写像は、この1パスで1回だけ作る**（設計 3-82b）。`pane.list` は機械中の pane を
+	// **pane の写像は、この1パスで1回だけ作る**（設計 3-83b）。`pane.list` は機械中の pane を
 	// 全部返すので、候補ごとに引き直すと巡回1回で候補の数だけ飛ぶ。**`agent.list` は投げない。**
 	var panes directChatPaneIndex
 	var panesErr error
@@ -133,7 +133,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		if ctx.Err() != nil {
 			break
 		}
-		// 門1: 既に印を持っている。**pane を持っているかは見ない**（設計 3-82c）。
+		// 門1: 既に印を持っている。**pane を持っているかは見ない**（設計 3-83c）。
 		// 用意し直すには、印を持つ run に着手の段1 をもう一度踏ませることになる。
 		if _, taken := o.lookupRunByID(issue.ID); taken {
 			o.clearGate(issue.ID)
@@ -148,14 +148,14 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
-		// 門3: 担当者が自分1人ではない（設計 3-82h）。
+		// 門3: 担当者が自分1人ではない（設計 3-83h）。
 		switch o.judgeDirectChatAssignees(ctx, issue) {
 		case assigneeInvalidCount:
 			o.writeDirectChatAssigneeFailureAsync(ctx, issue)
 			o.clearGate(issue.ID)
 			continue
 		case assigneeLoginUnknown:
-			// **この巡回では何もしない**（設計 3-82h の順2 の「印を持っていない機械」）。
+			// **この巡回では何もしない**（設計 3-83h の順2 の「印を持っていない機械」）。
 			o.logger.Debug("gh の持ち主が分からないので、この巡回では direct chat の pane を用意しません",
 				"identifier", issue.Identifier)
 			o.clearGate(issue.ID)
@@ -166,13 +166,13 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
-		// 門4: この worktree に pane が1枚でもある。**「Claude Code が居るか」は判定しない**（設計 3-82c）。
+		// 門4: この worktree に pane が1枚でもある。**「Claude Code が居るか」は判定しない**（設計 3-83c）。
 		if !panesDone {
 			panes, panesErr = o.directChatPanes(ctx)
 			panesDone = true
 		}
 		if panesErr != nil {
-			// **「引けなかった」と「pane が無い」を混ぜない**（設計 3-82b）。混ぜると、herdr の socket が
+			// **「引けなかった」と「pane が無い」を混ぜない**（設計 3-83b）。混ぜると、herdr の socket が
 			// 一瞬落ちただけで、人間が話している pane の隣に2枚目を開くことになる。
 			o.logger.Warn("pane か workspace の一覧を取れないので、direct chat の pane は用意しません（次の巡回で見ます）",
 				"identifier", issue.Identifier, "error", panesErr)
@@ -192,7 +192,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
-		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけを走らせる**（設計 3-82d の用意の段2）。
+		// 門7: 用意の失敗が上限を超えた。**用意せず、書く経路だけを走らせる**（設計 3-83d の用意の段2）。
 		// **書くのはここだけである。**用意の段2 の失敗（`failDirectChatSetup`）は数えるだけで書かない。
 		// 書けなかったら次の巡回でまた書く。**実際に書けたら（`Wrote`）記録を消す**（下の goroutine）。
 		// **門5・門6 より前で見る。**書く経路は枠も `preflight` も使わないので、枠が埋まっている・
@@ -219,7 +219,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			}(issue)
 			continue
 		}
-		// 門5: 空きスロット。**人間の決定で、枠が尽きたことを知らせる仕組みは作らない**（設計 3-82c）。
+		// 門5: 空きスロット。**人間の決定で、枠が尽きたことを知らせる仕組みは作らない**（設計 3-83c）。
 		// **出すのは Debug 1行だけである。**`clearGate` はこの分岐の外（下の共通の後始末）でも呼ぶ。
 		// **見るのは全体の上限だけである**（`globalFreeSlot`）。Status ごとの上限は当てない。
 		if free, limit := o.globalFreeSlot(); !free {
@@ -228,7 +228,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			o.clearGate(issue.ID)
 			continue
 		}
-		// 門6: 着手の直前の検査。**信頼登録の判定をこの門より前に置いてはならない**（設計 3-82c）。
+		// 門6: 着手の直前の検査。**信頼登録の判定をこの門より前に置いてはならない**（設計 3-83c）。
 		// 先に落とすと、未信頼のリポジトリで direct chat を頼んだ人へ、直し方のコメントが1件も出ない。
 		if !o.preflight(ctx, issue) {
 			o.clearGate(issue.ID)
@@ -244,7 +244,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		o.clearGate(issue.ID)
 
 		// 用意の段1: 印を付け、「用意中」の記録を立てる（着手の段1）。
-		// **`claimForDispatch` ではなく `o.claim` を直に呼ぶ**（設計 3-82d）。あれは印を付けたあとに
+		// **`claimForDispatch` ではなく `o.claim` を直に呼ぶ**（設計 3-83d）。あれは印を付けたあとに
 		// 写しの Status を `running_state` へ書き換える。**写しの Status は書き換えない。**
 		// 書き換えると状態ごとの上限の勘定に入り、direct chat のカードを1枚置いただけで
 		// 通常の着手を1件ぶん失う。
@@ -253,7 +253,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 			continue
 		}
 		rs.beginPreparing()
-		// **閉じる集合にその worktree があれば外す**（設計 3-82f）。印を持った worktree には、
+		// **閉じる集合にその worktree があれば外す**（設計 3-83f）。印を持った worktree には、
 		// 閉じる規則を当てない。
 		o.removeFromCloseSet(issue.ID)
 		claimed = append(claimed, claimedRun{rs: rs, issue: issue})
@@ -262,7 +262,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 		return
 	}
 
-	// **用意の段2 と段3 は別の goroutine で回す**（設計 3-82d / 3-8）。用意の段2 は git の worktree 作成・
+	// **用意の段2 と段3 は別の goroutine で回す**（設計 3-83d / 3-8）。用意の段2 は git の worktree 作成・
 	// 利用者が書いた `workspace_hooks`・起動の待ちを順に通るので、同期に踏むと巡回が最大2分返らない。
 	// **goroutine は1本だけ立てる。**印を付けた順に1本で処理する（`dispatchCandidates` と同じ扱い）。
 	o.wg.Add(1)
@@ -277,7 +277,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 	}()
 }
 
-// setUpDirectChat は用意の段2 と段3 を踏む（設計 3-82d）。
+// setUpDirectChat は用意の段2 と段3 を踏む（設計 3-83d）。
 //
 // **巡回のループから同期で呼んではならない**（設計 3-8）。
 //
@@ -287,7 +287,7 @@ func (o *Orchestrator) prepareDirectChatPanes(ctx context.Context, candidates []
 func (o *Orchestrator) setUpDirectChat(ctx context.Context, rs *runState, issue tracker.Issue) {
 	// 用意の段2: 着手の段3〜段10 を踏む（**着手の段2 と段11 は踏まない**）。
 	//
-	// **`startRun` から入ってはならない**（設計 3-82d）。あれは着手の段2 を踏むので、
+	// **`startRun` から入ってはならない**（設計 3-83d）。あれは着手の段2 を踏むので、
 	// 用意の段2 が `ErrStatusNotWritten` で落ち、pane が1枚もできない。
 	//
 	// **`ErrStartupBusy` は失敗ではない**（herdr が登録していないだけで Claude Code は動いている）。
@@ -298,12 +298,12 @@ func (o *Orchestrator) setUpDirectChat(ctx context.Context, rs *runState, issue 
 		o.failDirectChatSetup(ctx, rs, issue, err)
 		return
 	}
-	// **用意が成功したら、専用の記録を消す**（設計 3-82d の用意の段2）。
+	// **用意が成功したら、専用の記録を消す**（設計 3-83d の用意の段2）。
 	o.forgetDirectChatSetupFailure(issue.ID)
 	o.finishDirectChatSetup(ctx, rs, issue, busy)
 }
 
-// directChatSetupOutcome は用意の段3 の外れ方である（設計 3-82d の外れ方の表）。
+// directChatSetupOutcome は用意の段3 の外れ方である（設計 3-83d の外れ方の表）。
 type directChatSetupOutcome int
 
 const (
@@ -318,16 +318,16 @@ const (
 	setupAbandon
 )
 
-// finishDirectChatSetup は用意の段3 を踏む（設計 3-82d）。
+// finishDirectChatSetup は用意の段3 を踏む（設計 3-83d）。
 //
 // **カードを取り直し、`o.mu` を取ってから「用意中」を下ろす。**同じロックの中で、自分の取り直しと、
-// 巡回が用意中に書いた記録（設計 3-82b の段2）のうち、**見た時刻が新しいほうの Status** で判定する。
+// 巡回が用意中に書いた記録（設計 3-83b の段2）のうち、**見た時刻が新しいほうの Status** で判定する。
 //
 // **ロックの中で行うのは、判定と印の出し入れだけである。**issue への書き込み・`running_state`・
 // hold・`pane.close`・印を外す（`release`）はロックを放してから行う（判断票6周目。
 // `o.release` は自分で `o.mu` を取るので、持ったまま呼ぶと固まる）。
 //
-// **hold のコメントはここでは書かない**（設計 3-82h）。書くのは作業中の Status へ戻ったときだけである。
+// **hold のコメントはここでは書かない**（設計 3-83h）。書くのは作業中の Status へ戻ったときだけである。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 用意の段2 を通った run。
@@ -362,7 +362,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 		outcome = setupLost
 	} else if haveCurrent {
 		decided = current.State
-		// **見た時刻が新しいほうの Status で判定する**（設計 3-82d）。素早く往復すると
+		// **見た時刻が新しいほうの Status で判定する**（設計 3-83d）。素早く往復すると
 		// 1回余計にやり直すだけで、害は無い。
 		if !seenAt.IsZero() && seenAt.After(ownAt) {
 			decided = seenState
@@ -370,7 +370,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 		switch {
 		case config.IsDirectChatState(o.cfg.Tracker, decided) &&
 			(verdict == assigneeSelf || verdict == assigneeLoginUnknown):
-			// **自分のログイン名が取れないときは、3-82h の順2 の「印を持っている機械」と同じく入れる。**
+			// **自分のログイン名が取れないときは、3-83h の順2 の「印を持っている機械」と同じく入れる。**
 			outcome = setupEnter
 			rs.clearSendFirstPrompt()
 			rs.enterDirectChatMode()
@@ -391,7 +391,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 			"identifier", issue.Identifier, "状態", decided)
 		o.postDirectChatReady(ctx, issue)
 	case setupReturned:
-		// **用意の最中に人間が作業中の Status へ戻した**（設計 3-82d の外れ方の表の1行目）。
+		// **用意の最中に人間が作業中の Status へ戻した**（設計 3-83d の外れ方の表の1行目）。
 		// **印は残し、`SendFirstPrompt` を立てたまま、送る印を立てる。**1回目の本文（5-3）が送られる。
 		// Claude Code が既に動いていたなら、送る印の代わりに turn の終わりを待つ印を立てる（下）。
 		// **書き込みが終わってから送る印を立てる**（判断票6周目）。
@@ -421,7 +421,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 			"identifier", issue.Identifier)
 		o.closeDirectChatSetupPane(ctx, rs)
 	default:
-		// **用意の段2 が落ちたときと同じ後始末である。失敗としては数えない**（設計 3-82d）。
+		// **用意の段2 が落ちたときと同じ後始末である。失敗としては数えない**（設計 3-83d）。
 		// `ensureAgentComment` も `after_run` も通らない。
 		o.logger.Info("direct chat の用意を終える前にカードが外れたので、自分で開いた pane を閉じて印を外します",
 			"identifier", issue.Identifier, "状態", decided)
@@ -429,7 +429,7 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 	}
 }
 
-// failDirectChatSetup は、direct chat の用意（用意の段2）が落ちたときの後始末である（設計 3-82d）。
+// failDirectChatSetup は、direct chat の用意（用意の段2）が落ちたときの後始末である（設計 3-83d）。
 //
 // **カンバンへは1バイトも書かない。**通常の着手の失敗は `failure_state` を書くか、バックオフして
 // 再 dispatch する。**どちらも Status を動かすので、人間が置いたカードが `direct_chat_state` から外れる。**
@@ -457,7 +457,7 @@ func (o *Orchestrator) failDirectChatSetup(ctx context.Context, rs *runState, is
 }
 
 // beginDirectChatSetupLimitWrite は、用意の失敗が上限を超えているかを見て、超えていれば書く経路の番を取る
-// （設計 3-82c の門7・3-82d の用意の段2）。
+// （設計 3-83c の門7・3-83d の用意の段2）。
 //
 // **比べ方は通常の着手（`skipByFailure`）と同じ「回数が `agent.max_retries` を超えたら」である。**
 // `agent.max_retries: 0` なら1回目の失敗で超える。「達したら」にすると、0 のときに一度も書かれない。
@@ -487,7 +487,7 @@ func (o *Orchestrator) beginDirectChatSetupLimitWrite(issueID string) (string, b
 		count, reason, o.cfg.Tracker.DirectChatState, o.cfg.Tracker.FailureState), true, true
 }
 
-// endDirectChatSetupLimitWrite は、書く経路の番を返す（設計 3-82c の門7）。
+// endDirectChatSetupLimitWrite は、書く経路の番を返す（設計 3-83c の門7）。
 //
 // **記録が既に消えていれば何もしない**（書けてカードが候補から外れた巡回で消える）。
 //
@@ -500,7 +500,7 @@ func (o *Orchestrator) endDirectChatSetupLimitWrite(issueID string) {
 	}
 }
 
-// abandonDirectChatSetup は、用意した run の自分で開いた pane を閉じ、印を外す（設計 3-82d）。
+// abandonDirectChatSetup は、用意した run の自分で開いた pane を閉じ、印を外す（設計 3-83d）。
 //
 // **`stopWorker` を通さない。**あれは direct chat の門で必ず止まるので、自分で開いた pane を
 // 1枚も閉じられない。**pane の ID を直接閉じる。**
@@ -516,7 +516,7 @@ func (o *Orchestrator) abandonDirectChatSetup(ctx context.Context, rs *runState)
 	}
 }
 
-// closeDirectChatSetupPane は、direct chat の用意か打ち切りで、自分が開いた pane を閉じる（設計 3-82d / 3-82f）。
+// closeDirectChatSetupPane は、direct chat の用意か打ち切りで、自分が開いた pane を閉じる（設計 3-83d / 3-83f）。
 //
 // **`stopWorker` を通らない。**あれは direct chat の run では必ず門で止まる。
 //
@@ -549,7 +549,7 @@ func (o *Orchestrator) closeDirectChatSetupPane(ctx context.Context, rs *runStat
 		"identifier", rs.issue().Identifier, "pane_id", paneID)
 }
 
-// noteDirectChatSetupFailure は用意の失敗を専用の記録へ1つ数える（設計 3-82d）。
+// noteDirectChatSetupFailure は用意の失敗を専用の記録へ1つ数える（設計 3-83d）。
 //
 // issueID: project item の ID。
 // reason: 落ちた理由。
@@ -568,7 +568,7 @@ func (o *Orchestrator) noteDirectChatSetupFailure(issueID, reason string) int {
 	return note.Count
 }
 
-// forgetDirectChatSetupFailure は用意の失敗の記録を消す（用意が成功したときと、門7 の書く経路が実際に書けたとき。設計 3-82d）。
+// forgetDirectChatSetupFailure は用意の失敗の記録を消す（用意が成功したときと、門7 の書く経路が実際に書けたとき。設計 3-83d）。
 //
 // issueID: project item の ID。
 func (o *Orchestrator) forgetDirectChatSetupFailure(issueID string) {
@@ -577,7 +577,7 @@ func (o *Orchestrator) forgetDirectChatSetupFailure(issueID string) {
 	delete(o.directChatSetupFailures, issueID)
 }
 
-// forgetDirectChatSetupFailuresNotIn は、この巡回の direct chat の候補に無い issue の記録を消す（設計 3-82d）。
+// forgetDirectChatSetupFailuresNotIn は、この巡回の direct chat の候補に無い issue の記録を消す（設計 3-83d）。
 //
 // candidates: この巡回の direct chat の候補。
 func (o *Orchestrator) forgetDirectChatSetupFailuresNotIn(candidates []tracker.Issue) {
@@ -594,7 +594,7 @@ func (o *Orchestrator) forgetDirectChatSetupFailuresNotIn(candidates []tracker.I
 	}
 }
 
-// directChatSetupBackoff は、用意が直前に落ちてから間隔が空いていないかを返す（設計 3-82c の門7）。
+// directChatSetupBackoff は、用意が直前に落ちてから間隔が空いていないかを返す（設計 3-83c の門7）。
 //
 // **間隔は通常の着手のバックオフと同じ計算である**（`retryBackoff`）。
 //
@@ -622,12 +622,12 @@ func (o *Orchestrator) directChatSetupBackoff(issueID string) (time.Duration, bo
 }
 
 // writeDirectChatAssigneeFailureAsync は、担当者が0人か2人以上の direct chat のカードへ
-// `failure_state` を書きに行く（設計 3-82h の判定の表の順1）。
+// `failure_state` を書きに行く（設計 3-83h の判定の表の順1）。
 //
-// **巡回のループの外で書く**（設計 3-82h / 3-8）。巡回のループの中で決めるのは、
+// **巡回のループの外で書く**（設計 3-83h / 3-8）。巡回のループの中で決めるのは、
 // どの表の行に当たったかと、印の出し入れだけである。
 //
-// **判定に使った担当者は、その巡回の取得の値である。**書く直前に取り直さない（設計 3-82h）。
+// **判定に使った担当者は、その巡回の取得の値である。**書く直前に取り直さない（設計 3-83h）。
 //
 // **書いている最中の issue には、次の goroutine を立てない**（上限の書き込みの `Writing` と同じ番）。
 // 呼び出し元は門3 と巡回の段1 の2つで、どちらも巡回ごとに呼ぶ。書き込みが巡回の間隔より長くかかると、
@@ -667,9 +667,9 @@ func (o *Orchestrator) writeDirectChatAssigneeFailureAsync(ctx context.Context, 
 	}()
 }
 
-// writeDirectChatFailure は、direct chat のカードへ `failure_state` を書く（設計 3-82h の「書く経路」）。
+// writeDirectChatFailure は、direct chat のカードへ `failure_state` を書く（設計 3-83h の「書く経路」）。
 //
-// **3-82e の不変条件2（`direct_chat_state` のカードへ Status を書かない）の、唯一の例外である。**
+// **3-83e の不変条件2（`direct_chat_state` のカードへ Status を書かない）の、唯一の例外である。**
 // **呼ぶ場面は2つある。**担当者が0人か2人以上のときと、用意の失敗が上限に達したとき。
 //
 // **取り直した Status が `direct_chat_state` のときだけ書く（許可リスト）。**
@@ -724,7 +724,7 @@ func (o *Orchestrator) writeDirectChatFailure(ctx context.Context, issue tracker
 }
 
 // statusesOtherThan は、`UpdateStatus` を許可リストとして使うための拒否リストを返す
-// （設計 3-82h の「書く経路」と 3-82g の `running_state` の書き込み）。
+// （設計 3-83h の「書く経路」と 3-83g の `running_state` の書き込み）。
 //
 // **中身は、カンバンの選択肢のうち allowed 以外の全部と、空文字である。**`UpdateStatus` は書く直前に
 // 取り直した値と拒否リストを同じ正規化で比べるので、取り直した値が allowed のときだけ書く。
@@ -751,7 +751,7 @@ func (o *Orchestrator) statusesOtherThan(allowed string) ([]string, bool) {
 }
 
 // letGoOfDirectChatAsync は、担当者が別の1人に替わった direct chat の run から手を離す
-// （設計 3-82h の「手を離す経路」）。
+// （設計 3-83h の「手を離す経路」）。
 //
 //	段1 direct chat を抜けさせる（印を下ろし、捨てるもの3つと時計を処理する）
 //	段2 `stopBecauseHandoffLost` と同じ形で片付ける。Status を書かず、`after_run` を走らせず、
@@ -790,7 +790,7 @@ func (o *Orchestrator) letGoOfDirectChatAsync(ctx context.Context, rs *runState,
 	}()
 }
 
-// directChatPaneIndex は、門4 が「この worktree に pane が1枚でもあるか」を引くための写像である（設計 3-82c）。
+// directChatPaneIndex は、門4 が「この worktree に pane が1枚でもあるか」を引くための写像である（設計 3-83c）。
 type directChatPaneIndex struct {
 	// cwds は、pane の cwd（シンボリックリンク解決済み）の集合である。
 	cwds map[string]bool
@@ -801,7 +801,7 @@ type directChatPaneIndex struct {
 	worktreeWorkspaces map[string]string
 }
 
-// directChatPanes は、この巡回で使う pane の写像を1回だけ作る（設計 3-82b）。
+// directChatPanes は、この巡回で使う pane の写像を1回だけ作る（設計 3-83b）。
 //
 // **候補1件ごとに引き直してはならない。**`pane.list` は機械中の pane を全部返すので、
 // 候補が N 件あると巡回1回で N 本になる。**`pane.list` と `workspace.list` を1回ずつ投げる。**
@@ -812,7 +812,7 @@ type directChatPaneIndex struct {
 // 戻り値の1つ目: 門4 が引く写像。
 // 戻り値の2つ目: どちらかを引けなかった理由。
 func (o *Orchestrator) directChatPanes(ctx context.Context) (directChatPaneIndex, error) {
-	// **`agent.list` は投げない**（設計 3-82b）。pane の有無しか要らない。
+	// **`agent.list` は投げない**（設計 3-83b）。pane の有無しか要らない。
 	index := directChatPaneIndex{
 		cwds:                map[string]bool{},
 		workspacesWithPanes: map[string]bool{},
@@ -850,7 +850,7 @@ func (o *Orchestrator) directChatPanes(ctx context.Context) (directChatPaneIndex
 	return index, nil
 }
 
-// directChatPaneExists は、その issue の worktree に pane が1枚でもあるかを返す（設計 3-82c の門4）。
+// directChatPaneExists は、その issue の worktree に pane が1枚でもあるかを返す（設計 3-83c の門4）。
 //
 // **当たるのは2通りである。**どちらか一方でも当たれば「ある」と答える。
 //
@@ -897,7 +897,7 @@ func (o *Orchestrator) directChatPaneExists(panes directChatPaneIndex, issue tra
 	return false, nil
 }
 
-// postDirectChatReady は「話しかけられます」を issue へ1件書く（設計 3-82d の用意の段3）。
+// postDirectChatReady は「話しかけられます」を issue へ1件書く（設計 3-83d の用意の段3）。
 //
 // **これを書かないと、人間はカードを動かしたあと、いつ pane ができたのかを知る手段が無い。**
 // continuo は Status を動かさないので、カンバンは1バイトも変わらない。
@@ -925,7 +925,7 @@ func (o *Orchestrator) postDirectChatReady(ctx context.Context, issue tracker.Is
 }
 
 // postDirectChatHold は、direct chat から作業中の Status へ戻したときに hold のコメントを1件書く
-// （設計 3-82h の「戻したときに hold を書く」）。
+// （設計 3-83h の「戻したときに hold を書く」）。
 //
 // **人間向けの文だけを入札の hold と別に決める。**先頭の印と、そのあとの JSON は入札の hold と同じにする
 // （`assignee` に自分のログイン名、`branch` にこの run の branch）。`ParseHold` は JSON を読めないと
@@ -962,13 +962,13 @@ func (o *Orchestrator) postDirectChatHold(ctx context.Context, issue tracker.Iss
 }
 
 // writeRunningStateOnReturn は、direct chat から `dispatch_state` へ戻されたときに `running_state` を書く
-// （設計 3-82g の表の2行目）。
+// （設計 3-83g の表の2行目）。
 //
 // **`dispatch_state` そのものとの一致で判定する**（`directChatReturnState`）。
-// **3-82g の書き込みと用意の段3 は、この同じ関数を呼ぶ**（`UpdateStatus` の呼び出しを増やさない。設計 3-82d）。
+// **3-83g の書き込みと用意の段3 は、この同じ関数を呼ぶ**（`UpdateStatus` の呼び出しを増やさない。設計 3-83d）。
 //
 // **書けなくても続ける。**指示を送るほうが、Status の見た目より重い。次の巡回で書き直しはしない
-// （判断票6周目。既存の 3-82g の書き込みと同じ扱い）。
+// （判断票6周目。既存の 3-83g の書き込みと同じ扱い）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 戻した run。
@@ -1001,7 +1001,7 @@ func (o *Orchestrator) writeRunningStateOnReturn(ctx context.Context, rs *runSta
 	}
 }
 
-// directChatReturnState は、direct chat から戻った先で書くべき Status を返す（設計 3-82g）。
+// directChatReturnState は、direct chat から戻った先で書くべき Status を返す（設計 3-83g）。
 //
 // **`dispatch_state`（既定 `Ready`）へ戻されたときだけ、`running_state` を書く。**
 // 書かないと2つ壊れる。状態ごとの上限（`agent.max_concurrent_agents_by_state`）は
@@ -1027,16 +1027,16 @@ func directChatReturnState(cfg config.TrackerConfig, state string) (string, bool
 }
 
 // returnFromDirectChatAsync は、direct chat から作業中の Status へ戻した run の後始末を行う
-// （設計 3-82b の段4・3-82g）。
+// （設計 3-83b の段4・3-83g）。
 //
 // **巡回のループから同期で呼んではならない。**ここは通信を最大3本以上行う
 // （`UpdateStatus` は取り直しと書き込み、hold の `PostComment`、記録の `PostComment`）。
 //
-// **続きの指示を送る印は、書き込みが終わってから立てる**（設計 3-82b の段4）。
+// **続きの指示を送る印は、書き込みが終わってから立てる**（設計 3-83b の段4）。
 // **送る直前に `agent.get` で応答を書いている最中かを見る**（`busyCheckBeforeSend`。turn ループが見る）。
 // 人間が話しかけた直後（応答を書いている最中）に戻すのは自然な操作で、そこへ投げると turn が混ざる。
 //
-// **turn 数は数え直さない**（設計 3-82j）。人間が2回切り替えるだけで上限が外れる形にはしない。
+// **turn 数は数え直さない**（設計 3-83j）。人間が2回切り替えるだけで上限が外れる形にはしない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 戻す run。
@@ -1055,7 +1055,7 @@ func (o *Orchestrator) returnFromDirectChatAsync(ctx context.Context, rs *runSta
 }
 
 // abortTerminalForHuman は「人間が direct chat へ引き取ったので、この run を終わらせるのをやめる」を判定する
-// （設計 3-82f）。
+// （設計 3-83f）。
 //
 // **終わらせる処理は、印を取ってから終わるまでに長くかかる。**その間に人間がカードを動かすことがある。
 // **`stopWorker` の門だけでは足りない。**あの門は pane を守るが、この経路はそのあとで印まで外す。
@@ -1066,7 +1066,7 @@ func (o *Orchestrator) returnFromDirectChatAsync(ctx context.Context, rs *runSta
 //
 //	`PaneID` が空でなく `agent.start` が済んでいる … 終わらせる処理をやめ、印を残す（巡回が direct chat へ入れる）
 //	`PaneID` が空、または `agent.start` がまだ     … 後者なら自分で開いた pane を ID で閉じ、印を外す
-//	                                                 （次の巡回で 3-82c が pane を用意し直す）
+//	                                                 （次の巡回で 3-83c が pane を用意し直す）
 //
 // **どちらでも、終端の権利（`claimTerminal` で取ったもの）を `endTerminal` で返す。**
 //
@@ -1089,7 +1089,7 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 		// 同じ pane で続かないまま stall で打ち切られる。**
 		//
 		// **`SendFirstPrompt` は前の値へ戻す。**`beginAttempt` は立てるが、戻したときに送るのは
-		// 継続の指示である（設計 3-82g）。**`resumed` は真にする**（同じセッションなので累計トークンを畳み込まない）。
+		// 継続の指示である（設計 3-83g）。**`resumed` は真にする**（同じセッションなので累計トークンを畳み込まない）。
 		if rs.stoppedByContinuo() {
 			sendFirst := rs.snapshot().SendFirstPrompt
 			rs.beginAttempt(true)
@@ -1100,8 +1100,8 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 		rs.endTerminal()
 		return true
 	}
-	// **pane の無い印を残してはならない**（誰も気づかない。設計 3-82j）。印を外せば、
-	// 次の巡回で 3-82c が pane を用意し直す。**Status を書かず、コメントを書かない。**
+	// **pane の無い印を残してはならない**（誰も気づかない。設計 3-83j）。印を外せば、
+	// 次の巡回で 3-83c が pane を用意し直す。**Status を書かず、コメントを書かない。**
 	o.logger.Info("人間が引き取りましたが、この run の pane はもう Claude Code を持っていないので印を外します"+
 		"（次の巡回で pane を用意し直します）",
 		"identifier", rs.issue().Identifier, "やめた理由", summaryLine(reason), "pane_id", paneID)
@@ -1115,7 +1115,7 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 }
 
 // cardInDirectChat は、run の控えの Status（最後に取り直したカードの Status）が `direct_chat_state` かを返す
-// （設計 3-82f）。
+// （設計 3-83f）。
 //
 // **送る側（`wakeRuns` と turn ループの先頭）は、印（`inDirectChatMode`）とこれの両方で見る。**
 // 印を立てるのは巡回の段1 だけなので、turn の終わりが控えを `direct_chat_state` にしてから
@@ -1128,7 +1128,7 @@ func (o *Orchestrator) cardInDirectChat(rs *runState) bool {
 	return config.IsDirectChatState(o.cfg.Tracker, rs.issue().State)
 }
 
-// addToCloseSet は、worktree を「agent 名を問わず閉じる worktree の集合」へ入れる（設計 3-82f）。
+// addToCloseSet は、worktree を「agent 名を問わず閉じる worktree の集合」へ入れる（設計 3-83f）。
 //
 // **閉じるのは、印を持たずに Status が `active_states` へ戻った巡回だけである**（`reconcileWorktrees`）。
 // それ以外の Status では、閉じずに集合に残す。
@@ -1144,7 +1144,7 @@ func (o *Orchestrator) addToCloseSet(itemID, path string) {
 	o.closeSet[itemID] = path
 }
 
-// removeFromCloseSet は、閉じる集合から外す（設計 3-82f）。
+// removeFromCloseSet は、閉じる集合から外す（設計 3-83f）。
 //
 // **外すのは3つの場面だけである。**閉じ終えたとき・走査に出てこなくなったとき・用意の段1 で印を付けたとき。
 //
@@ -1155,7 +1155,7 @@ func (o *Orchestrator) removeFromCloseSet(itemID string) {
 	delete(o.closeSet, itemID)
 }
 
-// inCloseSet は、閉じる集合に入っているかを返す（設計 3-82f）。
+// inCloseSet は、閉じる集合に入っているかを返す（設計 3-83f）。
 //
 // **集合にあるあいだは、通常の候補のループ（`dispatchCandidates`）はその issue を飛ばす。**
 // **direct chat の1パスは集合を見ない。**見ると、`Blocked` や `In Review` から入った issue
@@ -1170,7 +1170,7 @@ func (o *Orchestrator) inCloseSet(itemID string) bool {
 	return ok
 }
 
-// pruneCloseSet は、走査に出てこなくなった worktree を閉じる集合から外す（設計 3-82f）。
+// pruneCloseSet は、走査に出てこなくなった worktree を閉じる集合から外す（設計 3-83f）。
 //
 // present: 走査で身元ファイルを読めた worktree の project item の ID。
 func (o *Orchestrator) pruneCloseSet(present map[string]bool) {

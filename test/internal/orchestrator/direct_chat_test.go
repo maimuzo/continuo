@@ -1,4 +1,4 @@
-// 人間が pane で直接エージェントと話しているあいだの振る舞いの検査である（設計 3-82）。
+// 人間が pane で直接エージェントと話しているあいだの振る舞いの検査である（設計 3-83）。
 //
 // **守るのは1つだけである。「direct chat の run に対して `pane.close` を呼ばない」。**
 // 呼ばれた瞬間に、人間が話していた画面が消える。
@@ -24,7 +24,7 @@ const humanState = "Human"
 
 // directChatBoardOptions はカンバンの Status の選択肢である（`humanState` を含む）。
 //
-// **書く経路（設計 3-82h）は、この写しから拒否リストを作る。**写しが空なら書かない。
+// **書く経路（設計 3-83h）は、この写しから拒否リストを作る。**写しが空なら書かない。
 var directChatBoardOptions = []string{"Ready", "In Progress", "In Review", "Blocked", "Done", humanState}
 
 // withDirectChatState は `tracker.direct_chat_state` を設定した検査対象を作る。
@@ -41,7 +41,7 @@ func withDirectChatState(t *testing.T) *stubFixture {
 
 // withDirectChatStateOn は、テスト用トラッカー mock を指定して withDirectChatState と同じものを作る。
 //
-// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-82h）。
+// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-83h）。
 //
 // t: 呼び出し元のテスト。
 // ft: 使うトラッカー。nil なら新しく作る。
@@ -60,10 +60,10 @@ func withDirectChatStateOn(t *testing.T, ft *fakeTracker) *stubFixture {
 	return fx
 }
 
-// adoptOwnRun は、担当者がこの continuo のアカウント1人の run を印の集合へ入れる（設計 3-82h）。
+// adoptOwnRun は、担当者がこの continuo のアカウント1人の run を印の集合へ入れる（設計 3-83h）。
 //
 // **direct chat に居られるのは、担当者が自分1人のときだけである。**担当者を付けずに
-// direct chat へ動かすと、3-82h の判定の表の順1 に当たり `failure_state` へ落ちる。
+// direct chat へ動かすと、3-83h の判定の表の順1 に当たり `failure_state` へ落ちる。
 //
 // fx: 対象の stubFixture。
 // number: issue の番号。
@@ -117,7 +117,7 @@ func TestDirectChatMode_directChatのあいだは画面が止まっていても�
 
 // TestDirectChatMode_作業中のStatusへ戻すと同じpaneへ続きの指示を送る は、戻し方を確かめる。
 //
-// 目的: 設計 3-82 の「`active_states` へ戻したら、**同じ pane・同じセッションのまま**
+// 目的: 設計 3-83 の「`active_states` へ戻したら、**同じ pane・同じセッションのまま**
 // 続きの指示を1回送る」を示す。**pane を閉じて作り直さない。**
 //
 // 与える情報: direct chat に入れたあと、Status を `In Progress` へ戻した run。
@@ -145,7 +145,7 @@ func TestDirectChatMode_作業中のStatusへ戻すと同じpaneへ続きの指�
 
 		// 人間が continuo へ返す。
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
-		// **戻すときの後始末は巡回のループの外で走る**（設計 3-82）。
+		// **戻すときの後始末は巡回のループの外で走る**（設計 3-83）。
 		// **1回目の巡回で印が立ち、2回目の `wakeRuns` が指示を送る。**
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
@@ -203,7 +203,7 @@ func TestDirectChatMode_エージェントが動いている最中に戻した�
 
 // TestDirectChatMode_完了のStatusへ動かすとdirect chatを抜けて片付ける は、抜け方を確かめる。
 //
-// 目的: **抜ける条件を「`active_states` へ戻ったとき」に絞ってはならない**（設計 3-82）。
+// 目的: **抜ける条件を「`active_states` へ戻ったとき」に絞ってはならない**（設計 3-83）。
 // 絞ると `Done` へ動かしたときに印が立ったままになり、`stopWorker` の門が pane を守り続けて
 // **worktree も片付かない。**
 //
@@ -328,7 +328,7 @@ func TestDirectChatMode_設定していなければいままでどおり止め�
 }
 
 // TestDirectChat_カンバンに選択肢が無ければ候補の一覧へ足さない は、
-// 「起動はするのに1件も着手されない」を塞ぐ（設計 3-82）。
+// 「起動はするのに1件も着手されない」を塞ぐ（設計 3-83）。
 //
 // 目的: **`FetchIssuesByStates` は、カンバンに無い Status 名を渡されると
 // 0件ではなくエラーを返す**（`tracker.verifyKnownStates`）。**そのエラーは候補の取得
@@ -371,7 +371,7 @@ func TestDirectChat_カンバンに選択肢が無ければ候補の一覧へ足
 	}
 }
 
-// TestDirectChat_着手待ちへ戻したら作業中のStatusを書く は、設計 3-82 の書き込みを確かめる。
+// TestDirectChat_着手待ちへ戻したら作業中のStatusを書く は、設計 3-83 の書き込みを確かめる。
 //
 // 目的: **direct chat の run は、着手の段2 を1度も通っていない。**
 // `dispatch_state`（既定 `Ready`）へ戻されたまま放っておくと、
@@ -393,7 +393,7 @@ func TestDirectChat_着手待ちへ戻したら作業中のStatusを書く(t *te
 
 		fx.Herdr.SetStatus(herdr.AgentStatusIdle)
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.DispatchState)
-		// **戻すときの後始末は巡回のループの外で走る**（設計 3-82）。
+		// **戻すときの後始末は巡回のループの外で走る**（設計 3-83）。
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 		fx.Orc.Tick(context.Background())
@@ -453,7 +453,7 @@ func containsFoldStr(values []string, target string) bool {
 }
 
 // TestDirectChat_カードがdirectChatになった巡回では何もしない は、
-// 巡回の分岐を確かめる（設計 3-82）。
+// 巡回の分岐を確かめる（設計 3-83）。
 //
 // 目的: **カードが `direct_chat_state` になった最初の巡回で、pane も印も触らない**ことを示す。
 //
@@ -486,7 +486,7 @@ func TestDirectChat_カードがdirectChatになった巡回では何もしな�
 }
 
 // TestDirectChat_段2の拒否リストにdirectChatのStatusが入っている は、
-// 着手の最後の砦を確かめる（設計 3-82）。
+// 着手の最後の砦を確かめる（設計 3-83）。
 //
 // 目的: **`dispatchBlockedStates` は拒否リストであって「`active_states` の外を全部」ではない。**
 // **足さないと、人間が着手の隙間にカードを direct chat へ動かしたとき、
@@ -502,7 +502,7 @@ func TestDirectChat_段2の拒否リストにdirectChatのStatusが入ってい�
 	}
 }
 
-// assigneesInvalidMarker は、担当者が1人でないときに issue へ書くコメントにだけ出る文字列である（設計 3-82h）。
+// assigneesInvalidMarker は、担当者が1人でないときに issue へ書くコメントにだけ出る文字列である（設計 3-83h）。
 const assigneesInvalidMarker = "担当者を1人だけにしてください"
 
 // commentsContaining は、issue のコメントのうち本文に substr を含むものの数を返す。
@@ -522,7 +522,7 @@ func commentsContaining(ft *fakeTracker, nodeID, substr string) int {
 }
 
 // TestDirectChat_担当者が0人の候補はfailure_stateへ動かしてコメントを1件書く は、
-// 3-82h の判定の表の順1（印を持っていない機械）を確かめる。
+// 3-83h の判定の表の順1（印を持っていない機械）を確かめる。
 //
 // 目的: 人間の決定「担当者が1人だけの状態以外で direct chat に移したら、エラーとして blocked に遷移して良い。
 // その際、担当者を1人だけ設定する旨をコメントに書いておいて」を示す。
@@ -551,7 +551,7 @@ func TestDirectChat_担当者が0人の候補はfailure_stateへ動かしてコ�
 	})
 }
 
-// TestDirectChat_担当者が2人の候補もfailure_stateへ動かす は、3-82h の判定の表の順1（2人以上）を確かめる。
+// TestDirectChat_担当者が2人の候補もfailure_stateへ動かす は、3-83h の判定の表の順1（2人以上）を確かめる。
 //
 // 目的: 「複数人は NG」（人間の決定）を示す。自分が含まれていても NG である。
 // 与える情報: Status が direct chat で担当者が2人（自分と他人）の候補。
@@ -575,7 +575,7 @@ func TestDirectChat_担当者が2人の候補もfailure_stateへ動かす(t *tes
 	})
 }
 
-// TestDirectChat_担当者が1人で他人の候補には何もしない は、3-82h の判定の表の順3（印を持っていない機械）を確かめる。
+// TestDirectChat_担当者が1人で他人の候補には何もしない は、3-83h の判定の表の順3（印を持っていない機械）を確かめる。
 //
 // 目的: どの機械が pane を持つかは担当者だけで決まる。**他人のアカウントが担当なら、この機械は何もしない。**
 // 与える情報: Status が direct chat で担当者が1人（他人）の候補。
@@ -605,7 +605,7 @@ func TestDirectChat_担当者が1人で他人の候補には何もしない(t *t
 	})
 }
 
-// TestDirectChat_ログイン名が取れない巡回では候補に何もしない は、3-82h の判定の表の順2 を確かめる。
+// TestDirectChat_ログイン名が取れない巡回では候補に何もしない は、3-83h の判定の表の順2 を確かめる。
 //
 // 目的: 自分が誰か分からないまま pane を用意しない（印を持っていない機械は、この巡回では何もしない）。
 // 与える情報: gh の持ち主を取れない状態で、担当者1人の direct chat の候補。
@@ -631,7 +631,7 @@ func TestDirectChat_ログイン名が取れない巡回では候補に何もし
 }
 
 // TestDirectChat_印を持つrunの担当者が0人になったらfailure_stateへ動かし指示を送らない は、
-// 3-82h の判定の表の順1（印を持っている機械）を確かめる。
+// 3-83h の判定の表の順1（印を持っている機械）を確かめる。
 //
 // 目的: **入ったあとも毎巡回同じ判定を当てる**（人間の決定）。direct chat の最中に担当者を外すと
 // `failure_state` へ落ちてチャットが切れる。**書けるまでの巡回で turn を送らないよう、印も立てる。**
@@ -657,7 +657,7 @@ func TestDirectChat_印を持つrunの担当者が0人になったらfailure_sta
 			t.Fatalf("担当者が1人でない direct chat の run へ指示を送った: %v", got)
 		}
 
-		// **次の巡回で、`failure_state` の既存の出口（3-82g）が pane を閉じる。**
+		// **次の巡回で、`failure_state` の既存の出口（3-83g）が pane を閉じる。**
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 		if ids := fx.Herdr.ClosedPanes(); len(ids) == 0 {
@@ -666,7 +666,7 @@ func TestDirectChat_印を持つrunの担当者が0人になったらfailure_sta
 	})
 }
 
-// TestDirectChat_印を持つrunの担当者が他人に替わったら手を離す は、3-82h の「手を離す経路」を確かめる。
+// TestDirectChat_印を持つrunの担当者が他人に替わったら手を離す は、3-83h の「手を離す経路」を確かめる。
 //
 // 目的: 担当者が別の1人に替わったら、印を持つ機械は pane を閉じ、印を外す。
 // **Status を書かず、コメントも書かない。**新しい担当者の機械が pane を用意する。
@@ -706,7 +706,7 @@ func TestDirectChat_印を持つrunの担当者が他人に替わったら手を
 	})
 }
 
-// TestDirectChat_印を持つrunはログイン名が取れなくてもdirect_chatへ入れる は、3-82h の順2（印を持っている機械）を確かめる。
+// TestDirectChat_印を持つrunはログイン名が取れなくてもdirect_chatへ入れる は、3-83h の順2（印を持っている機械）を確かめる。
 //
 // 目的: **判定できないあいだは turn を送らない側へ倒す。**
 // 与える情報: 印を持つ run。gh の持ち主を取れない状態でカードを direct chat へ動かす。
@@ -733,7 +733,7 @@ func TestDirectChat_印を持つrunはログイン名が取れなくてもdirect
 	})
 }
 
-// TestDirectChat_選択肢の写しが空なら書く経路は書かない は、3-82e の書く経路の拒否リストを確かめる。
+// TestDirectChat_選択肢の写しが空なら書く経路は書かない は、3-83e の書く経路の拒否リストを確かめる。
 //
 // 目的: 拒否リストは「カンバンの選択肢のうち direct chat 以外の全部」で作る。
 // **写しが空なら、書かずに WARN を1行出す**（空の拒否リストで書くと、人間が戻した直後のカードを上書きする）。
@@ -758,7 +758,7 @@ func TestDirectChat_選択肢の写しが空なら書く経路は書かない(t 
 	})
 }
 
-// TestDirectChat_2台が同時に書いてもコメントは実際に書いた1台だけ は、3-82h の「`Wrote` のときだけコメント」を確かめる。
+// TestDirectChat_2台が同時に書いてもコメントは実際に書いた1台だけ は、3-83h の「`Wrote` のときだけコメント」を確かめる。
 //
 // 目的: 見張っている全台が書こうとするが、実際に書けるのは取り直しの時点で先に書いた1台である。
 // **`Reached`（既にその値だった）や、取り直すと direct chat でなかったときにはコメントを書かない。**
@@ -789,7 +789,7 @@ func TestDirectChat_2台が同時に書いてもコメントは実際に書い�
 	})
 }
 
-// TestDirectChat_未設定のStatusへは書く経路は書かない は、3-82e の「取り直した値が未設定なら書かない」を確かめる。
+// TestDirectChat_未設定のStatusへは書く経路は書かない は、3-83e の「取り直した値が未設定なら書かない」を確かめる。
 //
 // 目的: 人間が Status を外した item に `Blocked` を付けない。
 // 与える情報: 担当者0人の direct chat の候補。書き込みを止めているあいだに人間が Status を外す。
@@ -816,7 +816,7 @@ func TestDirectChat_未設定のStatusへは書く経路は書かない(t *testi
 	})
 }
 
-// TestDirectChat_戻したときにholdを書く は、3-82h の「戻したときに hold を書く」を確かめる。
+// TestDirectChat_戻したときにholdを書く は、3-83h の「戻したときに hold を書く」を確かめる。
 //
 // 目的: 用意した run には hold が1件も無い。**書かないと、別の機械からは「人間が付けた担当者」に見え、
 // 「担当者を外してください」という案内を公開の issue へ投稿する。**
@@ -851,7 +851,7 @@ func TestDirectChat_戻したときにholdを書く(t *testing.T) {
 	})
 }
 
-// TestDirectChat_打ち切りはClaude_Codeが起動済みのpaneなら印を残す は、3-82f の打ち切りの1通り目を確かめる。
+// TestDirectChat_打ち切りはClaude_Codeが起動済みのpaneなら印を残す は、3-83f の打ち切りの1通り目を確かめる。
 //
 // 目的: 終わらせる処理の最中に人間が direct chat へ引き取ったとき、**その pane で `agent.start` が
 // 済んでいるなら、終わらせる処理をやめて印を残す。**人間はその pane で話せる。
@@ -873,11 +873,11 @@ func TestDirectChat_打ち切りはClaudeCodeが起動済みのpaneなら印を�
 	}
 }
 
-// TestDirectChat_打ち切りはagent_startが済んでいないpaneなら閉じて印を外す は、3-82f の打ち切りの2通り目を確かめる。
+// TestDirectChat_打ち切りはagent_startが済んでいないpaneなら閉じて印を外す は、3-83f の打ち切りの2通り目を確かめる。
 //
 // 目的: `PaneID` が立っていても、その pane で `agent.start` が済んでいなければ Claude Code は居ない
 // （continuo が開いたばかりのシェル）。**自分で開いた pane を ID で閉じ、印を外す。**
-// **印を残すと、pane の無い印になり誰も気づかない**（3-82j）。
+// **印を残すと、pane の無い印になり誰も気づかない**（3-83j）。
 // 与える情報: `agent.start` が済んでいない pane を持つ run。
 // 成功条件: 打ち切り、その pane を閉じ、印を外すこと。
 func TestDirectChat_打ち切りはagentStartが済んでいないpaneなら閉じて印を外す(t *testing.T) {
@@ -896,7 +896,7 @@ func TestDirectChat_打ち切りはagentStartが済んでいないpaneなら閉�
 	}
 }
 
-// TestDirectChat_打ち切りはpaneが既に閉じていれば印を外すだけ は、3-82f の打ち切りの2通り目（`PaneID` が空）を確かめる。
+// TestDirectChat_打ち切りはpaneが既に閉じていれば印を外すだけ は、3-83f の打ち切りの2通り目（`PaneID` が空）を確かめる。
 //
 // 目的: この処理の `stopWorker` が閉じたあとで当たったら、**閉じる相手は居ないので印を外すだけにする。**
 // 与える情報: `PaneID` が空の run。

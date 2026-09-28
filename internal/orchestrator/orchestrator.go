@@ -132,7 +132,7 @@ type Tracker interface {
 	RemoveAssignees(ctx context.Context, issueNodeID string, assigneeIDs []string) ([]tracker.Assignee, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
-	// StatusOptionNames はカンバン側の Status の選択肢名を全部返す（設計 3-82）。
+	// StatusOptionNames はカンバン側の Status の選択肢名を全部返す（設計 3-83）。
 	//
 	// **`tracker.direct_chat_state` がカンバンに在るかを、候補を取りに行く前に見るために要る。**
 	// **在らない名前を `FetchIssuesByStates` へ渡すと、その巡回の dispatch が丸ごと落ちる**
@@ -151,7 +151,7 @@ type Tracker interface {
 type HerdrClient interface {
 	// PaneList は workspace の pane を引く（設計 3-16 の段8）。
 	PaneList(ctx context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error)
-	// WorkspaceList は workspace の一覧を引く（設計 3-82c の門4。worktree を開いている workspace を引く）。
+	// WorkspaceList は workspace の一覧を引く（設計 3-83c の門4。worktree を開いている workspace を引く）。
 	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
 	// WorktreeOpen は既にある worktree を workspace として開く。
 	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
@@ -405,10 +405,10 @@ type Orchestrator struct {
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
 	// directChatMissingNoted は「tracker.direct_chat_state の選択肢がカンバンに無い」を
-	// 既に知らせたかどうかである（設計 3-82）。**1回だけ出す。**
+	// 既に知らせたかどうかである（設計 3-83）。**1回だけ出す。**
 	// 選択肢は人間がカンバンを触ったときにしか増えないので、毎巡回で言い直す意味が無い。
 	directChatMissingNoted bool
-	// closeSet は「agent 名を問わず閉じる worktree の集合」である（設計 3-82f の表の最後から2行目）。
+	// closeSet は「agent 名を問わず閉じる worktree の集合」である（設計 3-83f の表の最後から2行目）。
 	// **キーは project item の ID、値はその worktree の絶対パス。mu が守る。メモリだけに持つ。**
 	//
 	// **入れるのは3つである。**復元で取り直しに失敗した worktree・復元で herdr の一覧を
@@ -418,13 +418,13 @@ type Orchestrator struct {
 	// 戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の
 	// 入力欄へ `claude --resume …` を送る。
 	closeSet map[string]string
-	// directChatSetupFailures は、direct chat の用意（設計 3-82d の用意の段2）が落ちた記録である
+	// directChatSetupFailures は、direct chat の用意（設計 3-83d の用意の段2）が落ちた記録である
 	// （キーは project item の ID。**mu が守る。メモリだけに持つ**）。
 	//
 	// **通常の着手の失敗の記録（`failures`）とは混ぜない。**混ぜると、通常の着手で失敗が積もった
 	// issue（人間がまさに引き取りたいもの）が、用意の1回の失敗で上限を超えて `failure_state` へ落ちる。
 	directChatSetupFailures map[string]*directChatSetupFailure
-	// directChatAssigneeWriting は、担当者が1人ではない direct chat のカードへ書く経路（設計 3-82h）が
+	// directChatAssigneeWriting は、担当者が1人ではない direct chat のカードへ書く経路（設計 3-83h）が
 	// 走っている最中の issue の集合である（キーは project item の ID。**mu が守る。メモリだけに持つ**）。
 	// **立っているあいだは次の書き込みを立てない**（2本が並ぶと、コメントが2件付きうる）。
 	directChatAssigneeWriting map[string]bool
@@ -494,7 +494,7 @@ func New(opts Options) (*Orchestrator, error) {
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
 	knownStateNames := config.KnownStates(opts.Config.Tracker)
-	// **門は `RequiredBoardStates` で数える**（設計 3-82）。
+	// **門は `RequiredBoardStates` で数える**（設計 3-83）。
 	//
 	// **`KnownStates` で数えてはならない。**`tracker.direct_chat_state` の既定は
 	// `"Direct Chat"` なので、他の Status を全部空にした設定でも1件返ってしまい、
@@ -591,9 +591,9 @@ func New(opts Options) (*Orchestrator, error) {
 		failures:     map[string]*failureNote{},
 		tokenLedger:  map[string]tokenLedgerEntry{},
 		closeSet:     map[string]string{},
-		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-82d）。
+		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-83d）。
 		directChatSetupFailures: map[string]*directChatSetupFailure{},
-		// **担当者の人数による書き込みの番**（設計 3-82h）。
+		// **担当者の人数による書き込みの番**（設計 3-83h）。
 		directChatAssigneeWriting: map[string]bool{},
 		shutdown:                  shutdown,
 		shutdownCancel:            shutdownCancel,
@@ -722,14 +722,14 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	o.checkStalls(ctx)
 
 	if dispatchAllowed {
-		// **候補を2つに分ける**（設計 3-82b）。direct chat の候補は専用の1パスへ回し、
+		// **候補を2つに分ける**（設計 3-83b）。direct chat の候補は専用の1パスへ回し、
 		// `dispatchCandidates` へは1件も渡さない（あちらに direct chat の分岐を1つも持たせない）。
 		//
 		// **direct chat のパスを先に走らせる。**両方が `agent.max_concurrent_agents` の同じ枠を取るので、
 		// 後にすると、通常の候補が枠を埋めた巡回では、人間が名指しで頼んだ pane が1つもできない。
 		// **これは「返ってきた配列の順序をそのまま使う」（設計 4-2）の例外である。**
 		//
-		// **このパスも `dispatchAllowed` が真のときだけ走らせる。**この判断に例外を作らない（設計 3-82b）。
+		// **このパスも `dispatchAllowed` が真のときだけ走らせる。**この判断に例外を作らない（設計 3-83b）。
 		directChat, others := o.splitDirectChatCandidates(candidates)
 		o.prepareDirectChatPanes(ctx, directChat)
 		o.dispatchCandidates(ctx, others)
@@ -738,7 +738,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	o.wakeRuns(ctx)
 }
 
-// candidateStates は、この巡回で候補として取りに行く Status 名を返す（設計 3-82）。
+// candidateStates は、この巡回で候補として取りに行く Status 名を返す（設計 3-83）。
 //
 //	tracker.active_states                    … 常に入る
 //	tracker.direct_chat_state                … **カンバンに選択肢が実在するときだけ入る**
@@ -1025,7 +1025,7 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		if rs.isFinished() {
 			continue
 		}
-		// **人間が引き取っている run は起こさない**（設計 3-82）。
+		// **人間が引き取っている run は起こさない**（設計 3-83）。
 		//
 		// **担当の確認より前に置くことが要である。**あとに置くと、
 		// `handoffLostOnResume` が「担当が自分でない」と判定した瞬間に
@@ -1040,13 +1040,13 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		if rs.inDirectChatMode() || o.cardInDirectChat(rs) {
 			continue
 		}
-		// **direct chat の pane を用意している最中の run も起こさない**（設計 3-82d の用意の段2）。
+		// **direct chat の pane を用意している最中の run も起こさない**（設計 3-83d の用意の段2）。
 		// 送るか下ろすかは用意の段3 が決める。**ここで担当を確かめ直すと、用意の段2 が使っている
 		// pane を `stopBecauseHandoffLost` が閉じうる。**
 		if rs.isPreparing() {
 			continue
 		}
-		// **終わらせる処理が走っている run も起こさない**（設計 3-82f）。turn の終わりが direct chat を見て
+		// **終わらせる処理が走っている run も起こさない**（設計 3-83f）。turn の終わりが direct chat を見て
 		// 送る印を立てたあと、巡回より先に人間が `Done` などへ動かすと、印が残ったまま終わらせる処理が始まる。
 		// 起こすと、終わらせる処理（成果のコメントの確認・`after_run`・`pane.close`）と並んで続きの指示が届く。
 		// **担当の確認より前に置く。**終わらせている run で `stopBecauseHandoffLost` を走らせないためである。
@@ -1292,7 +1292,7 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	rs := newRunState(issue.ID, issue, now)
 	rs.AgentName = state.AgentName
 	rs.PaneID = state.PaneID
-	// **引き取った pane では Claude Code が起動済みである**（設計 3-82f。判断票6周目）。
+	// **引き取った pane では Claude Code が起動済みである**（設計 3-83f。判断票6周目）。
 	rs.startedPaneID = state.PaneID
 	rs.SessionUUID = state.SessionUUID
 	rs.WorktreePath = state.WorktreePath
@@ -1309,7 +1309,7 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
-	// **direct chat の run は、印に入れたその場で direct chat へ入れる**（設計 3-82）。
+	// **direct chat の run は、印に入れたその場で direct chat へ入れる**（設計 3-83）。
 	// **入れないと、`reconcileWorktrees` が「取り残された worktree」として
 	// 人間の pane を閉じる隙間ができる**（巡回は `reconcileRunning` より先に
 	// この印を見る保証が無い）。
@@ -1359,7 +1359,7 @@ type AdoptedRun struct {
 	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
 	// 起きず、その run の `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	AwaitTurnEnd bool
-	// DirectChat は「direct chat の run として引き継ぐ」ことを表す（設計 3-82）。
+	// DirectChat は「direct chat の run として引き継ぐ」ことを表す（設計 3-83）。
 	//
 	// **真なら turn を1つも送らず、pane も閉じない。**`NeedsPrompt` とも
 	// `AwaitTurnEnd` とも同時に立てない。**指示を送るのは人間である。**
@@ -1417,7 +1417,7 @@ func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 	if !isTurnBoundaryHook(ev) {
 		return true
 	}
-	// **direct chat では受け口へ流さない**（設計 3-82）。
+	// **direct chat では受け口へ流さない**（設計 3-83）。
 	//
 	// **読む者が居ない。**turn ループはdirect chat では走らないので、流しても溜まるだけである。
 	// 受け口は256件で埋まり、**人間が話しかけるたびに「あふれたので捨てました」の WARN が

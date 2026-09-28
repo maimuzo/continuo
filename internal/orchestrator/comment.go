@@ -46,7 +46,7 @@ const commentRecheckWait = 2 * time.Second
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: 人間が direct chat へ引き取ったので打ち切ったなら true（呼び出し元はそこで止まる。設計 3-82f）。
+// 戻り値: 人間が direct chat へ引き取ったので打ち切ったなら true（呼び出し元はそこで止まる。設計 3-83f）。
 //
 // stoppedWhileRecovering は、止められたことが原因の失敗かを判定する。
 //
@@ -68,7 +68,7 @@ func (o *Orchestrator) stoppedWhileRecovering(ctx context.Context) bool {
 }
 
 func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) bool {
-	// **「direct chat から `terminal_states` へ直接抜けた」run には書かせに行かない**（設計 3-82g）。
+	// **「direct chat から `terminal_states` へ直接抜けた」run には書かせに行かない**（設計 3-83g）。
 	// 人間が Claude Code を終了させてから `Done` へ動かすのは人間が名指しした出口であり、
 	// 書かせに行くと終了させたものを `--resume` で立て直すことになる。
 	if rs.exitedDirectlyToTerminal() {
@@ -76,7 +76,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 			"identifier", rs.issue().Identifier)
 		return false
 	}
-	// **人間が direct chat へ引き取っている run では、1文字も書かせに行かない**（設計 3-82f）。
+	// **人間が direct chat へ引き取っている run では、1文字も書かせに行かない**（設計 3-83f）。
 	//
 	// **段2 の `stopWorker` が門で止まるためである。**その直後に段5 が同じセッションへ `--resume` で
 	// 2本目の Claude Code を立てるので、人間が話している会話の記録へ、2本目が同時に書き込む。
@@ -202,7 +202,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	}
 	rs.setPaneID(paneID)
 
-	// **段5 の直前に見る**（設計 3-82f）。段2 の `stopWorker` が門で止まっていれば、
+	// **段5 の直前に見る**（設計 3-83f）。段2 の `stopWorker` が門で止まっていれば、
 	// 元の pane がまだ生きている（`PaneID` を立て直したので、ここでは判定が新しい pane を見る。
 	// 元の pane は、この run の印を持ったまま direct chat の巡回が扱う）。
 	if o.abortTerminalForHuman(ctx, rs, why) {
@@ -239,7 +239,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		return false
 	}
 	rs.setAgentName(name)
-	// **この pane で Claude Code が起動済みであることを控える**（設計 3-82f。判断票6周目）。
+	// **この pane で Claude Code が起動済みであることを控える**（設計 3-83f。判断票6周目）。
 	rs.setStartedPane(paneID)
 	// **証拠の基準は `agent.start` が通ってから取る**（設計 3-80c）。
 	//
@@ -294,7 +294,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		return false
 	}
 
-	// **段7 の直前に見る**（設計 3-82f）。段6 の待ちのあいだに人間が引き取っていたら、
+	// **段7 の直前に見る**（設計 3-83f）。段6 の待ちのあいだに人間が引き取っていたら、
 	// 人間が話そうとしている pane へ「コメントに書いてください」を送らない。
 	if o.abortTerminalForHuman(ctx, rs, why) {
 		return true
@@ -325,7 +325,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		return false
 	case <-time.After(commentRecheckWait):
 	}
-	// **段8 の直前に見る**（設計 3-82f）。見ないと、段9 の `failCommentRecovery` が、Status は書かないが
+	// **段8 の直前に見る**（設計 3-83f）。見ないと、段9 の `failCommentRecovery` が、Status は書かないが
 	// 事実と違う引き渡しの通知を投稿する。
 	if o.abortTerminalForHuman(ctx, rs, why) {
 		return true

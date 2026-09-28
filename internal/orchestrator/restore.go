@@ -100,7 +100,7 @@ type adoption struct {
 // **引き継げないと決めた run の pane は必ず閉じる**（設計 3-4）。巡回には
 // 「生きている pane を引き継ぐ」経路が無いので（3-16）、残すと2つ目が立つ。
 // **例外が2つある**（設計 3-4 の段3）。取り直しに失敗した run と、Status が `direct_chat_state` の
-// カードは閉じずに、閉じる集合（3-82f）へ入れる。**閉じる集合が、作業中の Status へ戻った巡回で閉じる。**
+// カードは閉じずに、閉じる集合（3-83f）へ入れる。**閉じる集合が、作業中の Status へ戻った巡回で閉じる。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // hs: hook の受け口。**nil を渡してはならない**（段5d で listen を始められない）。
@@ -127,7 +127,7 @@ func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResu
 
 	// 段4: herdr から pane と agent の一覧を取り、cwd と worktree のパスで突き合わせる。
 	m := o.matchPanes(ctx, candidates, discarded)
-	// **段3 で取り直した Status を渡す**（設計 3-82j）。Status が `direct_chat_state` の worktree と、
+	// **段3 で取り直した Status を渡す**（設計 3-83j）。Status が `direct_chat_state` の worktree と、
 	// 取り直しに失敗した worktree では、2枚目の pane を閉じない。
 	result.ClosedPanes = append(result.ClosedPanes, o.closeExtraPanes(ctx, &m, candidates, issues, fetchFailed)...)
 
@@ -421,12 +421,12 @@ type paneMatch struct {
 	// 「同じ worktree に Claude Code が2つ」がそのまま残る（設計 3-4 / 3-16）。
 	DuplicatePanes []herdr.Pane
 	// DuplicatesByWorktree は DuplicatePanes を worktree の絶対パスごとに引けるようにしたものである
-	// （設計 3-82j）。**direct chat の worktree では、引き継ぎの相手を agent 名を持つ pane に選び直す**ために要る。
+	// （設計 3-83j）。**direct chat の worktree では、引き継ぎの相手を agent 名を持つ pane に選び直す**ために要る。
 	DuplicatesByWorktree map[string][]herdr.Pane
-	// Unadoptable は、pane はあるが引き継がない worktree である（設計 3-82j。値は真）。
+	// Unadoptable は、pane はあるが引き継がない worktree である（設計 3-83j。値は真）。
 	//
 	// **direct chat の worktree で、agent 名を持つ pane が1枚も無かったときに入れる。**
-	// 引き継がずに2枚とも残し、閉じる集合（3-82f）へ入れる。**「pane が無い」として段8 へ回さない。**
+	// 引き継がずに2枚とも残し、閉じる集合（3-83f）へ入れる。**「pane が無い」として段8 へ回さない。**
 	Unadoptable map[string]bool
 	// AgentByPane は pane の ID から agent を引く写像である（`agent.list` から作る）。
 	AgentByPane map[string]herdr.Agent
@@ -564,7 +564,7 @@ func (o *Orchestrator) matchPanes(
 // **どちらも残してはならない。**巡回には「生きている pane を引き継ぐ」経路が無いので
 // （設計 3-16）、残すと2つ目が立ったままになる。
 //
-// **例外が2つある**（設計 3-82j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」）。
+// **例外が2つある**（設計 3-83j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」）。
 //
 //	段3 の Status が `direct_chat_state` … 2枚目を閉じない。**引き継ぎの相手には agent 名を持つ pane を選ぶ**
 //	                                    （pane ID の小さいほうではない。小さいほうが人間のシェルだと、
@@ -673,7 +673,7 @@ func (o *Orchestrator) decideAdoptions(
 		for _, c := range candidates {
 			o.logger.Warn("herdr の一覧を取れなかったので、この worktree は判断を保留します（次の巡回に委ねます）",
 				"identifier", c.Identity.IssueIdentifier, "path", c.Path)
-			// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-82f）。pane があるかも分からないので、
+			// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-83f）。pane があるかも分からないので、
 			// Status が作業中へ戻った巡回で、agent 名を問わずその worktree の pane を閉じる。
 			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 		}
@@ -682,7 +682,7 @@ func (o *Orchestrator) decideAdoptions(
 
 	for _, c := range candidates {
 		if m.Unadoptable[c.Path] {
-			// **引き継がずに pane を全部残し、閉じる集合へ入れる**（設計 3-82j）。段8 へは回さない。
+			// **引き継がずに pane を全部残し、閉じる集合へ入れる**（設計 3-83j）。段8 へは回さない。
 			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 			continue
 		}
@@ -725,7 +725,7 @@ func (o *Orchestrator) decideOne(
 
 	// 段3 の分岐: 取り直しそのものに失敗した run は引き継げない。**pane は閉じない。**
 	//
-	// **閉じてはならない理由**（設計 3-82）。**ここでは Status がまだ読めていない。**
+	// **閉じてはならない理由**（設計 3-83）。**ここでは Status がまだ読めていない。**
 	// カードが `direct_chat_state` だったかどうかを知る手立てが1つも無いので、
 	// **GitHub が一瞬落ちただけで、人間が話している会話が消えることになる。**
 	//
@@ -734,7 +734,7 @@ func (o *Orchestrator) decideOne(
 	if fetchFailed {
 		o.logger.Warn("取り直しに失敗したので引き継ぎません（pane も worktree も Status も残します。次の巡回で見ます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-82f）。Status が読めた巡回で、
+		// **閉じる集合へ入れる**（設計 3-4 の段3 の例外(1)・3-83f）。Status が読めた巡回で、
 		// 作業中の Status なら agent 名を問わず閉じ、それ以外なら閉じずに残す。
 		o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 		return adoption{}, false
@@ -754,14 +754,14 @@ func (o *Orchestrator) decideOne(
 		return adoption{}, false
 	}
 
-	// **Status が `direct_chat_state` のカードでは、この関数は pane を1枚も閉じない**（設計 3-4 の段3 の例外(2)・3-82j）。
+	// **Status が `direct_chat_state` のカードでは、この関数は pane を1枚も閉じない**（設計 3-4 の段3 の例外(2)・3-83j）。
 	//
 	// **閉じずに見送る道は6つある。**socket のパスが前回と違う・agent 名が無い・セッション UUID を取れない・
 	// 確認の画面で止まっている・`agent_status` を判断できない・引き継いだ回数が上限。
 	// **コードの上では7つあるが、1つ目（`cleanup.on_states`）は設定の検査が起動前に断るので、
 	// direct chat では通らない。**
 	// **どれも「continuo が引き継げない」という意味であって、「人間が話している画面を消してよい」
-	// という意味ではない。****見送った pane は印に入れず、閉じる集合が扱う**（3-82f）。
+	// という意味ではない。****見送った pane は印に入れず、閉じる集合が扱う**（3-83f）。
 	// 人間がカードを作業中へ戻した巡回で、閉じる集合がその pane を閉じ、3-16 が同じセッションへ
 	// `--resume` で立て直す。会話は残るが、送るのは1回目の本文（5-3）になる。
 	directChat := config.IsDirectChatState(o.cfg.Tracker, issue.State)
@@ -787,7 +787,7 @@ func (o *Orchestrator) decideOne(
 	case containsFold(o.cfg.Tracker.ActiveStates, issue.State):
 		// 引き継ぐ側。段5a2 以降へ進む。
 	case directChat:
-		// **direct chat も引き継ぐ側である**（設計 3-82）。
+		// **direct chat も引き継ぐ側である**（設計 3-83）。
 		// **引き継がないと、人間がカードを戻した最初の巡回で
 		// `reconcileWorktrees` が pane を閉じ、着手が1回目の指示書を送ることになる。**
 		// **人間が pane で積み上げた誘導を、エージェントが最初からやり直す。**
@@ -860,7 +860,7 @@ func (o *Orchestrator) decideOne(
 		// （3-11 で実測。3/3）。**esc は送らない**（pane ごと閉じるので要求も消える）。
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-82f の表の最後の行）。
+		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-83f の表の最後の行）。
 		// Status を書かないだけでは足りない。この道の通知は「continuo が pane を閉じたので画面は
 		// 残っていません」と書いており、**pane を閉じないのに投稿すると嘘になる。**
 		// 再起動のたびに1件積まれ、issue のコメントは消せない。
@@ -892,8 +892,8 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("引き継いだ回数が上限に達したので引き継ぎません（無駄な turn を1回も送りません）",
 			"identifier", identifier,
 			"takeover_count", c.Identity.TakeoverCount, "max_takeover", o.cfg.Agent.MaxTakeover)
-		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-82f）。pane を閉じていないのに
-		// 人間へ引き渡したと記録することになる。**引き継がずに見送り、閉じる集合へ入れる**（設計 3-82j の代償の表）。
+		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-83f）。pane を閉じていないのに
+		// 人間へ引き渡したと記録することになる。**引き継がずに見送り、閉じる集合へ入れる**（設計 3-83j の代償の表）。
 		if directChat {
 			closePane("引き継いだ回数が上限に達した")
 			return adoption{}, false
@@ -932,7 +932,7 @@ func (o *Orchestrator) decideOne(
 			AwaitTurnEnd:     awaitTurnEnd && !directChat,
 			DirectChat:       directChat,
 		},
-		// **direct chat では指示を送らない**（設計 3-82）。送るのは人間である。
+		// **direct chat では指示を送らない**（設計 3-83）。送るのは人間である。
 		NeedsPrompt: needsPrompt && !directChat,
 		Branch:      c.Identity.Branch,
 	}, true
@@ -1048,7 +1048,7 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // reason: 人間へ見せる理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
-	// **`protectedStates()` を渡す**（設計 3-82）。`terminal_states` だけでは
+	// **`protectedStates()` を渡す**（設計 3-83）。`terminal_states` だけでは
 	// **人間が置いた direct chat のカードへ `failure_state` を書いてしまう。**
 	// 書かれるとカードが direct chat から外れ、以後この機能が効かない。
 	moved, err := o.tracker.UpdateStatus(
@@ -1238,7 +1238,7 @@ func (o *Orchestrator) handleBrokenWorktrees(ctx context.Context) error {
 // **段4 の matchPanes とは別に引く。**あちらは身元ファイルを読めた worktree だけを
 // 相手にするので、**まさに読めなかった worktree の pane が入らない。**
 //
-// **引けなかったことを知りたい呼び出し元は `panesByCwdErr` を使う**（設計 3-82）。
+// **引けなかったことを知りたい呼び出し元は `panesByCwdErr` を使う**（設計 3-83）。
 // **こちらは「引けなければ空」で丸める。**復元の手掛かりに使うだけなので、
 // 空でも「手掛かりが無い」として正しく振る舞える。
 //
@@ -1253,7 +1253,7 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 	return byCwd, byPane
 }
 
-// panesByCwdErr は panesByCwd と同じ写像を作り、**引けなかった理由も返す**（設計 3-82）。
+// panesByCwdErr は panesByCwd と同じ写像を作り、**引けなかった理由も返す**（設計 3-83）。
 //
 // **direct chat は「引けなかった」と「pane が無い」を混ぜてはならない。**
 // 混ぜると、herdr の socket が一瞬落ちただけで
@@ -1285,7 +1285,7 @@ func (o *Orchestrator) panesByCwdErr(ctx context.Context) (map[string]herdr.Pane
 	return byCwd, byPane, nil
 }
 
-// paneMapByCwd は pane だけを、解決済みの cwd から引ける形にする（設計 3-82）。
+// paneMapByCwd は pane だけを、解決済みの cwd から引ける形にする（設計 3-83）。
 //
 // **`agent.list` を投げない。**pane の有無しか要らない呼び出し元のために分けてある。
 // **分けないと、direct chat の候補がある巡回のたびに、使わない `agent.list` が1本飛ぶ。**

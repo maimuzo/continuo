@@ -642,9 +642,9 @@ type fakeTracker struct {
 	calls []string
 	// verifyErr は VerifyStatusOptions が返すエラーである。
 	verifyErr error
-	// lastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧である（設計 3-82）。
+	// lastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧である（設計 3-83）。
 	lastFetchStates []string
-	// statusOptions は StatusOptionNames が返すカンバンの選択肢名である（設計 3-82）。
+	// statusOptions は StatusOptionNames が返すカンバンの選択肢名である（設計 3-83）。
 	//
 	// **nil のままなら「まだ読めていない」を表す。**`tracker.direct_chat_state` を
 	// 候補の一覧へ足すかどうかの判定は、これが在ることを条件にしている。
@@ -1205,7 +1205,7 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchIssuesByStates")
-	// **頼まれた Status の一覧を控える**（設計 3-82）。
+	// **頼まれた Status の一覧を控える**（設計 3-83）。
 	// `tracker.direct_chat_state` を足すかどうかは、カンバンの選択肢を読んでから決まる。
 	// **控えないと、足した／足さなかったを検査から見分けられない。**
 	ft.lastFetchStates = append([]string(nil), states...)
@@ -1560,7 +1560,7 @@ func (ft *fakeTracker) VerifyStatusOptions(_ context.Context, _ config.TrackerCo
 	return ft.verifyErr
 }
 
-// StatusOptionNames はカンバン側の Status の選択肢名を返す（設計 3-82）。
+// StatusOptionNames はカンバン側の Status の選択肢名を返す（設計 3-83）。
 func (ft *fakeTracker) StatusOptionNames() []string {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -1569,14 +1569,14 @@ func (ft *fakeTracker) StatusOptionNames() []string {
 	return out
 }
 
-// LastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧を返す（設計 3-82）。
+// LastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧を返す（設計 3-83）。
 func (ft *fakeTracker) LastFetchStates() []string {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	return append([]string(nil), ft.lastFetchStates...)
 }
 
-// SetStatusOptions はカンバン側の Status の選択肢名を差し替える（設計 3-82）。
+// SetStatusOptions はカンバン側の Status の選択肢名を差し替える（設計 3-83）。
 //
 // **`tracker.direct_chat_state` をここへ入れないと、候補の一覧に足されない。**
 // 選択肢がまだ読めていない状態（`Bootstrap` の前）と同じ扱いになる。

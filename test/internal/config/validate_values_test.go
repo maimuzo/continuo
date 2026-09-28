@@ -189,7 +189,7 @@ func TestValidate_書き戻しの対応表は空でも書いてあっても通�
 	}
 }
 
-// TestValidate_direct chat のStatusが他の役割と重なったら弾く は、設計 3-82 の検査を確かめる。
+// TestValidate_direct chat のStatusが他の役割と重なったら弾く は、設計 3-83 の検査を確かめる。
 //
 // **`tracker.direct_chat_state` は「人間が pane で直接続けているあいだだけ置く Status」である。**
 // **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
@@ -225,7 +225,7 @@ func TestValidate_directChatのStatusが他の役割と重なったら弾く(t *
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("何と重なったのか分からない（%s が欲しい）: %v", tc.want, err)
 			}
-			// **このキーを書いていない人にも当たるので、既定値であることを文面に入れる**（設計 3-82j）。
+			// **このキーを書いていない人にも当たるので、既定値であることを文面に入れる**（設計 3-83j）。
 			if !strings.Contains(err.Error(), i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, tc.want)) {
 				t.Errorf("既定値であることを伝える文面になっていない: %v", err)
 			}
@@ -236,7 +236,7 @@ func TestValidate_directChatのStatusが他の役割と重なったら弾く(t *
 // TestValidate_direct chat のStatusは空でも別の名前でも通る は、既定と正しい設定を守る。
 //
 // **既定は `"Direct Chat"` である。**この名前だけはカンバンに実在することを起動時に要求しない
-// （`config.RequiredBoardStates`）ので、選択肢を持たない利用者の continuo も起動する（設計 3-82）。
+// （`config.RequiredBoardStates`）ので、選択肢を持たない利用者の continuo も起動する（設計 3-83）。
 //
 // 目的: 空のままと、他の役割と重ならない名前のどちらも通すこと。
 // 与える情報: `direct_chat_state` の1行だけを差し替えた WORKFLOW.md。
@@ -251,7 +251,7 @@ func TestValidate_directChatのStatusは空でも別の名前でも通る(t *tes
 }
 
 // TestKnownStates_direct chat のStatusは空でなければ知っているStatusになる は、
-// 設計 3-82 の「`config.KnownStates` に入れる」を確かめる。
+// 設計 3-83 の「`config.KnownStates` に入れる」を確かめる。
 //
 // **入れないと「知らない Status」として扱われ、猶予のあとで worker が止まる**
 // （＝pane が閉じてチャットが切れる）。**入れたことで、起動時にボードへ実在することも
@@ -261,7 +261,7 @@ func TestValidate_directChatのStatusは空でも別の名前でも通る(t *tes
 // 与える情報: `direct_chat_state` が空の設定・空白だけの設定・`Human` を書いた設定の3つ。
 // 成功条件: 空と空白だけでは含まれず、書いてあれば含まれること。
 func TestKnownStates_directChatのStatusは空でなければ知っているStatusになる(t *testing.T) {
-	// **既定は `"Direct Chat"` なので、空にした設定を基準にする**（設計 3-82）。
+	// **既定は `"Direct Chat"` なので、空にした設定を基準にする**（設計 3-83）。
 	cfg := config.DefaultConfig().Tracker
 	cfg.DirectChatState = ""
 	base := len(config.KnownStates(cfg))
@@ -291,7 +291,7 @@ func TestKnownStates_directChatのStatusは空でなければ知っているStat
 	}
 }
 
-// TestRequiredBoardStates_directChatのStatusだけは起動時に実在を要求しない は、設計 3-82 を確かめる。
+// TestRequiredBoardStates_directChatのStatusだけは起動時に実在を要求しない は、設計 3-83 を確かめる。
 //
 // **既定が `"Direct Chat"` なので、要求してしまうと、その選択肢をまだ作っていない
 // 全利用者の continuo が起動しなくなる。**
@@ -342,7 +342,7 @@ func containsStr(values []string, target string) bool {
 	return false
 }
 
-// TestIsDirectChatState_空白だけの値はどのStatusにも一致しない は、設計 3-82 の判定を確かめる。
+// TestIsDirectChatState_空白だけの値はどのStatusにも一致しない は、設計 3-83 の判定を確かめる。
 //
 // **`direct_chat_state: "  "` を書いた設定で前後の空白を落として比べると、
 // Status が未設定（空文字）の item に一致してしまう。**巡回は Status が空の場合を
@@ -564,7 +564,7 @@ func TestResolvePath_存在しないパスはそのまま返す(t *testing.T) {
 	}
 }
 
-// TestDirectChatConflicts_7つの相手を全部見る は、設計 3-82k の「重なりを見る相手は7つ」を確かめる。
+// TestDirectChatConflicts_7つの相手を全部見る は、設計 3-83k の「重なりを見る相手は7つ」を確かめる。
 //
 // **一覧は `config.DirectChatConflicts` の1箇所にあり、起動時の検査と `continuo doctor` が同じものを読む。**
 // 目的: 7つのどれと重なっても名指しすること。とくに `cleanup.on_states` は `terminal_states` と別の名前にでき、

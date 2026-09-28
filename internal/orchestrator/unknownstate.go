@@ -443,7 +443,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 	}
 	// **`protectedStates()` を渡す。**その issue を人間が「終わった」にしていたら、
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
-	// **人間が `direct_chat_state` へ動かしていたときも書かない**（設計 3-82e の不変条件2）。
+	// **人間が `direct_chat_state` へ動かしていたときも書かない**（設計 3-83e の不変条件2）。
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
 	if err != nil {
 		// **枠を返す。**カンバンは動いていない（押し合いは起きていない）。
@@ -568,7 +568,7 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 		// 「黙って止まった」状態がそのまま残る。
 		// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
 		//
-		// **コメントの直前と `release` の直前に、direct chat への引き取りを見る**（設計 3-82f）。
+		// **コメントの直前と `release` の直前に、direct chat への引き取りを見る**（設計 3-83f）。
 		// この道も印を外す6本のうちの1本である。見ないと、後始末の最中に人間が direct chat へ動かしたとき、
 		// 事実と違うコメントが残り、印だけ外れる。
 		if o.abortTerminalForHuman(cleanupCtx, rs, reason) {

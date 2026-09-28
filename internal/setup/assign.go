@@ -47,7 +47,7 @@ var (
 
 // Assignment は役割へ割り当てた Status の選択肢名である。
 //
-// **飛ばせる役割は空文字のままになりうる**（設計 3-82 の `direct_chat_state`）。
+// **飛ばせる役割は空文字のままになりうる**（設計 3-83 の `direct_chat_state`）。
 type Assignment struct {
 	// names は役割ごとに割り当てた選択肢名である。添字は Role の値。
 	names [RoleCount]string
@@ -91,7 +91,7 @@ type AssignOptions struct {
 }
 
 // Assign は6つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる
-// （6つ目の direct chat は番号 0 で飛ばせる。設計 3-82）。
+// （6つ目の direct chat は番号 0 で飛ばせる。設計 3-83）。
 //
 // **役割の名前より先に「continuo がその Status で何をするか」を出してから番号を待つ。**
 // 初見の利用者は、どの Status がどの役割かを知らないためである。
@@ -123,7 +123,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 
 	// **尋ねる前に選択肢の数を確かめる**（RUCM の基本フロー5）。足りないまま尋ねると、
 	// 何回か答えさせたあとで必ず行き止まる。利用者に無駄な入力をさせない。
-	// **数えるのは `RequiredRoleCount` である**（設計 3-82）。`RoleCount` で数えると、
+	// **数えるのは `RequiredRoleCount` である**（設計 3-83）。`RoleCount` で数えると、
 	// **選択肢がちょうど5つのカンバンで1問も尋ねずに終わる。**飛ばせる役割の選択肢が
 	// 無くても、残りは割り当てきれる。
 	if len(opts.Options) < RequiredRoleCount {
@@ -187,7 +187,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 			}
 			if n == noOptionInput {
 				if role.IsOptional() {
-					// **飛ばせる役割では、0 は「飛ばす」である**（設計 3-82）。
+					// **飛ばせる役割では、0 は「飛ばす」である**（設計 3-83）。
 					// **打ち切ってはならない。**選択肢が無くても continuo は起動するので、
 					// **ここで打ち切ると、この機能を使わない利用者から
 					// `continuo setup` そのものを奪うことになる。**
@@ -242,7 +242,7 @@ func writeSummary(out io.Writer, a Assignment) {
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryHeader, RoleCount))
 	for _, role := range roleOrder {
 		if a.names[role] == "" {
-			// **飛ばした役割は、飛ばしたと書く**（設計 3-82）。
+			// **飛ばした役割は、飛ばしたと書く**（設計 3-83）。
 			// 空の引用符だけを出すと、割り当て損ねたのか飛ばしたのかが読めない。
 			fmt.Fprintln(out, i18n.T(i18n.KeySetupSummarySkipped, role.ConfigKey()))
 			continue

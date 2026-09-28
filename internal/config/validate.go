@@ -134,7 +134,7 @@ func validate(cfg *Config) error {
 		}
 	}
 
-	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-82）。
+	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-83）。
 	// **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
 	if err := validateDirectChatState(cfg); err != nil {
 		return err
@@ -613,17 +613,17 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 	return nil
 }
 
-// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-82k）。
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-83k）。
 //
 // **空なら何も見ない。**空はこの機能を使わないという意味である。
 //
 // **重なりを見る相手の一覧は `DirectChatConflicts` の1箇所だけに置く。**`continuo doctor` も同じものを読む。
 // 別々に持つと、どれか1つだけが古くなる。
 //
-// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-82k）。
+// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-83k）。
 // `validateAutomatedStateRewrite` が弾くので、ここへ同じ検査を置いても弾く相手が1件も残らない。
 //
-// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-82j）。
+// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-83j）。
 // 既定が非空なので、この機能を1度も頼んでいない人にも当たり、しかもその人の WORKFLOW.md に
 // 1行も書いていないキーの名前が出るためである。
 //

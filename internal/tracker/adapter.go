@@ -173,7 +173,7 @@ func NewAdapter(
 // failure_state・direct_chat_state・status_signal_map の遷移先を含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **`direct_chat_state` だけは入らない**（設計 3-82）。既定が `"Direct Chat"` なので、
+// **`direct_chat_state` だけは入らない**（設計 3-83）。既定が `"Direct Chat"` なので、
 // 入れると**その選択肢をまだ作っていない全利用者の continuo が起動しなくなる。**
 // **止めてよい理由が、この Status には当てはまらない。**止めるのは
 // 「GraphQL がエラーを出さずに0件を返し続ける」ためだが、選択肢が無ければ

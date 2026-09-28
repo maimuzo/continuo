@@ -1,4 +1,4 @@
-// direct chat の pane の用意（設計 3-82c / 3-82d）・再起動（3-82j）・閉じる集合（3-82f）の検査である。
+// direct chat の pane の用意（設計 3-83c / 3-83d）・再起動（3-83j）・閉じる集合（3-83f）の検査である。
 //
 // **本物の git で worktree を作る。**用意の段2 は着手の段3〜段10 を踏むので、
 // 通信をしない stub（stub_test.go）では worktree を用意できない。
@@ -17,7 +17,7 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// readyCommentMarker は、direct chat の pane を用意したときに issue へ書く案内にだけ出る文字列である（設計 3-82d）。
+// readyCommentMarker は、direct chat の pane を用意したときに issue へ書く案内にだけ出る文字列である（設計 3-83d）。
 const readyCommentMarker = "pane を用意しました"
 
 // firstPromptMarker は、1回目の本文（5-3）にだけ出る文字列である（samplePromptTemplate の書き出し）。
@@ -56,7 +56,7 @@ func addOwnDirectChatIssue(fx *fixture, number int) (string, string) {
 
 // holdAgentStart は、`agent.start` を返り値の関数を呼ぶまで返さないようにする。
 //
-// **用意の段2 の最中にカードや担当者を動かす場面を作るためにある**（設計 3-82d の用意の段3）。
+// **用意の段2 の最中にカードや担当者を動かす場面を作るためにある**（設計 3-83d の用意の段3）。
 //
 // fx: fixture。
 // 戻り値の1つ目: 待たせている `agent.start` を進ませる関数。
@@ -79,7 +79,7 @@ func holdAgentStart(t *testing.T, fx *fixture) (func(), <-chan struct{}) {
 	return release, entered
 }
 
-// TestDirectChat_担当者が自分1人ならpaneを用意し指示は送らない は、設計 3-82c と 3-82d の用意の段1〜段3 を確かめる。
+// TestDirectChat_担当者が自分1人ならpaneを用意し指示は送らない は、設計 3-83c と 3-83d の用意の段1〜段3 を確かめる。
 //
 // 目的: 印を持たない issue を direct chat へ動かすと、continuo は worktree と pane を用意して Claude Code を
 // 起動し、**指示は1文字も送らず、Status も動かさず、issue へ「話しかけられます」を1件書く。**
@@ -128,7 +128,7 @@ func TestDirectChat_担当者が自分1人ならpaneを用意し指示は送ら�
 	}
 }
 
-// TestDirectChat_用意中に作業中へ戻されたら1回目の本文を送る は、設計 3-82d の外れ方の表の1行目を確かめる。
+// TestDirectChat_用意中に作業中へ戻されたら1回目の本文を送る は、設計 3-83d の外れ方の表の1行目を確かめる。
 //
 // 目的: 用意は最大2分かかり、巡回は30秒である。その間に人間がカードを戻すことがある。
 // **確かめずに direct chat へ入れると、1回目の本文を1度も受け取っていないエージェントへ継続の指示だけが届く。**
@@ -160,9 +160,9 @@ func TestDirectChat_用意中に作業中へ戻されたら1回目の本文を�
 	}
 }
 
-// TestDirectChat_用意中に担当者が替わったら自分で開いたpaneを閉じて印を外す は、設計 3-82d の外れ方の表の3行目を確かめる。
+// TestDirectChat_用意中に担当者が替わったら自分で開いたpaneを閉じて印を外す は、設計 3-83d の外れ方の表の3行目を確かめる。
 //
-// 目的: 用意の最中に担当者が別の1人に替わったら、その machine は pane を持ってはならない（3-82h）。
+// 目的: 用意の最中に担当者が別の1人に替わったら、その machine は pane を持ってはならない（3-83h）。
 // **自分で開いた pane を ID で閉じ、印を外す。**失敗としては数えず、コメントも書かない。
 // 与える情報: `agent.start` の最中に担当者を他人1人に替えた用意。
 // 成功条件: pane を閉じ、印を外し、案内のコメントも Status の書き込みも無いこと。
@@ -190,7 +190,7 @@ func TestDirectChat_用意中に担当者が替わったら自分で開いたpan
 	}
 }
 
-// TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く は、設計 3-82d の用意の段2 を確かめる。
+// TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動かして理由を書く は、設計 3-83d の用意の段2 を確かめる。
 //
 // 目的: 用意が落ちたら、カンバンへは書かず、自分で開いた pane を閉じ、印を外す。
 // **通常の着手と同じ回数の上限（`agent.max_retries`）を超えたら、書く経路で `failure_state` を書き、
@@ -235,7 +235,7 @@ func TestDirectChat_用意の失敗が上限を超えたらfailure_stateへ動�
 	}
 }
 
-// TestDirectChat_用意が落ちた直後の巡回ではやり直さない は、設計 3-82c の門7 を確かめる。
+// TestDirectChat_用意が落ちた直後の巡回ではやり直さない は、設計 3-83c の門7 を確かめる。
 //
 // 目的: 用意が落ちたら、次に試すまで通常の着手のバックオフと同じ間隔を空ける。
 // **空けないと、30秒ごとに枠を取っては落ちるのを繰り返す。**
@@ -266,7 +266,7 @@ func TestDirectChat_用意が落ちた直後の巡回ではやり直さない(t 
 }
 
 // TestDirectChat_バックオフ明けに人間が引き取っていたら書いた担当者を消し戻さない は、
-// 設計 3-82c の門1 の表の下と 3-77g の例外を確かめる。
+// 設計 3-83c の門1 の表の下と 3-77g の例外を確かめる。
 //
 // 目的: バックオフを挟んだやり直し（`redispatch`）で、着手の段2 が取り直した Status が direct chat なら、
 // **書いた担当者を消し戻さない。**消すと担当者が0人になり、次の巡回で `failure_state` へ落ち、
@@ -302,7 +302,7 @@ func TestDirectChat_バックオフ明けに人間が引き取っていたら書
 	// バックオフのあいだに人間が direct chat へ引き取る。
 	fx.Tracker.SetState(issue.ID, humanState)
 	clock.Advance(30 * time.Second)
-	// **着手の段2 で印が外れ、次の巡回の direct chat の1パスが pane を用意し直す**（設計 3-82c の門1 の表の段4〜段5）。
+	// **着手の段2 で印が外れ、次の巡回の direct chat の1パスが pane を用意し直す**（設計 3-83c の門1 の表の段4〜段5）。
 	// **巡回は待ちの中で回す。**`redispatch` の段2 は別の goroutine なので、印が外れるのが
 	// 同じ巡回の direct chat の1パスより後になりうる（1回だけ回すと、`-race -cpu 1,2 -count=10` で20回中10回落ちた）。
 	waitFor(t, 10*time.Second, "direct chat の pane が用意される", func() bool {
@@ -322,7 +322,7 @@ func TestDirectChat_バックオフ明けに人間が引き取っていたら書
 	}
 }
 
-// TestDirectChat_再起動でdirect_chatのrunを引き取り指示を送らない は、設計 3-4 の段5a と 3-82j の1行目を確かめる。
+// TestDirectChat_再起動でdirect_chatのrunを引き取り指示を送らない は、設計 3-4 の段5a と 3-83j の1行目を確かめる。
 //
 // 目的: herdr が再起動前のセッションを resume したとき、復元は direct chat の run を引き取る（印にも入れる）。
 // **引き取ったあとも、指示は1文字も送らない。**
@@ -358,7 +358,7 @@ func TestDirectChat_再起動でdirectChatのrunを引き取り指示を送ら�
 }
 
 // TestDirectChat_再起動で確認の画面ならpaneを閉じず通知も書かず戻したときに閉じる集合が閉じる は、
-// 設計 3-4 の段3 の例外(2)・3-82f の表の最後の2行を確かめる。
+// 設計 3-4 の段3 の例外(2)・3-83f の表の最後の2行を確かめる。
 //
 // 目的: 確認の画面（`blocked`）で止まっている direct chat の run は、**`failure_state` へ落とさず、pane も閉じず、
 // 引き渡しの通知も投稿しない**（通知の本文は「continuo が pane を閉じたので画面は残っていません」と書いており、
@@ -401,7 +401,7 @@ func TestDirectChat_再起動で確認の画面ならpaneを閉じず通知も�
 }
 
 // TestDirectChat_取り直しに失敗した復元のagent名の無いpaneを戻したときに閉じる は、
-// 設計 3-4 の段3 の例外(1)・3-9 の手順7b・3-82f の閉じる集合を確かめる。
+// 設計 3-4 の段3 の例外(1)・3-9 の手順7b・3-83f の閉じる集合を確かめる。
 //
 // 目的: 取り直しに失敗した run は Status が読めないので、**閉じずに閉じる集合へ入れる。**
 // Status が作業中へ戻った巡回で、**agent 名の無い pane も閉じる。**入れないと、取り残しの処理は
@@ -435,7 +435,7 @@ func TestDirectChat_取り直しに失敗した復元のagent名の無いpaneを
 }
 
 // TestDirectChat_再起動でdirect_chatのworktreeの2枚目のpaneを閉じずagent名を持つpaneを引き継ぐ は、
-// 設計 3-82j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」を確かめる。
+// 設計 3-83j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」を確かめる。
 //
 // 目的: direct chat の最中に人間がテスト用のシェルを分けていると、再起動でどちらかが消える。
 // **Status が direct chat の worktree では段4 で閉じない。引き継ぎの相手には、agent 名を持つ pane を選ぶ**
@@ -469,7 +469,7 @@ func TestDirectChat_再起動でdirectChatのworktreeの2枚目のpaneを閉じ�
 }
 
 // TestDirectChat_再起動でagent名を持つpaneが無いdirect_chatのworktreeは引き継がず全部残す は、
-// 設計 3-82j の同じ段落の「agent 名を持つ pane が無ければ、引き継がずに2枚とも残す」を確かめる。
+// 設計 3-83j の同じ段落の「agent 名を持つ pane が無ければ、引き継がずに2枚とも残す」を確かめる。
 //
 // 与える情報: Status が direct chat の worktree に、agent 名の無い pane が2枚。
 // 成功条件: どちらも閉じず、引き継がないこと。
@@ -495,11 +495,11 @@ func TestDirectChat_再起動でagent名を持つpaneが無いdirectChatのworkt
 	}
 }
 
-// abortedLog は、終わらせる処理を人間の引き取りでやめたときにだけ出るログである（設計 3-82f）。
+// abortedLog は、終わらせる処理を人間の引き取りでやめたときにだけ出るログである（設計 3-83f）。
 const abortedLog = "この run を終わらせるのをやめます"
 
 // TestDirectChat_コメントを書かせる途中で引き取って戻すと同じpaneで続く は、
-// 設計 3-82f の打ち切りを `ensureAgentComment` の段5〜段7 から通して確かめる。
+// 設計 3-83f の打ち切りを `ensureAgentComment` の段5〜段7 から通して確かめる。
 //
 // 目的: エージェントが表明を出して終わり、成果のコメントが無いので continuo が段2 で pane を閉じ（止めた印が立つ）、
 // 段5 で新しい pane に `--resume` で立て直している最中に、人間がカードを direct chat へ動かす。
@@ -597,7 +597,7 @@ func TestDirectChat_コメントを書かせる途中で引き取って戻すと
 }
 
 // TestDirectChat_turnの終わりに引き取りを見たあと巡回より先に戻しても指示が届く は、
-// `decideAfterTurn` の direct chat の枝（設計 3-82f）が送る印を立てることを確かめる。
+// `decideAfterTurn` の direct chat の枝（設計 3-83f）が送る印を立てることを確かめる。
 //
 // 目的: turn の終わりに取り直したカードが direct chat だったとき、turn ループはそこで終わる。
 // **次の巡回より先に人間が作業中へ戻すと、direct chat へは1度も入らない。**
@@ -640,7 +640,7 @@ func TestDirectChat_turnの終わりに引き取りを見たあと巡回より�
 	}
 }
 
-// TestDirectChat_Statusごとの上限に達していてもpaneを用意する は、設計 3-82c の門5 を確かめる。
+// TestDirectChat_Statusごとの上限に達していてもpaneを用意する は、設計 3-83c の門5 を確かめる。
 //
 // 目的: **門5 は全体の上限（`agent.max_concurrent_agents`）だけを見る。**用意する pane は
 // `running_state` の枠を消費しないので、Status ごとの上限を当てると、全体が空いていても pane が来ない。
@@ -667,7 +667,7 @@ func TestDirectChat_Statusごとの上限に達していてもpaneを用意す�
 	})
 }
 
-// TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせに行かない は、設計 3-82g の `Done` の行を確かめる。
+// TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせに行かない は、設計 3-83g の `Done` の行を確かめる。
 //
 // 目的: 人間が Claude Code を終了させてから `Done` へ動かすのは、人間が名指しした出口である。
 // **書かせに行くと、終了させたものを `--resume` で立て直すことになる。**
@@ -701,7 +701,7 @@ func TestDirectChat_Doneへ直接抜けたら成果のコメントを書かせ�
 	}
 }
 
-// TestDirectChat_閉じる集合の pane は作業中でない Status では閉じない は、設計 3-82f の閉じる集合を確かめる。
+// TestDirectChat_閉じる集合の pane は作業中でない Status では閉じない は、設計 3-83f の閉じる集合を確かめる。
 //
 // 目的: **閉じるのは、印を持たずに Status が `active_states` へ戻った巡回だけである。**
 // それ以外の Status で閉じると、人間が `In Review` へ動かして見返している画面が消える。
@@ -742,7 +742,7 @@ type errString string
 // Error はエラーの文面を返す。
 func (e errString) Error() string { return string(e) }
 
-// TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す は、設計 3-82c の門7 を確かめる。
+// TestDirectChat_上限を超えたときに書けなかったら次の巡回で用意せずに書き直す は、設計 3-83c の門7 を確かめる。
 //
 // 目的: 用意の失敗が上限を超えた issue へ門7 が書く `failure_state` の書き込みが失敗しても、**次の巡回で書き直す。**
 // **書き直すまで用意はやり直さない**（やり直すと、上限を超えたあとも pane を開いては閉じる）。
@@ -839,7 +839,7 @@ func assertNoPromptFor(t *testing.T, fx *fixture, want int, message string) {
 }
 
 // TestDirectChat_turnの終わりに引き取りを見たあと取り直しに失敗した巡回では指示を送らない は、
-// 設計 3-82f の `wakeRuns` と turn ループの先頭の行を確かめる。
+// 設計 3-83f の `wakeRuns` と turn ループの先頭の行を確かめる。
 //
 // 目的: turn の終わりがカードを direct chat と読んで送る印を立てたあと、**巡回の取り直しが失敗すると
 // direct chat の印は立たない。**送る側が印しか見ないと、カンバンでは Direct Chat のまま
@@ -873,7 +873,7 @@ func TestDirectChat_turnの終わりに引き取りを見たあと取り直し�
 }
 
 // TestDirectChat_turnの終わりに引き取りを見たあと手を離す巡回では指示を送らない は、
-// 設計 3-82h の「手を離す経路」と 3-82f の `wakeRuns` の行を確かめる。
+// 設計 3-83h の「手を離す経路」と 3-83f の `wakeRuns` の行を確かめる。
 //
 // 目的: turn の終わりが送る印を立てたあと、次の巡回で担当者が別の1人に替わっていたら手を離す。
 // **手を離す途中（印を外すまで）に、人間の pane へ続きの指示を送らない。**
@@ -900,7 +900,7 @@ func TestDirectChat_turnの終わりに引き取りを見たあと手を離す�
 	}
 }
 
-// TestDirectChat_上限を超えたissueへ書いている最中の巡回では2本目を立てない は、設計 3-82c の門7 を確かめる。
+// TestDirectChat_上限を超えたissueへ書いている最中の巡回では2本目を立てない は、設計 3-83c の門7 を確かめる。
 //
 // 目的: 上限を超えた issue へ書く経路は門7 の1箇所だけが走らせ、**書いている最中は次の巡回で2本目を立てない。**
 // 書き込みが巡回の間隔より長くかかると、2本が並んで書き、コメントが2件付きうる。
@@ -966,7 +966,7 @@ func countString(list []string, want string) int {
 }
 
 // TestDirectChat_turnの終わりに引き取りを見たあと終わらせる処理が走っているあいだは指示を送らない は、
-// 設計 3-82f の `wakeRuns` の行（終端の権利を取った run）を確かめる。
+// 設計 3-83f の `wakeRuns` の行（終端の権利を取った run）を確かめる。
 //
 // 目的: turn の終わりがカードを direct chat と読んで送る印を立てたあと、**巡回より先に人間が引き渡しの Status へ
 // 動かすと、direct chat へは入らないまま終わらせる処理が始まる。**そこへ続きの指示を送ると、
@@ -995,7 +995,7 @@ func TestDirectChat_turnの終わりに引き取りを見たあと終わらせ�
 	}
 }
 
-// TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるときに下ろす は、設計 3-82i を確かめる。
+// TestDirectChat_turnの終わりを待つ印はdirectChatを抜けるときに下ろす は、設計 3-83i を確かめる。
 //
 // 目的: direct chat へ入る前の turn ループが一時的な失敗で立てた「turn の終わりを待つ印」が残ると、
 // 戻したあと `wakeRuns` が送る印より先にそれを取り、**指示を送らずに待つだけの turn ループを起こす。**
@@ -1075,7 +1075,7 @@ func worktreeWorkspaceID(fx *fixture) string {
 	return ""
 }
 
-// TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが開いたpaneを閉じる は、設計 3-82d の用意の段2 を確かめる。
+// TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが開いたpaneを閉じる は、設計 3-83d の用意の段2 を確かめる。
 //
 // 目的: `worktree.open`（着手の段3）の時点で herdr は pane を開いている。**着手の段8 まで控えないと、
 // 段4〜段8 で落ちたときに後始末が閉じる相手を知らず、シェルの pane が残る。**残った pane は門4 に当たり続けるので、
@@ -1108,7 +1108,7 @@ func TestDirectChat_用意の段2が段8より前で落ちたらworktreeOpenが�
 	}
 }
 
-// TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意しない は、設計 3-82c の門4 を確かめる。
+// TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意しない は、設計 3-83c の門4 を確かめる。
 //
 // 目的: 門4 は、用意の段2 が pane を引くのと同じ見方で「pane が1枚でもあるか」を見る。用意の段2 の `resolvePane` は
 // `worktree.open` が返した workspace の中の1枚を cwd を見ずに使う。**門4 が cwd だけで見ると、人間がその workspace の
@@ -1174,7 +1174,7 @@ func TestDirectChat_worktreeのworkspaceにcwdの違うpaneがあれば用意し
 }
 
 // TestDirectChat_用意中に戻されたときClaudeCodeが既に動いていればturnの終わりを待ってから1回目の本文を送る は、
-// 設計 3-82d の外れ方の表の1行目を確かめる。
+// 設計 3-83d の外れ方の表の1行目を確かめる。
 //
 // 目的: 用意の段2 が「Claude Code は既に動いている」（`ErrStartupBusy`）に着地した run を、用意の最中に人間が
 // 作業中の Status へ戻すことがある。**送る印を立てると、走っている turn へ1回目の本文が投げられ、turn が混ざる。**
@@ -1216,7 +1216,7 @@ func TestDirectChat_用意中に戻されたときClaudeCodeが既に動いて�
 	}
 }
 
-// TestDirectChat_担当者が1人でないカードへ書いている最中の巡回では2本目を立てない は、設計 3-82h の書く経路を確かめる。
+// TestDirectChat_担当者が1人でないカードへ書いている最中の巡回では2本目を立てない は、設計 3-83h の書く経路を確かめる。
 //
 // 目的: 担当者の人数による書き込みは、門3 と巡回の段1 が巡回ごとに立てる。**書いている最中は次の巡回で2本目を立てない。**
 // 書き込みが巡回の間隔より長くかかると、2本が並んで書き、同じ機械がコメントを2件付けうる。
@@ -1258,7 +1258,7 @@ func TestDirectChat_担当者が1人でないカードへ書いている最中�
 	})
 }
 
-// TestDirectChat_上限を超えた書き込みに成功したら記録を消す は、設計 3-82d の用意の段2 を確かめる。
+// TestDirectChat_上限を超えた書き込みに成功したら記録を消す は、設計 3-83d の用意の段2 を確かめる。
 //
 // 目的: 門7 の書く経路が実際に書けたら、用意の失敗の記録を消す。**残すと、索引の遅れでカードがまだ候補に見える間に
 // 人間が direct chat へ戻したとき、1回も用意し直さずにまた `failure_state` へ落とす。**

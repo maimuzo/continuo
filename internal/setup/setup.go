@@ -34,7 +34,7 @@ const (
 	// RoleDone は完了である。人間がここへ動かすと continuo が worktree と branch を片付ける。
 	RoleDone
 	// RoleDirectChat は direct chat である。人間が pane で直接エージェントと話すあいだ、
-	// continuo は指示を送らず、pane も worktree も閉じない（設計 3-82）。
+	// continuo は指示を送らず、pane も worktree も閉じない（設計 3-83）。
 	//
 	// **この役割だけは飛ばせる**（`OptionalRoles`）。カンバンに選択肢が無くても
 	// continuo は起動するので、割り当てを強いる理由が無い。
@@ -48,7 +48,7 @@ const RoleCount = 6
 //
 // **RoleCount より1つ少ない。**`RoleDirectChat` は飛ばせるので、その選択肢が無くても
 // 残り5つは割り当てきれる。**ここを RoleCount にすると、選択肢がちょうど5つの
-// カンバンで `continuo setup` が1問も尋ねずに終わる**（設計 3-82）。
+// カンバンで `continuo setup` が1問も尋ねずに終わる**（設計 3-83）。
 const RequiredRoleCount = 5
 
 // IsOptional は、その役割を飛ばせるかどうかを返す。

@@ -341,7 +341,7 @@ type statusKey struct {
 	// value は割り当てから、そのキーへ書く YAML の値を組み立てる。
 	value func(Statuses) string
 	// optional は「そのキーが WORKFLOW.md に無くても、書き込み全体を止めない」ことを表す
-	// （設計 3-82）。
+	// （設計 3-83）。
 	//
 	// **`direct_chat_state` だけが真である。**このキーは continuo が新しく足したもので、
 	// **それより前に作られた WORKFLOW.md には1行も無い。**止めると、
@@ -420,7 +420,7 @@ func StatusKeyNames() []string {
 	return out
 }
 
-// StatusKeyLine は、そのキーを WORKFLOW.md へ手で足すときの1行を返す（設計 3-82k）。
+// StatusKeyLine は、そのキーを WORKFLOW.md へ手で足すときの1行を返す（設計 3-83k）。
 //
 // **親のキーの下にそのまま貼れる形にする**（`  direct_chat_state: "Direct Chat"`）。
 // `tracker.direct_chat_state:` の形を見本にすると、貼った行が知らないキーになり、設定の読み込みが落ちる。
@@ -460,7 +460,7 @@ type Statuses struct {
 	Blocked string
 	// Done は完了の Status である（terminal_states の1つめ）。
 	Done string
-	// DirectChat は direct chat の Status である（direct_chat_state。設計 3-82）。
+	// DirectChat は direct chat の Status である（direct_chat_state。設計 3-83）。
 	//
 	// **空でよい。**利用者が対話で飛ばしたときと、この機能を使わないときに空になる。
 	// **空のときは `direct_chat_state: ""` を書く。**「飛ばした」は
@@ -471,7 +471,7 @@ type Statuses struct {
 
 // Complete は、必ず要る5つの役割に選択肢名が入っているかを返す。
 //
-// **`DirectChat` は数えない**（設計 3-82）。あれは飛ばせる役割で、空でも continuo は動く。
+// **`DirectChat` は数えない**（設計 3-83）。あれは飛ばせる役割で、空でも continuo は動く。
 //
 // 戻り値: 5つとも空文字でなければ真。
 func (s Statuses) Complete() bool {
@@ -498,14 +498,14 @@ func (s Statuses) Complete() bool {
 // 戻り値の2つ目: 見つからなかったキーの名前（ドット区切り）。
 // 戻り値の3つ目: 見つかったが書き換えられない形だったキーの名前（ドット区切り）。
 // 戻り値の4つ目: **飛ばせるキーのうち、WORKFLOW.md に無くて書けなかったものの名前**
-// （設計 3-82。**書き込みは止めないが、黙って捨ててはならない**）。
+// （設計 3-83。**書き込みは止めないが、黙って捨ててはならない**）。
 // front matter を切り出せない場合は、全文をそのまま返し、必ず要るキーを全部
 // 見つからなかったものとして返す。
 func applyStatuses(s string, st Statuses) (string, []string, []string, []string) {
 	lines := strings.Split(s, "\n")
 	start, end, ok := frontMatterRange(lines)
 	if !ok {
-		// **飛ばせるキーは名指ししない**（設計 3-82）。
+		// **飛ばせるキーは名指ししない**（設計 3-83）。
 		// **すぐ下の分岐が「無くても止めない」と決めているキーを、
 		// ここだけ必須として返すと、利用者は足す必要の無いキーを足しに行く。**
 		return s, requiredStatusKeyNames(), nil, nil
@@ -516,7 +516,7 @@ func applyStatuses(s string, st Statuses) (string, []string, []string, []string)
 		i, found := findKeyLine(lines, start, end, k.path)
 		if !found {
 			if k.optional {
-				// **書き込み全体を止めない**（設計 3-82）。この変更より前に作られた
+				// **書き込み全体を止めない**（設計 3-83）。この変更より前に作られた
 				// WORKFLOW.md には、このキーが1行も無い。**止めると、既存の利用者が
 				// `continuo setup` を最後まで通せなくなる。**
 				//
@@ -542,7 +542,7 @@ func applyStatuses(s string, st Statuses) (string, []string, []string, []string)
 	return strings.Join(lines, "\n"), missing, blocked, skipped
 }
 
-// requiredStatusKeyNames は `continuo setup` が**必ず**書き換えるキーの名前を返す（設計 3-82）。
+// requiredStatusKeyNames は `continuo setup` が**必ず**書き換えるキーの名前を返す（設計 3-83）。
 //
 // **飛ばせるキーは入れない。**`applyStatuses` が「無くても止めない」と決めているキーを
 // 「見つからなかった」として返すと、**利用者は足す必要の無いキーを足しに行く。**

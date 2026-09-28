@@ -42,7 +42,7 @@ type stubHerdr struct {
 	// sentKeys は AgentSendKeys に渡されたキーである。
 	sentKeys [][]string
 	// prompts は AgentPrompt に渡された本文である。
-	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-82）。
+	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-83）。
 	prompts []string
 }
 
@@ -87,7 +87,7 @@ func (s *stubHerdr) PaneList(_ context.Context, params herdr.PaneListParams) (*h
 	}, nil
 }
 
-// WorkspaceList は workspace を1つも返さない（direct chat の門4 が引く。設計 3-82c）。
+// WorkspaceList は workspace を1つも返さない（direct chat の門4 が引く。設計 3-83c）。
 func (s *stubHerdr) WorkspaceList(_ context.Context) (*herdr.WorkspaceListResult, error) {
 	return &herdr.WorkspaceListResult{Type: "workspace_list"}, nil
 }
@@ -206,7 +206,7 @@ type stubFixtureOptions struct {
 	GHLogin func(ctx context.Context) (string, error)
 	// Tracker は使うテスト用トラッカー mock である。nil なら新しく作る。
 	//
-	// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-82h の書く経路）。
+	// **同じカンバンを2台の continuo で見張る場面を作るために使う**（設計 3-83h の書く経路）。
 	Tracker *fakeTracker
 }
 

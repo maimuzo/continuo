@@ -392,7 +392,7 @@ func TestUpdateStatuses_役割が欠けていたら止まる(t *testing.T) {
 // 成功条件: StatusKeyNames が9件返り、そこに cleanup.on_states が入っていて、
 // UpdateStatuses がエラー無しで通ること。
 //
-// **9件目は `tracker.direct_chat_state` である**（設計 3-82）。
+// **9件目は `tracker.direct_chat_state` である**（設計 3-83）。
 // **このキーだけは、既にある WORKFLOW.md に無くても書き込みを止めない**が、
 // **雛形には必ずある。**無いと `continuo init` が書き出したファイルへ書き込めない。
 func TestStatusKeyNames_雛形に9つのキーが全部ある(t *testing.T) {

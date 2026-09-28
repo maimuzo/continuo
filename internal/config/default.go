@@ -123,7 +123,7 @@ func DefaultConfig() *Config {
 			RunningState:   "In Progress",
 			DispatchState:  "Ready",
 			FailureState:   "Blocked",
-			// 人間が pane で直接 Claude Code と話している間だけ置く Status（設計 3-82）。
+			// 人間が pane で直接 Claude Code と話している間だけ置く Status（設計 3-83）。
 			// **標準機能なので、既定に名前が入っている。**
 			// **この名前だけは、カンバンに実在することを起動時に要求しない**
 			// （`config.RequiredBoardStates`）。選択肢をまだ作っていない利用者の continuo を
