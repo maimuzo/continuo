@@ -137,6 +137,30 @@ os.Rename(tmp.Name(), path)
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
 Claude Code がまだ喋っている最中であることは、本体からは区別できない。
 
+**`continuo statusline` も、同じ約束の上にある。**Claude Code はステータスラインを描き直すたびに、
+[internal/orchestrator/settings.go:106](internal/orchestrator/settings.go#L106) が組み立てた
+`'<continuo のパス>' statusline --socket '<sl.sock のパス>'` を exec する
+（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:438](internal/orchestrator/statuslinefetch.go#L438)）の両方に書く）。
+**ビルドするたびに「本体は古い・statusline は新しい」が混ざるのも、hook と同じである。**
+**この項目の「やること」は、`continuo statusline` の挙動を変える変更にも当てる**（人間の決定。2026-09-28）。
+「挙動が変わる」とは、下の表のどれかである。
+
+| 何が変わるか | 例 |
+| --- | --- |
+| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1657-1666](internal/cli/cli.go#L1657-L1666) の `runStatusline`） |
+| **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:826](internal/daemon/daemon.go#L826)） |
+| **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:144](internal/orchestrator/quota.go#L144) の `OnStatusline`） |
+| **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**固定の1行** `continuo`（[internal/statuslineclient/client.go:31](internal/statuslineclient/client.go#L31)。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
+
+**hook と違うところ。**ステータスラインは hook ではない。**壊れても turn の終わりの判定には効かない。**
+効くのは使用率である。動いている本体へ値が1行も届かなくなり、入札を見送り続けて、自動の着手が進まなくなる。
+**人間が観測できる症状は、WARN「statusline取得ができません（値が1行も届かなかった: …）」が
+`rate_limit.refresh_interval_ms`（既定5分）ごとに繰り返し出ることである。**
+
+**実測（2026-09-28）。**サブコマンド名を変えたのと同じ状態を作って叩くと、**終了コード 2 が返り、標準出力は空になる**
+（`flag provided but not defined: -socket` と使い方は標準エラーへ出る）。いまの名前なら、`continuo` の1行を出して 0 で終わる。
+**ステータスラインのコマンドが 2 を返したときに Claude Code が何をするかは、測っていない。**
+
 **やること。**
 
 > **hook の挙動が変わる変更は、実装する前に止まること。**
@@ -207,7 +231,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 { git -C "$R" diff --name-only origin/main...HEAD   # commit 済みのもの
   git -C "$R" diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
   git -C "$R" ls-files --others --exclude-standard -- :/  # 新しく足して、まだ追跡させていないもの
-} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/cli/cli\.go)'
+} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/statuslineclient/|internal/statuslineserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/orchestrator/statuslinefetch\.go|internal/orchestrator/quota\.go|internal/daemon/daemon\.go|internal/cli/cli\.go)'
 ```
 
 **`git -C "$R"` から叩くのは、cwd の下しか見ない経路を塞ぐためである。**
@@ -230,11 +254,15 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:171-192](internal/cli/cli.go#L171-L192) の `switch args[0]` と [internal/cli/cli.go:1505-1510](internal/cli/cli.go#L1505-L1510) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
-| [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
-| [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
+| [internal/cli/cli.go:171-192](internal/cli/cli.go#L171-L192) の `switch args[0]` と [internal/cli/cli.go:1505-1510](internal/cli/cli.go#L1505-L1510) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる。**`statusline` の分岐も同じで、名前を変えると使用率が届かなくなる** |
+| [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行と、statusLine のコマンド行を組み立てている場所そのもの |
+| [internal/socketpath/](internal/socketpath/) | socket のパスの決め方（`hooks.sock` と `sl.sock`）。ずれると hook と statusline の宛先が消える |
 | [internal/orchestrator/orchestrator.go:1486-1490](internal/orchestrator/orchestrator.go#L1486-L1490) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
+| [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・固定の1行 `continuo`・終了コード 0） |
+| [internal/orchestrator/statuslinefetch.go](internal/orchestrator/statuslinefetch.go) | statusline取得用の設定ファイルに statusLine を書く場所 |
+| [internal/orchestrator/quota.go](internal/orchestrator/quota.go) | 届いた1行の解釈（`OnStatusline`）。**受ける側の解釈そのもの** |
+| [internal/daemon/daemon.go](internal/daemon/daemon.go) | `sl.sock` と `hooks.sock` のパスを決めて本体へ渡す場所。ずれると宛先が消える |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 | [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
 | [internal/orchestrator/turn.go](internal/orchestrator/turn.go) | turn の終わりを決める場所。**ここが変わると、本体が turn の終わりを受け取れなくなる** |
@@ -244,7 +272,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 
 | 何を見せるか | 具体的に何を書くか |
 | --- | --- |
-| **深く検討した影響** | **走っている run のどれが、いつ、どう壊れるか。**既に書かれている issue ごとの設定ファイルが、新しい実行ファイルで通るか。**壊れたときに人間が観測できる症状は何か** |
+| **深く検討した影響** | **走っている run のどれが、いつ、どう壊れるか。**既に書かれている issue ごとの設定ファイル（statusline なら statusline取得用の設定ファイルも）が、新しい実行ファイルで通るか。**壊れたときに人間が観測できる症状は何か** |
 | **どのファイルのどこを触るか** | 上の `git diff --name-only` の出力と、変える関数名・フラグ名 |
 | **hook のどの経路に効くか** | 上の表のどの行に当たるか。issue ごとの設定ファイルのどこが変わるか |
 | **止まったまま何もしないと何が起きるか** | **その issue が進まないだけである。**動いている continuo は壊れない |
