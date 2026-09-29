@@ -1,6 +1,6 @@
 # Claude Codeを正本にしたCodex併用セットアップ手順
 
-Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・選択したskills・hook scriptを正本のまま使い、Codexの入口とnative宣言だけを追加する。
+Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・`CLAUDE.md` が指す文書とpluginのskill・hook scriptを正本のまま使い、Codexの入口とnative宣言だけを追加する。
 本文やscriptはsymlink・直接参照で共有し、Codex固有の宣言が必要な部分だけ薄い接続を置く。
 この手順は、既に検証した範囲と、追加検証が必要なhooks・permissions・agent連携を分けて別のmacOS/Linux環境へ反映するものである。
 
@@ -10,8 +10,8 @@ Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・選択したskills・hook 
 
 - Codexが `CLAUDE.md` をプロジェクト指示として読む設定
 - 個人指示の `~/.codex/AGENTS.md` から `~/.claude/CLAUDE.md` へのsymlink
-- Claudeの標準的なskillディレクトリを、プロジェクトの `.agents/skills/` または `~/.agents/skills/` へskill単位でsymlink
-- 同じmarketplaceからCodexへ必要なpluginだけを導入
+- プロジェクト固有のskillを持つ場合だけ、そのskillディレクトリをプロジェクトの `.agents/skills/` へ、個人のskillを `~/.agents/skills/` へskill単位でsymlink
+- 同じmarketplaceからCodexへ必要なpluginだけを導入（`CLAUDE.md` が規則の置き場としてpluginのskillを指す場合は、そのpluginを含める）
 - Claude内からCodexを呼ぶ公式pluginと、HerdrからCodexを直接起動する経路
 - Codex native hooksから、互換性を確認したClaude hook scriptを直接呼ぶ経路
 
@@ -74,6 +74,8 @@ Claude専用のtool・hook・Workflowは、Codexに同等機能があること�
 
 ## 5. プロジェクトのskillを選択してsymlinkする
 
+この節は、プロジェクトが `.claude/skills/` に固有のskillを持つ場合だけ行う。このリポジトリは `.claude/skills/` を持たず、規則は `.claude/rules/` の2本（`reporting.md`・`plan-file.md`）・`internal/prompt/builtin.md`・pluginのskillにあるため、`.agents/skills/` は置かない。pluginのskillは6節の導入で共有する。
+
 Claudeの全skillを平坦化せず、Codexで使うものだけをskillディレクトリ単位でリンクする。`SKILL.md` だけでなく、同じディレクトリの `scripts/`・`references/`・`assets/` も一緒に参照できる。
 
 ```sh
@@ -105,7 +107,14 @@ codex plugin marketplace list
 codex plugin list
 ```
 
-実際のplugin名はmarketplaceの一覧で確認して置き換える。Claude側のplugin cacheをCodexの探索先へリンクしない。plugin更新後はCodex側のmarketplaceも更新し、新しいセッションでskill一覧を確認する。
+実際のplugin名はmarketplaceの一覧で確認して置き換える。このリポジトリの `CLAUDE.md` は、作業の規則の置き場として `maimuzo-dev-core`（`general-claude-md`・`issue-management`・`docs-standard`）と `maimuzo-chat-response`（`chat-response`）のskillを指す。Codexでこのリポジトリを扱う場合は、この2つを導入対象に含める。同じ表が指す `internal/prompt/builtin.md` はリポジトリ内の文書なので、pluginを介さず `CLAUDE.md` からの参照として読む。これらのskillは `user-invocable: false` を持つため、Codexで発見・本文読取できるかを9節の方法で確かめる（未確認）。
+
+```sh
+codex plugin add maimuzo-dev-core@maimuzo-marketplace
+codex plugin add maimuzo-chat-response@maimuzo-marketplace
+```
+
+Claude側のplugin cacheをCodexの探索先へリンクしない。plugin更新後はCodex側のmarketplaceも更新し、新しいセッションでskill一覧を確認する。
 
 ```sh
 codex plugin marketplace upgrade maimuzo-marketplace
@@ -145,6 +154,7 @@ Claudeから `/codex:transfer` が返した `codex resume <session-id>` は、He
 
 ```sh
 test -L ~/.codex/AGENTS.md || test -f ~/.codex/AGENTS.md
+# 5節でプロジェクトのskillをリンクした場合だけ
 test -L .agents/skills/<skill>
 test -f .agents/skills/<skill>/SKILL.md
 codex exec --sandbox read-only "利用可能なskillから、指定した領域に対応する本文を読み、選んだskill名と根拠だけ返す"

@@ -16,9 +16,10 @@ Claude側を正本として維持し、Codexには公式の互換機能とsymlin
 | ClaudeからCodexへの委任・レビュー | OpenAI公式 `codex-plugin-cc` | 通常は追加実装なし |
 | プロジェクトの基本指示 | Codexのfallbackに `CLAUDE.md` を指定 | 既存のCLAUDE.mdのみ |
 | 個人共通の基本指示 | CodexのグローバルAGENTS.mdから既存CLAUDE.mdへsymlink | 既存の個人CLAUDE.mdのみ |
-| `.claude/rules/` | CLAUDE.mdにCodex向け読取手順を短く追記 | 既存rulesと短い接続指示 |
-| `.claude/skills/` | 共有対象のskillディレクトリを `.agents/skills/` へsymlink | 既存のSKILL.mdと付属ファイル |
-| 指定のClaudeプラグイン群 | 既存marketplaceをCodexにも登録し、必要なpluginを選択 | 既存の配布元・本文 |
+| `.claude/rules/`（このリポジトリでは `reporting.md`・`plan-file.md` の2本） | CLAUDE.mdにCodex向け読取手順を短く追記 | 既存rulesと短い接続指示 |
+| CLAUDE.mdが指す規則の文書（`internal/prompt/builtin.md`） | CLAUDE.mdからの参照としてそのまま読む | 既存の文書のみ |
+| `.claude/skills/` | このリポジトリには無い。プロジェクト固有のskillを持つ場合だけ、skillディレクトリを `.agents/skills/` へsymlink | 既存のSKILL.mdと付属ファイル |
+| 指定のClaudeプラグイン群（CLAUDE.mdが規則の置き場として指す `maimuzo-dev-core`・`maimuzo-chat-response` を含む） | 既存marketplaceをCodexにも登録し、必要なpluginを選択 | 既存の配布元・本文 |
 | Claude固有の実行機能 | Codex native機能へ直接接続できるものを個別採用 | 本文・script正本はClaude側、宣言だけCodex側 |
 | Claude停止時の継続 | HerdrからCodexを起動し、session resumeまたは公式import | 通常は追加実装なし |
 
@@ -89,7 +90,7 @@ ln -s ../.claude/CLAUDE.md ~/.codex/AGENTS.md
 
 Codexのグローバル探索はプロジェクトのfallbackとは別である。すでにCodex固有の指示がある場合は上書きせず、そのAGENTS.mdを短い入口にして既存CLAUDE.mdを読むよう指定する。これは入口の差分管理であり、規則本文を複製する必要はない。[公式のグローバル指示](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 
-Claudeは `.claude/rules/` 内のMarkdownを読み、`paths` による条件付き読み込みも行う。Codexの `.rules` はコマンド実行ポリシーであり、Claudeの自然言語rulesをそこへsymlinkしても代替にならない。[Claudeのmemory/rules](https://code.claude.com/docs/en/memory)、[CodexのRules](https://learn.chatgpt.com/docs/agent-configuration/rules)
+Claudeは `.claude/rules/` 内のMarkdownを読み、`paths` による条件付き読み込みも行う。このリポジトリの2本は `paths` 指定を持たない。Codexの `.rules` はコマンド実行ポリシーであり、Claudeの自然言語rulesをそこへsymlinkしても代替にならない。[Claudeのmemory/rules](https://code.claude.com/docs/en/memory)、[CodexのRules](https://learn.chatgpt.com/docs/agent-configuration/rules)
 
 接続指示は個人のCLAUDE.mdに一度だけ置けば、各プロジェクトへの重複追記を避けられる。今回はこちらを採用し、Codexにのみ適用すると明記する。プロジェクト単独で配布する場合の接続指示の例:
 
@@ -109,8 +110,10 @@ Claudeは `.claude/rules/` 内のMarkdownを読み、`paths` による条件付�
 
 ## 5. 単体skillsはディレクトリ単位でsymlinkする
 
-SKILL.mdだけでなくscripts・referencesもまとめて共有する。
+プロジェクト固有のskillを持つ場合だけ、SKILL.mdとscripts・referencesをまとめて共有する。
 既存の `.agents/skills/` を残せる、skillごとのsymlinkを標準にする。
+
+このリポジトリは `.claude/skills/` を持たない。CLAUDE.mdが規則の置き場として指すskillはpluginにあるため、`.agents/skills/` は置かず、6節の導入で共有する。以下はプロジェクト固有のskillを持つプロジェクト向けの手順である。
 
 初回セットアップで、プロジェクトルートから実行する例。`example-skill` は実在する共有対象の名前に置き換える。リンク先の実在と、リンクを置くパスが未使用であることを確認し、既存ファイル・ディレクトリがあれば上書きせず整理する。
 
@@ -149,6 +152,8 @@ codex plugin add maimuzo-go@maimuzo-marketplace
 ```
 
 これは指定された配布元を再利用する具体例であり、全14件を無条件に導入する指示ではない。Codexの `/plugins` から必要なものを選ぶ運用でもよい。
+
+このリポジトリのCLAUDE.mdは、作業の規則の置き場として `maimuzo-dev-core` の `general-claude-md`・`issue-management`・`docs-standard` と、`maimuzo-chat-response` の `chat-response` を指す。Codexでこのリポジトリを扱うなら、この2つのpluginを同じ手順で導入する。4つのskillはいずれも `user-invocable: false` を持つ。Codexで発見・本文読取できるかは確認していない（16節で確認した代表3件には含まれない）。
 
 根拠は、公式仕様のClaude互換manifest受け入れと既存marketplace互換、および公式実装の `.claude-plugin/plugin.json` 対応である。ただしmanifestを読めることと、個々のskill・agentの実行意味が一致することは別である。[公式パッケージ仕様](https://developers.openai.com/plugins/build/plugins)、[公式manifest実装](https://github.com/openai/codex/blob/main/codex-rs/core-plugins/src/manifest.rs)
 
@@ -260,7 +265,7 @@ Vercel Skills CLIのsymlinkはcanonical copyを各エージェントから参照
 1. Codexの認証と公式連携プラグインを確認する。
 2. CLAUDE.mdのfallbackと必要な読み込み上限を設定する。
 3. rulesの読取指示を既存CLAUDE.mdに一度追加する。
-4. 単体skillを一つsymlinkし、同じmarketplaceから小さなpluginを一つ導入する。
+4. プロジェクト固有の単体skillがあれば一つsymlinkし、同じmarketplaceから小さなpluginを一つ導入する。
 5. Claude内の委任と、Herdr上のCodex直接起動の両方で使う。
 6. 確認済みの対象だけ増やす。Claude専用資産はそのまま残す。
 
@@ -303,7 +308,7 @@ Claude側の資産本文を移動・複製せず、Codexの入口と標準plugin
 | --- | --- |
 | プロジェクト指示 | 3節のfallbackと上限を設定。再開後のセッションにCLAUDE.mdの先頭から末尾のcommit規則まで渡されたことを確認 |
 | 個人指示 | 新設した `~/.claude/CLAUDE.md` にCodex限定のrules・import読取手順を集約。`~/.codex/AGENTS.md` は `../.claude/CLAUDE.md` へのsymlink |
-| 単体skill | `.agents/skills/worker-briefing` は `../../.claude/skills/worker-briefing` へのsymlink。Codexの `skills/list` が正本のパスへ解決し、利用可能と返すことを確認 |
+| 単体skill | プロジェクトの単体skillは共有していない。このリポジトリに `.claude/skills/` が無く、`.agents/skills/` も置いていない。16節の `worker-briefing` の検査は2026-09-15時点の記録で、そのskillはいまリポジトリにもpluginにも無い（中身は `maimuzo-chat-response` の `chat-response` スキルと `internal/prompt/builtin.md` の5-7にある） |
 | 既存共有skill | 個人のHerdr skillは既に共有配置だったため変更なし。`skills/list` でも利用可能 |
 | marketplace | 指定の既存配布元をCodex CLIで登録し、Goガイドのpluginを一つ導入。本文の変換・独自manifest追加なし |
 | 選択的な有効化 | Goガイド・coding・git・patterns・security・testingの6 skillsが有効。Claude固有のagents・hooks・performanceの3 skillsはCodex設定で無効化 |
@@ -323,7 +328,7 @@ Codex側で無効化したskillの設定はplugin cacheのバージョン付き�
 リポジトリの変更はcommitで戻し、ホーム配下の設定は個人バックアップで戻す。
 Gitの取り消しだけでは個人設定は復元されない。後から加えた変更がある場合は丸ごと上書きしない。
 
-導入前のcommitは `1355524d`。導入完了のcommitは、この文書と `.agents/skills/worker-briefing` の履歴から確認できる。
+導入前のcommitは `1355524d`。導入完了のcommitは、この文書と、`git log -- .agents/skills/worker-briefing` が返す履歴（そのsymlinkを足したcommit）から確認できる。
 リポジトリの未コミット変更を保護したうえで、完了commitだけを `git revert <完了commit>` で取り消す。履歴や無関係の変更を消す `git reset --hard` は使わない。
 
 個人設定のバックアップ先は `~/.codex/backups/claude-coexistence-20260914/`。
@@ -379,6 +384,7 @@ Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`�
 | プロジェクト前提 | Goガイドの `go run ./cmd/manager/` と `bash unit_and_e2e_test.sh` はplugin同梱資産ではない。対象プロジェクトで存在を確かめる。共有設定の検証を製品固有の修正へ広げない |
 | 正本更新の反映 | 隔離fixtureのCLAUDE.md・symlink先skill・相対参照の3値を更新前の値から更新後の値へ変更。Codexの新規sessionとClaudeの新規Herdr sessionが、`PROJECT-R2-9136`・`SKILL-R2-2748`・`REFERENCE-R2-6502` を同じく返した。運用中の正本を編集する試験は未実施 |
 | 残りの自動選択・回帰 | 共有対象の更新後暗黙選択は `ecc-git` と `ecc-security` で確認済み。Claude側の既存開発フロー全般と、各frontmatterキーの実行意味の完全同等性は保留。issue操作・auto-debug・co-review等を実行すると外部書込みや編集が発生するため、読み取り専用の今回スコープでは試験しない。今回の限定試験を全互換と一般化しない |
+| CLAUDE.mdが指すpluginの規則 | `maimuzo-dev-core`・`maimuzo-chat-response` はCodexに未導入（2026-09-29に `~/.codex/config.toml` の `plugins` を読んで確認。maimuzo-marketplaceから導入済みなのは `maimuzo-go` だけ）。Codexでこのリポジトリを扱う前に6節の手順で導入し、4つのskillを発見・本文読取できるかを確かめる |
 | 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。重複読込を避ける薄い宣言と、Codex側のtrustを別途検証する |
 
 Claudeのレートリミットを意図的に発生させる試験はしていない。代わりの合格条件である「移送済みの会話をClaudeに依存せずCodexで継続できること」は16節の試験で満たした。次に残る確認を行う場合も、lunaを明示し、300秒上限を付けてから開始する。
@@ -436,7 +442,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 
 | 残件 | 実現性 | 今回の扱い |
 | --- | --- | --- |
-| 標準skill本文・付属資料 | 高い | symlinkを継続 |
+| 標準skill本文・付属資料 | 高い | プロジェクト固有のskillを持つ場合はsymlink（このリポジトリには無い）。pluginのskillはnative導入 |
 | Claude pluginのCodex導入 | 高い | 既存marketplaceをnative導入 |
 | Claudeの基本指示・個人指示 | 高い | fallbackとAGENTS.md symlink |
 | 条件付きrulesの自動適用 | 部分的 | CLAUDE.mdのCodex読取手順。厳密化はRulesyncを再評価 |
@@ -460,7 +466,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 | 拡張frontmatter代表3件 | 完了 | `github-project-update`・`naming-brainstorming`・`co-reviewer`をfixtureで発見・本文読取。実行意味の同等性は保証しない |
 | Claude agentのCodex共有 | 不採用 | Codex custom agentは`name`・`description`・`developer_instructions`必須のTOMLで、Claude Markdownをsymlinkできない。変換すると更新のたびに再生成・再検証が必要になるため、Claude専用として残す |
 | Codexでのagent役割利用 | 限定対応 | Codexの標準`worker`/`explorer`へ、作業時だけ正本Markdownのパスを明示して読ませる。自動spawn・frontmatter・Claude専用toolsの同等性は保証しない |
-| 条件付きrules | 保留（追加調査済み） | Codexの指示探索には`.claude/rules/`の`paths`条件と同じ自動適用機構がない。現行のCodex向け読取指示を正本へ残し、実タスクで漏れが観測されても本文変換は行わず、Codex側の入口だけを再検討する |
+| 条件付きrules | 保留（追加調査済み） | このリポジトリの`.claude/rules/`の2本は`paths`指定を持たないため、いまは該当しない。Codexの指示探索には`.claude/rules/`の`paths`条件と同じ自動適用機構がない。現行のCodex向け読取指示を正本へ残し、実タスクで漏れが観測されても本文変換は行わず、Codex側の入口だけを再検討する |
 | hooksの段階接続 | 追加採用候補を選定 | 公式migrate-to-codexでcommand hook設定を生成できる。既存 `block-merge-without-review.py` と `check-reply-clarity.py` は同じscriptを接続できる見込み。`check-verified-commands.py` はClaude側もtranscript依存をやめ、両製品の共通Pre/PostToolUse journal方式へ再実装するか、採用を見送る |
 | permissions | 追加検証 | Claude `permissions.allow/deny` とCodex `approval_policy`/`sandbox_mode` は別契約。危険操作のdenyだけをCodex native hookへ移し、通常の承認は既存のCodex設定を正本とする |
 | commands・MCP | 部分採用 | command本文は標準skillへsymlinkできるものだけ選ぶ。MCPはClaude `.mcp.json`を変換せず、plugin native MCPまたはCodex側の既存接続を使う |
@@ -473,7 +479,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 Claudeの正本を変更せず、Codexが必要とする範囲だけnative設定から実行時に参照する。
 Codex用のagent TOMLや変換済み本文は作らない。薄いhook/plugin宣言は本文を持たない接続として許容する。
 
-1. ローカルskillは`.agents/skills/<name>`からClaude側のskillディレクトリへsymlinkする。Codex公式もskillディレクトリのsymlink探索をサポートしている。
+1. プロジェクト固有のローカルskillを持つ場合は、`.agents/skills/<name>`からClaude側のskillディレクトリへsymlinkする（このリポジトリには無い）。Codex公式もskillディレクトリのsymlink探索をサポートしている。
 2. plugin skillはClaudeとCodexの両方で同じmarketplaceからnative導入する。Claude cacheの版付きディレクトリを直接symlinkしない。
 3. Claude agentが本文で参照されたとき、Codexでは実行済みと扱わず、必要なら依頼文に正本Markdownのパスを渡して標準agentに読ませる。
 4. rulesはCLAUDE.mdのCodex向け読取指示に従って必要なMarkdownを読む。`paths`条件が自動適用されたとは扱わない。
