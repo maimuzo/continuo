@@ -882,7 +882,20 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// （既定60秒）を自分で掛ける。**ここで同じ長さをもう1枚重ねると、
 	// 外側のほうが先に始まっているぶん先に切れ、hook の側の後始末を通らずに
 	// `context deadline exceeded` だけが残る。**
-	afterRunOK := o.runAfterRunOK(keepCtx, rs)
+	afterRunOK, afterRunSkip := o.runAfterRunOK(keepCtx, rs)
+	if !afterRunOK {
+		// **`released` の本文が「どちらかはログに出ています」と約束している**ので、出す
+		// （実装レビュー2周目の MEDIUM）。**未設定と「worktree のパスが無い」は、
+		// それまで1行も出していなかった。**既定の `WORKFLOW.md` は `after_run` を持たないので、
+		// **未設定のほうが普通の状態である。**
+		//
+		// **run ごとに1回だけの札は付けない。**この段は手放しのたびに1回しか通らない
+		// （通ったあとは担当を外して印から外れる。外せなかったときは `noteQuotaReleaseFailed`
+		// の札が付いた行が出る）。**毎巡回で積む経路が無い。**
+		o.logger.Info("枠の上限で担当を手放しますが、workspace_hooks.after_run では push できていません"+
+			"（remote の中身を確かめてください）",
+			"identifier", issue.Identifier, "理由", afterRunSkip)
+	}
 
 	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
@@ -1438,6 +1451,18 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 // rs: 対象の run。
 // newAccount: いま担当になっているアカウントのログイン名。
 func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState, newAccount string) {
+	// **先に direct chat を抜けさせる**（設計 3-83f の印を外す道の6本目・3-83h の手を離す経路の段1。
+	// 実装レビュー2周目の MEDIUM）。**抜けさせないと、下の `stopWorker` が門で止まって
+	// pane を閉じないのに、そのあとの `release` が run の登録から外す。**
+	// **人間が居る pane が残ったまま、continuo がその run を忘れる。**
+	//
+	// **呼び出し元の一方（`stopBecauseHandoffLost`）は、標識を取る前に既に呼んでいる。**
+	// **`leaveDirectChatMode` は印が立っていなければ偽を返して何もしない**ので、二重に呼んでも害が無い。
+	// **関数の中へ置くのは、標識を取った状態で入ってくるもう一方の経路
+	// （枠の上限で手放す `!mine` の枝）が、この段を落としていたためである。**
+	// **外に置くと、次に呼び出し元が増えたときに同じ落とし方が戻る。**
+	rs.leaveDirectChatMode()
+
 	// **空のときの差し替えは置かない。**`verifyHandoff` は issue に付いている担当者から
 	// **`logins[0]` をそのまま返す**ので、真のときに空になる経路が1つも無い。
 	// **到達できない差し替えを置くと、読む人が「空になることがある」と読む。**

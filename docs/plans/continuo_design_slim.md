@@ -400,6 +400,10 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 **言いたいこと。**枠に当たったら**新規の dispatch だけを止め、走行中の turn は止めない。**
 **リセット時刻を過ぎたら、継続の指示を1回送って生死を確かめる。**
 **待っている間は時計を止める。**止めないと、待っているだけの worker を「固まった」とみなして殺す。
+**手放しの線は、枠待ちの記録とは別に走る**（下の図で `usage` から2本に分かれる）。
+**枠待ちの記録は使用率100でしか立たないが、手放しは余裕値0以下で走る**ので、
+**使用率90〜99の帯では、枠待ちの記録が無いまま手放しだけが成立する。**
+**手放しを枠待ちの下流に置くと、その帯で1度も走らない。**
 
 ```mermaid
 flowchart TB
@@ -411,11 +415,13 @@ flowchart TB
     usage --> full{"使用率が100の<br/>枠があるか"}
     full -->|"無い"| normal
     full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
-    waiting --> limit{"1週間の枠で<br/>待つ上限を超えたか"}
-    limit -->|"超えた"| letgo["担当を手放す<br/>after_run を走らせ pane を閉じる<br/>worktree と Status はそのまま"]
-    limit -->|"超えていない"| reset{"resets_at を過ぎたか"}
+    waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]
+
+    usage --> limit{"1週間の枠の余裕値が0以下で<br/>明けるまでが待つ上限を超えたか"}
+    limit -->|"超えた"| letgo["担当を手放す<br/>after_run を走らせ pane を閉じる<br/>worktree と Status はそのまま"]
+    limit -->|"超えていない"| normal
 
     probe --> resp{"応答が返るか"}
     resp -->|"返った"| resume["そのまま継続する<br/>時計を動かし直す"]

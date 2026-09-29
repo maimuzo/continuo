@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "459bb3cc1ce8aae1d9cebffacd8d8f6a2f7bf8aced0dcbb4dbe7bc9131afae57", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "af3aebfea7324d55c97dbfc97ddc697941587d2e6b2357d5c1ba132a839bc9b2", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 //
@@ -72,21 +72,6 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 	}
 	return reader
 }
-
-// {"RUCM-PATH": "P001"}
-//
-// TestQuota_100パーセントかつhookが来ていない run だけを枠待ちにする は、
-// 枠待ちの判定が2条件の連言であることを確かめる。
-//
-// 目的: 設計 3-27 の「**この run は枠待ちである**は次の2つが同時に成り立つとき。
-// 条件その1: `percent` が 100 に達している。条件その2: その run から `claude.turn_timeout_ms` の
-// あいだ hook が1件も来ていない」と、「**`severity` は見ない**」を守っていることを示す。
-//
-// **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
-// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
-//
-// 与える情報: 枠が100%。hook が来ていない run と、閾値の手前で hook を受けた run。
-// 成功条件: 前者だけが枠待ちになり、時計が止まる。後者は枠待ちにならない。
 
 // weeklyWaitFixture は「1週間の枠を待つ上限」の検査で使う一式を組み立てる（issue #197）。
 //
@@ -163,7 +148,8 @@ func weeklyWaitFixtureWith(
 // tickOnce は巡回を1回だけ回す（issue #197）。
 //
 // **1回では手放さない。**連番を初めて見た巡回では「そこからどれだけ止まっていたか」が
-// 分からないので、**次の巡回まで待つ**（設計 3-27 の段0b）。
+// 分からないので、**次の巡回まで待つ**（設計 3-27 の「段0 へ入る前に外すもの」の7行目。
+// **段0b ではない。**あちらは「外す相手が決まるか」である）。
 // **窓を満たすまで回すのは `waitForRelease` である。**
 //
 // fx: 対象の一式。
@@ -175,7 +161,7 @@ func tickOnce(fx *stubFixture) {
 //
 // **1回の巡回では手放さない。**連番を初めて見た巡回では
 // 「そこからどれだけ止まっていたか」が分からないので、**次の巡回まで待つ**
-// （設計 3-27 の段0b）。**手放しは別の goroutine で走る**ので、
+// （設計 3-27 の「段0 へ入る前に外すもの」の7行目）。**手放しは別の goroutine で走る**ので、
 // **巡回を止めて待つのではなく、時計を進めながら巡回を回し続ける。**
 //
 // t: 呼び出し元のテスト。
@@ -258,7 +244,7 @@ func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P008"}
 //
 // TestQuota_担当が移っていたらafter_runを走らせずに止める は、代替フロー「待つ上限を超えた」の
 // 担当の確かめで引き返す枝を検査する（設計 3-27 / 3-77c。issue #197）。
@@ -294,7 +280,7 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P009"}
 //
 // TestQuota_1週間の枠のリセットが上限より先なら担当を手放す は、#197 の本体を確かめる
 // （時刻で測る側）。
@@ -484,6 +470,8 @@ func TestQuota_連番を返さない版では手放さない(t *testing.T) {
 	t.Fatalf("連番を読めない run が、手放されも打ち切られもせずに残っています:\n%s", fx.Logs.String())
 }
 
+// {"RUCM-PATH": "P009"}
+//
 // TestQuota_92パーセントでも打ち切られずに手放される は、90〜99%の帯を確かめる
 // （issue #173 / #197）。
 //
@@ -632,6 +620,17 @@ func TestQuota_走っている印が残っていても止まっていれば手�
 	fx.Orc.OnHook(subagentStartEvent("session-188", "", "a1f9f743842d397e1", "Explore"))
 
 	waitForRelease(t, fx, clock, issue.Identifier)
+
+	// **印から外れる出口は手放しだけではない**（実装レビュー2周目の MEDIUM）。
+	// **`mayReleaseOwnWork` が「担当は自分ではない」と答えると、`stopHandoffLostClaimed` へ落ちる。**
+	// **あちらは `after_run` も `released` も通さずに pane を閉じて印から外す**ので、
+	// **`viewOf` だけを見る検査は緑のままになる。**担当者とログの1行で区別する。
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("担当者が残っている（手放しの経路を通っていない）: %v", got)
+	}
+	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("手放したことを出していない（打ち切りか畳みで消えた恐れがある）:\n%s", got)
+	}
 }
 
 // TestQuota_5時間の枠の時刻で1週間の枠を判定しない は、待つ先の取り方を確かめる。
@@ -652,7 +651,7 @@ func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testi
 	fx.Orc.Tick(context.Background())
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-	// **連番を初めて見た巡回では手放さない**（設計 3-27 の段0b）。
+	// **連番を初めて見た巡回では手放さない**（設計 3-27 の「段0 へ入る前に外すもの」の7行目）。
 	waitForRelease(t, fx, clock, issue.Identifier)
 
 	// **打ち切りで消えたのではないことを確かめる**（issue #197）。

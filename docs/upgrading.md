@@ -180,11 +180,13 @@ continuo setup       # 選び直させます。重なる名前は書き込みま
 **`WORKFLOW.md` から消すキーが1つあります。**`rate_limit.pause_above_percent` です（**書いてある人は全員。**`continuo init` の雛形がずっと書いていました）。
 **足すキーが1つあるのは、`Direct Chat` の名前の重なりに当たる人だけです。**
 
-**ただし `continuo doctor` の `未記入の項目` が2つ増えます。**雛形に `tracker.direct_chat_state` と `rate_limit.refresh_interval_ms` が
+**ただし `continuo doctor` の `未記入の項目` が3つ増えます。**雛形に `tracker.direct_chat_state` と
+`rate_limit.refresh_interval_ms` と `rate_limit.weekly_wait_limit_minutes` が
 増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
 **書かなくても、いままでどおり動きます**（書かなければ Go が持つ既定が使われます。`Direct Chat` は、
-**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**。`refresh_interval_ms` は既定の5分です）。
-気になるなら、次のコマンドが足す2行を作ります。
+**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**。`refresh_interval_ms` は既定の5分、
+`weekly_wait_limit_minutes` は既定の300分＝5時間です）。
+気になるなら、次のコマンドが足す3行を作ります。
 
 ```bash
 continuo doctor --missing-keys-patch ~/continuo-work

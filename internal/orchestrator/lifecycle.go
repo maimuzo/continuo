@@ -1125,6 +1125,32 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 	o.runAfterRunOK(ctx, rs)
 }
 
+// afterRunSkip は `workspace_hooks.after_run` を走らせなかった理由である（issue #197）。
+//
+// **`released` のコメントは「`after_run` で push できたことを確かめられませんでした
+// （設定していないか、走らせたが失敗しました。どちらかはログに出ています）」と書く。**
+// **黙って偽を返すと、その約束が果たされない**（実装レビュー2周目の MEDIUM）。
+// **既定の `WORKFLOW.md` は `after_run` を持たないので、未設定のほうが普通の状態である。**
+// 利用者は存在しないログを探すことになる。
+//
+// **判定そのものは `internal/workspace` に置いたままにする。**ここが返すのは語だけである。
+// **判定を写すと、あちらが「設定されている」の規則を変えたときに、この1行だけが古い規則で答え続ける。**
+const (
+	// afterRunSkipNone は、走らせて成功した（か、既に走らせてあった）ことを表す。
+	afterRunSkipNone = ""
+	// afterRunSkipNoWorktree は、走らせる相手が無かった（worktree のパスが空）ことを表す。
+	afterRunSkipNoWorktree = "worktree のパスを持っていません"
+	// afterRunSkipNotConfigured は、`workspace_hooks.after_run` が書かれていないことを表す。
+	afterRunSkipNotConfigured = "workspace_hooks.after_run が設定されていません"
+	// afterRunSkipFailed は、走ったが失敗したことを表す。**その詳細は別の WARN に出ている。**
+	afterRunSkipFailed = "workspace_hooks.after_run が失敗しました"
+	// afterRunSkipAlreadyRan は、**この worktree で既に走っていた**ことを表す。
+	//
+	// **成功したとは言えない。**印を立てるのは実行の前なので、
+	// **前に走った回が失敗していても印は残る。**だから偽を返す。
+	afterRunSkipAlreadyRan = "workspace_hooks.after_run は、この worktree で既に走っていました"
+)
+
 // runAfterRunOK は `workspace_hooks.after_run` を走らせ、**成功したかどうかを返す。**
 //
 // **`released` のコメントは「`after_run` は実行済みです」と断言する**（設計 3-27）。
@@ -1133,12 +1159,13 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: `after_run` が走って成功したら true。
+// 戻り値の1つ目: `after_run` が走って成功したら true。
 // **走らせる相手が無かったとき（worktree のパスが空）も false である。**
-func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
+// 戻り値の2つ目: 走らせなかった理由（`afterRunSkip…` のどれか）。**成功したときは空である。**
+func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, string) {
 	snap := rs.snapshot()
 	if snap.WorktreePath == "" {
-		return false
+		return false, afterRunSkipNoWorktree
 	}
 	// **設定されていないときは、走らせたと言ってはならない**（issue #197）。
 	// **`RunAfterRunOnce` は「この worktree で初めて呼ばれたか」を返すだけで、
@@ -1151,7 +1178,7 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	// **ここへ写すと、あちらが「設定されている」の規則を変えたときに、
 	// この1行だけが古い規則で答え続ける。**
 	if !o.ws.HookConfigured(workspace.HookAfterRun) {
-		return false
+		return false, afterRunSkipNotConfigured
 	}
 	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
 	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
@@ -1164,7 +1191,7 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	// **6周目のレビューが「`ran` をそのまま返している」と挙げたので同じ段を足したが、
 	// この段が既にそれを塞いでいた**（`2a2e60d` から在る）。**2つ目は到達しない。**
 	if rs.afterRunDone() {
-		return true
+		return true, afterRunSkipNone
 	}
 	// **`ran` は「この worktree で初めて呼ばれたか」であって、成否ではない。**
 	// **走って失敗したときも真が返る。**
@@ -1179,12 +1206,15 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
 			"（remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
-		return false
+		return false, afterRunSkipFailed
 	}
 	if ran {
 		rs.markAfterRunDone()
+		return true, afterRunSkipNone
 	}
-	return ran
+	// **`ran` が偽になるのは「既に走らせてあった」ときだけである。**
+	// 上の `rs.afterRunDone()` が先に受けるので、ここへは復元をまたいだ run しか来ない。
+	return false, afterRunSkipAlreadyRan
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。

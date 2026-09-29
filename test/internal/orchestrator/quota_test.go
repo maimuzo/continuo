@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "459bb3cc1ce8aae1d9cebffacd8d8f6a2f7bf8aced0dcbb4dbe7bc9131afae57", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "af3aebfea7324d55c97dbfc97ddc697941587d2e6b2357d5c1ba132a839bc9b2", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
@@ -148,7 +148,7 @@ func TestQuota_source_noneなら使用率を読まずに0として入札に参�
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の指示を送らない は、
 // 二重投入の防止を確かめる。

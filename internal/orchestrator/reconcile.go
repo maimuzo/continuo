@@ -434,13 +434,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // snap: この巡回で読んだ枠の写し。**nil でも、時刻で外す枝は通す**（下の理由）。
 // now: いまの時刻。
 func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
-	// **1度も読めていないなら、何もしない**（issue #173）。
-	//
-	// **`AnySelected` は nil のレシーバに偽を返す。**そのまま進むと
-	// 「使い切っている枠は無い」と読み、**待っている run の印を全部外す。**
-	// **枠は尽きたままなので、外された run は打ち切られてリトライを積む。**
-	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) の
-	// 「読めないことを理由に走行中の run を捨てない」に、真っ向から反する。
+	// **写しが nil でも早戻りしてはならない**（issue #173）。
 	//
 	// **nil へ戻る経路は在る**（実装レビュー1周目の MEDIUM。`origin/main` を取り込んで生まれた）。
 	// **`snapshotOf` は、期限内の期間が1つも無いと nil を返す**
