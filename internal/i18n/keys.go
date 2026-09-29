@@ -2451,6 +2451,10 @@ const (
 	// KeyOrchestratorDirectChatReady は、direct chat の pane を用意したときに issue へ書く案内である
 	// （設計 3-83d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
 	KeyOrchestratorDirectChatReady Key = "orchestrator.direct_chat.ready"
+	// KeyOrchestratorRelayClosedRecord は、continuo が Claude Code を起動した pane を閉じたときに
+	// issue へ書く「閉じた記録」の2行目である（設計 3-85。issue #246）。1行目は `<!-- continuo:closed -->`
+	// で、その印はコードが付ける（言語で変えない）。差し込む値は無い。
+	KeyOrchestratorRelayClosedRecord Key = "orchestrator.relay.closed_record"
 	// KeyOrchestratorDirectChatAssigneesInvalid は、direct chat のカードの担当者が1人ではないので
 	// failure_state へ動かしたときに issue へ書く（設計 3-83h）。人数・担当者の一覧・
 	// direct_chat_state・failure_state を差し込む。
@@ -3549,6 +3553,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorErrStartupBusy,
 	KeyOrchestratorDirectChatReady,
+	KeyOrchestratorRelayClosedRecord,
 	KeyOrchestratorDirectChatAssigneesInvalid,
 	KeyOrchestratorDirectChatNoAssignees,
 	KeyOrchestratorDirectChatSetupLimit,

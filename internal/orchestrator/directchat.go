@@ -384,6 +384,11 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 		}
 	}
 	o.mu.Unlock()
+	if haveCurrent && (outcome == setupLost || outcome == setupAbandon) {
+		// **閉じる前に、控えの担当者を取り直したものへ差し替える**（設計 3-85）。閉じた記録を書くかは
+		// 控えの担当者で決めるので、古いままだと、担当者が他人へ替わったのに記録を書いてしまう。
+		rs.setAssigneesFrom(current)
+	}
 
 	switch outcome {
 	case setupEnter:
@@ -522,16 +527,21 @@ func (o *Orchestrator) abandonDirectChatSetup(ctx context.Context, rs *runState)
 //
 // **`markWorkerStopped` は呼ぶ。**この run を待っている turn ループがあった場合に返らなくなるのを防ぐ。
 //
+// **閉じたら、閉じた記録の扱いを `stopWorker` と同じ規則で決める**（設計 3-85。`settleClosedRecord`）。
+// 閉じた pane でその run の `agent.start` が済んでいたか、保留が立っていれば書く。
+// **`agent.start` の前のシェルを閉じただけなら、保留が無い限り書かない。**閉じ損ねたら書かず、保留も捨てる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) closeDirectChatSetupPane(ctx context.Context, rs *runState) {
+// 戻り値: pane が残っていないなら true（閉じられた・既に無かった・閉じる pane が無かった）。閉じ損ねたら false。
+func (o *Orchestrator) closeDirectChatSetupPane(ctx context.Context, rs *runState) bool {
 	rs.mu.Lock()
 	paneID := rs.PaneID
 	rs.PaneID = ""
 	rs.mu.Unlock()
 	rs.markWorkerStopped()
 	if paneID == "" {
-		return
+		return true
 	}
 	// **期限は付ける。**herdr が応答しないときに停止が永久に返らなくなるのを防ぐ（`stopWorker` と同じ扱い）。
 	if ctx.Err() != nil {
@@ -541,12 +551,21 @@ func (o *Orchestrator) closeDirectChatSetupPane(ctx context.Context, rs *runStat
 		defer cancel()
 	}
 	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
+		if paneAlreadyGone(err) {
+			o.logger.Info("閉じようとした pane はもうありませんでした",
+				"identifier", rs.issue().Identifier, "pane_id", paneID)
+			o.settleClosedRecord(ctx, rs, paneID, true, closedRecordWrite)
+			return true
+		}
 		o.logger.Warn("direct chat のために開いた pane を閉じられませんでした",
 			"identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)
-		return
+		o.settleClosedRecord(ctx, rs, paneID, false, closedRecordWrite)
+		return false
 	}
 	o.logger.Info("direct chat のために開いた pane を閉じました",
 		"identifier", rs.issue().Identifier, "pane_id", paneID)
+	o.settleClosedRecord(ctx, rs, paneID, true, closedRecordWrite)
+	return true
 }
 
 // noteDirectChatSetupFailure は用意の失敗を専用の記録へ1つ数える（設計 3-83d）。
@@ -785,7 +804,8 @@ func (o *Orchestrator) letGoOfDirectChatAsync(ctx context.Context, rs *runState,
 		cleanupCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 		defer cancel()
-		o.stopWorker(cleanupCtx, rs)
+		// **閉じた記録は書かない**（設計 3-85）。担当を外された機械は issue へ書かない（設計 3-83h）。
+		o.stopWorker(cleanupCtx, rs, closedRecordSkip)
 		o.release(rs)
 	}()
 }
@@ -1105,9 +1125,16 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 	o.logger.Info("人間が引き取りましたが、この run の pane はもう Claude Code を持っていないので印を外します"+
 		"（次の巡回で pane を用意し直します）",
 		"identifier", rs.issue().Identifier, "やめた理由", summaryLine(reason), "pane_id", paneID)
+	// **この枝は、`stopWorker` を通らずに run を手放す唯一の道である**（設計 3-85）。
+	// 報告の書かせ直しの段2 で閉じた Claude Code の閉じた記録（保留）は、ここで書かないと誰も書かない。
+	// **シェルを閉じられたら保留を書き、閉じ損ねたら捨てる**（`closeDirectChatSetupPane` が決める）。
+	// **pane の ID が空なら、保留を書く。**段2 で閉じた Claude Code はもう動いていない。
+	// `release` 自身は変えない（ctx を受け取らない）。
 	if paneID != "" {
 		// **continuo が開いたばかりのシェルである**（`agent.start` がまだ済んでいない）。
 		o.closeDirectChatSetupPane(ctx, rs)
+	} else {
+		o.settleClosedRecord(ctx, rs, "", false, closedRecordWrite)
 	}
 	rs.endTerminal()
 	o.release(rs)

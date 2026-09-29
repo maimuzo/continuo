@@ -68,7 +68,7 @@ flowchart TB
     CC -->|"Stop / Notification など"| HKR
 
     TRK ==>|"読む（毎巡回）"| BOARD
-    TRK ==>|"書く（Status・引き渡しの通知・Status を動かした記録）"| BOARD
+    TRK ==>|"書く（Status と、self_marker か continuo: の印で始まるコメント）"| BOARD
     CC -.->|"書く（エージェントが自分で gh を叩いた場合）"| BOARD
     HUMAN ==>|"書く（着手・回答・レビュー完了）"| BOARD
     TOOL ==>|"書く（カンバンへ載せる・Ice Box・並べ替え・sub-issue）"| BOARD
@@ -364,7 +364,7 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 
 | 止まる箇所 | 打つ手 |
 | --- | --- |
-| **権限の確認** | `--permission-mode auto` で起動する（既定）。**保護対象パスへの書き込みとシェルのコマンドは判定役へ回る。issue のコメントで出した許可は届かない**（判定役への要求から道具の結果は取り除かれる。公式文書。2026-09-18 取得）。**許可は設定ファイルへ狭い規則で書き、continuo を再起動する**（広い規則は auto で落とされる）。`dontAsk` も選べる |
+| **権限の確認** | `--permission-mode auto` で起動する（既定）。**保護対象パスへの書き込みとシェルのコマンドは判定役へ回る。エージェントが `gh` で読んだ issue のコメントの許可は届かない**（判定役への要求から道具の結果は取り除かれる。公式文書。2026-09-18 取得）。**そのため continuo が、pane を閉じるたびに書く閉じた記録（`<!-- continuo:closed -->`）より後に人間が書いたコメントを、次の起動の最初のメッセージに付けて渡す**（relay。詳細版 3-85）。**決まった操作をいつも許すなら、設定ファイルへ狭い規則で書き、continuo を再起動する**（広い規則は auto で落とされる）。`dontAsk` も選べる（relay は動かない） |
 | **フォルダの信頼確認** | リポジトリごとに人間が1度だけ承認する。**continuo は dispatch の直前に検査し、未承認なら飛ばす** |
 | **レートリミット** | 第9節 |
 
@@ -464,6 +464,8 @@ herdr がその workspace を issue の親にしてしまう（実測）。**開
 **言いたいこと。**プロンプトに本文を埋め込まない。**owner / repo / 番号だけを渡し、
 エージェントが `gh` の JSON 出力で読む**（3-29）。
 コメントを何件まで渡すかを continuo が決めると、切り捨てた分が読まれないからである。
+**例外は1つだけで、信頼できる人間が前の回のあとに書いたコメントを最初のメッセージに付ける**（relay。詳細版 3-85）。
+判定役は user メッセージにある人間の意図しか許可として数えないためである。**エージェントは、それでも本文とコメントを自分で全部読む。**
 
 **読ませるのは JSON だけである。テキスト表示は使わせない**（3-72）。
 `gh issue view --comments` はコメントを行頭の `--` だけで区切り、本文を桁0から無加工で流す。
@@ -640,7 +642,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | branch を消す | worktree だけでなく branch も消す |
 | `read_timeout_ms` の相手が違う | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
-| **issue の中身をプロンプトに埋め込まない** | owner / repo / 番号だけを渡し、`gh` の JSON 出力で直接読ませる |
+| **issue の中身をプロンプトに埋め込まない** | owner / repo / 番号だけを渡し、`gh` の JSON 出力で直接読ませる。例外は、信頼できる人間のコメントだけを最初のメッセージに埋め込む relay（詳細版 3-85） |
 | 無音の測り方 | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
 | `tracker` に仕様外のキーを足す | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | 再起動後は引き渡し状態の worker を止めない | pane を残して人間に見せる |
@@ -662,7 +664,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | --- | --- | --- |
 | `codex.stall_timeout_ms` | 5.3.6 | 観測点は pane の `revision`（画面の版）1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
 | `claude.liveness_hooks` | 仕様に無い | 読むコードが1行も無かった |
-| `tracker.write_interval_ms` | 仕様に無い | 読むコードが無い。書き込みはもともと間隔が空く |
+| `tracker.write_interval_ms` | 仕様に無い | 読むコードが無い。書き込みはもともと間隔が空く（閉じた記録は Status の書き込み・引き渡しの通知と続けて書かれることがあるが、pane を閉じるたびに1件だけ） |
 | `workspace.layout` | 仕様に無い | `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い |
 | `claude.hook_bridge.mode` | 仕様に無い | `settings_flag` 以外を弾くだけ |
 | `tracker.provider.comments.fetch` | 仕様に無い | `false` にすると全 run が `Blocked` に落ちる |

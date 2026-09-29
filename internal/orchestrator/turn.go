@@ -184,7 +184,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				return
 			}
 
-			text, err := o.buildTurnText(rs, snap)
+			text, relayTried, err := o.buildTurnText(waitCtx, rs, snap)
 			if err != nil {
 				o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
 				o.failRun(ctx, rs, fmt.Sprintf(
@@ -196,6 +196,33 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 						"\n【対処】テンプレートを直してから Status を着手待ちへ戻してください。"+
 						"\n元のエラー: %v", err))
 				return
+			}
+			// **relay を試みたあとは、読めたかどうかに関わらず、送る前の確認をもう一度通す**（設計 3-85）。
+			// コメントを読んでいるあいだ（最大 60 秒）に、止められた・別の経路が run を終わらせた・
+			// 人間が direct chat へ引き取った、が起きうる。ループの先頭と同じものを見て、終わらせている
+			// 最中（`isTerminating`）も足す。**送る合図を立て直すのは、ループの先頭と同じく
+			// `cardInDirectChat` と `waitCtx` のときだけである。**
+			if relayTried {
+				if ctx.Err() != nil || !rs.currentWorker(epoch) || rs.isTerminating() {
+					return
+				}
+				if rs.inDirectChatMode() {
+					o.logger.Info("人間が引き取ったので turn を送りません（pane は閉じません）",
+						"identifier", snap.Identifier)
+					return
+				}
+				if o.cardInDirectChat(rs) {
+					o.logger.Info("カードが direct chat にあるので turn を送りません（作業中へ戻したら送ります）",
+						"identifier", snap.Identifier)
+					rs.setNeedsPrompt()
+					return
+				}
+				if waitCtx.Err() != nil {
+					o.logger.Info("待ちのコンテキストが切れているので、この turn ループは畳みます（次の巡回が起こし直します）",
+						"identifier", snap.Identifier)
+					rs.setNeedsPrompt()
+					return
+				}
 			}
 
 			outcome, sendErr = o.sendTurn(waitCtx, rs, text)
@@ -269,7 +296,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
 			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				blockedHandoffReason(o.cfg.Claude.PermissionMode, stillRunning))
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg), stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -426,14 +453,16 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // **どちらのモードでも、対処は `claude.permissions.allow` に足すことである**（設計 3-11。issue #259）。
 // **モードで変わるのは、見出しと、規則を狭く書かせるかどうかと、保護対象パスの1文と、**
 // **「この停止は拒否とは別の原因のことがある」の書き方である。**第三者への注意と再起動は両方に入る。
-// **issue のコメントに許可を書いても届かない。**判定役への要求から道具の結果は
+// **issue のコメントに許可を書いても、`gh` で読ませただけでは届かない。**判定役への要求から道具の結果は
 // 取り除かれ、issue のコメントは `gh` の出力（道具の結果）として届くためである
-// （公式文書の permission modes のページ。2026-09-18 取得）。
+// （公式文書の permission modes のページ。2026-09-18 取得）。**例外は relay である**（設計 3-85）。
+// 閉じた記録のあとに書いたコメントは、次の着手の最初のメッセージに付けて渡すので、判定役に届く。
 //
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// relay: relay が有効なら true（`relayEnabled`。案内にコメントでの許可の出し方を足す）。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(mode string, stillRunning []string) string {
+func blockedHandoffReason(mode string, relay bool, stillRunning []string) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -465,18 +494,24 @@ func blockedHandoffReason(mode string, stillRunning []string) string {
 		"親の記録の末尾には何も残っていないことがあります。" +
 		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
 		"**何の確認だったかは continuo の側には残りません。**")
-	b.WriteString(permissionRemedyText(mode))
+	b.WriteString(permissionRemedyText(mode, relay))
 	return b.String()
 }
 
 // permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
 //
 // **対処はどちらのモードでも `claude.permissions.allow` である。**
-// **issue のコメントに許可を書いても届かない。**公式文書（permission modes のページ。
+// **issue のコメントに許可を書いても、エージェントが `gh` で読むだけでは届かない。**公式文書（permission modes のページ。
 // 2026-09-18 取得）が "Tool results are stripped from those requests"
 // （**訳:** それらの要求から道具の結果は取り除かれる）と書いており、
 // **issue のコメントは `gh` の出力、つまり道具の結果として届く。**
 // 2026-09-18 に実測でも確かめた（OWNER が許可を書いたあと `[CI Bypass]` で拒否された）。
+//
+// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-85。issue #246）。
+// 閉じた記録（`<!-- continuo:closed -->`）のあとに新しく書いたコメントは、次の着手の最初のメッセージ
+// （user メッセージ）に付けて渡すので、判定役に届く。**記録より前に書いたものは渡らない**ので、
+// 「記録が付いてから書く」と「効かなかったら記録のあとに書き直す」を添える。
+// **`claude.tool_gate` の検査はコメントでは通らない**（hook の入力の JSON だけを見る）ことも添える。
 //
 // **`auto` では、足す規則を狭く書かせる。**同じ公式文書が
 // "On entering auto mode, broad allow rules that grant arbitrary code execution are dropped"
@@ -494,14 +529,16 @@ func blockedHandoffReason(mode string, stillRunning []string) string {
 // 片方だけ直すと食い違う。
 //
 // **リポジトリの公開・非公開で分けない。**分けていたのは「公開の場所へ『ここへ書けば通る』と
-// 書くと第三者が同じ文を書ける」ためだったが、**誰が書いても届かないので、分ける中身が無い。**
+// 書くと第三者が同じ文を書ける」ためだったが、**第三者が書いても届かないので、分ける中身が無い。**
+// relay が渡すのも、OWNER / MEMBER / COLLABORATOR が書いたコメントだけである。
 //
 // **ここでは `fmt.Sprintf` を使わず連結で書く。**日本語の文言の件数を台帳で数えている検査があり
 // （test/internal/testdesign/no_japanese_messages_test.go）、使うなら台帳の数も同じ commit で直す。
 //
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// relay: relay が有効なら true（`relayEnabled`）。**偽なら、コメントで許可を出す書き方を1文字も入れない。**
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
-func permissionRemedyText(mode string) string {
+func permissionRemedyText(mode string, relay bool) string {
 	restart := "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
 		"そのうえで Status を着手待ちへ戻してください。"
 	// **第三者への注意は、どちらのモードにも入れる。**守っているのは判定役ではなく、許可を広げる人間である。
@@ -516,9 +553,20 @@ func permissionRemedyText(mode string) string {
 			thirdParty +
 			restart
 	}
+	// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-85）。
+	commentGrant := ""
+	if relay {
+		commentGrant = "\n**ただし、continuo が1行目に `" + config.ClosedMarker + "` を置いた" +
+			"「Claude Code を閉じました」（英語の設定では英語の文）のコメントを書いたあとに、" +
+			"issue へ新しいコメントとして許可を書いてから Status を着手待ちへ戻すと、" +
+			"次の着手の最初のメッセージに付けて渡します。**" +
+			"記録がまだ無いときは、記録が付いてから書いてください。" +
+			"許可が効かなかったときは、いちばん新しい記録のあとに書き直してください。" +
+			"`claude.tool_gate` の検査はコメントでは通りません。"
+	}
 	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
 		"**このモードでは判定役が実行の前に確かめます。**" +
-		"**判定役は issue のコメントを読みません**（公式文書: 判定役への要求から道具の結果は取り除かれる）。" +
+		"**判定役は、エージェントが `gh` で読んだ issue のコメントを読みません**（公式文書: 判定役への要求から道具の結果は取り除かれる）。" +
 		"**この停止が権限の拒否とは限りません。**agent teams が有効だと確認の画面が出ます" +
 		"（docs/FAQ.md の「作業の途中で確認の画面に止まりました（agent teams が有効な場合）」）。" +
 		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
@@ -527,7 +575,8 @@ func permissionRemedyText(mode string) string {
 		"\n**`Bash` のように道具を丸ごと許す規則は、このモードでは落とされます。**" +
 		"**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります（足すものはありません）。**" +
 		thirdParty +
-		restart
+		restart +
+		commentGrant
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
@@ -552,12 +601,18 @@ func permissionRemedyText(mode string) string {
 // **試行回数（`.attempt`）は再着手で埋まる。**1回目の着手では nil である
 // （`RetryCount` が 0 のため）。
 //
+// **1回目の本文にだけ、人間のコメントの節を付ける**（relay。設計 3-85。issue #246）。
+// 継続の指示（「続けてください」）には付けない（人間の決定）。**テンプレートの展開に失敗したら読まない。**
+// relay の失敗はエラーにしない（エラーで返すと turnLoop が `failRun` へ落とすため）。
+//
+// ctx: turn ループの待ちのコンテキスト（relay の読み取りに使う）。
 // rs: 対象の run。
 // snap: 判定に使う写し。
 // 戻り値の1つ目: 送る本文。
-// 戻り値の2つ目: 1回目のテンプレートの変数展開に失敗した場合のエラー
+// 戻り値の2つ目: relay を試みたなら true（呼び出し側は送る前の確認をもう一度通す）。
+// 戻り値の3つ目: 1回目のテンプレートの変数展開に失敗した場合のエラー
 // （`missingkey=error` なので、5-3 の一覧に無い変数を書くとここで落ちる）。
-func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, error) {
+func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap runSnapshot) (string, bool, error) {
 	if !snap.SendFirstPrompt {
 		return BuildContinuationPrompt(
 			snap.TurnCount+1,
@@ -565,7 +620,7 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 			rs.missingSignal(),
 			o.cfg.Tracker.RunningState,
 			o.cfg.Tracker.StatusSignalPrefix,
-		), nil
+		), false, nil
 	}
 	var attempt *int
 	if snap.RetryCount > 0 {
@@ -573,7 +628,12 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 		n := snap.RetryCount + 1
 		attempt = &n
 	}
-	return o.renderFirstPrompt(rs.issue(), attempt)
+	text, err := o.renderFirstPrompt(rs.issue(), attempt)
+	if err != nil {
+		return "", false, err
+	}
+	section, tried := o.relaySectionFor(ctx, rs)
+	return text + section, tried, nil
 }
 
 // sendTurn は turn を1つ送り、turn の終わりまで待つ（設計 3-2 の「判定の規則」）。

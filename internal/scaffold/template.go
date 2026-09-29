@@ -68,7 +68,8 @@ tracker:
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
-    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡や Status を動かした記録などで、成果は書かない。
+                                            # 空にすると agent.relay_trusted_comments は効かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
@@ -139,13 +140,20 @@ agent:
   max_takeover: 5                           # continuo が落ちたあと、同じ worktree を引き継いだ回数の上限
   max_retry_backoff_ms: 300000              # やり直しの前に待つ時間の上限。失敗のたびに待ち時間を伸ばしていく
   max_retries: 3                            # 応答が止まった・異常終了したときにやり直す回数の上限。0 ならやり直さない
+  relay_trusted_comments: true              # 人間が issue に書いたコメントを、次に Claude Code を起動したときの最初のメッセージに付けて渡す。
+                                            # 渡すのは、continuo が Claude Code を閉じたときに書く記録（<!-- continuo:closed -->）より後に、
+                                            # OWNER / MEMBER / COLLABORATOR が新しく書いた、AI の目印の無いコメントだけ。
+                                            # auto の判定役は、こうして渡したコメントなら人間の許可として読む。
+                                            # 効くのは claude.permission_mode が auto で、tracker.comments.self_marker が空でないときだけ。
+                                            # false にすると渡さず、閉じた記録も書かない。変えたら continuo を再起動する
 
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
   permission_mode: auto                     # auto か dontAsk。auto は判定役が実行の前に確かめるので、.claude/ と .mcp.json にも書ける。
-                                            # 判定役は issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
-                                            # 許可を出すのはこのファイルで、足したら continuo を再起動する。
+                                            # 判定役は gh で読んだ issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
+                                            # ただし agent.relay_trusted_comments が最初のメッセージに付けて渡したコメントは読む。
+                                            # 決まった操作をいつも許すなら、このファイルに書き、足したら continuo を再起動する。
                                             # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
   permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
                                             # dontAsk のとき、allow に書いていないツールは全部拒否される
@@ -176,7 +184,7 @@ claude:
     mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
                                             # public_only なら公開リポジトリの issue にだけ掛ける。
                                             # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
-                                            # コメントで許可を出しても通らない（auto の判定役も、この検査も読まない）。
+                                            # コメントで許可を出しても通らない（この検査は、最初のメッセージに付けて渡したコメントも読まない）。
                                             # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
                                             # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。

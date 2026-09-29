@@ -3,7 +3,7 @@
   "usecase_name": "再起動して実行中の issue を引き継ぐ",
   "source": {
     "file": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.rucm.md",
-    "rucm_block_sha256": "95a71ad78066bc9e11ccf3e208469f4539e8d63e998a7456138114413738bd04"
+    "rucm_block_sha256": "4023d5ca545b406bb076bce243a849c5410711257c2c7c7540ee55dca7ad197f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -98,7 +98,7 @@
           15
         ]
       },
-      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "権限の確認での停止": {
       "rfs": {
@@ -107,7 +107,7 @@
           16
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。保留中の権限の要求は pane ごと消えている。worktree は残っている。"
     },
     "引き継ぎの上限": {
       "rfs": {
@@ -116,7 +116,7 @@
           17
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。"
     },
     "中断": {
       "when": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
@@ -646,20 +646,27 @@
       "type": "action",
       "flow": "状態の不明",
       "step": 2,
-      "statement": "システムは worktree と issue の Status を残す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "状態の不明-3",
       "type": "action",
       "flow": "状態の不明",
       "step": 3,
-      "statement": "システムは issue を印の集合に入れない。"
+      "statement": "システムは worktree と issue の Status を残す。"
     },
     {
       "id": "状態の不明-4",
-      "type": "abort",
+      "type": "action",
       "flow": "状態の不明",
       "step": 4,
+      "statement": "システムは issue を印の集合に入れない。"
+    },
+    {
+      "id": "状態の不明-5",
+      "type": "abort",
+      "flow": "状態の不明",
+      "step": 5,
       "statement": "ABORT"
     },
     {
@@ -681,13 +688,20 @@
       "type": "action",
       "flow": "権限の確認での停止",
       "step": 3,
-      "statement": "システムは worktree を残す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "権限の確認での停止-4",
-      "type": "abort",
+      "type": "action",
       "flow": "権限の確認での停止",
       "step": 4,
+      "statement": "システムは worktree を残す。"
+    },
+    {
+      "id": "権限の確認での停止-5",
+      "type": "abort",
+      "flow": "権限の確認での停止",
+      "step": 5,
       "statement": "ABORT"
     },
     {
@@ -709,13 +723,20 @@
       "type": "action",
       "flow": "引き継ぎの上限",
       "step": 3,
-      "statement": "システムは worktree を残す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "引き継ぎの上限-4",
-      "type": "abort",
+      "type": "action",
       "flow": "引き継ぎの上限",
       "step": 4,
+      "statement": "システムは worktree を残す。"
+    },
+    {
+      "id": "引き継ぎの上限-5",
+      "type": "abort",
+      "flow": "引き継ぎの上限",
+      "step": 5,
       "statement": "ABORT"
     },
     {
@@ -1231,6 +1252,11 @@
       "kind": "seq"
     },
     {
+      "from": "状態の不明-4",
+      "to": "状態の不明-5",
+      "kind": "seq"
+    },
+    {
       "from": "権限の確認での停止-1",
       "to": "権限の確認での停止-2",
       "kind": "seq"
@@ -1246,6 +1272,11 @@
       "kind": "seq"
     },
     {
+      "from": "権限の確認での停止-4",
+      "to": "権限の確認での停止-5",
+      "kind": "seq"
+    },
+    {
       "from": "引き継ぎの上限-1",
       "to": "引き継ぎの上限-2",
       "kind": "seq"
@@ -1258,6 +1289,11 @@
     {
       "from": "引き継ぎの上限-3",
       "to": "引き継ぎの上限-4",
+      "kind": "seq"
+    },
+    {
+      "from": "引き継ぎの上限-4",
+      "to": "引き継ぎの上限-5",
       "kind": "seq"
     },
     {
@@ -1921,7 +1957,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "引き継ぎの上限",
-      "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1943,7 +1979,8 @@
         "引き継ぎの上限-1",
         "引き継ぎの上限-2",
         "引き継ぎの上限-3",
-        "引き継ぎの上限-4"
+        "引き継ぎの上限-4",
+        "引き継ぎの上限-5"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -1966,6 +2003,7 @@
         "CONDITION: NOT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは worktree を残す。",
         "ABORT"
       ]
@@ -1974,7 +2012,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "権限の確認での停止",
-      "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。保留中の権限の要求は pane ごと消えている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1995,7 +2033,8 @@
         "権限の確認での停止-1",
         "権限の確認での停止-2",
         "権限の確認での停止-3",
-        "権限の確認での停止-4"
+        "権限の確認での停止-4",
+        "権限の確認での停止-5"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -2017,6 +2056,7 @@
         "CONDITION: NOT agent_status が blocked でない",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは worktree を残す。",
         "ABORT"
       ]
@@ -2025,7 +2065,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "状態の不明",
-      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2045,7 +2085,8 @@
         "状態の不明-1",
         "状態の不明-2",
         "状態の不明-3",
-        "状態の不明-4"
+        "状態の不明-4",
+        "状態の不明-5"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -2065,6 +2106,7 @@
         "システムは VALIDATES THAT pane の agent_status を読み取れる。",
         "CONDITION: NOT pane の agent_status を読み取れる",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは worktree と issue の Status を残す。",
         "システムは issue を印の集合に入れない。",
         "ABORT"
@@ -2439,9 +2481,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 93,
-    "nodes_covered": 93,
-    "edges_total": 96,
-    "edges_covered": 96
+    "nodes_total": 96,
+    "nodes_covered": 96,
+    "edges_total": 99,
+    "edges_covered": 99
   }
 }

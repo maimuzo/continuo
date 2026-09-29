@@ -922,6 +922,7 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
-	o.stopWorker(cleanupCtx, rs)
+	// **閉じた記録も書かない**（設計 3-85）。この機械はもうこの issue の担当ではない。
+	o.stopWorker(cleanupCtx, rs, closedRecordSkip)
 	o.release(rs)
 }

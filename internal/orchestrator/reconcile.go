@@ -402,10 +402,44 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		}
 		// **閉じる集合に入っている worktree では、agent 名の無い pane も閉じる**（設計 3-9 の手順7b・3-83f）。
 		inSet := o.inCloseSet(orph.identity.ProjectItemID)
-		if o.closeOrphanPane(ctx, orph.path, orph.identity, inSet) && inSet {
+		allClosed, closed := o.closeOrphanPane(ctx, orph.path, orph.identity, inSet)
+		if allClosed && inSet {
 			o.removeFromCloseSet(orph.identity.ProjectItemID)
 		}
+		// **閉じる対象を全部閉じられ、かつ1枚以上閉じたときだけ、閉じた記録を書く**（設計 3-85。issue #246）。
+		// 0枚のときは書かない（印に入っていない active の worktree ごとに、巡回のたびにここへ来る）。
+		// 閉じ損ねた pane が残っていれば書かない（Claude Code が生きたまま記録を付けない）。
+		//
+		// **巡回の中で書き込みを待つ**（設計 3-8 の例外。10秒の期限で1回）。同じ巡回の着手より前に
+		// 記録を付けないと、着手の最初のメッセージが古い境目で組み立てられる。
+		if allClosed && closed > 0 {
+			o.recordOrphanClosed(ctx, orph.path, orph.identity, issue)
+		}
 	}
+}
+
+// recordOrphanClosed は、印に入っていない worktree の pane を閉じたあとで、閉じた記録を書く（設計 3-85）。
+//
+// **書く前に、取り直した issue が worktree の置き場所と同じリポジトリのものかを確かめる**
+// （`issueAgreesWithPath` と同じ照合。身元ファイルの `project_item_id` はエージェントが書き換えられるので、
+// 照らさないと無関係の issue に記録が付く）。**agent 名は見ない。**担当者が他人のときは書かない
+// （`recordWorkerClosed`）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// worktreePath: worktree の絶対パス（走査で得た値）。
+// identity: worktree の身元ファイル（ログに出す名前にだけ使う）。
+// issue: 取り直した issue。
+func (o *Orchestrator) recordOrphanClosed(
+	ctx context.Context, worktreePath string, identity *workspace.Identity, issue tracker.Issue,
+) {
+	owner, repo, err := o.ws.OwnerRepoOf(worktreePath)
+	if err != nil || !strings.EqualFold(issue.Owner, owner) || !strings.EqualFold(issue.Repo, repo) {
+		o.logger.Warn("取り直した issue が worktree の置き場所と違うリポジトリなので、Claude Code を閉じた記録は書きません",
+			"path", worktreePath, "置き場所", owner+"/"+repo,
+			"取り直した issue", issue.Identifier, "project_item_id", identity.ProjectItemID)
+		return
+	}
+	o.recordWorkerClosed(ctx, issue)
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
@@ -431,26 +465,31 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // **閉じ損ねたら WARN を1行出し、偽を返す。**呼び出し側は集合に残して次の巡回でやり直す
 // （黙って着手されない issue を作らないため）。
 //
+// **閉じた枚数も返す**（設計 3-85）。1枚も無かったときも「全部閉じられた」は真なので、
+// 閉じた記録を書くかはそれだけでは決められない。**その pane は既に無かった（`pane_not_found`）は、
+// 閉じられたものとして数える。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス（走査で得た値）。
 // identity: worktree の身元ファイル（**ログに出す issue の名前にだけ使う**）。
 // includeUnnamed: 真なら agent 名の無い pane も閉じる。
-// 戻り値: 閉じるべき pane を全部閉じられたら true（1枚も無かったときも true）。
+// 戻り値の1つ目: 閉じるべき pane を全部閉じられたら true（1枚も無かったときも true）。
+// 戻り値の2つ目: 閉じた pane の枚数。
 func (o *Orchestrator) closeOrphanPane(
 	ctx context.Context, worktreePath string, identity *workspace.Identity, includeUnnamed bool,
-) bool {
+) (bool, int) {
 	want, ok := resolvePath(worktreePath)
 	if !ok {
 		// 解決できないパスは突き合わせの対象から外す（設計 3-4 の段4 と同じ判断）。
 		o.logger.Warn("worktree のパスを解決できないので pane は閉じません",
 			"identifier", identity.IssueIdentifier, "path", worktreePath)
-		return false
+		return false, 0
 	}
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
 		o.logger.Warn("pane の一覧を取れないので pane は閉じません",
 			"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
-		return false
+		return false, 0
 	}
 	// **閉じる集合の worktree では、その worktree を開いている herdr workspace の pane も閉じる**（設計 3-83c の門4・3-83f）。
 	// 着手の段8 の `resolvePane` は、workspace の中の1枚を cwd を見ずに使う。cwd だけで探すと、人間がその
@@ -462,7 +501,7 @@ func (o *Orchestrator) closeOrphanPane(
 		if err != nil {
 			o.logger.Warn("workspace の一覧を取れないので pane は閉じません",
 				"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
-			return false
+			return false, 0
 		}
 		for _, ws := range workspaces.Workspaces {
 			if ws.WorkspaceID == "" || ws.Worktree == nil || ws.Worktree.CheckoutPath == "" {
@@ -474,6 +513,7 @@ func (o *Orchestrator) closeOrphanPane(
 		}
 	}
 	allClosed := true
+	closed := 0
 	for _, p := range list.Panes {
 		if p.Agent == "" && !includeUnnamed {
 			continue
@@ -486,11 +526,18 @@ func (o *Orchestrator) closeOrphanPane(
 			"identifier", identity.IssueIdentifier, "pane_id", p.PaneID, "cwd", p.Cwd,
 			"agent 名が無くても閉じる", includeUnnamed)
 		if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: p.PaneID}); err != nil {
+			if paneAlreadyGone(err) {
+				// **その pane はもう無い。**閉じられたものとして数える（設計 3-85）。
+				closed++
+				continue
+			}
 			o.logger.Warn("pane を閉じられませんでした（次の巡回でやり直します）", "pane_id", p.PaneID, "error", err)
 			allClosed = false
+			continue
 		}
+		closed++
 	}
-	return allClosed
+	return allClosed, closed
 }
 
 // checkStalls は stall を判定する（設計 3-21 / 3-27 の評価順）。

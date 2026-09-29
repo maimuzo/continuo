@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "543eefbe1c311dcfa52a656cc30d1798fd069f3857444b6083817ee2e38019af", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "b7e108d0ae7958daa3565fe62cae237cc6408b684b3d2a95af6fd1d4c3e04941", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // うち、**リポジトリの親 workspace を閉じるかどうか**の分岐（ステップ11〜20）を通る

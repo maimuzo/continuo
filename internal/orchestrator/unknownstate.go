@@ -576,7 +576,7 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 		}
 		o.postHandoffComment(cleanupCtx, rs, reason, statusMove{})
 		o.runAfterRun(cleanupCtx, rs)
-		o.stopWorker(cleanupCtx, rs)
+		o.stopWorker(cleanupCtx, rs, closedRecordWrite)
 		if o.abortTerminalForHuman(cleanupCtx, rs, reason) {
 			return
 		}

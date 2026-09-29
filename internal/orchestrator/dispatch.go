@@ -624,7 +624,7 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
 		// 待たずに戻ると、着手を取りやめた run の印が外れないまま残る。
 		if rs.claimTerminal(ctx) {
-			o.stopWorker(ctx, rs)
+			o.stopWorker(ctx, rs, closedRecordWrite)
 			o.release(rs)
 		}
 		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。カンバンは continuo が

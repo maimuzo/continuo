@@ -108,7 +108,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	o.logger.Info("この run のコメントが無いので、セッションを復元して書かせます", "identifier", snap.Identifier)
 
 	// 段2: 先に worker を止める（同じセッション UUID が2つ生きるのを防ぐ）。
-	o.stopWorker(ctx, rs)
+	//
+	// **閉じた記録は書かずに保留する**（設計 3-85。issue #246）。ここで書くと、人間がその記録を見て
+	// 書いた許可が、段8 のあとの記録より前になり黙って落ちる。**段2 のあとの道は、どれも最後に
+	// 呼び出し側の `stopWorker`（`finishRunClaimed` / `failRun` / `abandonRunClaimed`）か、段8・段9 の
+	// `stopWorker` を通るので、そこで書く。**人間が direct chat で引き取った道は `abortTerminalForHuman` が書く。
+	o.stopWorker(ctx, rs, closedRecordDefer)
 
 	// 段3: 身元ファイルからセッション UUID と設定ファイルのパスを読む。
 	if snap.WorktreePath == "" {
@@ -332,7 +337,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	}
 	if o.hasRunComment(ctx, nodeID, snap) {
 		o.logger.Info("エージェントがコメントを書きました", "identifier", snap.Identifier)
-		o.stopWorker(ctx, rs)
+		o.stopWorker(ctx, rs, closedRecordWrite)
 		return false
 	}
 
@@ -486,7 +491,7 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 // rs: 対象の run。
 // cause: 【よくある原因】の行に載せる文。
 func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, cause string) {
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
@@ -517,7 +522,7 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, ca
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState) {
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
