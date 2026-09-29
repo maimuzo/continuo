@@ -387,6 +387,27 @@ func (o *Orchestrator) logNewWorkBlocked(
 		"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
 		"枠が戻れば自分で再開します。すぐ動かしたいときは " +
 		"tracker.provider.handoff の2つのマージンを見てください"
+	// **使用率100 の枠があるときは、マージンでは動き出さない**（実装レビュー4周目の MEDIUM）。
+	// **マージンは 0〜99 に制限されている**（`internal/config/validate.go` の `validateHandoff`）。
+	// **だから余裕値は `100 − 100 − マージン` で、どの値を書いても必ず0以下になる。**
+	// **案内どおりマージンを触った人は、効かないまま原因を探し続ける。**
+	//
+	// **消した `dispatchPaused` のログが、この直し方を持っていた**（`origin/main`）。
+	// **`logNewWorkBlocked` へ移し忘れていた。**
+	// **issue #173 がまさに読めるようにしようとしている案内である。**
+	if snap != nil && snap.AnySelected(handoff.Full()) {
+		retake := "（Claude Code のアカウントを替えたなら、" +
+			"continuo を止めて quota.json を消し、立て直してください）"
+		// **statusline取得で値を取るときだけ、100 の期間が残っていると取り直さない**（issue #284）。
+		// **usage API が読めていれば 100 があっても取り直すので、この断りは当たらない。**
+		if o.cfg.RateLimit.Source == ratelimit.SourceStatusline || o.apiSwitched() {
+			retake = "（使用率が 100 の期間が残っているときは、値を取り直さないので直りません。" +
+				"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
+		}
+		msg = "枠を使い切っているので、入札の要る issue には着手しません" +
+			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"枠が戻れば自分で再開します。**マージンを下げても動き出しません**" + retake
+	}
 	if skip == handoff.SkipQuotaUnreadable {
 		msg = "枠を読めないので、入札の要る issue には着手しません" +
 			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +

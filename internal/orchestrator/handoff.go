@@ -642,7 +642,13 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **読めなくなった写しでは、判定も記録もしない**（issue #197）。
 	// **この判定は GitHub へ2回書き、pane を閉じる。**
 	//
-	// **新しさは問わない**（issue #284。`quotaSnapshot` の規則）。
+	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
+	// **`checkStalls` が `quotaForBid()`（新しくなければ nil）を渡す。**
+	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
+	// 資格情報が切れて写しが凍っている機械は、1件も手放さない」と決めている。**
+	// **ここで `quotaSnapshot` を渡す形へ戻してはならない。**
+	// 09:00 に資格情報が切れた機械は、そのときの「週次100%」を1日中返し続けるので、
+	// **抱えている run を毎巡回で1件ずつ、`after_run` を走らせて手放す。**
 	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちの判定に使える。**
 	// **新しさで止めるのは入札だけである**（`quotaForBid`）。
 	//
@@ -846,7 +852,8 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// **見えなくなった run は `reconcileRunning` が止める。**
 		if rs.noteQuotaReleaseUnknown() {
 			o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
-				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
+				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）。"+
+				"無音が claude.turn_timeout_ms を超えているので、同じ巡回の打ち切りが先に拾うこともあります",
 				"identifier", issue.Identifier)
 		}
 		rs.endTerminal()

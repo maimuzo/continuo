@@ -306,9 +306,12 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 		t.Fatalf("担当が移っているのに手放しの経路を通っている:\n%s", got)
 	}
 	// **この経路の段に「pane を閉じる」がある**（RUCM の `担当が移っていた` の段3。
-	// 実装レビュー3周目の MEDIUM）。**`stopHandoffLostClaimed` が
-	// `leaveDirectChatMode` を先に呼ばないと、`stopWorker` が門で止まって pane が残り、
-	// そのあとの `release` が run の登録から外す。**確かめないと、その直しが消えても緑になる。
+	// 実装レビュー3周目の MEDIUM）。
+	//
+	// **この検査は `leaveDirectChatMode` を守っていない**（実装レビュー4周目の MEDIUM。実測）。
+	// **この一式は `tracker.direct_chat_state` を設定しないので、`DirectChatMode` が偽である。**
+	// **`stopWorker` の門は最初から当たらない。**確かめているのは、
+	// **ふつうの場合（direct chat に入っていない run）に pane が閉じることだけである。**
 	if ids := fx.Herdr.ClosedPanes(); len(ids) == 0 {
 		t.Fatalf("担当が移った run の pane を閉じていない:\n%s", fx.Logs.String())
 	}
@@ -533,6 +536,119 @@ func TestQuota_忙しいhookを受けた直後のrunは手放さない(t *testin
 	}
 	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
 		t.Fatalf("忙しい hook を受けている run を手放した:\n%s", got)
+	}
+}
+
+// TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない は、
+// 設計 3-27 の門の8つ目（床）を確かめる（issue #197）。
+//
+// 目的: **`claude.turn_timeout_ms` が0以下の機械では、無音の門が2本とも外れる。**
+// **代わりに床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの
+// 経過が `weekly_wait_limit_minutes` を超えるまで手放さない。
+//
+// **この門には冗長な相手が1つも無い**（実装レビュー4周目の MEDIUM）。
+// **外すと、turn と turn のあいだで `idle` に見えるだけの健全な run が2巡回（既定60秒）で手放される。**
+// **`workspace_hooks.after_run` を書いていない機械では push が走らないので、
+// push していない commit が失われる。**
+//
+// 与える情報: 1週間の枠が 100% で、**リセットは48時間後**（時刻で測る枝は即座に「超えた」と答える）。
+// 上限は20分。`claude.turn_timeout_ms` は0。**時計は上限より短く進める。**
+// 成功条件: 手放さないこと。**上限を超えるまで進めたら手放すこと**（床が「効かない」のではないことも確かめる）。
+func TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixtureWith(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 20, "CONTINUO_TEST_OAUTH_TOKEN_W_FLOOR", func(cfg *config.Config) {
+		// **打ち切りの判定を切る。**この設定は validate が明示的に許している。
+		cfg.Claude.TurnTimeoutMs = 0
+	})
+
+	// **起点を控えさせる。**`noteWeeklyShort` は巡回の中で控えるので、1回回す。
+	tickOnce(fx)
+
+	// **上限（20分）より短く進める。**床が効いていれば手放さない。
+	// **1回の刻みは2分にする。**大きく飛ばすと使用率の写しが古くなり、
+	// **手放しの側が「新しさを問う写し」を受け取れずに、床とは別の理由で見送る**
+	// （設計 3-27。実装レビュー3周目の HIGH）。**それでは床を確かめられない。**
+	for range 5 {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("経過が上限を超える前に手放した（床が効いていない）:\n%s", got)
+	}
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("経過が上限を超える前に担当者を書き換えた: %v", got)
+	}
+
+	// **上限を超えるまで進めたら手放す。**床が「永久に手放さない」形ではないことを確かめる。
+	waitForRelease(t, fx, clock, issue.Identifier)
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("上限を超えたのに担当者が残っている: %v", got)
+	}
+}
+
+// TestQuota_人間が引き取っている最中に担当が移ったらpaneを閉じる は、
+// `stopHandoffLostClaimed` が `leaveDirectChatMode` を先に呼ぶことを確かめる（設計 3-83f・3-83h）。
+//
+// 目的: **`stopWorker` は direct chat の印が立っていると門で止まり、pane を閉じない。**
+// **その run を `release` が印から外すと、人が居る pane が残ったまま continuo がその run を忘れる。**
+// **だから、担当が別の機械へ移ったときは、印を下ろしてから閉じる。**
+//
+// **この検査でも、`leaveDirectChatMode` の1行そのものは守れていない**（4周目に実測した）。
+// **カードを作業中の Status へ戻した時点で、巡回の `updateDirectChatMode` が印を下ろす。**
+// **だから `releaseBecauseQuotaWaitClaimed` へ着くときには、印はもう立っていない。**
+// **印が立ったまま `!mine` の枝へ入るのは、手放しの非同期が走っている最中
+// （最大90秒）に人間がカードを動かした窓だけで、その窓を検査から作る手立てが無い。**
+// **`leaveDirectChatMode` は、その窓のための保険である。**
+// **消しても全部の検査が緑になる**（実測。2026-09-29）。**それでも残す。**
+// **消えると、人が居る pane が残ったまま continuo がその run を忘れる。**
+//
+// **この検査が確かめているのは、`!mine` の枝が
+// 「pane を閉じる・印から外す・`after_run` を走らせない・担当者に触らない」を守ることである。**
+//
+// 与える情報: `tracker.direct_chat_state` を設定し、いったんその Status へ入れてから作業中へ戻した run。
+// 1週間の枠が 100% でリセットは48時間後。上限は10分。**担当者を別のアカウントへ書き換える。**
+// 成功条件: pane が閉じられ、印から外れること。**`after_run` は走らせず、担当者にも触らないこと。**
+func TestQuota_人間が引き取っている最中に担当が移ったらpaneを閉じる(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixtureWith(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_DC_LOST", func(cfg *config.Config) {
+		cfg.Tracker.DirectChatState = humanState
+	})
+	fx.Tracker.SetStatusOptions(directChatBoardOptions...)
+	// **direct chat の印を立てる。**カードをその Status へ動かし、1回巡回を回す。
+	fx.Tracker.SetState(issue.ID, humanState)
+	tickOnce(fx)
+	// **担当を別の機械へ移す。**`mayReleaseOwnWork` は「自分ではない」と答える。
+	fx.Tracker.SetAssignees(issue.ID, "octodog")
+	// **作業中の Status へ戻す。**巡回の門（`DirectChatMode`）を通さないと、手放しの経路へ入らない。
+	// **印はこの巡回で下りるが、`stopWorker` が読むのは `releaseBecauseQuotaWaitClaimed` の中である。**
+	fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+
+	for range 60 {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			break
+		}
+	}
+
+	if _, ok := viewOf(fx, issue.Identifier); ok {
+		t.Fatalf("担当が移った run を印から外していない:\n%s", fx.Logs.String())
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) == 0 {
+		t.Fatalf("担当が移った run の pane を閉じていない:\n%s", fx.Logs.String())
+	}
+	// **担当者には触らない。**
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != "octodog" {
+		t.Fatalf("担当が移った run の担当者を触った: %v", got)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("担当が移っているのに手放しの経路を通っている:\n%s", got)
 	}
 }
 

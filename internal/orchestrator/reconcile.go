@@ -498,9 +498,13 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 //
 // **見る順序を入れ替えてはならない。**herdr へ問い合わせるのはいちばん最後である。
 //
-//  1. 枠待ちの印が立っているか                 … メモリ上の値。ただ
-//  2. 1週間の枠の余裕が無く、待っても明けないか … 最後に読めた枠の写し。ただ
+//  1. 1週間の枠の余裕が無く、待っても明けないか … 直前に読めた枠の写し。ただ
+//  2. 無音が `claude.turn_timeout_ms` を超えたか … メモリ上の時計。ただ
 //  3. pane が止まっているか                    … **herdr へ1回問い合わせる**（既定5秒の持ち時間）
+//
+// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
+// **「1. 枠待ちの印が立っているか」と書いていた時期があるが、それは誤りである**
+// （2026-09-29 に直した）。**印を門にすると、使用率90〜99 の帯で1度も手放せない。**
 //
 // **段3 を先に置くと、巡回のたびに走っている run の数だけ herdr を叩くことになる。**
 // その間、stall 検知も枠の読み直しも止まる。
@@ -539,7 +543,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **読めない写しでは作らない**（issue #173）。
 	// **そのときは `weeklyWaitExceededWith` が全部の run で偽を返すので、1度も読まれない。**
 	//
-	// **新しさは問わない**（issue #284。`quotaSnapshot` の規則）。
+	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
+	// **`checkStalls` が `quotaForBid()` を渡す。**理由は `weeklyWaitExceededWith` の doc にある。
 	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちと閾値の判定に使える。**
 	// **止めるのは入札だけである。**
 	var shortKinds string
@@ -641,9 +646,13 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **この門は「指示を送った直後の run を手放さない」ために在る**（issue #197）。
 		//
 		// **見るのは `LastBusyHookAt` である。`LastSeenAt` ではない**（issue #173）。
-		// **`LastSeenAt` は4箇所が進める**（`beginTurn` / `noteHook` / `noteWorking` /
-		// `clearWaitingQuota`）**が、4つ目は「枠が明けた」だけで、
+		// **`LastSeenAt` は5箇所が進める**（`beginTurn` / `noteHook` / `noteWorking` /
+		// `resetStallClock` / `clearWaitingQuota`）**が、
+		// 最後の `clearWaitingQuota` は「枠が明けた」だけで、
 		// この run が生きている証拠を1つも含まない。**
+		// **`resetStallClock` は direct chat から作業中へ戻すときに進める**
+		// （実装レビュー4周目の MEDIUM で数え上げに足した）。**あれは意図した動きで、
+		// 戻った直後の run を `claude.turn_timeout_ms` ぶん守る。**
 		// **5時間の枠が明けるたびに `claude.turn_timeout_ms`（既定1時間）ぶん再武装するので、
 		// `weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく。**
 		//
@@ -983,8 +992,11 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	now = o.now()
 
 	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。
-	// **`weeklyWaitExceeded` の中だけで控えてはならない。**あれは印が立っている run しか
-	// 通らないので、**印が別の経路で外れると、以後どこからも消されない。**
+	// **`weeklyWaitExceededWith` の中だけで控えてはならない。**
+	// **あれは3つの早戻りを持つ**（写しが nil／上限が0以下／余裕の無い1週間の枠が無い）。
+	// **とくに3つ目は「余裕が戻った巡回」なので、そこで消せないと永久に残る。**
+	// **「印が立っている run しか通らない」と書いていた時期があるが、それは誤りである**
+	// （2026-09-29 に直した。**この判定は印を1バイトも読まない**）。
 	// **消されないと、何日か普通に動いたあと1週間の枠の余裕がもう一度無くなったときに、
 	// 何日も前の時刻との差で「上限を超えた」と判定し、1分も待たずに手放す。**
 	//
