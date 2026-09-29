@@ -121,17 +121,19 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 | `concurrency` | **置かない** | 打ち切られた run は success / skipped / neutral のどれでもなく、必須の検査にするとマージを塞ぐ |
 
 **判定の条件を3箇所で揃えた。**片方だけ緩いと、緩いほうが実質の規則になる。
+**このうち hook は 2026-09-21 に廃止したので、いま揃えているのは2箇所である。**
 
 | どこ | 何を止めるか |
 | --- | --- |
-| [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) | 手元の `gh pr merge` / `gh pr ready` |
+| `.claude/hooks/block-merge-without-review.py`（**廃止済み**） | 手元の `gh pr merge` / `gh pr ready` |
 | [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) | PR のマージ |
 | [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | タグを打つこと |
 
 **条件は「目印が本文の先頭にある」ことと「投稿者が `OWNER` / `MEMBER` / `COLLABORATOR`」の2つである。**
 
 **hook だけは絞り込みを Python 側に移した。**jq の式に押し込むと、`gh` を叩かない限り条件を確かめられない。
-`counts_as_review` を切り出し、[.claude/hooks/tests/test_block_merge_without_review.py](../../.claude/hooks/tests/test_block_merge_without_review.py) に10件足した。
+`counts_as_review` を切り出し、`.claude/hooks/tests/test_block_merge_without_review.py` に10件足した。
+**この hook もテストも 2026-09-21 に消した。**
 
 **採らなかった案。**`issue_comment` で走らせる形。
 **その run の `GITHUB_SHA` は既定の branch の最新の commit であり、PR の先頭の commit に紐づかない。**
@@ -139,17 +141,18 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 
 **必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
 **この job は `code-review-result` へ改名した。**
-**必須の検査を入れ替えるまで、登録されているのは古い名前のままである。**
+**入れ替えは済んでいる**（2026-09-21 に確認。いまは `code-review-result` と `design-review-result` を含む8本）。
 
 ```
 $ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
+（2026-09-02 の時点）
 test (ubuntu-latest)
 test (macos-latest)
 build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-review-result          ← 改名前の名前。入れ替えるまでこのままである
+review-result          ← 改名前の名前。このあと入れ替えた
 ```
 
 **入れ直す手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**
@@ -175,9 +178,10 @@ review-result          ← 改名前の名前。入れ替えるまでこのま�
 run_verify("echo 1\ntouch <パス>")  →  (True, '1')   ファイルができた
 ```
 
-### 直していないもの（2件）。**どちらも [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) の `targets_other_repo` / `target_prs`**
+### 直していないもの（2件）。**どちらも `.claude/hooks/block-merge-without-review.py`（廃止済み）の `targets_other_repo` / `target_prs`**
 
-**メインエージェントが直した箇所であり、触らないよう指示されている。**
+**メインエージェントが直した箇所であり、触らないよう指示されていた。**
+**2026-09-21 にその hook ごと消したので、この2件は消滅した。**
 
 | 指摘 | 実測 |
 | --- | --- |

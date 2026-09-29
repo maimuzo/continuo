@@ -28,7 +28,11 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
-// 枠の種別である（Claude の usage API が `kind` に返す値。設計 3-77）。
+// 枠の種別である（設計 3-77）。
+//
+// **値の出どころは usage API（Claude の usage API）と Claude Code のステータスラインである**
+// （issue #284）。orchestrator の保管値が、usage API の `kind` をそのまま、ステータスラインの
+// `rate_limits.five_hour` を session、`rate_limits.seven_day` を weekly_all として写す。
 const (
 	// LimitKindSession は5時間の枠である。
 	LimitKindSession = "session"
@@ -36,10 +40,13 @@ const (
 	LimitKindWeeklyAll = "weekly_all"
 	// LimitKindWeeklyScoped は1週間のモデル別の枠である。
 	//
-	// **最初から返ってくる。**「一定量を使うまで現れる」ではない（issue #199）。
+	// **usage API だけが運ぶ**（ステータスラインは載せない。issue #284）。`rate_limit.source` が
+	// `oauth_usage_api` で usage API が読めたときだけ保管値に入る。
+	// **現れるのは最初からである。**「一定量を使うまで現れる」ではない（issue #199）。
 	// **使っていなければ `percent: 0` で返り、`resets_at` は `null` である**
 	// （2026-08-29 の実測。設計 3-15 のサンプルも同じ形である）。
 	// **だから「現れたら判定に入れる」という書き方をしてはならない。**その判定は永久に発火しない。
+	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	LimitKindWeeklyScoped = "weekly_scoped"
 )
 
@@ -194,10 +201,13 @@ const (
 	SkipQuotaUnreadable
 	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかが0以下であることを表す。
 	//
-	// **`rate_limit.pause_above_percent` は消えた**（人間の決定。2026-09-06。issue #173）。
-	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
-	// 既定（マージン10）では余裕値のほうが低い使用率で先に効くので、
-	// **あちらは一度も発火していなかった。**
+	// **`rate_limit.pause_above_percent` を見る段は、ここから消えた**
+	// （人間の決定。2026-09-06。issue #173）。**余裕値と同じことを2つの閾値で言っていて、
+	// 使い分けができていなかった。**既定（マージン10）では余裕値が90%で先に効くので、
+	// **95%の閾値は一度も発火していなかった。**
+	// **キーそのものは残っている。**`internal/orchestrator/statuslinefetch.go` の
+	// `statuslineFetchPointless` が、**モデル別の週次の枠について statusline取得を開くかを決める**のに使う。
+	// **あれは仕事を取るかどうかの門ではない**ので、2つの閾値が同じことを言う形には戻らない。
 	SkipNoHeadroom
 )
 
@@ -335,8 +345,9 @@ func ShortWeekly(margins Margins) func(l ratelimit.Limit) bool {
 // WeeklyPercent は1週間の使用率を返す（設計 3-77）。
 //
 // **1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ `percent: 0` なので、
-// **最大を採れば、使っていない枠は自動的に判定へ効かない。**
+// モデル別の枠は usage API だけが運ぶ（issue #284）。**現れるのは最初からで、
+// 使っていなければ `percent: 0` である**（issue #199）。
+// **だから最大を採れば、使っていない枠は自動的に判定へ効かない。**
 //
 // snap: 読み取った枠の一覧。
 // 戻り値の1つ目: いちばん大きい1週間の使用率。
@@ -433,7 +444,9 @@ func matchesKind(kind string, kinds []string) bool {
 // **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
 //
 // **「読めなかった」は「枠が1件も返ってこなかった」である。**返ってきた中に
-// 特定の種別が無いのは、使用率0として扱う。
+// 特定の種別が無いのは、**その期間の保管値が無い**という意味なので、使用率0として扱う。
+// 保管値が無いのは、その期間の値がまだ届いていないか、`resets_at` を過ぎて消えたかである
+// （期間が切れたなら使用率は0から始まる。issue #284）。
 // **usage API が将来 kind を増やしても、知らない kind が1つ欠けただけで黙らないためである。**
 //
 // snap: 読み取った枠の一覧。**nil なら「枠を読めなかった」である。**
@@ -459,7 +472,8 @@ func Evaluate(
 		// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**
 		//
 		// **写しがあって特定の種別が載っていないのは、別の話である。**
-		// **その1件が欠けていることは「読めなかった」ではない。**
+		// その期間の保管値が無い（まだ届いていないか、`resets_at` を過ぎて消えた）だけである。
+		// **現れないものは「まだ使っていない」であって「読めなかった」ではない。**
 		// **usage API が将来 kind を増やしたとき、知らない kind が1つ欠けただけで
 		// 黙る機械が出ると、その issue は誰にも進まない。**
 		if snap == nil || len(snap.Limits) == 0 {
@@ -746,6 +760,24 @@ func bidDeadlineLine(window time.Duration) string {
 func FormatHold(h Hold) string {
 	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
 		i18n.T(i18n.KeyHandoffHoldAssigned, h.Assignee) + "\n" +
+		holdStartingLine(h.Branch) + "\n"
+}
+
+// FormatDirectChatHold は、direct chat から作業中の Status へ戻したときの hold のコメントの本文を組み立てる
+// （設計 3-83h の「戻したときに hold を書く」）。
+//
+// **先頭の印と JSON は `FormatHold` と同じである。**`ParseHold` は JSON を読めないと hold として数えず、
+// `LatestHoldFor` は `assignee` で絞り、期限切れで外すときは `branch` を使うので、
+// **JSON を落とすと hold が無いのと同じになる。**
+// **人間向けの1行目だけが違う。**入札で担当が決まったのではなく、人間が direct chat から戻したためである。
+//
+// **足す文に `}` を入れてはならない**（FormatBid と同じ理由）。
+//
+// h: 書く hold。
+// 戻り値: 印を先頭に置いたコメント本文。
+func FormatDirectChatHold(h Hold) string {
+	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
+		i18n.T(i18n.KeyHandoffHoldDirectChatReturned, h.Assignee) + "\n" +
 		holdStartingLine(h.Branch) + "\n"
 }
 

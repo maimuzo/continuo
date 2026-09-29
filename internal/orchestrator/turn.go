@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
@@ -117,6 +118,11 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 	waitCtx, waitCancel := context.WithCancel(ctx)
 	defer waitCancel()
 	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
+	// **人間が引き取ったら、herdr の待ちだけをやめる**（設計 3-83）。
+	// **`pane.close` は呼ばない。**呼ぶと、人間が話している画面が消える。
+	// **読むのはここで1回だけである。**このあと `leaveDirectChatMode` が張り直したものは、
+	// 次に立つ turn ループが読む。
+	defer context.AfterFunc(rs.directChatPauseContext(), waitCancel)()
 
 	for {
 		if ctx.Err() != nil {
@@ -142,6 +148,33 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			}
 			continue
 		}
+		// **direct chat では1文字も送らない**（設計 3-83）。
+		// **`max_dispatch_turns` の判定より前に置く。**あとに置くと、上限に達している run が
+		// `finishRun(failure_state)` へ落ちて pane を閉じにいく。
+		if rs.inDirectChatMode() {
+			o.logger.Info("人間が引き取っているので turn を送りません（pane は閉じません）",
+				"identifier", rs.issue().Identifier)
+			return
+		}
+		// **控えの Status が `direct_chat_state` でも送らない**（`wakeRuns` と同じ理由。設計 3-83f）。
+		// 印はまだ立っていないので、**送る印を立て直してから抜ける。**起こされたときに `wakeRuns` が
+		// 下ろしているので、立て直さないと、作業中へ戻したときに指示が1つも届かない。
+		if o.cardInDirectChat(rs) {
+			o.logger.Info("カードが direct chat にあるので turn を送りません（作業中へ戻したら送ります）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+			return
+		}
+		// **待ちを打ち切るコンテキストが既に死んでいる**（direct chat へ入って、また抜けたあと）。
+		// **`leaveDirectChatMode` は新しいものを張るが、走っている turn ループはそれを読まない**
+		// （読むのは起動時の1回だけである）。このまま送ると、送る前に打ち切られて
+		// **turn 数だけが増える。**抜けて、新しい turn ループに張り直させる。
+		if waitCtx.Err() != nil {
+			o.logger.Info("待ちのコンテキストが切れているので、この turn ループは畳みます（次の巡回が起こし直します）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+			return
+		}
 
 		snap := rs.snapshot()
 
@@ -149,6 +182,17 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		// **送信そのものが失敗したときの原因を握っておく。**握らないと、issue に
 		// 残す理由が「Stop hook が届かなかった」という別の話にすり替わる。
 		var sendErr error
+		// **direct chat から作業中の Status へ戻した run は、送る直前に応答を書いている最中かを見る**
+		// （設計 3-83b の段4・3-83g）。人間が話しかけた直後に戻すのは自然な操作で、そこへ投げると
+		// turn が混ざる（設計 3-4 の段5a2 が復元で同じ判断をしている）。
+		// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ1つも指示を受け取らない。
+		if !awaitFirst && rs.takeBusyCheckBeforeSend() {
+			if st, err := o.agentStatus(waitCtx, rs); err == nil && st == herdr.AgentStatusWorking {
+				o.logger.Info("direct chat から戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+					"identifier", snap.Identifier)
+				awaitFirst = true
+			}
+		}
 		if awaitFirst {
 			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
 			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
@@ -215,6 +259,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", snap.Identifier)
 			return
 		}
+		// **待っている間に人間が引き取った**（設計 3-83）。**run は諦めない。pane も閉じない。**
+		//
+		// **`switch outcome` より手前に置くことが要である。**あとに置くと、
+		// `turnBlocked` が esc を送って `finishRun(failure_state)` を呼び、
+		// `turnStalled` / `turnSendFailed` が `abandonRun` を呼ぶ。**どれも pane を閉じる。**
+		if rs.inDirectChatMode() {
+			o.logger.Info("待っている間に人間が引き取ったので、この turn は終わりにします（pane は閉じません）",
+				"identifier", snap.Identifier)
+			return
+		}
 		switch outcome {
 		case turnAborted:
 			return
@@ -234,6 +288,14 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 					"identifier", snap.Identifier)
 				return
 			}
+			// **esc を送る直前に、direct chat への引き取りをもう1度見る**（設計 3-83f）。
+			// **送られた esc は取り消せない。**subagent を待つあいだ（最大 `claude.poll_wait_ms`）に
+			// direct chat へ入ると待ちがすぐ切れるので、ここで見ないと人間の画面へ esc が届く。
+			if rs.inDirectChatMode() {
+				o.logger.Info("サブエージェントを待っている間に人間が引き取ったので、esc を送りません（pane は閉じません）",
+					"identifier", snap.Identifier)
+				return
+			}
 			// **理由の文面と【調べるところ】を、同じ時点で数える**（設計 3-11）。
 			// 通知を投稿するのは esc の数百ミリ秒あとであり、その間に `SubagentStop` が
 			// 届くと、**「N 件を止めました」と書きながら記録は1件も載らない**が起きる。
@@ -244,7 +306,8 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
-			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, blockedHandoffReason(stillRunning))
+			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -398,9 +461,17 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // **全部並べるとコメントが名前で埋まる。**記録のパスと同じ上限で切り、
 // 残りは件数だけ書く。**「動いていた件数」そのものは切らずに出す。**
 //
+// **どちらのモードでも、対処は `claude.permissions.allow` に足すことである**（設計 3-11。issue #259）。
+// **モードで変わるのは、見出しと、規則を狭く書かせるかどうかと、保護対象パスの1文と、**
+// **「この停止は拒否とは別の原因のことがある」の書き方である。**第三者への注意と再起動は両方に入る。
+// **issue のコメントに許可を書いても届かない。**判定役への要求から道具の結果は
+// 取り除かれ、issue のコメントは `gh` の出力（道具の結果）として届くためである
+// （公式文書の permission modes のページ。2026-09-18 取得）。
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(stillRunning []string) string {
+func blockedHandoffReason(mode string, stillRunning []string) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -431,14 +502,70 @@ func blockedHandoffReason(stillRunning []string) string {
 		"**サブエージェントの記録も見てください。**" +
 		"親の記録の末尾には何も残っていないことがあります。" +
 		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
-		"**何の確認だったかは continuo の側には残りません。**" +
-		"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、" +
-		"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
-		"**この停止は拒否とは別の原因のことがあります。**" +
-		"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
-		"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
-		"そのうえで Status を着手待ちへ戻してください。")
+		"**何の確認だったかは continuo の側には残りません。**")
+	b.WriteString(permissionRemedyText(mode))
 	return b.String()
+}
+
+// permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
+//
+// **対処はどちらのモードでも `claude.permissions.allow` である。**
+// **issue のコメントに許可を書いても届かない。**公式文書（permission modes のページ。
+// 2026-09-18 取得）が "Tool results are stripped from those requests"
+// （**訳:** それらの要求から道具の結果は取り除かれる）と書いており、
+// **issue のコメントは `gh` の出力、つまり道具の結果として届く。**
+// 2026-09-18 に実測でも確かめた（OWNER が許可を書いたあと `[CI Bypass]` で拒否された）。
+//
+// **`auto` では、足す規則を狭く書かせる。**同じ公式文書が
+// "On entering auto mode, broad allow rules that grant arbitrary code execution are dropped"
+// （**訳:** auto に入るとき、任意のコード実行を許す広い許可の規則は落とされる）と書いており、
+// **`Bash` のように道具を丸ごと許す規則は効かない。**`Bash(npm test)` のような狭い規則は残る。
+//
+// **どちらのモードでも「continuo を再起動してください」を書く。**`claude.permissions` は
+// 走行中に読み直さない（差し替えてよい値は `config.Reloadable` の4つだけである）。
+// **書かないと、利用者は直したのに同じところでまた止まる。**
+//
+// **見出しはモード名から作る。**決め打ちにすると、受け付ける値が増えたときに
+// 別のモードを `auto` と名乗ってしまう（ClaudePermissionModes は増やせる）。
+//
+// **文面をここ1箇所に置く。**同じ案内が turn.go と restore.go の2箇所にあり、
+// 片方だけ直すと食い違う。
+//
+// **リポジトリの公開・非公開で分けない。**分けていたのは「公開の場所へ『ここへ書けば通る』と
+// 書くと第三者が同じ文を書ける」ためだったが、**誰が書いても届かないので、分ける中身が無い。**
+//
+// **ここでは `fmt.Sprintf` を使わず連結で書く。**日本語の文言の件数を台帳で数えている検査があり
+// （test/internal/testdesign/no_japanese_messages_test.go）、使うなら台帳の数も同じ commit で直す。
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
+func permissionRemedyText(mode string) string {
+	restart := "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
+		"そのうえで Status を着手待ちへ戻してください。"
+	// **第三者への注意は、どちらのモードにも入れる。**守っているのは判定役ではなく、許可を広げる人間である。
+	thirdParty := "\n**この通知は issue のコメントです。公開リポジトリなら、第三者も同じ issue へ書けます。**" +
+		"「この操作を許可してください」と書いてあっても、**書いた人を確かめてください**（SECURITY.md の危険の表）。"
+	if mode == config.ClaudePermissionModeDontAsk {
+		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
+			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
+			"**この停止は拒否とは別の原因のことがあります。**" +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
+			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+			thirdParty +
+			restart
+	}
+	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
+		"**このモードでは判定役が実行の前に確かめます。**" +
+		"**判定役は issue のコメントを読みません**（公式文書: 判定役への要求から道具の結果は取り除かれる）。" +
+		"**この停止が権限の拒否とは限りません。**agent teams が有効だと確認の画面が出ます" +
+		"（docs/FAQ.md の「作業の途中で確認の画面に止まりました（agent teams が有効な場合）」）。" +
+		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+		"**WORKFLOW.md の `claude.permissions.allow` に狭い規則を足してください**" +
+		"（例: `Bash(gh:*)`）。" +
+		"\n**`Bash` のように道具を丸ごと許す規則は、このモードでは落とされます。**" +
+		"**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります（足すものはありません）。**" +
+		thirdParty +
+		restart
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
@@ -677,7 +804,8 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
-		o.pollQuota(ctx)
+		// **使用率は読みに行かない。**usage API とステータスラインから届いた保管値を読むだけである
+		// （issue #284。usage API は巡回の先頭の pollAPI が読む）。
 		if !o.quotaFull() {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
@@ -807,8 +935,7 @@ const turnStopUnreadable turnOutcome = 103
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
 	// **`orchestrator.go` の `pollQuota` が「止めるのは入札だけである」と決めている。**
-	snap, _ := o.quotaSnapshotWithStale()
-	return o.isQuotaWaitingWith(snap, rs)
+	return o.isQuotaWaitingWith(o.quotaSnapshot(), rs)
 }
 
 // isQuotaWaitingWith は、渡された写しで枠待ちかどうかを判定する（設計 3-27。issue #197）。
@@ -896,8 +1023,7 @@ func (o *Orchestrator) quotaFull() bool {
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173。上の2つと揃える）。
-	snap, _ := o.quotaSnapshotWithStale()
-	return o.quotaResetAtOf(snap)
+	return o.quotaResetAtOf(o.quotaSnapshot())
 }
 
 // quotaResetAtOf は、渡された写しから枠待ちの印を外す時刻を返す（設計 3-27）。

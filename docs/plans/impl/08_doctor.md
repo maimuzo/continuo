@@ -39,7 +39,7 @@
 | `未記入の項目` | 雛形の front matter のキーが `WORKFLOW.md` に全部書かれているか（記号は `!` だけ。内訳は足りない項目の名前だけを10件まで。設計 3-75） |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
-| `資格情報` | `rate_limit` の設定に応じて、環境変数かファイルがあるか |
+| `資格情報` | `rate_limit.source` が `oauth_usage_api` のときだけ、`token_source` に応じて環境変数かファイルか Keychain から取れるか（`statusline` と `none` なら `✓`） |
 
 **`claude` と `hook の置き場所` と `Claude の設定` は、設定ファイルが `✗` でも走る**（設計 6-11）。
 前の2つは既定値で成立し、`Claude の設定` は設定を1バイトも読まない。
@@ -67,7 +67,7 @@
   - **カンマで区切り、各要素の前後の空白と引用符を落としてから照合する**
   - **該当ブロックが1つも無ければ `✗`**（未ログイン）。「`gh auth login -s project` を実行してください」と出す
 - [ ] **資格情報。**`rate_limit.source` と `token_source` に応じて記号を分ける（設計 3-32 の表）
-  - **`source` が `none` なら `✓`**（`token_source` は見ない）
+  - **`source` が `statusline` か `none` なら `✓`**（`token_source` は見ない）
   - **`token_source` が `env` で環境変数が無ければ `✗`**、`claude_credentials` でファイルが無ければ `!`
   - **`token_source` が `keychain` で読めなければ `✗`**（`accessToken` が無いときも同じ）
   - **設定そのものが読めないときは `!`**（何を見るべきか決まらない）

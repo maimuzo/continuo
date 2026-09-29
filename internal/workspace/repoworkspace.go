@@ -16,7 +16,8 @@ import (
 //
 //	cwd を省く            … worktree_not_found で断られる。**外せない**
 //	cwd に worktree を渡す … linked_worktree_source で断られる。**リポジトリ本体しか渡せない**
-//	親を閉じる            … **その下の worktree の workspace と pane も一緒に消える**
+//	親を閉じる（0.8.x）   … **その下の worktree の workspace と pane も一緒に消える**
+//	親を閉じる（0.9.0 以降）… workspace_group_close_required で断られ、何も閉じない（実測: 2026-09-24）
 //	worktree.remove       … 親は閉じない。**issue 1件につき1つ溜まる**
 //
 // **だから閉じるのは片付けの最後で、かつ2つの条件を両方満たすときだけである。**
@@ -25,7 +26,7 @@ import (
 //	2 その親の下に worktree の workspace が1つも残っていないこと
 //
 // 1 を見ないと**人間が自分で開いたリポジトリの workspace を閉じてしまう。**
-// 2 を見ないと**別の issue が使っている worktree の pane ごと消す。**
+// 2 を見ないと、herdr 0.8.x では**別の issue が使っている worktree の pane ごと消す**（0.9.0 以降は断られる）。
 
 // repoWorkspaceOpen は、そのリポジトリの親 workspace が既に開かれているかを返す
 // （`worktree.open` を呼ぶ前に見る）。
@@ -109,11 +110,33 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 		return
 	}
 
+	// **一覧を引いてから閉じるまでを1つの仕事として loop に通す**（issue #284。serial.go）。
+	// 間に別の `worktree.open` が挟まると、herdr 0.8.x では走っている issue の pane まで消える。
+	// **引き継ぎを身元ファイルへ書く handOverRepoWorkspace は仕事の外で行う**（git を呼ぶので、
+	// loop を長く止めない）。
+	var handOver []herdr.Workspace
+	// **仕事が1度も走らずに返ったとき（順番待ちの間に取り消された・loop が閉じた）も黙らない。**
+	if err := m.run(ctx, "", func(ctx context.Context) error {
+		handOver = m.closeRepoWorkspaceLocked(ctx, repoDir, target)
+		return nil
+	}); err != nil {
+		m.logger.Warn("herdr の workspace を閉じる順番が来ないまま止まったので、リポジトリ本体の herdr workspace は残ります（手で閉じてください）",
+			"repo", repoDir, "workspace_id", target, "error", err)
+	}
+	if handOver != nil {
+		m.handOverRepoWorkspace(ctx, handOver, repoDir, target)
+	}
+}
+
+// closeRepoWorkspaceLocked は closeRepoWorkspace の本体である。loop の仕事の中で呼ぶ。
+//
+// 戻り値: 閉じる責任を渡すべきなら、そのときの `workspace.list` の一覧。渡さないなら nil。
+func (m *Manager) closeRepoWorkspaceLocked(ctx context.Context, repoDir, target string) []herdr.Workspace {
 	list, err := m.herdr.WorkspaceList(ctx)
 	if err != nil {
 		m.logger.Warn("herdr の workspace の一覧を引けないので、リポジトリの親 workspace を閉じません",
 			"repo", repoDir, "workspace_id", target, "error", err)
-		return
+		return nil
 	}
 
 	// **身元ファイルの値をそのまま herdr へ渡さない。**この値もエージェントが
@@ -123,11 +146,11 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 	if findRepoWorkspace(list.Workspaces, repoDir) != target {
 		m.logger.Warn("身元ファイルの herdr_repo_workspace_id がリポジトリの現物と一致しないので閉じません",
 			"identity_repo_workspace_id", target, "repo", repoDir)
-		return
+		return nil
 	}
 
-	// **まだ使っている worktree があれば閉じない。**親を閉じると、その下の worktree の
-	// workspace と pane も一緒に消える（実測: 2026-08-25）。
+	// **まだ使っている worktree があれば閉じない。**herdr 0.8.x で親を閉じると、その下の
+	// worktree の workspace と pane も一緒に消える（実測: 2026-08-25）。0.9.0 以降は断られる。
 	//
 	// **代わりに、閉じる責任をその worktree へ渡す。**渡さないと、同じリポジトリの
 	// issue を2件並行して走らせたとき（agent.max_concurrent_agents の既定は2）、
@@ -138,17 +161,29 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 		m.logger.Info("同じリポジトリの worktree がまだ開いているので、リポジトリの親 workspace は残します",
 			"repo", repoDir, "repo_workspace_id", target,
 			"open_workspace_id", id, "open_worktree", path)
-		m.handOverRepoWorkspace(ctx, list.Workspaces, repoDir, target)
-		return
+		return list.Workspaces
 	}
 
 	if _, err := m.herdr.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: target}); err != nil {
+		// **herdr 0.9.0 以降は、配下に worktree の workspace がある親を断り、何も閉じない。**
+		// 主に、一覧を引いてから閉じるまでの間に別の worktree が開いたときに起きる。
+		// **ここで責任は渡さない。**あとから開いた worktree の身元ファイルは着手の段6 で
+		// 初めて書かれるので、この時点では書き込む先が無く、書けても段6 の上書きで消える。
+		// **親は残る。**herdr の画面から閉じると close_group が付いて配下の pane ごと閉じるので、
+		// 「手で閉じて」とは案内しない。
+		if herdr.IsCode(err, herdr.ErrCodeWorkspaceGroupCloseRequired) {
+			m.logger.Warn("herdr が配下の worktree を理由に断ったので、リポジトリの親 workspace は残します"+
+				"（閉じるなら、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください）",
+				"repo", repoDir, "workspace_id", target, "error", err)
+			return nil
+		}
 		m.logger.Warn("リポジトリの親 workspace を閉じられませんでした（手で閉じてください）",
 			"repo", repoDir, "workspace_id", target, "error", err)
-		return
+		return nil
 	}
 	m.logger.Info("リポジトリの親 workspace を閉じました",
 		"repo", repoDir, "workspace_id", target)
+	return nil
 }
 
 // handOverRepoWorkspace は、リポジトリの親 workspace を閉じる責任を、まだ残っている
@@ -208,7 +243,8 @@ func (m *Manager) handOverRepoWorkspace(
 		}
 	}
 	if handed == 0 {
-		m.logger.Warn("リポジトリの親 workspace を閉じる相手が居なくなりました（herdr の画面から手で閉じてください）",
+		m.logger.Warn("リポジトリの親 workspace を閉じる責任を、残っている worktree へ渡せませんでした"+
+			"（閉じるなら、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください）",
 			"repo", repoDir, "repo_workspace_id", target)
 	}
 }

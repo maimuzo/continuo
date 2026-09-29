@@ -8,6 +8,7 @@
 - `docs/plans/continuo_design.md#3-22`（worktree の置き場所は gwq の規則に合わせる）
 - `docs/plans/continuo_design.md#4-1`（worktree を消す契機は Done だけにする）
 - `docs/plans/continuo_design.md#8-1`（branch を消す。仕様は workspace のディレクトリだけを消す）
+- `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
 - `internal/workspace/cleanup.go` の `ShouldCleanup`、`Cleanup`、`effectiveBase`、`resolveWorkspaceID`、`deletableBranch`、`removeWorktree`、`removeWorktreeByHand`
 - `internal/workspace/git.go` の `gitBranchExists`
 - `internal/workspace/sweep.go` と `internal/workspace/scan.go`
@@ -18,7 +19,7 @@
 
 ```rucm
 USE CASE NAME: worktree と branch を片付ける
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。システムは worktree の身元ファイルを読み、ボードの Status をまとめて取り直す。システムは Status が cleanup.on_states に入った worktree について、失うものが残っていないことを確かめてから worktree と branch と設定ファイルを消す。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは worktree の身元ファイルを読み、ボードの Status をまとめて取り直す。システムは Status が cleanup.on_states に入った worktree について、失うものが残っていないことを確かめてから worktree と branch と設定ファイルを消す。
 PRECONDITION: システムは常駐している。worktree の置き場所に身元ファイルを持つ worktree が1つ以上ある。利用者はボードの issue の Status を cleanup.on_states の選択肢へ動かしている。設定の cleanup.enabled は true である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、herdr、git

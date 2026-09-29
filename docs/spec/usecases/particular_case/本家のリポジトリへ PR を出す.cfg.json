@@ -3,7 +3,7 @@
   "usecase_name": "本家のリポジトリへ PR を出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md",
-    "rucm_block_sha256": "9764bc71890d39a0267cedc13178854315c5fe3389d0783b35cfc4c10d249f8a"
+    "rucm_block_sha256": "4501e3fb4a51e01a397ec4287e05bf784826a848db7e79d34294f9000ac1062c"
   },
   "root": "BASIC FLOW-1",
   "flows": {

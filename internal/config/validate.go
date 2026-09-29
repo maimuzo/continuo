@@ -143,6 +143,12 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-83）。
+	// **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
+	if err := validateDirectChatState(cfg); err != nil {
+		return err
+	}
+
 	if cfg.Tracker.StatusSignalPrefix == "" {
 		return requiredValueError("tracker.status_signal_prefix")
 	}
@@ -238,8 +244,14 @@ func validate(cfg *Config) error {
 	if cfg.Claude.Kind == "" {
 		return requiredValueError("claude.kind")
 	}
-	if cfg.Claude.PermissionMode != "dontAsk" {
-		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode, `無人運用で入力を待たない唯一のモードである "dontAsk" のみサポートする（設計 3-11）`)
+	// **空文字も弾く**（設計 3-11）。空だと orchestrator が --permission-mode を付けずに
+	// 起動するため、Claude Code 側の既定で走る。利用者の手元の設定しだいで挙動が変わる。
+	if !slices.Contains(ClaudePermissionModes, cfg.Claude.PermissionMode) {
+		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode,
+			`"auto" か "dontAsk" のどちらかにすること（設計 3-11）。`+
+				`既定は "auto"（判定役が実行の前に確かめる。保護対象パスへ書ける。`+
+				`広い許可の規則は落とされるので、足すなら狭い規則にする）。`+
+				`"dontAsk" は許可の一覧の外を確認せずに拒否し、入力を待たない`)
 	}
 
 	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
@@ -259,6 +271,7 @@ func validate(cfg *Config) error {
 		{"herdr.startup_timeout_ms", cfg.Herdr.StartupTimeoutMs},
 		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
 		{"rate_limit.poll_interval_ms", cfg.RateLimit.PollIntervalMs},
+		{"rate_limit.refresh_interval_ms", cfg.RateLimit.RefreshIntervalMs},
 		{"workspace_hooks.timeout_ms", cfg.WorkspaceHooks.TimeoutMs},
 	} {
 		if item.value <= 0 {
@@ -318,13 +331,23 @@ func validate(cfg *Config) error {
 		return requiredValueError("cleanup.on_states（cleanup.enabled が true のとき必須）")
 	}
 
-	// none を受理する。usage API がトークンを消費するかどうかを判別できていないため、
-	// この経路を切って運用できる必要がある（設計 3-27 / 第6節）。
-	// none のときは枠の判定を行わず、stall 検知だけに頼る。
+	// oauth_usage_api か statusline か none のどれか（issue #284）。**none は必須の逃げ道である。**
+	// 使用率が届くのは Pro / Max だけなので、それ以外の契約と API キーの人は none にする。
 	switch cfg.RateLimit.Source {
-	case "oauth_usage_api", "none":
+	case RateLimitSourceOAuthUsageAPI:
+		// **refresh_interval_ms が polling.interval_ms 以下でも起動は止めない。**
+		// v0.1.15 までの WORKFLOW.md をそのまま通すためである。orchestrator が
+		// polling.interval_ms の2倍として扱い、起動時に WARN を1回出す（quota.go の quotaRefreshInterval）。
+	case RateLimitSourceStatusline:
+		// **refresh_interval_ms は polling.interval_ms より長くする。**短いと巡回のたびに
+		// statusline取得が走り、1日に何百回も haiku を起動する。
+		if cfg.RateLimit.RefreshIntervalMs <= cfg.Polling.IntervalMs {
+			return invalidValueError("rate_limit.refresh_interval_ms", cfg.RateLimit.RefreshIntervalMs,
+				fmt.Sprintf("polling.interval_ms（%d）より長くすること", cfg.Polling.IntervalMs))
+		}
+	case RateLimitSourceNone:
 	default:
-		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "none" のどちらか（設計 3-27）`)
+		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "statusline" か "none" のどれか（設計 3-27）`)
 	}
 	switch cfg.RateLimit.TokenSource {
 	case RateLimitTokenSourceClaudeCredentials:
@@ -332,15 +355,18 @@ func validate(cfg *Config) error {
 	case RateLimitTokenSourceKeychain:
 		// **macOS でだけ選べる。**Keychain を読む `security` は macOS の標準コマンドであり、
 		// ほかの OS には無い。ここで弾かないと、Linux の運用者は起動時ではなく5分ごとの
-		// 取得で毎回失敗し、枠の判定が黙って無効化される（5-5 と同じ理由）。
-		if runtime.GOOS != "darwin" {
+		// 取得で毎回失敗し、usage API が黙って読めなくなる（5-5 と同じ理由）。
+		// **usage API を読む設定のときだけ弾く。**statusline と none はトークンを1回も読まないので、
+		// macOS で作った WORKFLOW.md をほかの OS で共有しても起動を止めない。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && runtime.GOOS != "darwin" {
 			return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 				fmt.Sprintf(`"keychain" は macOS でだけ使える（いまの OS: %s）。"claude_credentials" か "env" にすること`, runtime.GOOS))
 		}
 	case RateLimitTokenSourceEnv:
 		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
-		// 5分ごとの取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される（5-5）。
-		if cfg.RateLimit.TokenEnv == "" {
+		// 5分ごとの取得が毎回 ErrNoCredentials になり、usage API が黙って読めなくなる（5-5）。
+		// usage API を読む設定のときだけ必須にする（statusline と none は読まない）。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && cfg.RateLimit.TokenEnv == "" {
 			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
 		}
 	default:
@@ -611,7 +637,8 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 				"tracker.automated_state_rewrite のキー",
 				from,
 				"tracker の他のキー（active_states / terminal_states / running_state / "+
-					"dispatch_state / failure_state / status_signal_map の遷移先）に無い Status 名にすること"+
+					"dispatch_state / failure_state / direct_chat_state / status_signal_map の遷移先）"+
+					"に無い Status 名にすること"+
 					"（既に名前の出てくる Status は「知らない Status」にならないので、この行は1度も効かない）",
 			)
 		}
@@ -625,6 +652,33 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-83k）。
+//
+// **空なら何も見ない。**空はこの機能を使わないという意味である。
+//
+// **重なりを見る相手の一覧は `DirectChatConflicts` の1箇所だけに置く。**`continuo doctor` も同じものを読む。
+// 別々に持つと、どれか1つだけが古くなる。
+//
+// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-83k）。
+// `validateAutomatedStateRewrite` が弾くので、ここへ同じ検査を置いても弾く相手が1件も残らない。
+//
+// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-83j）。
+// 既定が非空なので、この機能を1度も頼んでいない人にも当たり、しかもその人の WORKFLOW.md に
+// 1行も書いていないキーの名前が出るためである。
+//
+// cfg: 検証する設定。
+// 戻り値: 重なっていれば理由付きのエラー。
+func validateDirectChatState(cfg *Config) error {
+	conflicts := DirectChatConflicts(*cfg)
+	if len(conflicts) == 0 {
+		return nil
+	}
+	return invalidValueError(
+		"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
+		i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflicts[0]),
+	)
 }
 
 // containsStateFold は ss の中に target と同じ状態名があるかどうかを返す。

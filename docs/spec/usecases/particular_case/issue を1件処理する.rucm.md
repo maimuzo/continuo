@@ -17,6 +17,8 @@
 - `docs/plans/continuo_design.md#3-77b`（担当は assignee で持ち、期限は hold のコメントで持つ）
 - `docs/plans/continuo_design.md#3-77c`（走っている最中の担当の確かめ直しと `recheck_interval_ms`。担当を外された機械は push してはならない）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
+- `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
+- `docs/plans/continuo_design.md#3-4c`（herdr の workspace の開け閉めは、1つの loop で1つずつ行う。statusline取得の workspace が開いている clone では着手の `worktree.open` が後に回る）
 - `internal/orchestrator/dispatch.go` の `dispatchCandidates`、`hasRequiredLabels`、`claimForDispatch`、`preflight`、`startRun`、`runStartOrFail`、`launchClaude`、`restartWithNewSession`、`confirmStartup`、`confirmStartupWithRestart`
 - `internal/orchestrator/failure.go` の `noteFailure`、`skipByFailure`
 - `internal/orchestrator/turn.go` の `startTurnLoop`、`turnLoop`、`buildTurnText`、`sendTurn`、`afterWaitTimeout`、`confirmTurnEnd`、`turnSendFailed` と `turnTransient`
@@ -25,7 +27,8 @@
 - `internal/orchestrator/reconcile.go` の `checkStalls`
 - `internal/orchestrator/comment.go` の `ensureAgentComment`、`failCommentRecovery`、`postStatusMove`
 - `internal/orchestrator/signal.go` の `ParseSignals`
-- `internal/workspace/prepare.go` の `CheckWorktreeUsable`、`checkBranchFree`、`Prepare`
+- `internal/workspace/prepare.go` の `CheckWorktreeUsable`、`checkBranchFree`、`Prepare`、`openWorktreeInHerdr`
+- `internal/workspace/serial.go` の `cloneKey`、`run`（statusline取得の workspace が押さえた clone を待つ）
 - `internal/tracker/adapter.go` の `dropUnrequestedStates`、`UpdateStatus`
 - `internal/tracker/query.go` の `foldStatus`（Status 名の比較の正規化）
 
@@ -33,7 +36,7 @@
 
 ```rucm
 USE CASE NAME: issue を1件処理する
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。システムはボードから候補を取り、着手できることを確かめ、入札で担当を決めてから先頭の1件に印を付けて worktree と worker を用意する。システムは既存の身元ファイルを読んでどのセッションで起動するかを決め、復帰つきの起動が完了しなければ会話を捨てて新しいセッションで立て直す。システムは turn を送り、Stop hook で turn の終わりを判定し、transcript の表明を読む。システムは走っている最中も recheck_interval_ms ごとに担当が自分のままかを確かめる。システムは表明の値どおりにボードの Status を書き、worker を止める。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムはボードから候補を取り、着手できることを確かめ、入札で担当を決めてから先頭の1件に印を付けて worktree と worker を用意する。システムは既存の身元ファイルを読んでどのセッションで起動するかを決め、復帰つきの起動が完了しなければ会話を捨てて新しいセッションで立て直す。システムは turn を送り、Stop hook で turn の終わりを判定し、transcript の表明を読む。システムは走っている最中も recheck_interval_ms ごとに担当が自分のままかを確かめる。システムは表明の値どおりにボードの Status を書き、worker を止める。
 PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの dispatch_state の Status に issue が1件以上ある。herdr は待ち受けている。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code、ほかの機械
@@ -58,7 +61,7 @@ BASIC FLOW:
 15. システムは Status を動かした記録を issue にコメントする。
 16. システムは workspace.root の下に issue の worktree を作る。
 17. システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。
-18. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
+18. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
 19. システムは Claude Code の設定ファイルを worktree の外に書く。
 20. システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。
 21. システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。
@@ -276,7 +279,7 @@ SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
 RFS BASIC FLOW 45
 1. システムは herdr の pane を閉じる。
 2. システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。
-3. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
+3. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
 4. システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。
 5. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
 6. システムは issue のコメントを読み直す。
@@ -478,6 +481,17 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 親があったか」を見るため、後ろは「無かったなら、いま開いた親の ID」を控えるためである。
 **控えた ID は「身元ファイルを書く」の段で身元ファイルへ書く**（`herdr_repo_workspace_id`）。
 **前からあったなら人間が開いたものなので、控えず、二度と触らない。**
+
+## 「workspace として開く」の段は、statusline取得の workspace が閉じるのを待つ
+
+**言いたいこと。**同じリポジトリ本体で statusline取得用の workspace が開いている間に `worktree.open` をすると、
+herdr はその workspace を issue の親にしてしまい、閉じられなくなる（設計 3-4c。herdr 0.9.1 の実測）。
+**だから herdr の workspace の開け閉めを1つの loop に通し、statusline取得の workspace が押さえた
+リポジトリ本体では、「workspace として開く」の段が閉じるまで後に回る**
+（`internal/workspace/serial.go` の `cloneKey` と `run`、`internal/workspace/prepare.go` の `Prepare`）。
+`コメントの取り戻し` の「workspace として開き直す」の段も `Prepare` を通るので、同じく待つ。
+
+**段は足さない。**待つのは開く前の順番だけで、開いた結果も、そのあとの段も変わらない。
 
 ## 復帰つきの起動は、失敗の理由を問わず捨てて立て直す
 
@@ -745,7 +759,7 @@ flowchart TD
     B15["15. Status を動かした記録を issue にコメントする"]
     B16["16. worktree を作る"]
     B17["17. 再利用する worktree の既存の身元ファイルを読む"]
-    B18["18. worktree の絶対パスとリポジトリ本体を渡して開き label に owner/repo/issues/N を書く"]
+    B18["18. statusline取得の workspace が閉じるのを待ち、worktree の絶対パスとリポジトリ本体を渡して開き label に owner/repo/issues/N を書く"]
     B19["19. 設定ファイルを worktree の外に書く"]
     B20["20. 復帰つきか新しいセッションの指定つきか、起動フラグを決める"]
     B21["21. 起動に使うセッション UUID を書いた身元ファイルを書く"]

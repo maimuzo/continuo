@@ -1457,7 +1457,7 @@ func TestAbandon_paneの作業ディレクトリがworktreeの内側でも拾う
 // 目的: 身元ファイルの issue_url が**置き場所のパスと食い違う** worktree を、
 // 候補にしないことを確認する（設計 3-4 の段2）。
 // **身元ファイルは worktree の直下にあり、そこでエージェントが
-// `--permission-mode dontAsk` で動く。**検算しなければ、worktree A のエージェントが
+// `--permission-mode auto`（既定）で動く。**検算しなければ、worktree A のエージェントが
 // 自分の issue_url を issue B に書き換えるだけで、**人間が B を取り消したとき A が消える。**
 // 与える情報: `octocat/another-repo` の下に用意した worktree に、
 // `octocat/hello-world#188` の issue_url を書いた身元ファイル。
@@ -1571,6 +1571,79 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 	assertNoRemoval(t, fx)
 	if len(fx.Tracker.Updates()) != 0 {
 		t.Fatalf("止まったのにカンバンへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
+// 目的: `--park` にdirect chat の状態（tracker.direct_chat_state の値）を渡したとき、
+// **ボードへ1文字も書かずに**止まることを確認する（設計 3-83）。
+// **direct chat の Status は `tracker.active_states` に入っていないので、
+// 1つ上の検査を素通りする。**だが動かした先で continuo は `pane.close` を1回も呼ばないので、
+// **pane が閉じるのを待つ段（3-37 の段1 の後半）が待ち切れず、結局何も消せない。**
+// 待つ前に、はっきりした理由で断る。
+// 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
+// issue 188 の worktree、`tracker.direct_chat_state` を設定したうえで `--park` にその値。
+// 成功条件: 終了コードが 1、ボードへの書き込みが0件、worktree が残っている、
+// herdr へ worktree.remove を送っていないこと。
+func TestAbandon_parkがdirectChatの状態なら書く前に止まる(t *testing.T) {
+	fx := newFixture(t)
+	// **`newFixtureWithConfig` の extra は最上位のキーしか足せない**ので、
+	// `tracker:` の中へは書けない。WORKFLOW.md を直接1行足す。
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ParkState = "Human" })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrParkDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
+// 目的: `--to` に direct chat の状態を渡したとき、**何も消さずに**止まることを確認する（設計 3-83k）。
+// **そこへ動かすと、次に continuo が起動したとき、いま消したばかりの issue の worktree と pane を作り直す。**
+// **文面は `--park` と分ける。**1つの文言を使い回すと、`--to` を叩いた人が `--park` の説明を読むことになる。
+// 与える情報: 継続監視が動いていない状態で、`tracker.direct_chat_state` を設定したうえで `--to` にその値。
+// 成功条件: 終了コードが 1、`--to` の文面が出て、worktree が残り、ボードへの書き込みが0件であること。
+func TestAbandon_toがdirectChatの状態なら何も消さずに止まる(t *testing.T) {
+	fx := newFixture(t)
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ToState = "Human" })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrToDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
+// 目的: いまの Status が direct chat のカードは、**`--force` を付けても**片付けないことを確認する（設計 3-83k）。
+// **`--force` を付けると worktree は消えるが、カードは direct chat のままなので、巡回はその run を毎回飛ばし、
+// 印は永久に外れない。**消えた worktree を指したまま枠を1つ持ち続け、ログにも issue にも何も出ない。
+// 与える情報: 継続監視が動いていない状態で、ボードの Status が direct chat の issue に `--force`。
+// 成功条件: 終了コードが 1、いまの Status の文面が出て、worktree が残り、ボードへの書き込みが0件であること。
+func TestAbandon_いまのStatusがdirectChatならforceでも止まる(t *testing.T) {
+	fx := newFixture(t)
+	addTrackerKey(t, fx.WorkflowPath, `  direct_chat_state: "Human"`)
+	prepared := fx.Prepare(t, 188)
+	fx.Tracker.SetState("Human")
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrCurrentDirectChat, "Human"))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
 	}
 }
 

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "83e82192fc4d6359974bd605866638ea66db94fa24d769fa18d5082b053246da", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "9b49be315ae9891ada5990ac1a422fa1f5dab7423d7eb76df26f90b07a43f84a", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じカンバンを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //
@@ -14,6 +14,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -475,16 +476,20 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 // TestHandoff_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。
 //
 // 目的: **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
-// 与える情報: 枠を読む設定（`oauth_usage_api`）だが、枠を1度も読めていない状態。
+// 与える情報: 使用率を読む設定（`statusline`。issue #284）だが、ステータスラインの行が
+// 1行も届いていない状態。trust.repositories は空（statusline取得は「使える clone が無い」で終わる）。
 // 成功条件: 入札のコメントが1件も増えず、着手もしないこと。
 func TestHandoff_枠を読めない機械は入札しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			// **枠を読む設定にする。**読み取り（RateLimit）は渡していないので、
-			// 枠の写しは永久に nil のままになる（＝読めなかった状態）。
-			cfg.RateLimit.Source = "oauth_usage_api"
+			// **使用率を読む設定にする。**行は1行も入れないので、保管値は空のままになる
+			// （＝読めなかった状態）。
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
+	// **値が無いので巡回の最後に statusline取得を開き、使える clone が無いので WARN を出す。**
+	// その状況はこのテストが作っている（trust.repositories を空にしている）。
+	fx.AllowLog("使える clone が無い")
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 

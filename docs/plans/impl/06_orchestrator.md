@@ -30,7 +30,7 @@
 | --- | --- |
 | `internal/orchestrator` | 巡回・dispatch・turn ループ・照合・リトライ・stall 検知 |
 | `internal/orchestrator` | 表明の読み取り（transcript のパース） |
-| `internal/ratelimit` | usage API を読む（`rate_limit.source: none` なら1回も叩かない） |
+| `internal/ratelimit` | usage API を読む（`rate_limit.source` が `statusline` か `none` なら1回も叩かない）。誤りは種類ごとの型で返し、`internal/orchestrator` が statusline へ切り替える（設計 3-27） |
 
 **第3段階のアダプタに1つ足す。**
 
@@ -70,7 +70,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **stall の閾値に達したら、枠待ちの判定を先に見る**（設計 3-27 の評価順）
   - 「時計を止める」は `runState.WaitingQuota` を立てて判定を飛ばすこと。`LastSeenAt` は進めない
 - [x] **枠のトークンの出所は `rate_limit.token_source` で決まる**（`claude_credentials` / `keychain` / `env`。設計 3-15）
-  - **macOS の既定は `keychain`。**`security` に10秒の上限を掛け、取れなければ枠の判定を諦めて起動は続ける
+  - **macOS の既定は `keychain`。**`security` に10秒の上限を掛け、取れなければ statusline取得へ切り替え、起動は続ける（一時的な失敗は `poll_interval_ms` のあとに試し直し、恒久的な失敗は立て直すまで試さない）
 - [x] **段2 で書き込む先は `tracker.running_state`（既定 `In Progress`）である。**ハードコードしない
 - [x] **agent 名を設計 3-3 の4段で作る**（32文字に収める。重複したら末尾に連番）
 - [x] **空きスロットの検査が、印を付ける前に走る**（段-1）
@@ -99,7 +99,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **枠待ちの判定が2条件の連言になっている**（`percent` が 100、かつその run から hook が来ていない）
   - **`severity` は見ない。**上限を示す値が何かを実測できていない（設計 3-27）
 - [x] **`rate_limit.source: none` なら usage API を1回も叩かない**（設定の検証は対応済み）
-- [x] **資格情報が取れなかったら、枠の判定を諦めて `none` と同じ動きにする。起動は止めない**（設計 3-27）
+- [x] **資格情報が取れなかったら、statusline へ切り替える。起動は止めない**（設計 3-27 の「usage API と statusline の切り替え」）
   - **macOS では `~/.claude/.credentials.json` が無いのが普通である。**既定の `keychain` なら Keychain から読める（設計 3-15）
 - [x] **`runState.PromptID` は `UserPromptSubmit` を受けた時点で入れる**（投入時には取れない。設計 3-25）
 - [x] **枠待ちの run についてだけ、打ち切りの時計を止める**（`claude.turn_timeout_ms` の判定を飛ばす）
@@ -165,7 +165,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `internal/orchestrator` | [settings.go](../../../internal/orchestrator/settings.go) | issue ごとの Claude Code の設定ファイル（hook 8種 + `permissions` + `env`） |
 | `internal/orchestrator` | [prompt.go](../../../internal/orchestrator/prompt.go) | 1回目のテンプレートの変数展開と、2回目以降の文面の組み立て |
 | `internal/orchestrator` | [agentname.go](../../../internal/orchestrator/agentname.go) | agent 名の4段とセッション UUID の採番 |
-| `internal/ratelimit` | [ratelimit.go](../../../internal/ratelimit/ratelimit.go) | usage API の読み取り。`none` なら1回も叩かない |
+| `internal/ratelimit` | [ratelimit.go](../../../internal/ratelimit/ratelimit.go) | usage API の読み取り。`statusline` と `none` なら1回も叩かない |
 | `internal/tracker` | [by_identifier.go](../../../internal/tracker/by_identifier.go) | `FetchIssueByIdentifier`（3値。Status で絞らない） |
 | `internal/herdr` | [errors.go](../../../internal/herdr/errors.go) | `ErrCodeTimeout` を足した（turn の時間切れと枠待ちを分ける起点） |
 

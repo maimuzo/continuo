@@ -178,14 +178,20 @@ func TestTemplate_雛形の本文に組み込みの説明を書き写してい�
 // headingsOf は markdown の文面から `## ` で始まる見出しの行を取り出す。
 //
 // **行頭のものだけを取る。**字下げした行は、組み込みが例として引用しているコードブロックの
-// 中身であり、節の見出しではない。
+// 中身であり、節の見出しではない。**コード囲みの中の行も取らない。**見本は囲みの中に行頭から書いてあり、
+// コメントの本文の見出し（`## <節の題名>` など）を持つ。
 //
 // text: 取り出す元の文面。
 // 戻り値: 見出しの行（`## ` を含む。前後の空白は落としてある）。
 func headingsOf(text string) []string {
 	var out []string
+	inFence := false
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		if strings.HasPrefix(line, "## ") {
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+			continue
+		}
+		if !inFence && strings.HasPrefix(line, "## ") {
 			out = append(out, strings.TrimRight(line, " \t"))
 		}
 	}

@@ -626,11 +626,10 @@ func (o *Orchestrator) removeOwnAssignee(
 // 並行に走り、途中で写しを差し替える）。**片方の run の起点が消え、もう片方が進み続ける。**
 //
 // snap: この巡回で1回だけ読んだ枠の写し。
-// stale: 直前の読み取りに失敗していれば真。
 // rs: 判定する run。
 // 戻り値: 上限を超えていれば true。
 func (o *Orchestrator) weeklyWaitExceededWith(
-	snap *ratelimit.Snapshot, stale bool, rs *runState,
+	snap *ratelimit.Snapshot, rs *runState,
 ) bool {
 	// **「使い切っている」ではなく「余裕が無い」で数える**（人間の決定。2026-09-06。issue #197）。
 	// **入札に使う余裕値と同じ線である**（`handoff.Short`）。
@@ -640,14 +639,17 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **組み立てるのは、下の門を全部抜けてからである**（issue #173）。
 	// **入口で組み立てると、写しが読めない巡回でも run の数だけ closure を2つ確保して捨てる。**
 	//
-	// **読めなくなった写しでは、判定も記録もしない**（設計 3-77i。issue #197）。
+	// **読めなくなった写しでは、判定も記録もしない**（issue #197）。
 	// **この判定は GitHub へ2回書き、pane を閉じる。**
-	// **資格情報が切れた機械は、切れる直前の値を1日中返し続ける。**
+	//
+	// **新しさは問わない**（issue #284。`quotaSnapshot` の規則）。
+	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちの判定に使える。**
+	// **新しさで止めるのは入札だけである**（`quotaForBid`）。
 	//
 	// **記録の前で戻る。**nil の写しは「余裕がある」と答えるので、そのまま控えると
 	// **`WeeklyShortSince` がゼロへ戻り、経過で測る道が永久に閉じる。**
 	// **読めるようになった時点で、そこから測り直す。**
-	if snap == nil || stale {
+	if snap == nil {
 		return false
 	}
 	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
@@ -1414,6 +1416,10 @@ func (o *Orchestrator) logReleasedRecord(
 // newAccount: いま担当になっているアカウントのログイン名。
 // **呼び出し元は `verifyHandoff` が真を返したときだけここへ来る**ので、必ず1文字以上ある。
 func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newAccount string) {
+	// **先に direct chat を抜けさせてから閉じる**（設計 3-83f の印を外す道の6本目・3-83h の手を離す経路の段1）。
+	// 担当者が別の人に替わっているので、人間が direct chat へ入れていても手を離すのが正しい。
+	// **抜けさせないと `stopWorker` の門で止まり、pane を閉じずに印だけ外れる。**
+	rs.leaveDirectChatMode()
 	if !rs.claimTerminal(ctx) {
 		return
 	}

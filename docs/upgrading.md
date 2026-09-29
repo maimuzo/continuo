@@ -106,6 +106,545 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.15 から v0.1.16 へ
+
+**破壊的変更が2つあります。****`Direct Chat` という名前を、設定かカンバンで既に使っている人だけが当たります。**
+
+**API キーで Claude Code を動かしている機械は、`rate_limit.source` を `none` にしてください**（下の「枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました」の節）。
+**しないと、continuo を起動するたびに haiku の会話が最大1回、従量で課金されます。**
+
+**当たる人は2通りです。**
+
+**1つ目。`WORKFLOW.md` の他の役割に `Direct Chat` と書いている人は、起動しなくなります。**
+`tracker.direct_chat_state` というキーが増え、**既定値が `"Direct Chat"` です。**
+**この名前が `active_states` などと重なっていると、continuo は起動を断ります。**
+
+**重なりを見る先は7つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states`。
+**`automated_state_rewrite` のキーに書いている場合も、既存の検査が断ります。**
+
+**エラーの文面は `tracker.direct_chat_state` を名指しします。**
+**あなたの `WORKFLOW.md` にそのキーが1行も無いのは正常です**（既定値が使われています）。
+
+**なぜ断るのか。**重なったまま動かすと、**同じカードが「continuo が手を離す」と「continuo が着手する」の
+両方に当たります。**ログにも issue にも理由が出ないので、**気づく手立てがありません。**
+
+**2つ目。カンバンに `Direct Chat` という列を既に持っている人は、挙動が変わります。**
+設定を1行も書いていなくても当たります。
+
+| その列にあるカード | いままで | これから |
+| --- | --- | --- |
+| **担当者が0人か2人以上** | 「continuo が知らない Status」だったので、continuo が抱えていれば猶予（既定10分）のあとで pane を閉じ、worker を止めていました | **見張っている continuo が `Blocked`（`tracker.failure_state`）へ動かし、1件ずつ「担当者を1人に」とコメントを書きます** |
+| **担当者が1人で、その PC の continuo のアカウント** | 同上 | **止めません。**pane が無ければ用意し、**pane を開いたまま、同時実行の枠（`agent.max_concurrent_agents`。既定2）を1つ持ち続けます** |
+| **担当者が1人で、別のアカウント** | 同上 | その PC の continuo は何もしません |
+
+**枠が空かないので、他の issue の着手が半分になります。**
+
+**直し方。****`WORKFLOW.md` の `tracker:` の下へ1行足してください。**
+
+```yaml
+  direct_chat_state: ""            # この機能を使わない
+```
+
+**別の名前にすれば、機能はそのまま使えます**（例: `direct_chat_state: "人間が対応中"`）。
+**その名前でカンバンに選択肢を1つ足してください**（下の節）。
+
+**足した1行は、どちらの破壊的変更にも効きます。**空にすれば起動も通り、挙動も元のままです。
+
+**書いた値が正しいかは、2つのコマンドで確かめられます。**
+
+```bash
+continuo doctor      # 重なっていれば ! を出し、どのキーと重なったかを出します
+continuo setup       # 選び直させます。重なる名前は書き込みません
+```
+
+**当たらない人には何も起きません。**`Direct Chat` という名前を設定にもカンバンにも使っていなければ、
+**このキーを書かなくても、いままでどおり動きます。**
+
+| 何が変わったか | 当てる必要 |
+| --- | --- |
+| **枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました** | **要りません。**v0.1.15 の `WORKFLOW.md` のまま起動します。**API キーの機械だけ、`rate_limit.source: none` にします**（下の節） |
+| **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
+| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **カンバンに `Direct Chat` という列を既に持っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足し、**使う issue の担当者を自分1人にします**（下の節） |
+| **レビューの回し方・判断票の形・subagent へ渡すものが、組み込みのプロンプトへ入りました** | **止まりはしません。**`WORKFLOW.md` の `### レビューを頼む subagent` に名前を2つ書くと、関連処理まで見る役が立ちます（下の節） |
+
+**`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の2つの破壊的変更に当たる人だけです。
+
+**ただし `continuo doctor` の `未記入の項目` が2つ増えます。**雛形に `tracker.direct_chat_state` と `rate_limit.refresh_interval_ms` が
+増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
+**書かなくても、いままでどおり動きます**（書かなければ Go が持つ既定が使われます。`Direct Chat` は、
+**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**。`refresh_interval_ms` は既定の5分です）。
+気になるなら、次のコマンドが足す2行を作ります。
+
+```bash
+continuo doctor --missing-keys-patch ~/continuo-work
+```
+
+### 枠の使用率を読めないとき、Claude Code のステータスラインへ切り替えるようになりました
+
+**v0.1.15 までは、枠の使用率を Anthropic の usage API からだけ読んでいました。**
+**読めないと（資格情報が無い・401・403 など）枠の判定を諦め、429 や 5xx のあいだは巡回のたびに叩き直していました。**
+**usage API が 429 を返し続けると、入札が止まり、上限に当たった run の回復待ちの判定も効かなくなっていました。**
+
+**この版から、usage API が誤りを返すあいだ（どの誤りでも）は、Claude Code のステータスラインから使用率を受け取ります。**
+usage API はいままでどおり主に使い、読めるようになれば戻ります。**v0.1.15 の `WORKFLOW.md` のまま起動します。**
+
+| 何 | v0.1.15 まで | v0.1.16 から |
+| --- | --- | --- |
+| **usage API が誤りのとき** | 資格情報の誤り・401・403 では枠の判定を諦める。429・5xx は巡回のたび（30秒ごと）に叩き直す | **Claude Code のステータスラインへ切り替える。**`rate_limit.poll_interval_ms` と `Retry-After` の長いほうのあとに読み直し、読めたら戻る |
+| **`rate_limit.source` の値** | `oauth_usage_api`（既定）/ `none` | **`oauth_usage_api`（既定）/ `statusline` / `none`**。`statusline` は usage API を読まず、ステータスラインだけを使う |
+| **`rate_limit.refresh_interval_ms`** | 無かった | **足しました**（既定 `300000`）。usage API が誤りのあいだ、入札に使ってよい値の古さの上限で、statusline取得の間隔でもあります |
+| **continuo が起動した pane のステータスライン** | あなたのステータスライン | **固定の `continuo` の1語**（使用率を受け取るため） |
+| **`continuo allow-keychain-access` と `continuo doctor` の `資格情報`** | あった | **いままでどおりです** |
+
+**`WORKFLOW.md` から消すキーはありません。**書き換えなくても起動します。
+
+#### 何もしないとどうなるか
+
+**usage API が読めているあいだは、いままでと同じに動きます。**違うのは次の3つです。
+
+| 何が起きるか | いつ |
+| --- | --- |
+| **continuo が起動した pane で、あなたのステータスラインが固定の `continuo` の1語に替わる** | いつも。**あなたが自分で起動した Claude Code は変わりません** |
+| **haiku の Claude Code が短く起動する**（statusline取得。herdr の画面に `continuo statusline fetch` という workspace がしばらく現れて消える） | usage API が誤りを返していて、使用率が `rate_limit.refresh_interval_ms`（既定5分）より古いとき。**何もしていない機械で最大5分に1回、1回の入力は約600トークン**です |
+| **`continuo doctor` の `未記入の項目` が1つ増える**（`rate_limit.refresh_interval_ms`） | いつも。書かなければ既定の5分が使われます。**`continuo doctor --missing-keys-patch` で足せます**（上） |
+
+#### API キーの機械は、`rate_limit.source: none` にしてください
+
+**API キーで Claude Code を動かしている機械では、usage API もステータスラインも使用率を返しません。**
+**そのままだと、usage API の誤りでステータスラインへ切り替え、statusline取得の haiku の会話が従量で課金されます。**
+**課金は continuo を起動するたびに最大1回で止まります**（起動してから1度も使用率を読めていない機械では、値を受け取れなかった statusline取得を1回したところで、それ以後 statusline取得をしません）。
+
+```yaml
+rate_limit:
+  source: none
+```
+
+**`none` にすると、使用率0として常に入札します**（v0.1.15 と同じです）。複数の機械で見張っているなら、全員を揃えてください（[FAQ.md](FAQ.md) の「API キーの機械が混ざるとき」）。
+
+#### statusline取得には、信頼済みの clone が1つ要ります
+
+**usage API が誤りのあいだ、statusline取得には、`trust.repositories` に書いたリポジトリのうち、
+手元に clone があって `continuo trust` で信頼させたものが1つ要ります。**
+continuo は上から見て、最初に見つかった1つを使います。**1つも無いと、次の `WARN` が出て、usage API が読めるまで使用率が入りません。**
+**走っている issue が無い間は、値が1つも入らないので、自動の着手が止まり続けます。**
+
+```text
+statusline取得ができません（使える clone が無い: trust.repositories に、手元に clone があって信頼済みのリポジトリが1つもありません。1つ書いて continuo trust を叩き、continuo を立て直してください）
+```
+
+**`trust.repositories` は走行中に読み直しません。**書き換えたら、continuo を立て直してください。
+
+**雛形の `trust.repositories` のコメントにあった「巡回のループはここを読まない。continuo trust だけが読む」は、この版から正しくありません。**
+**あなたの `WORKFLOW.md` のコメントは、continuo が書き換えないので古いまま残ります。**statusline取得の clone を選ぶのにも読みます。
+
+#### `rate_limit.refresh_interval_ms` を書くとき
+
+**`polling.interval_ms`（既定30秒）より長くしてください。**
+`source: oauth_usage_api` で短く書くと、continuo は起動し、`polling.interval_ms` の2倍として扱って、起動時に `WARN` を1回出します。
+`source: statusline` で短く書くと、次のように出て起動しません。
+
+```text
+エラー: WORKFLOW.md を読めません: …/WORKFLOW.md の front matter が不正です: 設定キー rate_limit.refresh_interval_ms の値 30000 が不正です: polling.interval_ms（30000）より長くすること
+```
+
+#### 確かめた版
+
+| 何 | 確かめたこと | 確かめていないこと |
+| --- | --- | --- |
+| **Claude Code** | **macOS の 2.1.282〜2.1.283** で、ステータスラインから使用率が届き、statusline取得が動くこと | **Linux。**statusline取得は `--restricted` を使うので、**それを持たない 2.1.248 より前の版では起動しません**（「起動しなかった」の `WARN` が出ます） |
+| **herdr** | **0.9.1** で statusline取得が動くこと（herdr の `workspace.create` を使います） | **0.8.x** |
+
+#### 版を上げる前から走っている run
+
+**版を上げる前から走っている run は、`statusLine` の無い設定のまま動き続けます。**
+その run の pane からは使用率が届きませんが、usage API が読めていれば困りません。
+**usage API が誤りのあいだにその run が上限に当たると、回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。**
+気になるなら、走っている run が終わってから版を上げてください。
+
+#### 古い版へ戻すとき
+
+**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit.refresh_interval_ms` の行を消してください。**
+古い版はこのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
+
+**確かめ方。**
+
+```bash
+grep -n -E 'refresh_interval_ms|source: statusline' ~/continuo-work/WORKFLOW.md
+```
+
+**何も出なければ、v0.1.15 が読めない行は残っていません。**
+
+### レビューの回し方が組み込みのプロンプトへ入りました。**subagent が毎周2つ立ちます**
+
+**この版から、エージェントはレビューのたびに subagent を2つ並列に立てます。**
+差分だけを読む役と、**そこから呼ばれる処理・呼ぶ処理・対応する文書まで見る役**の2つです。
+**心配な場所があるときは3つ目が立ちます。**
+
+**レートリミットの減り方が変わります。**いままで1つだったところが2つになるので、**レビュー1周あたりの消費が増えます。**
+そのかわり、**周の数が減ることを狙っています。**同じ見落としを次の周で拾い直さなくなるためです。
+
+**`WORKFLOW.md` の `### レビューを頼む subagent` に、名前を2つ書いてください。**
+**1つしか書いていない場合は、「関連処理まで見る役」に当たる名前を足してください。**
+**`security-reviewer` のように役の違う名前が並んでいる場合は、その名前を上の2つの役に合うものへ差し替えてください。**
+**先に書いたほうが「差分を読む役」、後が「関連処理まで見る役」になります。**
+**案内のコメント行（`<!-- … -->`）は、送る文面から取り除かれます。**そちらを直す必要はありません。
+
+**書かないとどうなるか。**名前が1つだけなら、エージェントは**その1つを両方の役に使います。**1つも無ければ `general-purpose` です。
+止まりはしませんが、**1つだけだと、周辺のコードと対応する文書を見る役がいなくなります。**
+**1つも書いていないと、あなたが用意したレビュワーは呼ばれません。**
+
+### レビュー結果を貼ったあと、**エージェントが検査の完了まで黙ります**
+
+**この版から、エージェントはレビュー結果を貼ったあとに `gh run rerun` を叩き、`gh pr checks --required --watch` で検査が終わるまで待ちます。**
+**その間、エージェントは1行も書きません。**CI の実行時間をそのぶん使います。
+
+**`.github/workflows/` に `code-review-result` を持つ検査が無いリポジトリでは、この待ちに入りません。**
+**その検査は `continuo init` が置く `continuo-ci.yaml` を `.github/workflows/` へ移すと入ります。**
+
+**途中の周では、エージェントは結果を貼るたびに回し直してから待ちます。**
+**回し直しが要らないのは、レビューが収まって終わり、エージェントが `gh pr ready` で draft を外したときだけです。**そこで検査が回り直すためです。
+
+### 判断票の形が変わりました。**表が5列から7列になります**
+
+**この版から、判断票には「何周目か」を必ず書きます。**題名のあと、空行を1つ空けて `<何周目か>周目` です。
+**表には「数えた結果」と「分類」の2列が増えます。**同じ誤りが他に無いかを数えた結果と、その指摘が前の周に在ったかどうかです。
+
+**`WORKFLOW.md` の本文で判断票の形を自分で指示している場合は、そちらも直してください。**
+**何も書いていない場合は、エージェントが組み込みの形で書くので、直す必要はありません。**
+
+### `## 5-7. subagent へ渡すもの` が入りました。**subagent へ渡せないものが増えます**
+
+**この版から、エージェントは subagent へ次を渡しません。**
+**pull request のマージ・issue や pull request の削除・ファイルやディレクトリの削除・本番の環境への書き込み・release の作成です。**
+
+**本番の環境へ書き込む必要があるときは、エージェントが人間へ渡して止まります。**
+**カンバンはこれに当たりません。**Status を動かすのは continuo です。
+
+### 既定が3つ変わりました。**あなたの `WORKFLOW.md` は書き換わりません**
+
+**この版から、continuo は Claude Code を `--permission-mode auto` で起動します**（既定のままの場合）。
+**Claude Code が古いと、このフラグを知らずに起動に失敗します。**
+**2.1.266 で動作を確認しました。**`claude --version` で確かめてください。
+**それより古い版で `auto` が使えるかは測っていません。**
+
+**`continuo init` が置いた `WORKFLOW.md` には、3つとも値が書いてあります。**
+**既定を変えても、書いてある値が勝ちます。**
+**`continuo doctor --missing-keys-patch` も、既にあるキーには触りません。**
+
+**まず、いまの値を見てください。**
+
+```bash
+grep -n -A2 'permission_mode\|tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+### 新しい既定にする書き換え
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+**貼り替えると `permissions.allow` が消えます。**
+**変えるのは、右にコメントを付けた3行だけです。**
+
+```yaml
+claude:
+  kind: claude
+  permission_mode: auto        # ← dontAsk から変える
+  permissions:
+    allow:                     # ← 触りません。dontAsk へ戻したくなったときに要ります
+      - "Bash"
+      - "Read"
+      - "Glob"
+      - "Grep"
+      - "Edit"
+      - "Write"
+    deny: ["AskUserQuestion"]  # ← [] から変える
+  tool_gate:
+    mode: "off"                # ← 下の表のとおり
+```
+
+**`permission_mode` と `deny` は、必ず2つセットで変えてください。**
+**`permission_mode: auto` だけを当てて `deny` を当て忘れると、`AskUserQuestion` の拒否が外れます。**
+そうなると、スキルなどからその道具が呼ばれた瞬間に**質問の画面が出て pane が止まり、
+continuo が次に送る指示が、その質問への回答として消費されます**（実測）。
+
+**`tool_gate` は、いまの値によって変わります。**
+
+| `mode:` の値 | いま何が起きているか | 何をするか |
+| --- | --- | --- |
+| **`public_only`**（v0.1.10 以降の `continuo init` の既定） | 公開リポジトリの issue にだけ判定が掛かっている | **`off` へ書き換える。**掛けたままにしたいなら、そのままで構いません |
+| **`off`**（自分で止めた人） | 判定は掛かっていない | **何もしなくて構いません。**新しい既定と同じです |
+| **`on`**（自分で強めた人） | いつでも判定が掛かっている | **何もしなくて構いません。**書き換えると、自分で強めた守りを外すことになります |
+| **1行も出ない**（v0.1.9 以前の `continuo init`） | **既定がそのまま効いている** | **版を上げた時点で判定が止まります。**続けたいなら `mode: public_only` を手で書いてください。**`continuo doctor --missing-keys-patch` では戻りません**（新しい雛形の値、つまり `off` が入ります） |
+
+### `permission_mode: auto` にすると何が変わるか
+
+| 何 | どうなるか |
+| --- | --- |
+| **`.claude/` 配下と `.mcp.json` への書き込み** | **判定役へ回るようになります**（許可の規則に当たっていても回ります）。**`dontAsk` では、`permissions.allow` に書いても `PreToolUse` hook を張っても通りませんでした** |
+| **エージェントに許可を出す方法** | **`dontAsk` と同じく、設定ファイルを書き換えます。**`claude.permissions.allow` に**狭い規則**を足してください（例: `Bash(gh:*)`）。**`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**足したら **continuo を再起動してください。**走行中は設定を読み直しません。**issue のコメントに許可を書いても届きません**（判定役への要求から道具の結果は取り除かれます） |
+| **止まり方** | **確認の画面へ戻ることがあります**（**この経路は実機で観測できていません**）。戻ったときは、continuo が esc を送って Status を `tracker.failure_state`（既定は `Blocked`）へ動かし、issue に引き渡しを書きます。**固まりはしませんが、人間が見るまで進みません** |
+| **速さ** | **シェルのコマンドは毎回、Claude Code 側の判定を通ります。**どれだけ遅くなるかは測っていません |
+| **`AskUserQuestion`** | **上の `deny` で禁じてあります。**外すと、質問の画面が出て pane が止まります（実測。上の節） |
+| **判定役の呼び出しの費用** | 公式文書は *"On Enterprise plans and on accounts that use the Claude API, … classifier calls count toward your token usage."*（**訳:** Enterprise プランと、Claude API などを使うアカウントでは、判定役の呼び出しがトークン消費に数えられる）と書いています。**continuo の入札の判定にどれだけ効くかは検証していません** |
+| **会話で述べた制約** | 公式文書は *"Boundaries are not stored as rules. The classifier re-reads them from the transcript on each check, so a boundary can be lost if context compaction removes the message that stated it. For a hard guarantee, add a deny rule instead."*（**訳:** 制約はルールとして保存されない。判定役は判定のたびに会話から読み直すので、それを述べたメッセージが compaction で消えると、制約も失われる。確実に守らせたいなら、代わりに deny の規則を足すこと）と書いています。**組み込みの指示書が述べる制約が、compaction のあとも判定役に効くかは検証していません** |
+
+**止まり方・判定役の呼び出しの費用・会話で述べた制約の3つは、検証していません。**この版を実際に使って確かめます。
+
+**いままでどおり「入力を待たない」ことを最優先するなら、`permission_mode: dontAsk` のままにしてください。**
+**そのモードは残してあります。**
+
+**`mode: off` にすると、公開 issue の本文がコマンドになる経路を、continuo 側では止めなくなります。**
+戻し方は上の表と [SECURITY.md](../SECURITY.md) の「使う前に減らせる危険」にあります。
+
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+
+### 人間が pane で直接続けるあいだ、continuo が手を出さないようにできます（direct chat）
+
+**何が変わったか。**`tracker.direct_chat_state` というキーが1つ増えました。**既定は `"Direct Chat"` です。**
+
+> **先に読んでください。カンバンに `Direct Chat` という選択肢を既に持っている人だけ、上げると挙動が変わります**（上の破壊的変更の2つ目）。
+>
+> **いままでどおりにしたいときは、`WORKFLOW.md` の `tracker.direct_chat_state` を
+> 空文字にするか、別の名前へ書き換えてください。**
+>
+> ```yaml
+> tracker:
+>   direct_chat_state: ""
+> ```
+
+**`Direct Chat` という選択肢を持っていないカンバンでは、この機能が使えないだけで、他の動きは1つも変わりません。**
+
+**何が困っていたか。**何度やり直しても収束しない issue で、人間が herdr の pane に入って直接話しかけると、
+**continuo がその pane を閉じて会話が切れていました。**
+エージェントの返事に `CONTINUO-STATUS: blocked` の1行が入る、人間が考えている間に画面が変わらず打ち切られる、
+といった経路が4つあり、**どれも「continuo が手を離す」＝「pane を閉じる」だったためです。**
+
+**どう変わったか。**カードを `Direct Chat` へ動かしているあいだ、
+continuo は**指示を送らず、`CONTINUO-STATUS:` の行も読まず、Status も動かさず、pane も worktree も片付けません。**
+**pane がまだ無ければ、そこで1つ用意します**（continuo がその issue をまだ抱えていないときだけです）。
+`In Progress` か `Ready` へ戻すと、**たいていは同じ pane・同じ会話のまま**続きの指示を送ります。
+
+**使うのに要るのは2つです。**
+
+| 何を | どうするか |
+| --- | --- |
+| **カンバンの選択肢** | カンバンの画面で Status の選択肢を1つ足してください（名前は `Direct Chat`）。**足したら continuo を再起動してください**（カンバンの選択肢は、起動したときと20巡回ごとにしか読み直しません） |
+| **担当者** | **動かす issue の担当者を、pane を開きたい PC の continuo が使っている `gh` のアカウント1人だけにしてください。**0人か2人以上だと、continuo がカードを `Blocked` へ動かして「担当者を1人に」とコメントします。**`Direct Chat` のあいだに担当者を別の1人に替えると、いまの PC の continuo は pane を閉じて手を離します** |
+
+> **API（`gh project field-create` / `updateProjectV2Field`）で選択肢を足してはいけません。**
+> **設定済みの Status の値が全部消えます。**
+
+**何台かの PC で同じカンバンを見張っていても使えます。**pane を持つのは、担当者のアカウントの PC だけです。
+
+**別の名前にしたいときだけ、`WORKFLOW.md` に書きます。**`continuo setup` も6つ目の質問として尋ねます
+（番号 `0` で飛ばせます）。
+
+```yaml
+tracker:
+  direct_chat_state: "Direct Chat"
+```
+
+**書いたら再起動してください。**このキーは動いている最中には読み直しません。
+
+**書いた名前がカンバンに無くても、起動は止まりません。**`continuo doctor` の `Status の名前` が `!` を出します。
+**この Status だけの扱いです。**他の Status の名前がカンバンに無いときは、いままでどおり起動を止めます
+（そちらは、綴りがずれると issue が1件も見つからないのに正常に見えるためです）。
+
+**`Direct Chat` に置いたまま continuo の再起動を重ねると、`Blocked` へ落ちることがあります。**
+再起動して引き継いだ回数は `Direct Chat` のあいだも数えるので、**上限（`agent.max_takeover`、既定5）に届くと、
+戻したあとの再起動で引き継がずに `Blocked` へ落ちます。**再起動を何度も重ねる使い方なら、`agent.max_takeover` を上げてください。
+
+**使わないなら、`tracker.direct_chat_state` を空文字にしてください。**
+
+**使い方と気をつけること、pane が来ないときの手順は [docs/FAQ.md](FAQ.md) の「途中から人間が直接チャットで進めたいとき（direct chat）」にあります。**
+
+### 古い continuo で新しい `WORKFLOW.md` は読めません
+
+**`tracker.direct_chat_state` を書き足したら、continuo も一緒に上げてください。**
+設定の読み込みは知らないキーをエラーにするので、**古い実行ファイルで起動すると
+`unknown field "direct_chat_state"` で止まります。**
+**順番は「実行ファイルを入れ替える → `WORKFLOW.md` を書き足す」です。**
+
+### `continuo abandon` が direct chat の Status を3通りで断ります
+
+**`tracker.direct_chat_state` の Status をカンバンに作った人だけに関係します。**
+**設定に足すものはありません。**
+
+| どれ | なぜ断るか |
+| --- | --- |
+| **`--park` の行き先** | そこへ動かしても continuo は pane を閉じないので、`continuo abandon` は pane が閉じるのを待ち切れず、**結局何も消せません** |
+| **`--to` の行き先** | 片付けは通りますが、**次に continuo を起動したとき、いま消したばかりの worktree と pane を作り直します。**巡回のたびに作り直されます |
+| **いまの Status が `Direct Chat`** | `--force` を付けると worktree だけ消えて、**同時実行の枠を1つ持ったまま戻らなくなります。**ログにも issue にも何も出ません |
+
+**3つとも、待つ前に理由を出して止まります。****`--force` でも通りません。**
+**直し方は1つです。**カードを `Direct Chat` の外へ動かしてから叩いてください。
+
+### エージェントのコメントの形が、4つの見出しから7つに変わりました
+
+**v0.1.15 で入った4つの見出し**（`### 何に対する返答か` / `### 前提条件` / `### 単語の説明` / `### 何が問題なのか`）**は、この版で7つになります。**
+
+| 順 | 見出し | 中身 |
+| --- | --- | --- |
+| 1 | （見出しは付きません） | **引用。**その節が答えている原文だけ |
+| 2 | `### 三行まとめ` | 3行以内で結論 |
+| 3 | `### 前提` | その話が成り立つために要る条件 |
+| 4 | `### 単語の説明` | その節で使う語が何を指すか |
+| 5 | `### 既存の構造がどうなっているか` | いまどう作られていて、何がどの順で起きるか |
+| 6 | `### 何が問題なのか` | 症状と、放っておくと何が起きるか |
+| 7 | `### 詳細` | 根拠・仕組み・データ |
+
+**引用の置き方も変わります。**
+**v0.1.15 は、節ごとに `### 何に対する返答か` の見出しを立て、その下に引用を置いていました。**
+**この版からは見出しを付けず、節の先頭に引用を置きます。**そのすぐ下に `### 三行まとめ` が来ます。
+
+**あわせて4つ増えます。**
+**説明にシーケンス図を多用し、何を渡して何を受け取るかを具体的な値で書きます。**
+**技術用語は英語のまま書きます**（`worktree` / `pane` / `hook` / `branch` / `commit`）。
+**人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊きません。**
+**判断票は、指摘をまとめた表を、その節の `### 詳細` の中に置きます。**
+
+**あなたの側に要るものはありません。**`continuo init` が置いた `WORKFLOW.md` は書き換わりません。
+**`WORKFLOW.md` の本文（front matter の下）で、コメントの書き方を自分で指示している場合だけ、そちらを新しい形に合わせてください。**本文は組み込みの指示書の真ん中へ挟まり、コメントの形を決める組み込みの節はその後ろに来ます。**形が食い違うと、エージェントは2つの形を受け取ります。**
+
+### herdr 0.9.1 に合わせました。**herdr を 0.9.1 へ上げたら、`WORKFLOW.md` の `herdr.protocol` を手で `22` へ直してください**
+
+**この版は herdr 0.9.1 で動作を確認しています。**herdr 0.8.2 には、長い指示の本文を打ち込んだあとの Enter が届かない不具合があります。
+**そうなると、エージェントは1文字も読まずに黙ったまま止まり、continuo は `claude.turn_timeout_ms`（既定60分）を使い切るまで待ち続けます。**
+**この不具合は herdr 0.9.0 で直っています。**herdr を 0.9.1 へ上げてください。
+
+**herdr を上げると、`WORKFLOW.md` を直すまで continuo は起動しません。**
+continuo は起動するときに herdr へ `ping` を送り、返ってきた protocol の番号が `herdr.protocol` と1でも違うと止まります。
+
+| herdr の版 | 返す protocol |
+| --- | --- |
+| **0.9.1 / 0.9.0** | **22** |
+| 0.8.2 | 20 |
+| 0.8.0 | 19 |
+
+**v0.1.15 までの `continuo init` で `WORKFLOW.md` を作った人は、全員が手で直す必要があります。**
+**その雛形が `protocol: 20` を書いていたためです。**書いてある値は既定値より優先されるので、continuo の既定値を 22 に上げただけでは効きません。
+**逆に `protocol:` の行を消して既定値に任せている人は、continuo を上げた時点で 22 になります。**herdr を 0.8.2 のまま使うなら、`protocol: 20` を書き足してください。
+**`continuo setup` でも `continuo doctor --missing-keys-patch` でも直りません。**どちらも、既にあるこの行には触りません。
+
+```yaml
+herdr:
+  protocol: 22    # herdr 0.9.1 と 0.9.0 は 22。0.8.2 は 20、0.8.0 は 19
+```
+
+**直したら `continuo doctor` で確かめてください。**`herdr --version` ではなく doctor の出力を見ます。
+**照合するのは、動いている herdr の server が返す値だからです。**herdr 0.9.0 以降は client だけを上げて server を古いまま残せるので、
+`herdr --version` が 0.9.1 でも、server は古い版のままということがあります。
+
+```bash
+grep -n "protocol:" ~/continuo-work/WORKFLOW.md
+continuo doctor
+# ✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
+```
+
+**doctor の行に出る版が 0.9.1 でなければ、herdr の server がまだ古いままです。**herdr を立て直してから、もう一度確かめてください。
+
+**herdr 0.9.0 から、配下に worktree を持つリポジトリの workspace を閉じると、herdr が断るようになりました。**
+**continuo の片付けは、配下が残っていないことを確かめてから閉じるので、ふだんは当たりません。**
+断られるのは主に、確かめてから閉じるまでの間に同じリポジトリの worktree が開いたときです。**そのときは親を閉じずに残します。**
+**閉じたいときは、同じリポジトリの worktree が全部片付いてから herdr の画面で閉じてください。**配下が残っているうちに画面から閉じると、herdr は配下の pane ごと閉じます。
+
+### コメントと pull request の本文・題名を、ファイルから渡すようになりました — 設定に足すものはありません
+
+**エージェントは、issue のコメントと pull request の本文・題名を一時ファイルへ書いてから、`gh` へ渡します。**
+**v0.1.15 までの指示書は、本文と題名を `--body "…"` や `--title "…"` の二重引用符の中へ直に書かせていました。**
+**二重引用符の中では、シェルが backtick と `$( )` をコマンドとして実行します。**
+報告に backtick で囲んだ語を書いたり、issue から `$(…)` を含む文を引いたりすると、それが worktree の中で走ります。
+
+**あわせて2つ変わりました。**
+
+- **見本をコード囲みに入れ、中身を行頭から書くようにしました。**字下げした見本をそのまま写すと、ヒアドキュメントの終わりの行が終わりと読まれず、何も投稿されないまま終わります。
+- **計画・判断票・成果の報告の本文を、worktree の中の `plan.md`・`review.md`・`done.md` へ書かせるのをやめました。**残ったファイルがあると、既定の設定（`cleanup.require_clean_worktree: true`）では worktree が片付かず、issue に「コミットされていない変更が残っている」と書かれていました。
+
+**あなたの側に要るものはありません。**
+**`WORKFLOW.md` の本文で `gh issue comment … --body "…"` の形を自分で指示している場合だけ、次の形へ直してください。**
+
+```bash
+F=$(mktemp)
+cat > "$F" <<'BODY'
+<本文>
+BODY
+gh issue comment <issue の URL> --body-file "$F"
+```
+
+**`<<'BODY'` の引用符を落とさないでください。**落とすと、ヒアドキュメントの中でも backtick と `$( )` が実行されます。
+**`BODY` の行は行頭に置いてください。**字下げすると、そこで終わりと読まれません。
+**本文の中に `BODY` だけの行を作らないでください。**そこで本文が切れ、後ろの行がシェルのコマンドとして実行されます。入るなら、終わりの語を別のものに変えてください。
+
+**`docs/plans/continuo_design.md` の 3-78b を写して、`WORKFLOW.md` の本文に「コードが別のリポジトリにあるとき」を置いている場合は、そこも直してください。**
+v0.1.15 の見本は `commit -am "<何を直したか>"` と `--title "<何を直したか>"` でした。
+v0.1.16 の見本は、メッセージを一時ファイルへ書き、`git -C <clone のパス> commit -a -F "$M"` と `--title "$(cat "$M")"` で渡します。
+**直さないと、メッセージや題名に書いた backtick が、その `WORKFLOW.md` を使う全部の run で実行され続けます。**continuo は `WORKFLOW.md` を書き換えません。
+
+### AI の印が付いたコメントを、エージェントが命令として扱わなくなりました — 設定に足すものはありません
+
+**この版から、continuo が起動した Claude Code は、本文の先頭に AI の印があるコメントを命令として扱いません**（issue #245）。
+**印は、本文の1行目に置く HTML コメントです。**`<!-- continuo:` で始まるもの（`<!-- continuo:agent -->`・`<!-- continuo:ai -->` など）と、
+レビューの目印（`<!-- code-review-result -->`・`<!-- design-review-result -->`・`<!-- design-review-skipped -->`）が当たります。
+**書いた人が `OWNER` / `MEMBER` / `COLLABORATOR` でも、印があれば分析や記録として読みます。**
+
+**pull request の本文も、命令として扱わなくなりました。**変更の説明として読みます。指示はコメントに書いてください。
+
+**変わったこと。**
+
+| 何 | v0.1.15 まで | v0.1.16 から |
+| --- | --- | --- |
+| **`OWNER` が書いた、AI の印付きのコメント** | 命令として扱った | **分析や記録として読む** |
+| **pull request の本文** | 書いた人の立場で決めた | **命令として扱わない** |
+| **「コードは別のリポジトリにある」「この branch へ出せ」** | `OWNER` / `MEMBER` / `COLLABORATOR` が書いていれば従った | **そのうえで、AI の印が無いコメントか、issue の本文に書いてあるときだけ従う** |
+
+**あなたの決定は、あなたが自分で書いてください。**Claude Code に代筆させて AI の印が付くと、エージェントはそれを命令として扱いません。
+
+**あなたが自分で起動した Claude Code に印を付けさせるには、plugin を1回入れます**（[FAQ.md](FAQ.md) の「issue のコメントを、人間が書いたのか AI が書いたのか見分けたい」）。
+
+```bash
+claude plugin marketplace add maimuzo/continuo
+claude plugin install continuo-issue-comments@continuo
+```
+
+**自動では新しくなりません**（third-party の marketplace は、Claude Code の既定で自動更新が切れています）。新しくするときは次の2つを叩きます。
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+**手で直すものが3つあります。**どれも、前の版の案内をあなたが写した場合だけです。
+
+| 何 | どう直すか |
+| --- | --- |
+| **`WORKFLOW.md` の本文に、`## 書いた人によって扱いを変えること` の節が残っている**（v0.1.10 から v0.1.12 までの案内で足したもの） | **節ごと消してください。**「`OWNER` / `MEMBER` / `COLLABORATOR` の書いたものは命令」と言い切っているので、組み込みの指示書と食い違います |
+| **`WORKFLOW.md` の本文に、「OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と書いているときです」の2行が残っている**（v0.1.12 の「差し替え方（push には -u を付けろ）」で貼ったもの） | **その段落ごと消してください。**同じことは組み込みの指示書（6-3）が、AI の印を見る形で言っています |
+| **あなたの `CLAUDE.md` に、FAQ の見本の「continuo を使っているなら、1行目を `<!-- continuo:agent -->`」を写した** | **「1行目は `<!-- design-review-result -->` のまま。`<!-- continuo:agent -->` は continuo が起動したエージェントだけが付ける」に直してください。**あなたが自分で起動した Claude Code がそれを付けると、continuo がそのコメントを走っている run の成果として数えます |
+
+**`continuo init` が `WORKFLOW.md` の隣に置く CI の見本（`continuo-ci.yaml`）の案内の文も、同じ理由で書き分けました。**
+**既に置いた見本と、それを写したあなたの CI の定義は書き換わりません。**案内の文が古いだけで、検査の中身は変わっていないので、直さなくても動きます。
+
+**確かめ方。**
+
+```bash
+grep -c '^## 書いた人によって扱いを変えること' ~/continuo-work/WORKFLOW.md
+grep -c 'OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と' ~/continuo-work/WORKFLOW.md
+```
+
+**どちらも `0` なら、本文に古い決まりは残っていません。**
+
+---
+
+### 計画を書いたところで、どの issue も一度 `Blocked` で止まる
+
+**エージェントは計画を書いたら、設計レビューへ進む前に `Blocked` で止まり、あなたの確認を待ちます。**これは正常です。
+**了承するときは、了承することを issue のコメントにはっきり書いてから `Ready` へ戻してください。**Status を戻すだけでは進みません。
+**レビューの途中で質問して止まったときは、回答を issue のコメントに書いてから `Ready` へ戻してください。**
+
+**エージェントが draft で作った pull request は、レビューが収まるとエージェントが draft を外します。**
+`WORKFLOW.md` の 4-4 やリポジトリの決まりに「draft で作る」とだけ書いていた場合も同じです。
+
+詳しくは [docs/FAQ.md](FAQ.md) の「計画を書いたところで、どの issue も `Blocked` になる」にあります。
+
 ## v0.1.14 から v0.1.15 へ
 
 **破壊的変更が2つあります。**
@@ -716,7 +1255,7 @@ continuo doctor --missing-keys-patch WORKFLOW.md
 | **計画のコメントに図が入ります** | **mermaid の `flowchart` か `sequenceDiagram` です。**GitHub がそのまま図として表示するので、あなたの側に要るものはありません |
 | **人間へ読ませるコメントの節に、4つの見出しが入ります** | `### 何に対する返答か` / `### 前提条件` / `### 単語の説明` / `### 何が問題なのか` |
 
-**4つの見出しが当たるのは3種類のコメントです。**計画・判断票・何をしたかの報告。
+**4つの見出しが当たるのは4種類のコメントです。**計画・判断票・何をしたかの報告・削除の記録。
 **途中経過の報告と、まとめて直したときの報告には当たりません。**
 どちらも形が別に決まっていて、4つを置く場所がないからです。
 
@@ -1357,6 +1896,8 @@ cd ~/continuo-work && continuo prompt --show
 **レビューの節は `code-reviewer` / `security-reviewer` の subagent を名指ししています。**
 **起動できずに止まる場合は、`claude.permissions.allow` に
 subagent を起動する道具を足してください**（雛形の HTML のコメントにも書いてあります）。
+**ただし `permission_mode: auto`（既定）では、`Agent` の規則は落とされます**（公式文書の permission modes のページ。2026-09-18 取得）。
+**auto では `Agent` の呼び出しも判定役が確かめるので、allow に足す話ではありません。**止まったら、引き渡しの通知が挙げる記録で、何が止めたかを確かめてください。
 
 ### 応答を差し戻す `Stop` hook との噛み合わせ — 設定は要りません
 
@@ -1917,7 +2458,7 @@ front matter が重複キーになることはありません。
 claude:
   # …（ほかの設定）
   tool_gate:
-    mode: off      # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
+    mode: "off"    # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
 ```
 
 **`on` にすると、非公開リポジトリの issue にも掛かります。**

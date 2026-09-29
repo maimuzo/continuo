@@ -198,15 +198,9 @@ func TestTemplate_分岐元とPRのbaseを言い分けている(t *testing.T) {
 func TestTemplate_7_4の一覧にworktreeの分岐元が載っている(t *testing.T) {
 	body := prompt.Builtin()
 
-	at := strings.Index(body, "## 7-4. この指示書が決めていないこと")
-	if at < 0 {
-		t.Fatalf("組み込みのプロンプトに 7-4 の節がありません")
-	}
-	end := strings.Index(body[at+1:], "\n## ")
-	if end < 0 {
-		end = len(body) - at - 1
-	}
-	section := body[at : at+1+end]
+	// **囲みを見る sectionOf で切る。**見本は囲みの中に行頭から書いてあり、
+	// `## ` で始まる行を持つ。そこで切ると、後ろの文への検査が黙って素通りする。
+	section := sectionOf(t, body, "## 7-4. この指示書が決めていないこと")
 
 	if !strings.Contains(section, "この worktree の分岐元") {
 		t.Errorf("7-4 の一覧に worktree の分岐元がありません。"+
@@ -232,15 +226,10 @@ func TestTemplate_7_4の一覧にworktreeの分岐元が載っている(t *testi
 func TestTemplate_3_7は成果の報告を新しく1件投稿させる(t *testing.T) {
 	body := prompt.Builtin()
 
-	at := strings.Index(body, "## 3-7. 終わりを書く")
-	if at < 0 {
-		t.Fatalf("組み込みのプロンプトに 3-7 の節がありません")
-	}
-	end := strings.Index(body[at+1:], "\n# ")
-	if end < 0 {
-		end = len(body) - at - 1
-	}
-	section := body[at : at+1+end]
+	// **囲みを見る sectionUntilNextChapter で切る。**3-7 は章の最後なので `# ` で切る必要があるが、
+	// 成果の報告の見本は囲みの中に `# <何をしたかを一言で>` を行頭から持つ。
+	// 素朴に `"\n# "` で切ると、見本の題名で切れて、後ろの文への検査が全部素通りする。
+	section := sectionUntilNextChapter(t, body, "## 3-7. 終わりを書く")
 
 	if !strings.Contains(section, "新しく1件投稿してください") {
 		t.Errorf("3-7 が「新しく1件投稿してください」と言っていません。"+

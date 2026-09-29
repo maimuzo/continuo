@@ -1,3 +1,6 @@
+// Package ratelimit_test は internal/ratelimit（usage API の読み取りと、使用率の写しを運ぶ型）を検証する。
+//
+// **本物の usage API と Keychain は叩かない。**偽のサーバーと偽の `security` を使う（issue #284）。
 package ratelimit_test
 
 import (
@@ -36,6 +39,8 @@ func mustTime(t *testing.T, s string) *time.Time {
 // 引きずられて「いつまで待つか」を決められない。
 //
 // 与える情報: 使い切っている枠が2件（片方は resets_at が null）、まだ余裕のある枠が1件。
+// **種別の名前は `SelectedKinds` の戻り値になるので、実在する3種別で組む**
+// （`session` / `weekly_all` / `weekly_scoped`。usage API が返す3つである）。
 // 成功条件: SelectedKinds が使い切っている2件の種別を返し、AnySelected が真になり、
 // LatestResetForClearing が **resets_at が入っている枠の中で** いちばん遅い時刻を返すこと。
 func TestSnapshot_使い切った枠のうちresets_atがある中でいちばん遅い時刻を返す(t *testing.T) {
@@ -62,7 +67,7 @@ func TestSnapshot_使い切った枠のうちresets_atがある中でいちば�
 	}
 	want := *mustTime(t, "2026-08-18T14:09:59Z")
 	if !got.Equal(want) {
-		t.Fatalf("リセット時刻が想定と違う（resets_at が null の枠を混ぜている可能性）: got %s, want %s", got, want)
+		t.Fatalf("リセット時刻が想定と違う（resets_at が null の枠か、使い切っていない枠を混ぜている可能性）: got %s, want %s", got, want)
 	}
 }
 
@@ -74,7 +79,7 @@ func TestSnapshot_使い切った枠のうちresets_atがある中でいちば�
 // 成功条件: AnySelected は真、LatestResetForClearing の2つ目の戻り値が false であること。
 func TestSnapshot_使い切った枠にresets_atが無ければ見つからないと返す(t *testing.T) {
 	snap := &ratelimit.Snapshot{
-		Limits: []ratelimit.Limit{{Kind: "weekly_scoped", Percent: 100, ResetsAt: nil}},
+		Limits: []ratelimit.Limit{{Kind: "weekly_all", Percent: 100, ResetsAt: nil}},
 	}
 	if !snap.AnySelected(atFull) {
 		t.Fatalf("100%% の枠があるのに AnySelected が偽である")
@@ -85,7 +90,7 @@ func TestSnapshot_使い切った枠にresets_atが無ければ見つからな�
 }
 
 // 目的: nil の Snapshot に対しても panic せず、安全な既定値を返すことを確認する
-// （Fetch は資格情報が無いとき nil を返すので、呼び出し側が素直に渡してくる）。
+// （保管値が無いときや値が古いとき、orchestrator は nil の写しを渡してくる）。
 // 与える情報: nil の *Snapshot。
 // 成功条件: AnySelected が false、SelectedKinds が空、LatestResetForClearing が
 // 見つからないと返すこと。

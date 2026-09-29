@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "72f9472fcdb4c37c29c829202b58a7f601161257172517df5464cc1a221c1996", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "0bed93f700e890f472a288bc015de57981694b82a9fa45ec388db06f46fbcae5", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 起動と中断に関わるパスを検査する。
@@ -153,7 +153,7 @@ claude:
   turn_timeout_ms: 600000
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
   read_timeout_ms: %d
   startup_timeout_ms: 3000
 cleanup:
@@ -568,7 +568,7 @@ func TestDaemon_起動時の検査に落ちたら生きているpaneを閉じず
 	// **protocol が合わない。**起動時の検査で止まるべきである。
 	env.Herdr.Handle("ping", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{
-			"type": "pong", "version": "0.9.0-fake", "protocol": 21,
+			"type": "pong", "version": "mismatch-fake", "protocol": 21,
 			"capabilities": map[string]any{"live_handoff": true},
 		}, nil
 	})

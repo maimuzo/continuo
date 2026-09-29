@@ -175,8 +175,9 @@ continuo abandon — 間違えて着手した issue を、着手する前の状�
 ```
 
 **サブコマンドは次のとおりである。**`init` / `setup` / `trust` / `abandon` /
-`allow-keychain-access` / `doctor` / `prompt` / `version` / `hook` で、
-引数に何も渡さなければ常駐する。
+`allow-keychain-access` / `doctor` / `prompt` / `version` / `hook` / `statusline` で、
+引数に何も渡さなければ常駐する。**`hook` と `statusline` は Claude Code から呼ばれるもので、
+人間が直接叩くものではない。**
 
 **フラグは位置引数の前でも後ろでも書ける。**`git` / `docker` / `gh` と同じである。
 `continuo abandon <issue の URL> --dry-run` と `continuo abandon --dry-run <issue の URL>` は
@@ -396,9 +397,10 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 
 ## 段4. Status の割り当てを合わせる
 
-**言いたいこと。**`continuo setup` が、カンバンの選択肢を continuo の5つの役割へ割り当てる。
+**言いたいこと。**`continuo setup` が、カンバンの選択肢を continuo の6つの役割へ割り当てる。
 **役割の説明が出るので、それを読んで番号で選ぶ。**
-**書き換わるのは `Status` に関する7行だけで、段3 で手を入れた行はそのまま残る。**
+**6つ目（direct chat）だけは `0` で飛ばせる。**この手順で作るカンバンには、その選択肢が無い。
+**書き換わるのは `Status` に関する行だけで、段3 で手を入れた行はそのまま残る。**
 
 **段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
 `WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
@@ -440,36 +442,42 @@ cd ~/continuo-try
   5  In Review
   6  Done
 
-これから 5 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
+これから 6 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
 その役割に使える選択肢がカンバンに無い場合は 0 を入力してください。
 Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
-[1/5] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
+[1/6] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
 番号> 2
   → dispatch_state に "Ready" を割り当てました
 
-[2/5] running_state: continuo が処理を開始したときに移動する Status は何番ですか?
+[2/6] running_state: continuo が処理を開始したときに移動する Status は何番ですか?
 番号> 3
   → running_state に "In Progress" を割り当てました
 
-[3/5] status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?
+[3/6] status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?
 番号> 5
   → status_signal_map.review に "In Review" を割り当てました
 
-[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?
+[4/6] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?
 番号> 4
   → status_signal_map.blocked / failure_state に "Blocked" を割り当てました
 
-[5/5] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?
+[5/6] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?
 番号> 6
   → terminal_states に "Done" を割り当てました
 
-5 個の役割の割り当ては次のとおりです。
+[6/6] direct_chat_state: 人間が pane に入って直接エージェントと話すあいだだけ置く Status は何番ですか?（ここへ動かすと continuo は指示を送らず、pane も worktree も閉じません。使わないなら 0 を入力して飛ばせます）
+この役割は 0 を入力すると飛ばせます。
+番号> 0
+direct_chat_state を飛ばしました。WORKFLOW.md のこの項目は空のままにします。
+
+6 個の役割の割り当ては次のとおりです。
   dispatch_state: "Ready"
   running_state: "In Progress"
   status_signal_map.review: "In Review"
   status_signal_map.blocked / failure_state: "Blocked"
   terminal_states: "Done"
+  direct_chat_state: （飛ばしました。この項目は空のままです）
 
 WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/WORKFLOW.md
 書き換えたキー:
@@ -505,10 +513,10 @@ WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/W
 | 起きること | どうなるか |
 | --- | --- |
 | **`WORKFLOW.md` が無い** | **止める。**`continuo init` を先に実行するよう案内する（雛形は作らない） |
-| **7つのキーのどれかが `WORKFLOW.md` から消されている** | **尋ねる前に止める。**消したキーを名指しする（5問答えさせてから捨てない） |
+| **必ず要る7つのキーのどれかが `WORKFLOW.md` から消されている** | **尋ねる前に止める。**消したキーを名指しする（答えさせてから捨てない）。**`tracker.direct_chat_state` は例外で、無くても止めない**（新しく足したキーなので、それより前に作った `WORKFLOW.md` には無い） |
 | 同じ選択肢を2つの役割に選ぶ | **拒否して同じ役割をもう一度尋ねる**（打ち切らない） |
-| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない |
-| 選択肢が5個未満のカンバン | **尋ねる前に止める。**足す手順を出す |
+| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない。**ただし6つ目（direct chat）だけは飛ばして次へ進む** |
+| 選択肢が5個未満のカンバン | **尋ねる前に止める。**足す手順を出す。**6個は要らない**（6つ目は飛ばせるため） |
 | `Ctrl+C` | 中断する。`WORKFLOW.md` は書き換えない |
 
 ### 手で書き換えることもできる
@@ -611,12 +619,14 @@ trust:
 
 #### 何が「信頼済み」を決めるのか
 
-**巡回は `trust.repositories` を読まない。**読むのは `continuo trust` だけである。
+**issue を取るかどうかの判定は `trust.repositories` を読まない。**
+**`trust.repositories` を読むのは、`continuo trust` と、statusline取得に使う clone を選ぶときだけである。**
 
 | 誰が | 何を見るか |
 | --- | --- |
 | **巡回のループ** | **`~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted`。**これが唯一の門番 |
 | `continuo trust` | `WORKFLOW.md` の `trust.repositories`。**そこに書かれたものだけ**を `~/.claude.json` へ登録する |
+| **statusline取得**（枠の使用率を usage API から読めず、値が古いときに、haiku の Claude Code を短く起動して値を取ること） | 起動したときに読んだ `trust.repositories` を上から見て、**手元に clone があり `~/.claude.json` で信頼済みの最初の1つ**を使う。**走行中は読み直さないので、書き換えたら continuo を立て直す** |
 | `continuo doctor` の `信頼登録` | **カンバンに載っている issue のリポジトリ**について `~/.claude.json` を見る |
 
 **だから2つのことが起きうる。**
@@ -802,7 +812,8 @@ demo/sample-a の clone がないので `ghq get` で取ってきます（時間
 **なぜ要るか。**macOS の Claude Code は OAuth トークンを Keychain に置いていて、
 `~/.claude/.credentials.json` は無いのが普通である。continuo は枠（レートリミット）の残りを読むために
 このトークンを使う。**Keychain は初めて読む実行ファイルに確認のダイアログを出すので、
-無人で走る continuo がそれに当たると、答える人がいないまま枠の判定の期限が切れる。**
+無人で走る continuo がそれに当たると、答える人がいないまま読み取りの期限が切れる。**
+（そのあいだ continuo は枠の使用率を Claude Code のステータスラインから受け取る形へ切り替え、`rate_limit.poll_interval_ms`（既定5分）ごとに読み直すので、ダイアログがそのたびに出うる。）
 **人間が端末にいるうちに1回読ませて、「常に許可」で答えておく。**
 
 **実際に叩いた出力**（2026-08-21、macOS。**このときダイアログは出なかった**）。
@@ -815,7 +826,7 @@ Keychain の項目 "Claude Code-credentials" を読めました。以後 continu
 ```
 
 > **確認のダイアログが出たら「常に許可」を選ぶ。**「許可」だけを選ぶと、次に実行するときまた出る。
-> **無人運用中に出ると、答える人がいないまま10秒で打ち切られる。**
+> **無人運用中に出ると、答える人がいないまま10秒で打ち切られる。**答えるまで `rate_limit.poll_interval_ms` ごとに出うる。
 
 | 守られていること | 中身 |
 | --- | --- |
@@ -856,7 +867,7 @@ cd ~/continuo-try
 
 > **`資格情報` の行は、段5b を通した macOS で `rate_limit.token_source: keychain` にして
 > 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
-> 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**件数の行はそれに合わせて数え直してある。**
+> 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**`herdr` の行は、herdr 0.9.1 を入れた環境で別に叩いて取ったものである**（2026-09-24）。**件数の行はそれに合わせて数え直してある。**
 > **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
 >
 > **このあとに出てくる `continuo doctor` の出力は、どれも見出し語が7つ足りない。**
@@ -870,7 +881,7 @@ cd ~/continuo-try
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✓ カンバン        <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
@@ -953,7 +964,7 @@ EROFS: read-only file system, mkdir '/home/<ACCOUNT>/.claude/session-env/<sessio
 | `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 
 **`status_field` に実在しない名前を書いたときの出力**（実際に `continuo Status` と書いて叩いた。
-hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
+hook の socket の場所を `$TMPDIR` に置き換え、`herdr` の行を herdr 0.9.1 の環境で別に叩いて取ったもの（2026-09-24）に差し替えてある）。
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
@@ -961,7 +972,7 @@ hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
 ✓ Claude の設定   ~/.claude/session-env に書けます
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
-✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
+✓ herdr           protocol 22（設定と一致）／herdr 0.9.1／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✗ カンバン        カンバンを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
@@ -1086,7 +1097,8 @@ continuo は知らない Status になった issue を、
 **「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
-**この状態では Claude Code は起動しないので、枠を消費しない**）。
+**herdr 0.8.0（protocol 19）のときに取ったものなので、herdr 0.9.1 では `protocol=22` と出る**。
+**枠の読み方がいまと違う版で取ったので、そのとき出ていた枠の `WARN` の行は消してある**）。
 
 ```text
 continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）
@@ -1102,21 +1114,25 @@ level=INFO msg="hook の配送を始めました"
 level=INFO msg=復元を終えました worktrees=0 adopted=0 closed_panes=0 cleaned=0
 level=INFO msg="ダッシュボードは開きません（server.port が未設定）"
 level=INFO msg=巡回を始めます poll_interval_ms=30000
-level=WARN msg="枠の判定を諦めます（rate_limit.source: none と同じ動きになります。起動は止めません）" error="枠の判定に使う資格情報を取得できません: ~/.claude/.credentials.json を読めません（macOS では Keychain にあるのが普通です）: …"
 ```
 
-> **最後の `WARN` は、枠の判定に使う資格情報を取れなかったときに1回だけ出る。**
-> 枠の判定を諦めて `rate_limit.source: none` と同じ動きになるだけで、**起動は止まらない。**
->
-> **この出力を叩いたときの設定は `rate_limit.token_source: claude_credentials` で、
-> `~/.claude/.credentials.json` が無かった。**だからこの行が出ている。
-> **macOS の既定は `keychain` である**（段3 の `continuo init` がそう書く）。
-> `keychain` にして段5b を通すと、段6 の `資格情報` は `✓` になる。
+> **枠の判定に使う資格情報を取れないと、ここに `WARN` が1回出る。**
+> 枠の使用率を usage API から読めないので、Claude Code のステータスラインへ切り替えるという知らせで、**起動は止まらない。**
+> **macOS の既定は `rate_limit.token_source: keychain` である**（段3 の `continuo init` がそう書く）。
+> 段5b を通してあれば、段6 の `資格情報` は `✓` になり、この `WARN` は出ない。
 > 巡回のループも `doctor` と同じ `security find-generic-password -s "Claude Code-credentials" -w` を
 > 起動して読むので、**読める先が2つに割れることはない。**
 
-**`Ready` の issue が0件なら、ここで止まったまま何も起きない。**
-**Claude Code が起動するのは、`Ready` の issue を見つけたときだけである。**
+**`Ready` の issue が0件なら、issue の処理は何も始まらない。**
+**usage API から使用率を読めていれば、Claude Code も起動しない。**
+**usage API が誤りを返しているあいだは、Claude Code が短く起動することがある。**
+そのあいだは使用率を Claude Code のステータスラインから受け取るので、**直近の `rate_limit.refresh_interval_ms`
+（既定5分）に値が届いていなければ、continuo は statusline取得をする。**
+`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を起動し、`hello` を1回送って、
+値が届いたら閉じる。**herdr の画面に `continuo statusline fetch` という workspace がしばらく現れて消える。**
+会話の記録は残らない。**`trust.repositories` に信頼済みの clone が1つも無いと、起きない代わりに `WARN` が出る。**
+段5 で `continuo trust` を通してあれば、この `WARN` は出ない。
+**枠を見ないなら `rate_limit.source: none` にする。**そのときは usage API も statusline取得も使わない。
 
 ### 別の端末から様子を見る
 

@@ -23,7 +23,7 @@ USE CASE NAME: issue を着手から片付けまで見届ける
 BRIEF DESCRIPTION: 利用者は issue をボードに載せ、着手を決めて Status を dispatch_state へ動かす。システムは issue を1件処理し、エージェントの表明どおりに Status を動かす。利用者は成果をレビューして Status を terminal_states へ動かす。システムは worktree と branch を片付ける。
 PRECONDITION: 利用者は continuo を使い始める用意を終えている。システムは常駐している。ボードの Status の選択肢名は設定と一致する。対象リポジトリの clone は Claude Code に信頼登録されている。herdr は待ち受けている。
 PRIMARY ACTOR: 利用者
-SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code、Claude の usage API、git
+SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code、git
 DEPENDENCY: INCLUDE USE CASE issue を1件処理する、INCLUDE USE CASE 人間に判断を渡す、INCLUDE USE CASE worktree と branch を片付ける、INCLUDE USE CASE レートリミットで待って再開する、INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ
 GENERALIZATION: なし
 

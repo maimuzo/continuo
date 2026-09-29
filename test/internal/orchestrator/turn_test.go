@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "543f65dd58861fd390cbfb97112670e53e0c3f6521a17a9b563a71f49393b7a2", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -576,7 +576,14 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 		"agent-a1f9f743.jsonl",
 		"サブエージェントの記録の置き場所",
 		"下記の【調べるところ】に挙げた記録",
-		"dontAsk",
+		// **既定は auto である**（設計 3-11。issue #259）。
+		// **auto では、足す規則を狭く書かせる。**道具を丸ごと許す規則は、
+		// このモードに入るときに落とされる（公式の permission modes のページ）。
+		// **再起動まで案内する。**`claude.permissions` は走行中に読み直さないので、
+		// 足しただけでは同じところでまた止まる。
+		"auto",
+		"WORKFLOW.md の `claude.permissions.allow` に狭い規則を足してください",
+		"continuo を再起動してください",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
@@ -585,6 +592,11 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 	// **原因を断定してはならない。**何が確認の画面を出したかは continuo の側に残らない。
 	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
 		t.Errorf("確かめていない原因を断定している:\n%s", body)
+	}
+	// **コメントで許可を出す案内を書かない**（issue #259）。
+	// 判定役への要求から道具の結果は取り除かれるので、issue のコメントは判定役へ届かない。
+	if strings.Contains(body, "コメントに「その操作を許可します」と書いてください") {
+		t.Errorf("引き渡しに、コメントで許可を出す案内が入っている:\n%s", body)
 	}
 }
 
@@ -676,7 +688,7 @@ func TestTurn_一時的な送信の失敗ではpaneを閉じない(t *testing.T)
 // 目的: 設計 3-2 / 3-40 の「**待ち受けが返ったあとに Stop hook が来なかったこと**だけが
 // 『Stop hook が届かなかった』と言ってよい場所である」を示す。
 // **巡回の停滞の検知（`claude.turn_timeout_ms` の沈黙）とは別の経路である。**
-// あちらは `agent_status` が `working` かで測るが、こちらは待ち受けが返った直後の `settle_ms` だけを見る。
+// あちらは画面の版で測るが、こちらは待ち受けが返った直後の `settle_ms` だけを見る。
 //
 // 与える情報: `agent.prompt` は `idle` で返るのに、Stop hook が1件も届かない。
 // 成功条件: 「turn が終わったことを検知できませんでした」を理由にリトライを1つ積み、

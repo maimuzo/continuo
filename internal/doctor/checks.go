@@ -980,6 +980,7 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 //
 //	設定が読めない                              … `!`（何を見るべきか決まらない）
 //	rate_limit.source が none                   … `✓`（token_source は見ない）
+//	rate_limit.source が statusline             … `✓`（usage API を読まないので token_source は見ない。issue #284）
 //	token_source が env で環境変数がある         … `✓`
 //	token_source が env で環境変数が無い         … `✗`
 //	token_source が claude_credentials でファイルがある … `✓`
@@ -1019,6 +1020,15 @@ func checkCredentials(ctx context.Context, opts Options, cfg loadedConfig, confi
 			Label:  LabelCredentials,
 			Symbol: SymbolOK,
 			Detail: i18n.T(i18n.KeyDoctorCredentialsNone),
+		}
+	}
+	// **usage API を読むのは oauth_usage_api のときだけである**（issue #284）。statusline では
+	// トークンを1回も読まないので、取れるかどうかを見ても意味が無い。
+	if rl.Source == ratelimit.SourceStatusline {
+		return Result{
+			Label:  LabelCredentials,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorCredentialsStatusline),
 		}
 	}
 

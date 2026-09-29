@@ -242,7 +242,7 @@ func TestReadIdentity_壊れたJSONはErrIdentityBrokenになる(t *testing.T) {
 // ファイルは残っていること。
 //
 // **なぜ上限が要るか。**身元ファイルは worktree の直下にあり、そこでエージェントが
-// `--permission-mode dontAsk` で動く。上限が無いと、書かれただけの大きさが
+// `--permission-mode auto`（既定）で動く。上限が無いと、書かれただけの大きさが
 // 常駐プロセスのメモリに載る（実測で 67,109,391 バイトを読み切った）。
 // git の出力に gitOutputLimit を掛けているのとまったく同じ理由である。
 func TestReadIdentity_大きすぎる身元ファイルは読まない(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -171,8 +172,12 @@ func (d Deps) resolve(
 			return d, err
 		}
 		ws, err := workspace.New(workspace.Options{
-			Config:       cfg,
-			Herdr:        client,
+			Config: cfg,
+			Herdr:  client,
+			// **abandon は loop.Inline を渡す**（issue #284）。1つの issue を1つずつ片付け、
+			// statusline取得をしないので、順番を決める相手がいない。goroutine を起こさないので
+			// 閉じる口も要らない（Deps に閉じる口が無い）。
+			Loop:         loop.Inline{},
 			Logger:       logger,
 			SettingsRoot: settingsRoot,
 		})

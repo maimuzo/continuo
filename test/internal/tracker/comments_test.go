@@ -352,3 +352,46 @@ func TestCommentWrittenBy_持ち主が空文字なら照合しない(t *testing.
 		t.Fatalf("投稿者が違うのに true になった")
 	}
 }
+
+// 目的: 人間が自分で起動した Claude Code の印（`<!-- continuo:ai -->`）が、FetchComments の
+// どの判定にも当たらないことを確認する（issue #245。設計 3-82）。
+//
+// **なぜ要るか。**人間の AI は、continuo と同じ gh の持ち主のアカウントで書く。
+// その印が marker（`<!-- continuo:agent -->`）の前方一致に当たると、**走っている run が成果を書いたことになり、
+// 書かせ直しが飛ぶ。**self_marker に当たると、次の turn の入力から黙って消える。
+// **印が `<!-- continuo:` で始まるので、前方一致の相手を1文字でも縮めると当たりうる。**
+//
+// 与える情報: gh の持ち主が `<!-- continuo:ai -->` で始めたコメント1件。
+// 成功条件: 結果に残り、IsAgent も IsSelf も MarkedByOther も立たないこと。
+func TestFetchComments_人間のAIの印はどの判定にも当たらない(t *testing.T) {
+	cfg := testTrackerConfig()
+	commentsCfg := cfg.Provider.Comments
+	markers := cfg.Comments
+	const selfLogin = "octocat"
+
+	ai := map[string]any{"id": "c1", "url": "https://example.com/c1", "body": "<!-- continuo:ai -->\n人間が起動した Claude Code が書いた", "createdAt": "2026-08-01T00:00:00Z", "author": map[string]any{"login": selfLogin}}
+
+	fs := newFakeGraphQLServer(t, single(dataResponse(map[string]any{
+		"node": map[string]any{
+			"__typename": "Issue",
+			"comments":   map[string]any{"nodes": []map[string]any{ai}},
+		},
+	})))
+	a := newAdapterForFetch(t, fs)
+
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg, markers, selfLogin)
+	if err != nil {
+		t.Fatalf("FetchComments が失敗した: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1（人間の AI の印のコメントは外さない）", len(comments))
+	}
+	c := comments[0]
+	if c.IsAgent || c.IsSelf || c.MarkedByOther {
+		t.Fatalf("人間の AI の印のコメントが判定に当たった: IsAgent=%v IsSelf=%v MarkedByOther=%v",
+			c.IsAgent, c.IsSelf, c.MarkedByOther)
+	}
+	if !strings.HasPrefix(markers.Marker, "<!-- continuo:") {
+		t.Fatalf("既定の marker が %q で、この検査の前提（<!-- continuo: で始まる）と違う", markers.Marker)
+	}
+}

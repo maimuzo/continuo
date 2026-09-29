@@ -582,3 +582,55 @@ func TestResolve_上限ちょうどのパスで実際にlistenできる(t *testi
 			limit, socketpath.MaxPathLen)
 	}
 }
+
+// 目的: 使用率の socket（sl.sock）が、hook の socket と同じ実行時ディレクトリの下に、
+// hook の socket とは別の名前で置かれることを確認する（issue #284。hook の socket に
+// 判別子を足して同じ socket で受けると、判別子を知らない古い本体が使用率の行を hook として
+// 受け取るため、別の socket にする）。
+// 与える情報: 十分短い実行時ディレクトリ。
+// 成功条件: ResolveStatusline が "<dir>/sl.sock" を返し、Resolve が返す hook の socket の
+// パスと違い、同じディレクトリにあること。ファイル名が "sl.sock" であること。
+func TestResolveStatusline_hookと同じディレクトリに別の名前で置く(t *testing.T) {
+	const dir = "/tmp/continuo"
+	got, err := socketpath.ResolveStatusline(dir)
+	if err != nil {
+		t.Fatalf("短いパスなのにエラーになった: %v", err)
+	}
+	if want := filepath.Join(dir, "sl.sock"); got != want {
+		t.Fatalf("組み立てたパスが一致しない: got %q, want %q", got, want)
+	}
+	if socketpath.StatuslineSocketFileName != "sl.sock" {
+		t.Fatalf("StatuslineSocketFileName = %q, want %q", socketpath.StatuslineSocketFileName, "sl.sock")
+	}
+	hook, err := socketpath.Resolve(dir)
+	if err != nil {
+		t.Fatalf("hook の socket のパスを組み立てられない: %v", err)
+	}
+	if hook == got {
+		t.Fatalf("使用率の socket が hook の socket と同じパスになっている: %q", got)
+	}
+	if filepath.Dir(hook) != filepath.Dir(got) {
+		t.Fatalf("使用率の socket が hook の socket と別のディレクトリにある: hook=%q statusline=%q", hook, got)
+	}
+}
+
+// 目的: 使用率の socket のパスにも、hook の socket と同じ長さの上限（103バイト）が
+// 掛かることを確認する（境界値。macOS の Unix domain socket は 104 バイト以上を bind できない）。
+// 与える情報: "<dir>/sl.sock" がちょうど103バイトになる dir と、104バイトになる dir。
+// 成功条件: 103バイトなら成功してその長さのパスを返し、104バイトならエラーを返すこと。
+func TestResolveStatusline_103バイトまで通り104バイトでエラーになる(t *testing.T) {
+	// "/" + "sl.sock"（7バイト）で8バイト消費する。dir を95バイトにすると103バイト。
+	fits := "/" + strings.Repeat("a", 94)
+	got, err := socketpath.ResolveStatusline(fits)
+	if err != nil {
+		t.Fatalf("上限ちょうどのパス長なのにエラーになった: %v", err)
+	}
+	if len(got) != socketpath.MaxPathLen {
+		t.Fatalf("組み立てたパスの長さが上限と一致しない: got %d, want %d（path=%q）", len(got), socketpath.MaxPathLen, got)
+	}
+
+	tooLong := "/" + strings.Repeat("a", 95)
+	if _, err := socketpath.ResolveStatusline(tooLong); err == nil {
+		t.Fatalf("パス長が103バイトを超えているのにエラーが返らなかった（dir長=%d）", len(tooLong))
+	}
+}

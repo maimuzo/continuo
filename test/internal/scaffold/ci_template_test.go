@@ -92,13 +92,12 @@ func TestCITemplate_目印が組み込みと揃っている(t *testing.T) {
 	}
 }
 
-// 目的: 目印を数える条件が、雛形の中で既存の3箇所と1文字も違わないことを確かめる。
+// 目的: 目印を数える条件が、雛形の中で既存の2箇所と1文字も違わないことを確かめる。
 //
-// **`\s` を使ってはならない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
+// **`\s` を使ってはならない。**engine によって当たる範囲が違い、
 // 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
 // **当たる文字を並べて書く。**この並びは
-// .claude/hooks/block-merge-without-review.py の MARKER_SPACE_CLASS と、
-// .github/workflows/review-gate.yml と、scripts/check-release-ready.sh に揃えてある。
+// scripts/check-release-ready.sh（**正本**）と .github/workflows/review-gate.yml に揃えてある。
 //
 // 与える情報: scaffold.CITemplate() の全文。
 // 成功条件: 目印の判定が「先頭 + 並べた空白文字」の形で書かれ、`\s` が1つも無いこと。
@@ -117,7 +116,7 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("雛形に目印の判定 %s がありません（条件が既存の3箇所とずれています）", want)
+			t.Errorf("雛形に目印の判定 %s がありません（条件が既存の2箇所とずれています）", want)
 		}
 	}
 
@@ -146,8 +145,8 @@ const reviewGatePath = "../../../.github/workflows/review-gate.yml"
 // **名乗っているだけでは揃わない。**同じことが既に1度起きた（2026-09-02、
 // 目印の前に全角空白を置いたコメントを、CI は数え、hook は数えなかった）。
 //
-// **.claude/hooks/tests/test_marker_pattern_parity.py が3箇所を見張っているが、
-// あちらは code-review-result しか見ない。**雛形は4箇所目であり、
+// **.claude/hooks/tests/test_marker_pattern_parity.py が2箇所を見張っているが、
+// あちらは code-review-result しか見ない。**雛形は3箇所目であり、
 // design-review-result はあちらの検査の対象に入っていない。**ここで両方を見る。**
 //
 // 与える情報: scaffold.CITemplate() と .github/workflows/review-gate.yml の全文。

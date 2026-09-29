@@ -1,11 +1,11 @@
-// Package ratelimit は Claude の OAuth usage API を読み、5時間枠と週次枠の使用率と
-// リセット時刻を取得する（docs/plans/continuo_design.md 3-15 / 3-27）。
+// Package ratelimit は Claude の OAuth usage APIを読み、5時間枠と週次枠の使用率と
+// リセット時刻を取得する（docs/plans/continuo_design.md 3-15 / 3-27 / issue #284）。
 //
 // **この API はメッセージを送る API ではない。**枠の残量とリセット時刻を返すだけなので、
 // 「`claude -p` を使わない（従量課金にしない）」という絶対制約には触れない。
 //
-// **`rate_limit.source: none` のときは1回も叩かない。**Enabled が偽を返し、Fetch は
-// 常に nil を返す。
+// **`rate_limit.source` が `oauth_usage_api` のときだけ叩く。**`statusline` と `none` では
+// Enabled が偽を返し、Fetch は1本も HTTP リクエストを出さない。
 //
 // **資格情報の出所は `rate_limit.token_source` で決まる。**
 //
@@ -18,12 +18,11 @@
 //
 // **Keychain を読むと確認のダイアログが出ることがある。**答えられないまま無人のプロセスが
 // 固まらないよう、`security` の呼び出しには必ず上限を置く（DefaultKeychainTimeout）。
-// **期限内に返らなくても1回では諦めない。**やり直せば通るかもしれない失敗なので、
-// 連続 MaxTemporaryCredentialFailures 回まで粘る。先に `continuo allow-keychain-access` を
-// 1回実行しておけば、以後ダイアログは出ない。
+// 先に `continuo allow-keychain-access` を1回実行しておけば、以後ダイアログは出ない。
 //
-// **どの出所でも、恒久的に取れないと分かったら枠の判定を諦め、`none` と同じ動きにする。
-// 起動は止めない。**
+// **この package は諦めない。**読めなかったら、そのつど誤りを種類つきで返す
+// （*CredentialError / *StatusError / *RateLimitedError / それ以外）。次にいつ試すか・
+// statusline取得へ切り替えるかは、呼び出し側（internal/orchestrator）が決める。
 package ratelimit
 
 import (
@@ -38,18 +37,38 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// SourceNone は rate_limit.source が「usage API を1回も叩かない」を意味する値である。
+// SourceNone は rate_limit.source が「使用率を読まない」を意味する値である
+// （usage API も statusline も使わない）。
 const SourceNone = "none"
 
-// SourceOAuthUsageAPI は rate_limit.source が「OAuth の usage API を読む」を意味する値である。
+// SourceOAuthUsageAPI は rate_limit.source が「OAuth の usage APIを主に読み、
+// エラーのときは statusline取得へ切り替える」を意味する値である（既定。issue #284）。
+// **internal/config の RateLimitSourceOAuthUsageAPI と同じ文字列である。**
 const SourceOAuthUsageAPI = "oauth_usage_api"
+
+// SourceStatusline は rate_limit.source が「ステータスラインから使用率を受ける」を意味する値である
+// （issue #284）。**internal/config の RateLimitSourceStatusline と同じ文字列である。**
+// **この値では usage API を1回も叩かない。**
+const SourceStatusline = "statusline"
+
+// 枠の種別である（usage API が `kind` に返す値。internal/handoff の LimitKind* と同じ文字列）。
+// internal/handoff は internal/ratelimit を読むので、ここで持つ。
+const (
+	// KindSession は5時間の枠である。
+	KindSession = "session"
+	// KindWeeklyAll は1週間全体の枠である。
+	KindWeeklyAll = "weekly_all"
+	// KindWeeklyScoped は1週間のモデル別の枠である。**usage API しか運ばない**（ステータスラインには無い）。
+	KindWeeklyScoped = "weekly_scoped"
+)
 
 // TokenSourceClaudeCredentials は資格情報を `~/.claude/.credentials.json` から読むことを表す。
 const TokenSourceClaudeCredentials = "claude_credentials"
@@ -86,13 +105,15 @@ var CredentialsRelPath = filepath.Join(".claude", ".credentials.json")
 
 // ErrNoCredentials は資格情報を取れなかったことを表す。
 //
-// **これはエラーとして扱うが、起動は止めない**（設計 3-27）。Reader は自分で握りつぶし、
-// 以後 Enabled が偽を返すようになる。
+// **これはエラーとして扱うが、起動は止めない**（設計 3-27）。Fetch は *CredentialError に
+// 包んで返し、呼び出し側が statusline取得へ切り替える（issue #284）。
 var ErrNoCredentials = i18n.Sentinel(i18n.KeyRatelimitErrNoCredentials)
 
-// Limit は usage API が返す枠1件である（設計 3-15 の応答のサンプル）。
+// Limit は枠1件である（設計 3-15 の応答のサンプル）。usage API の応答の形であり、
+// orchestrator の保管値の写しもこの形で渡す（issue #284）。
 type Limit struct {
 	// Kind は枠の種別である（"session" / "weekly_all" / "weekly_scoped"）。
+	// **"weekly_scoped" は usage API しか運ばない**（ステータスラインには無い）。
 	Kind string `json:"kind"`
 	// Percent は使用率（整数の百分率）である。
 	Percent int `json:"percent"`
@@ -111,12 +132,15 @@ type Limit struct {
 // **「余裕値が0以下」**へ移り、**余裕値はマージンを引いた残りで、マージンは種別ごとに違う。**
 // **この package はマージンを知らない**ので、線そのものを述語として受け取る
 // （`AnySelected` / `SelectedKinds` / `LatestResetForClearing` / `LatestResetForWaitLimit`）。
+//
+// **`MaxPercent` / `AtFullPercent` / `LatestResetOfFullLimits` は残してある**（issue #284）。
+// **`rate_limit.pause_above_percent` と回復待ちの判定が、種別を選ばずに全部の枠を見る**ためである。
 
-// Snapshot は usage API を1回読んだ結果である。
+// Snapshot は usage API を1回読んだ結果、または保管値の写しである（issue #284）。
 type Snapshot struct {
-	// Limits は返ってきた枠の一覧である。
+	// Limits は枠の一覧である。
 	Limits []Limit
-	// FetchedAt は読んだ時刻である。
+	// FetchedAt は読んだ時刻（保管値の写しなら新しさの時刻）である。
 	FetchedAt time.Time
 }
 
@@ -129,6 +153,64 @@ type Snapshot struct {
 // **この package が線を1本持っているように読める。**
 // **線を決めるのは呼び出し側である**（`AnySelected` などに述語を渡す）。
 // **残すと、次の実装者がそこへ手を伸ばして、消したはずの2本目の閾値を作り直す。**
+
+// MaxPercent は枠の中でいちばん高い使用率を返す。
+//
+// 戻り値: 使用率の最大値。枠が1件も無ければ 0。
+func (s *Snapshot) MaxPercent() int {
+	if s == nil {
+		return 0
+	}
+	max := 0
+	for _, l := range s.Limits {
+		if l.Percent > max {
+			max = l.Percent
+		}
+	}
+	return max
+}
+
+// AtFullPercent は、使い切っている（`percent` が 100 に達している）枠が1つでもあるかを返す
+// （設計 3-27 の「この run は枠待ちである」の条件その1）。
+//
+// 戻り値: 100 に達している枠があれば true。
+func (s *Snapshot) AtFullPercent() bool {
+	if s == nil {
+		return false
+	}
+	for _, l := range s.Limits {
+		if l.Percent >= 100 {
+			return true
+		}
+	}
+	return false
+}
+
+// LatestResetOfFullLimits は、使い切っている枠のうち `resets_at` がいちばん遅いものを返す
+// （設計 3-27 の「どの枠の時刻を見るか」）。
+//
+// **`resets_at` が null の枠は判定から外す。**`weekly_scoped` も、モデルを判別せず
+// そのまま見る（continuo は Claude Code が使うモデルを知らない）。
+//
+// 戻り値の1つ目: いちばん遅いリセット時刻。
+// 戻り値の2つ目: 該当する枠が1つでもあれば true。
+func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	var latest time.Time
+	found := false
+	for _, l := range s.Limits {
+		if l.Percent < 100 || l.ResetsAt == nil {
+			continue
+		}
+		if !found || l.ResetsAt.After(latest) {
+			latest = *l.ResetsAt
+			found = true
+		}
+	}
+	return latest, found
+}
 
 // AnySelected は、選んだ枠が1つでもあるかを返す（設計 3-27。issue #173 / #197）。
 //
@@ -264,10 +346,14 @@ type Options struct {
 	KeychainTimeout time.Duration
 	// Logger はログの出力先である。nil なら slog.Default() を使う。
 	Logger *slog.Logger
+	// Now は時計である。nil なら time.Now を使う（Retry-After の HTTP の日付を解く基準）。
+	Now func() time.Time
 }
 
 // Reader は usage API を読む。
 //
+// **状態を持たない。**諦めた印も失敗の回数も持たず、読むたびに結果か誤りを返す
+// （issue #284。切り替えと次に試す時刻は internal/orchestrator が持つ）。
 // **複数の goroutine から同時に呼んでよい。**
 type Reader struct {
 	cfg             config.RateLimitConfig
@@ -277,42 +363,75 @@ type Reader struct {
 	userAgent       string
 	keychainTimeout time.Duration
 	logger          *slog.Logger
-
-	// mu は disabled と warned と tempFailures を守る。
-	mu sync.Mutex
-	// disabled は枠の判定を諦めたことを表す。
-	// **一度立てたら戻さない。**読めないものを毎回読みに行かない。
-	//
-	// **立てるのは恒久的な失敗のときだけである。**
-	//
-	//	資格情報が恒久的に取れない … `security` が PATH に無い / Keychain に項目が無い /
-	//	                          ファイルが無い / 環境変数が空 / 中身が壊れている
-	//	usage API が 401 / 403     … そのトークンでは以後も読めない
-	//	一時的な失敗が連続した      … MaxTemporaryCredentialFailures 回
-	//
-	// **一時的な失敗（`security` が期限内に返らなかった）1回では立てない。**
-	// 立ててしまうと、枠を使い切って黙っただけのエージェントを stall と誤認して
-	// pane を閉じることになる（設計 3-27）。
-	disabled bool
-	// warned は資格情報が取れないことを既に警告したかどうかである（警告は1回だけ。3-15）。
-	warned bool
-	// tempFailures は資格情報の取得が「一時的な理由で」連続して失敗した回数である。
-	// **1回でも成功したら 0 に戻す。**MaxTemporaryCredentialFailures に達したら諦める。
-	tempFailures int
+	// now は時計である（Retry-After の HTTP の日付を解く基準。テストが差し替える）。
+	now func() time.Time
 }
 
-// MaxTemporaryCredentialFailures は、資格情報の取得が一時的な理由で連続して失敗しても
-// 諦めない回数である。
+// CredentialError は資格情報（トークン）を読めなかったことを表す（issue #284）。
 //
-// **一時的な失敗で諦めてはならない。**`security` が1回だけ遅れた・確認のダイアログが
-// 1回出た・機材が重くて子プロセスの起動が遅れた、のどれでも枠の判定が永久に止まると、
-// **枠を使い切って黙っただけのエージェントの pane を continuo が閉じる**（設計 3-27 の
-// 枠待ちの判定が働かず、stall と誤認する）。
+// **一時的か恒久的かを持つ。**呼び出し側は、恒久的なら立て直すまで usage API を試し直さず、
+// 一時的なら `poll_interval_ms` のあとに試し直す。
 //
-// **かといって永久に叩き続けてもいけない。**読めないものを毎回読みに行くと、
-// 巡回のたびに `security` を起こすことになる。5回で諦める（`rate_limit.poll_interval_ms`
-// の既定は5分なので、およそ25分ぶん粘る）。
-const MaxTemporaryCredentialFailures = 5
+//	一時的 … `security` が期限（10秒）内に返らなかった（ErrKeychainTimeout）。
+//	         Keychain の確認のダイアログに誰も答えていないときである
+//	恒久的 … それ以外すべて。資格情報のファイルが無い・読めない・壊れている、
+//	         `token_env` の環境変数が空、Keychain に項目が無い・拒否された・ロックされている、
+//	         `security` が無い、など（やり直しても結果が変わらない）
+//
+// **打ち切り（ctx の取り消し）はこの型にしない。**資格情報の問題ではないためである。
+type CredentialError struct {
+	// Permanent は恒久的な失敗かである。
+	Permanent bool
+	// Err は元の誤りである（ErrNoCredentials を包んでいる）。
+	Err error
+}
+
+// Error は元の誤りの文面を返す。
+func (e *CredentialError) Error() string { return e.Err.Error() }
+
+// Unwrap は元の誤りを返す（errors.Is で ErrNoCredentials / ErrKeychainTimeout を辿れるように）。
+func (e *CredentialError) Unwrap() error { return e.Err }
+
+// StatusError は usage API が 200 以外を返したことを表す（issue #284）。
+type StatusError struct {
+	// StatusCode は HTTP の状態コードである。
+	StatusCode int
+	// Body はエラーの本文の先頭である（200文字まで）。
+	Body string
+}
+
+// Error は状態コードと本文の先頭を返す。
+func (e *StatusError) Error() string {
+	return i18n.T(i18n.KeyRatelimitFetchUnexpectedStatus, e.StatusCode, e.Body)
+}
+
+// RateLimitedError は usage API が 429 を返したことを表す（issue #284）。
+//
+// **Retry-After を持つ。**秒で来たら RetryAfter、HTTP の日付で来たら RetryAt に入れる
+// （どちらも無ければ両方ゼロ値）。上限（24時間）を掛けるのは呼び出し側である。
+type RateLimitedError struct {
+	// Status は状態コードと本文である。errors.As で *StatusError としても取り出せる。
+	Status *StatusError
+	// RetryAfter は Retry-After が秒で来たときの長さである。
+	RetryAfter time.Duration
+	// RetryAt は Retry-After が HTTP の日付で来たときの時刻である。
+	RetryAt time.Time
+	// raw は Retry-After の生の値である（文面に載せる）。
+	raw string
+}
+
+// Error は状態コードと Retry-After と本文の先頭を返す。
+func (e *RateLimitedError) Error() string {
+	return i18n.T(i18n.KeyRatelimitFetchRateLimited, e.Status.StatusCode, e.raw, e.Status.Body)
+}
+
+// Unwrap は *StatusError を返す。
+func (e *RateLimitedError) Unwrap() error { return e.Status }
+
+// ErrNoWindows は usage API が 200 を返したのに `session` も `weekly_all` も無かったことを表す
+// （issue #284）。**誤りとして扱う。**成功にすると、使用率の無い応答で新しさだけが進み、
+// statusline取得へ切り替わらない。
+var ErrNoWindows = i18n.Sentinel(i18n.KeyRatelimitFetchNoWindows)
 
 // isTemporaryCredentialFailure は、資格情報を取れなかった原因が一時的なものかを判定する。
 //
@@ -328,7 +447,7 @@ func isTemporaryCredentialFailure(err error) bool {
 
 // isCanceledCredentialFailure は、資格情報の取得が「打ち切られた」ことによる失敗かを判定する。
 //
-// **打ち切りは資格情報の問題ではない。**回数にも数えないし、諦める理由にもしない。
+// **打ち切りは資格情報の問題ではない。**一時的とも恒久的とも数えない。
 //
 // err: 資格情報の取得が返したエラー。
 // 戻り値: 呼び出し側の打ち切りが原因なら true。
@@ -363,7 +482,9 @@ func NewReader(opts Options) (*Reader, error) {
 		}
 	}
 	homeDir := opts.HomeDir
-	if homeDir == "" && opts.Config.Source != SourceNone && opts.Config.TokenSource == TokenSourceClaudeCredentials {
+	// **usage API を読む設定のときだけ引く**（statusline と none はトークンを1回も読まないので、
+	// HOME を引けない環境で起動を止めない）。
+	if homeDir == "" && opts.Config.Source == SourceOAuthUsageAPI && opts.Config.TokenSource == TokenSourceClaudeCredentials {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
@@ -378,6 +499,10 @@ func NewReader(opts Options) (*Reader, error) {
 	if keychainTimeout <= 0 {
 		keychainTimeout = DefaultKeychainTimeout
 	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
 
 	return &Reader{
 		cfg:             opts.Config,
@@ -387,45 +512,39 @@ func NewReader(opts Options) (*Reader, error) {
 		userAgent:       userAgent,
 		keychainTimeout: keychainTimeout,
 		logger:          logger,
+		now:             now,
 	}, nil
 }
 
 // Enabled は usage API を読む設定になっているかを返す。
 //
-// **`rate_limit.source: none` なら常に偽である**（1回も叩かない）。
-// 資格情報を取れずに諦めたあとも偽になる。
+// **`rate_limit.source` が `oauth_usage_api` のときだけ真である**（`statusline` と `none` では
+// 1回も叩かない）。
 //
 // 戻り値: 読む設定なら true。
 func (r *Reader) Enabled() bool {
-	if r == nil || r.cfg.Source == SourceNone {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return !r.disabled
+	return r != nil && r.cfg.Source == SourceOAuthUsageAPI
 }
 
 // Fetch は usage API を1回読む。
 //
 // **Enabled が偽のときは HTTP リクエストを1本も出さず、(nil, nil) を返す。**
 //
-// **資格情報の失敗は、恒久的なものと一時的なものを言い分ける。**恒久的なもの
-// （`security` が PATH に無い・Keychain に項目が無い・資格情報のファイルが無い・
-// 環境変数が空・中身が壊れている）は警告を1回だけ出して以後 Enabled を偽にし、
-// (nil, nil) を返す（**起動を止めない**。設計 3-27）。一時的なもの
-// （`security` が期限内に返らなかった）は 5xx と同じくエラーで返し、**Enabled は真のまま
-// 残す。**連続 MaxTemporaryCredentialFailures 回でようやく諦める。
-// **打ち切り（ctx の cancel）は回数にも数えない。**
+// **読めなかったら、そのつど誤りを返す。諦めない**（issue #284。ba24db63 までは恒久的な失敗と
+// 401 / 403 で `(nil, nil)` を返して以後叩かなかったが、それでは statusline取得へ切り替える
+// 判断を呼び出し側が下せない）。
 //
-// **401 / 403 を受けたときは諦める。**そのトークンでは以後も読めないので、
-// 資格情報が恒久的に取れない場合と同じく警告を1回出して以後 Enabled を偽にし、
-// (nil, nil) を返す。それ以外の非 200（5xx 等）は一時的な失敗としてエラーで返す。
+//	資格情報が一時的に取れない … *CredentialError{Permanent: false}
+//	資格情報が恒久的に取れない … *CredentialError{Permanent: true}
+//	打ち切り                   … 元の誤りのまま（資格情報の問題ではない）
+//	429                        … *RateLimitedError（Retry-After を持つ）
+//	それ以外の 200 以外        … *StatusError（401 / 403 / 5xx など）
+//	`session` も `weekly_all` も無い 200 … ErrNoWindows を包んだ誤り
+//	通信の失敗・応答の解析の失敗 … それ以外の誤り
 //
 // ctx: 呼び出しに適用するコンテキスト。
-// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合・資格情報が恒久的に取れない場合・
-// 401 / 403 を受けた場合は nil。
-// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗・401 / 403 以外の非 200・
-// 資格情報の一時的な失敗のときのエラー。
+// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合と誤りのときは nil。
+// 戻り値の2つ目: 読めなかった理由。
 func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 	if !r.Enabled() {
 		return nil, nil
@@ -435,22 +554,14 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		switch {
 		case isCanceledCredentialFailure(err):
-			// **打ち切りは資格情報の問題ではない。**数えないし、諦めない。
+			// **打ち切りは資格情報の問題ではない。**一時的とも恒久的とも数えない。
 			return nil, err
 		case isTemporaryCredentialFailure(err):
-			if n := r.noteTemporaryFailure(); n < MaxTemporaryCredentialFailures {
-				// **諦めない。**次の巡回で読み直す。枠の判定は生きたままである。
-				return nil, err
-			}
-			r.disable(i18n.Errorf(i18n.KeyRatelimitCredentialsTemporaryExhausted,
-				err, MaxTemporaryCredentialFailures))
-			return nil, nil
+			return nil, &CredentialError{Permanent: false, Err: err}
 		default:
-			r.disable(err)
-			return nil, nil
+			return nil, &CredentialError{Permanent: true, Err: err}
 		}
 	}
-	r.clearTemporaryFailures()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint, nil)
 	if err != nil {
@@ -471,15 +582,12 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 		return nil, i18n.Errorf(i18n.KeyRatelimitFetchBodyReadFailed, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		statusErr := i18n.Errorf(i18n.KeyRatelimitFetchUnexpectedStatus, resp.StatusCode, truncate(body, 200))
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			// **401 / 403 は、このトークンでは以後も読めない。**諦めないと、失効した
-			// accessToken を抱えた無人のプロセスが巡回のたび（既定30秒）に叩き直し、
-			// ログが同じ頻度で汚れ続ける。資格情報が取れなかった場合と同じ扱いにする
-			// （**起動は止めない**。設計 3-27）。
-			r.disable(statusErr)
-			return nil, nil
+		statusErr := &StatusError{StatusCode: resp.StatusCode, Body: truncate(body, 200)}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, r.rateLimited(statusErr, resp.Header.Get("Retry-After"))
 		}
+		// **401 / 403 も諦めない**（issue #284）。401 は一時的でもありうる（トークンの更新の途中など）。
+		// 次にいつ試すかは呼び出し側が `poll_interval_ms` で決める。
 		return nil, statusErr
 	}
 
@@ -489,8 +597,49 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return nil, i18n.Errorf(i18n.KeyRatelimitFetchParseFailed, err)
 	}
+	if !hasMainWindow(parsed.Limits) {
+		// **`session` も `weekly_all` も無い 200 は誤りである**（`weekly_scoped` だけでも）。
+		// 成功にすると、入札に要る値が無いまま新しさだけが進み、statusline取得へ切り替わらない。
+		return nil, ErrNoWindows
+	}
 
-	return &Snapshot{Limits: parsed.Limits, FetchedAt: time.Now()}, nil
+	return &Snapshot{Limits: parsed.Limits, FetchedAt: r.now()}, nil
+}
+
+// hasMainWindow は、`session` か `weekly_all` が1件以上あるかを返す。
+func hasMainWindow(limits []Limit) bool {
+	for _, l := range limits {
+		if l.Kind == KindSession || l.Kind == KindWeeklyAll {
+			return true
+		}
+	}
+	return false
+}
+
+// rateLimited は 429 の誤りを、Retry-After を読んで組み立てる。
+//
+// **Retry-After は秒か HTTP の日付である**（RFC 9110 10.2.3）。どちらでも読めなければ
+// 両方ゼロ値のまま返す（呼び出し側は `poll_interval_ms` で試し直す）。
+//
+// statusErr: 状態コードと本文。
+// raw: Retry-After の生の値。
+// 戻り値: 429 の誤り。
+func (r *Reader) rateLimited(statusErr *StatusError, raw string) *RateLimitedError {
+	e := &RateLimitedError{Status: statusErr, raw: raw}
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return e
+	}
+	if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if secs > 0 {
+			e.RetryAfter = time.Duration(secs) * time.Second
+		}
+		return e
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		e.RetryAt = t
+	}
+	return e
 }
 
 // token は設定に従って OAuth のトークンを取り出す。
@@ -575,43 +724,6 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileAccessTokenMissing, ErrNoCredentials, path)
 	}
 	return token, nil
-}
-
-// noteTemporaryFailure は資格情報の一時的な失敗を1回数え、連続した回数を返す。
-//
-// 戻り値: 直近で成功してから連続した一時的な失敗の回数（1始まり）。
-func (r *Reader) noteTemporaryFailure() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tempFailures++
-	return r.tempFailures
-}
-
-// clearTemporaryFailures は一時的な失敗の連続回数を 0 に戻す。
-//
-// **資格情報を取れたら必ず呼ぶ。**戻さないと、間隔を空けて起きた単発の失敗が積み上がり、
-// 一度も連続していないのに諦めることになる。
-func (r *Reader) clearTemporaryFailures() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tempFailures = 0
-}
-
-// disable は枠の判定を諦める。警告は1回だけ出す（設計 3-15）。
-//
-// cause: 諦めた理由。
-func (r *Reader) disable(cause error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.disabled = true
-	if r.warned {
-		return
-	}
-	r.warned = true
-	r.logger.Warn(
-		"枠の判定を諦めます（rate_limit.source: none と同じ動きになります。起動は止めません）",
-		"error", cause,
-	)
 }
 
 // truncate はエラーメッセージへ載せる本文を切り詰める。

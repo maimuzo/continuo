@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "543f65dd58861fd390cbfb97112670e53e0c3f6521a17a9b563a71f49393b7a2", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
@@ -356,8 +356,8 @@ func TestSettings_パスに空白があってもhookのコマンド行が壊れ�
 // TestTick_巡回のループはworkspace_hooksの間もブロックしない は、設計 3-8 を確かめる。
 //
 // 目的: 着手の段2以降（git の worktree 作成・利用者が書いた `workspace_hooks`・
-// 起動の待ち）を巡回のループの中で同期に通すと、その間 stall 検知も枠の読み取りも
-// 実行中の照合も全部止まることを防いでいる、と示す。
+// 起動の待ち）を巡回のループの中で同期に通すと、その間 stall 検知も statusline取得の
+// 要否の判定も実行中の照合も全部止まることを防いでいる、と示す。
 // 与える情報: 3秒かかる `workspace_hooks.after_create`。
 // 成功条件: `Tick` が1秒以内に返り、着手はそのあと別の goroutine で続く。
 func TestTick_巡回のループはworkspace_hooksの間もブロックしない(t *testing.T) {

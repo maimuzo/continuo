@@ -29,6 +29,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/lock"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -770,6 +771,7 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 	mgr, err := workspace.New(workspace.Options{
 		Config:       loaded.Config,
 		Herdr:        fake.Client(),
+		Loop:         loop.Inline{},
 		HomeDir:      filepath.Join(root, "home"),
 		GhqList:      func(_ context.Context, _, _ string) (string, error) { return ghq.Path, nil },
 		SettingsRoot: settingsRoot,
@@ -817,7 +819,7 @@ workspace:
   root: %s
 herdr:
   socket: %s
-  protocol: 20
+  protocol: 22
   read_timeout_ms: 3000
 rate_limit:
   source: none
@@ -827,6 +829,30 @@ rate_limit:
 `, worktreeRoot, socketPath, extra)
 
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+}
+
+// addTrackerKey は、テスト用の WORKFLOW.md の `tracker:` の直下へ1行足す。
+//
+// **`newFixtureWithConfig` の extra は front matter の最上位へ足すので、
+// `tracker:` の中のキーは書けない**（同じ最上位のキーを2回書くことになる）。
+//
+// t: 呼び出し元のテスト。
+// path: WORKFLOW.md のパス。
+// line: 足す行（`  direct_chat_state: "Human"` のように、インデントを含む全文）。
+func addTrackerKey(t *testing.T, path, line string) {
+	t.Helper()
+	raw, err := os.ReadFile(path) //nolint:gosec // テストが自分で書いた一時ファイルである
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	before, after, found := strings.Cut(string(raw), "tracker:\n")
+	if !found {
+		t.Fatalf("WORKFLOW.md に tracker: がありません")
+	}
+	out := before + "tracker:\n" + line + "\n" + after
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
 }
@@ -1156,7 +1182,7 @@ func (fx *fixture) TrackerBuilds() int {
 // gitFileBreakage は worktree の `.git` の壊れ方である（issue #23）。
 //
 // **worktree の `.git` はディレクトリではなく `gitdir: …` と書かれただけのファイルである。**
-// そこでエージェントが `--permission-mode dontAsk` で動くので、**中身は書き換えられるし、
+// そこでエージェントが `--permission-mode auto`（既定）で動くので、**中身は書き換えられるし、
 // 消せる。**壊れると `git -C <worktree> …` が1つも通らなくなる。
 type gitFileBreakage string
 

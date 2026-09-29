@@ -3,10 +3,8 @@ package orchestrator
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
@@ -36,7 +34,8 @@ const commentRecheckWait = 2 * time.Second
 //  3. 身元ファイルからセッション UUID と設定ファイルのパスを読む
 //  4. worktree を herdr の workspace として開き直し（着手の段3 と同じ Prepare を通す）、
 //     その中の pane を pane.list で引く
-//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル> --permission-mode dontAsk）
+//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル>
+//     --permission-mode <claude.permission_mode の値。既定は auto>）
 //  6. agent_status が idle または done になるのを待つ
 //  7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
 //     → **この送信は turn 数に数えない**（max_dispatch_turns の判定に影響させない）
@@ -47,6 +46,8 @@ const commentRecheckWait = 2 * time.Second
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
+// 戻り値: 人間が direct chat へ引き取ったので打ち切ったなら true（呼び出し元はそこで止まる。設計 3-83f）。
+//
 // stoppedWhileRecovering は、止められたことが原因の失敗かを判定する。
 //
 // **`Ctrl+C` のたびに「〜できません」が並ぶと、本当に壊れたときと見分けがつかない。**
@@ -66,11 +67,30 @@ func (o *Orchestrator) stoppedWhileRecovering(ctx context.Context) bool {
 	return true
 }
 
-func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
+func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) bool {
+	// **「direct chat から `terminal_states` へ直接抜けた」run には書かせに行かない**（設計 3-83g）。
+	// 人間が Claude Code を終了させてから `Done` へ動かすのは人間が名指しした出口であり、
+	// 書かせに行くと終了させたものを `--resume` で立て直すことになる。
+	if rs.exitedDirectlyToTerminal() {
+		o.logger.Info("direct chat から直接抜けた run なので、コメントを書かせに行きません",
+			"identifier", rs.issue().Identifier)
+		return false
+	}
+	// **人間が direct chat へ引き取っている run では、1文字も書かせに行かない**（設計 3-83f）。
+	//
+	// **段2 の `stopWorker` が門で止まるためである。**その直後に段5 が同じセッションへ `--resume` で
+	// 2本目の Claude Code を立てるので、人間が話している会話の記録へ、2本目が同時に書き込む。
+	// **入口だけでは足りない。**長い待ちは段6 と段7 にあり、その最中に巡回が direct chat の印を立てる。
+	// **だから段5・段7・段8・`failCommentRecovery`・`failCommentRecoveryBusy` の直前にも見る。**
+	// **打ち切ったことは戻り値で返し、呼び出し元はそこで止まる。**
+	const why = "成果のコメントを書かせるところでした"
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
+	}
 	nodeID := issueNodeID(rs.issue())
 	if nodeID == "" {
 		// draft issue にはコメントできない。
-		return
+		return false
 	}
 	snap := rs.snapshot()
 	if snap.StartedAt.IsZero() {
@@ -79,11 +99,11 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		// 失敗した）がこれである。復元しても、そのセッションには会話が1つも無い。
 		o.logger.Info("turn を1回も送っていないので、コメントの確認は行いません",
 			"identifier", snap.Identifier)
-		return
+		return false
 	}
 
 	if o.hasRunComment(ctx, nodeID, snap) {
-		return
+		return false
 	}
 	o.logger.Info("この run のコメントが無いので、セッションを復元して書かせます", "identifier", snap.Identifier)
 
@@ -93,12 +113,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 段3: 身元ファイルからセッション UUID と設定ファイルのパスを読む。
 	if snap.WorktreePath == "" {
 		o.logger.Warn("worktree のパスが分からないので復元できません", "identifier", snap.Identifier)
-		return
+		return false
 	}
 	identity, err := o.ws.ReadIdentity(snap.WorktreePath)
 	if err != nil {
 		o.logger.Warn("身元ファイルを読めないので復元できません", "identifier", snap.Identifier, "error", err)
-		return
+		return false
 	}
 	// **セッション UUID は、run が持っていれば身元ファイルに無くてもよい**（下で先に採る）。
 	// **身元ファイルはエージェントが書き換えられる**ので（設計 3-2 / 3-23）、
@@ -106,7 +126,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	if identity.SettingsPath == "" || (snap.SessionUUID == "" && identity.SessionUUID == "") {
 		o.logger.Warn("復帰に使うセッション UUID か、設定ファイルのパスがありません",
 			"identifier", snap.Identifier)
-		return
+		return false
 	}
 	// **復帰する先は、この run が使っている UUID を先に採る。**
 	//
@@ -137,12 +157,15 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("復帰する先のセッションに会話の記録が無いので、コメントを書かせられません",
 			"identifier", snap.Identifier, "session_uuid", truncateForLog(resumeUUID),
 			"記録の置き場所", o.transcriptRoot)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
 		o.failCommentRecovery(ctx, rs,
 			"復帰する先の会話の記録が見つからなかった。**エージェントには何も送っていない。**"+
 				"次のどちらかである。**(1) Claude Code の会話の置き場所（既定は `~/.claude/projects`）が"+
 				"消えたか、別の場所へ移っている。(2) worktree の中の身元ファイルの `session_uuid` が、"+
 				"パスに使えない形に書き換わっている。**")
-		return
+		return false
 	}
 
 	// 段4: worktree を herdr の workspace として開き直し、その中の pane を引く。
@@ -161,10 +184,10 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(rs.issue()))
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		o.logger.Warn("復元のための workspace を開けません", "identifier", snap.Identifier, "error", err)
-		return
+		return false
 	}
 	// **開かせた親 workspace を身元ファイルへ控える**（issue #19）。控えないと、
 	// 片付けが閉じる相手を知らないまま終わり、この経路で開いた workspace が残る。
@@ -172,22 +195,29 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	paneID, err := o.resolvePane(ctx, prepared)
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		o.logger.Warn("復元のための pane を引けません", "identifier", snap.Identifier, "error", err)
-		return
+		return false
 	}
 	rs.setPaneID(paneID)
+
+	// **段5 の直前に見る**（設計 3-83f）。段2 の `stopWorker` が門で止まっていれば、
+	// 元の pane がまだ生きている（`PaneID` を立て直したので、ここでは判定が新しい pane を見る。
+	// 元の pane は、この run の印を持ったまま direct chat の巡回が扱う）。
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
+	}
 
 	// 段5: --resume で復帰させる。**--settings と --permission-mode は毎回渡し直す**
 	// （復元されないので、渡し直さないと hook が1つも効かない。設計 3-25）。
 	name, err := o.resolveAgentName(ctx, rs.issue().Repo, rs.issue().Number)
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
-		return
+		return false
 	}
 	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
 		Name:   name,
@@ -196,16 +226,21 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		Args:   o.claudeStartArgs(identity.SettingsPath, "", resumeUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
 			"identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
 		o.failCommentRecovery(ctx, rs,
 			"セッションを復元できなかった。**エージェントには何も送っていない。**"+
 				"pane か Claude Code の側で起動に失敗している。")
-		return
+		return false
 	}
 	rs.setAgentName(name)
+	// **この pane で Claude Code が起動済みであることを控える**（設計 3-83f。判断票6周目）。
+	rs.setStartedPane(paneID)
 	// **証拠の基準は `agent.start` が通ってから取る**（設計 3-80c）。
 	//
 	// **前で取ってはならない。**この関数は段2 で**自分が pane を閉じている**ので、
@@ -229,7 +264,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
 	if err := o.confirmStartup(ctx, rs, since); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		// **`ErrStartupBusy` は「落ち着かなかった」ではない**（設計 3-80c）。
 		// **復元した Claude Code は生きていて、前の会話の続きを走らせている。**
@@ -244,13 +279,25 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		if errors.Is(err, ErrStartupBusy) {
 			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送れません",
 				"identifier", snap.Identifier, "error", err)
+			if o.abortTerminalForHuman(ctx, rs, why) {
+				return true
+			}
 			o.failCommentRecoveryBusy(ctx, rs)
-			return
+			return false
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
 		o.failCommentRecovery(ctx, rs,
 			"復元した Claude Code が入力を受け付けられる状態にならなかった。**本文は送っていない。**")
-		return
+		return false
+	}
+
+	// **段7 の直前に見る**（設計 3-83f）。段6 の待ちのあいだに人間が引き取っていたら、
+	// 人間が話そうとしている pane へ「コメントに書いてください」を送らない。
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
 	}
 
 	// 段7: 「コメントに書いてください」とだけ送る。**turn 数に数えない。**
@@ -267,7 +314,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		},
 	}); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
-			return
+			return false
 		}
 		o.logger.Warn("コメントを書かせるプロンプトを送れません", "identifier", snap.Identifier, "error", err)
 	}
@@ -275,20 +322,29 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 段8: コメントを読み直す。
 	select {
 	case <-ctx.Done():
-		return
+		return false
 	case <-time.After(commentRecheckWait):
+	}
+	// **段8 の直前に見る**（設計 3-83f）。見ないと、段9 の `failCommentRecovery` が、Status は書かないが
+	// 事実と違う引き渡しの通知を投稿する。
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
 	}
 	if o.hasRunComment(ctx, nodeID, snap) {
 		o.logger.Info("エージェントがコメントを書きました", "identifier", snap.Identifier)
 		o.stopWorker(ctx, rs)
-		return
+		return false
 	}
 
 	// 段9: それでも書かれなければ人間に渡す。
 	//
 	// **ここだけが「送ったのに書かれなかった」である。**上の3つは本文を1文字も送っていない。
+	if o.abortTerminalForHuman(ctx, rs, why) {
+		return true
+	}
 	o.failCommentRecovery(ctx, rs,
 		"エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。")
+	return false
 }
 
 // recordRepoWorkspace は、コメントの復元が開かせたリポジトリの親 workspace を
@@ -408,8 +464,10 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			// **除かないと、turn が途中で終わった run で書かせ直しが飛ぶ。**
 			// とくに計画は run の最初に書かれるので、判定はほぼ必ず外れる。
 			// 「何をしたか」が1行も残らないまま、issue が次へ進む。
-			if strings.Contains(c.Body, config.PlanMarker) ||
-				strings.Contains(c.Body, config.ProgressMarker) {
+			//
+			// **見るのは先頭の印の並びだけである**（進捗報告は上の `StartsAsProgressReport` で除いた）。
+			// 本文のどこかに印が在るかで見ると、計画の印について書いた成果の報告が捨てられる。
+			if handoff.StartsAsPlan(c.Body) {
 				continue
 			}
 			found = true
@@ -429,7 +487,7 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 // cause: 【よくある原因】の行に載せる文。
 func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, cause string) {
 	o.stopWorker(ctx, rs)
-	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
@@ -460,7 +518,7 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, ca
 // rs: 対象の run。
 func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState) {
 	o.stopWorker(ctx, rs)
-	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return

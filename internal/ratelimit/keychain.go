@@ -58,9 +58,9 @@ const keychainStderrMax = 200
 // **「読めなかった」と「返ってこなかった」を言い分けるためにある。**返ってこなかった場合は
 // 確認のダイアログが出たままである可能性が高く、人間に見せる案内が変わる（設計 3-34b）。
 // **この1回では枠を読めない**ので、ErrNoCredentials と一緒に包んで返す。
-// **ただし1回で諦めてはならない。**確認のダイアログも子プロセスの起動の遅れも一時的なもので、
-// 次の巡回では読める。`Fetch` はこれを一時的な失敗として数え、
-// MaxTemporaryCredentialFailures 回続いて初めて枠の判定を諦める。
+// **ただし諦めてはならない。**確認のダイアログも子プロセスの起動の遅れも一時的なもので、
+// あとで読める。`Fetch` はこれを *CredentialError{Permanent: false} として返し、
+// 呼び出し側は statusline取得へ切り替えて `poll_interval_ms` のあとに試し直す（issue #284）。
 var ErrKeychainTimeout = i18n.Sentinel(i18n.KeyRatelimitErrKeychainTimeout)
 
 // ErrKeychainCanceled は呼び出し側が `security` の実行を打ち切ったことを表す。

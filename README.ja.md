@@ -19,9 +19,9 @@ Go で書いており、OpenAI の symphony の仕様を実装しています。
 - **進み具合はカンバンで分かります。**結果は Status の変化として返るので、ほかを見に行く必要はありません
 - **枠を使い切っても待ちます。**枠が回復したら、自分で続きを進めます
 - **1枚のカンバンを複数の機械で分担できます。**残っている枠を入札し、いちばん余裕のある機械がその issue を取ります
-- **他人の指示は、指示書で絞ります。**従うのは `OWNER` / `MEMBER` / `COLLABORATOR` だけです。[始める前に知っておくこと](#始める前に知っておくこと)を先に読んでください
+- **他人の指示は、指示書で絞ります。**従うのは `OWNER` / `MEMBER` / `COLLABORATOR` だけで、AI が自分の書き込みだと印を付けたコメントには従いません。[始める前に知っておくこと](#始める前に知っておくこと)を先に読んでください
 - **画面に出す文言は英語と日本語を選べます。**`continuo doctor`・コマンドの出力・ダッシュボードが、1つの設定で切り替わります
-- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、5つの役割へ対応づけます
+- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、6つの役割へ対応づけます（6つ目の direct chat は飛ばせます）
 - **[openai/symphony](https://github.com/openai/symphony) の仕様を実装しています。**公開されたオーケストレーターの仕様であり、独自の取り決めではありません
 
 ## 想定しているカンバンの運用方法
@@ -69,12 +69,13 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 ## 始める前に知っておくこと
 
-**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を「人間に確認を出さないモード」で起動し、引数を制限せずに `Bash` を許可します。**確認のダイアログは出ません。**
+**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を `--permission-mode auto`（既定）で起動します。**確認のダイアログを出さずに進む作りです。**ただし、判定役が遮断を続けたときに確認へ戻るかは検証していません（[docs/upgrading.md](docs/upgrading.md) の `permission_mode: auto` の表）。シェルのコマンドは、Claude Code の中の判定役が実行の前に確かめます（`dontAsk` を選ぶと、許可の一覧の外は確認せずに拒否されます）。
 
 **issue の本文とコメントは、そのままエージェントへの指示になります。**既定の指示書には、
 本文とコメントを **JSON で**読むように書いてあります。GitHub が付けた投稿者の立場（`authorAssociation`）が、本文と混ざらずに届きます。
 **命令として従うのは `OWNER` / `MEMBER` / `COLLABORATOR` が書いたものだけ**で、それ以外は報告として読みます。
-**これは穴を狭めるだけで、塞ぎはしません。**エージェントは確認なしで `Bash` を実行できます。
+この3つの立場でも、本文の1行目に AI の印（`<!-- continuo:` で始まる HTML コメントか、レビューの目印）があるコメントは、命令ではなく記録として読みます（[FAQ](docs/FAQ.md)）。
+**これは穴を狭めるだけで、塞ぎはしません。**判定役は issue のコメントを読まないので、第三者の文で判定役が説得されることはありませんが、**エージェントが何を実行しようとするかは、その文で動かせます。**
 
 **public なリポジトリを載せるときは、その文を書いたのが他人であることを忘れないでください。**
 issue もコメントも第三者が書けます。**「このリポジトリを消せ」と書かれていたら、そのとおりに動きます。**
@@ -96,8 +97,8 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 | | |
 | --- | --- |
 | OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
-| [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.8.0 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない） |
-| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.233 で動作を確認 |
+| [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.9.1 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない。`WORKFLOW.md` の `herdr.protocol` は `22`） |
+| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.283 で動作を確認。枠の使用率は usage API から読み、それが誤りのあいだは Claude Code のステータスラインから受け取る（**ステータスラインが返すのは Pro / Max だけ**）。**API キーでは `rate_limit.source: none` にする** |
 | [`gh`](https://cli.github.com/) | `gh auth login -s project` でログイン済みであること。2.97.0 で動作を確認 |
 | [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と、clone の場所の解決に使う |
 | [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |
@@ -161,7 +162,7 @@ continuo init      # WORKFLOW.md と continuo-ci.yaml を置く。owner とカ�
 **ここで一度 `WORKFLOW.md` を開いてください。**`trust.repositories` に、カンバンに載っていたリポジトリが全部並んでいます。**要らない行を消さないと、無関係なリポジトリまで Claude Code に信頼登録されます。**
 
 ```bash
-continuo setup                    # カンバンの Status を continuo の5つの役割に対応づける（対話）
+continuo setup                    # カンバンの Status を continuo の6つの役割に対応づける（対話。6つ目は飛ばせる）
 continuo trust --dry-run          # 何を信頼登録するかを、実行せずに表示する
 continuo trust                    # 対象リポジトリを信頼登録する。clone が無ければ取ってくる
 continuo allow-keychain-access    # macOS だけ。定額プランの枠を読むために1回

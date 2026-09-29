@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/statuslineclient"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -185,6 +186,8 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 		switch args[0] {
 		case "hook":
 			return runHook(args[1:], stdin, stderr)
+		case "statusline":
+			return runStatusline(args[1:], stdin, stdout)
 		case "init":
 			return runInit(d, args[1:], stdout, stderr)
 		case "setup":
@@ -677,7 +680,7 @@ func countLines(s string) int {
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
-// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
+// continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当て、`scaffold.StatusKeyNames` が返す9つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
 //
@@ -845,8 +848,24 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdated, result.Path))
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKeysNote))
+	skipped := map[string]bool{}
+	for _, k := range result.SkippedKeys {
+		skipped[k] = true
+	}
 	for _, k := range scaffold.StatusKeyNames() {
+		if skipped[k] {
+			// **書けなかったキーを「書き換えた」の一覧へ混ぜない**（設計 3-83）。
+			continue
+		}
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKey, k))
+	}
+	// **書けなかったキーは名指しで出す**（設計 3-83k）。
+	// **黙って捨ててはならない。**利用者はその役割に答えている。
+	// **足す行の見本は、親のキーの下にそのまま貼れる形で出す**（`  direct_chat_state: "<選んだ値>"`）。
+	for _, k := range result.SkippedKeys {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupKeyNotWritten,
+			k, result.Path, scaffold.StatusKeyLine(k, assignment.Statuses())))
 	}
 	return 0
 }
@@ -1717,6 +1736,32 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 	logger.Info("continuo を終了しました")
 	return 0
+}
+
+// runStatusline は `continuo statusline` サブコマンドである（issue #284）。
+//
+// **人間が直接叩くものではない。**continuo が issue ごとの設定ファイルと statusline取得用の
+// 設定ファイルの `statusLine` に書き、Claude Code がステータスラインを描き直すたびに実行する。
+// 標準入力の使用率を `--socket` の `sl.sock` へ1行で送り、固定の1行 `continuo` を出す。
+//
+// **どんな失敗でも終了コード 0 で終える。**引数が読めないときも、何も送らずに固定の1行を出す。
+// **使うフラグは `--socket` だけである。**フラグを足したり名前を変えたりすると、新しい本体が
+// 書いた設定ファイルを古い実行ファイルが読めなくなる（hook と同じく、描き直すたびに実行ファイルを
+// exec する約束である）。
+//
+// args: `statusline` より後ろの引数。
+// stdin: ステータスラインの入力。
+// stdout: ステータスラインの出力先。
+// 戻り値: 終了コード。いつも 0。
+func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
+	fs := flag.NewFlagSet("continuo statusline", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	socketFlag := fs.String("socket", "", "")
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil || *socketFlag == "" || !filepath.IsAbs(*socketFlag) {
+		fmt.Fprintln(stdout, statuslineclient.Output)
+		return 0
+	}
+	return statuslineclient.Run(stdin, stdout, *socketFlag)
 }
 
 // runHook は `continuo hook` サブコマンドである（設計 3-2）。

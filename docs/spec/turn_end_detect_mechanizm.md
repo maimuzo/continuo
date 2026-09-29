@@ -146,11 +146,54 @@ git clone --depth 1 --branch v0.9.0 https://github.com/herdrdev/herdr.git
 
 | 問い | 誰が使うか | 誤るとどうなるか |
 | --- | --- | --- |
-| **A. この run は進んでいるか** | 打ち切り（`checkStalls`）。**毎巡回・全 run** | 進んでいる run を殺す／固まった run を放置する |
-| **B. この pane は完全に止まっているか** | 枠が尽きた run の手放し（`paneStopped`）。**まれ** | 動いている pane を閉じて書きかけを失う／永久に手放せない |
-| **C. この run は枠で止まっているのか** | 枠待ちの印（`isQuotaWaiting`） | 打ち切りの時計を止めるべきでない run で止める／止めるべき run で止めない |
+| **打ち切りの判定（この run は進んでいるか）** | 打ち切り（`checkStalls`）。**毎巡回・全 run** | 進んでいる run を殺す／固まった run を放置する |
+| **手放しの判定（この pane は完全に止まっているか）** | レートリミットが尽きた run の手放し（`paneStopped`）。**まれ** | 動いている pane を閉じて書きかけを失う／永久に手放せない |
+| **レートリミット待ちの判定（この run がレートリミットで止まっているか）** | 枠待ちの印（`isQuotaWaiting`） | 打ち切りの時計を止めるべきでない run で止める／止めるべき run で止めない |
 
 **この3つを1つの関数で答えようとして、過去に失敗している**（5節。9行10件）。
+
+**3つが1回の巡回でどう並ぶか。**
+
+```mermaid
+sequenceDiagram
+    actor T as 巡回タイマー（既定30秒）
+    participant C as continuo
+    participant H as herdr
+    participant CC as Claude Code
+
+    T->>C: 巡回の開始
+    Note over C: 走行中の run を1件ずつ見る
+
+    C->>C: hook の無音が claude.turn_timeout_ms を超えたか
+    alt 超えていない
+        Note over C: 何もしない。次の run へ
+    else 超えた
+        C->>H: agent.get（agent_status と state_change_seq）
+        H-->>C: agent_status を応答する
+
+        alt 打ち切りの判定: agent_status が working
+            Note over C: 進んでいる。時計を起こし直して次の run へ
+        else レートリミット待ちの判定: 使用率100の枠があり hook も来ていない
+            C->>C: 枠待ちの印を立てて打ち切りの時計を止める
+            Note over C: リセット時刻を過ぎたら印を外し、CC へ継続の指示を1回送る
+        else 手放しの判定: idle か done で、連番が2回続けて同じ
+            C->>C: 1週間のレートリミットを待つ上限を超えているか
+            alt 超えている
+                C->>H: pane の close
+                Note over C: 担当者から自分を外し、worktree は残す
+            else 超えていない
+                Note over C: 待ち続ける
+            end
+        else どれにも当たらない
+            C->>H: pane の close
+            Note over C: リトライを1つ積み、バックオフの期限を書く
+        end
+    end
+```
+
+**3つの順番は入れ替えられない。**
+**打ち切りの判定を先に置く理由は 4-1 にある**（レートリミット待ちの判定を先に置くと、
+1時間を超える1回の道具の呼び出しの最中に、正常な run が枠待ちと名乗る）。
 
 ### 2-1. `agent_status` を読んで進退を決める場所は、この3つだけではない
 
@@ -161,8 +204,8 @@ git clone --depth 1 --branch v0.9.0 https://github.com/herdrdev/herdr.git
 **実測（2026-09-08）。**検索パターン
 `AgentStatusWorking\|AgentStatusIdle\|AgentStatusDone\|AgentStatusBlocked`、
 対象パス `internal/orchestrator/`（`_test.go` を除く）。**17行・9関数。**
-うち2関数が問A（`checkStalls`）と問B（`paneStopped`）なので、**下の表は残り7つである。**
-**問C は1行も当たらない。**`isQuotaWaitingWith` は `agent_status` を読まず、
+うち2関数が打ち切りの判定（`checkStalls`）と手放しの判定（`paneStopped`）なので、**下の表は残り7つである。**
+**レートリミット待ちの判定 は1行も当たらない。**`isQuotaWaitingWith` は `agent_status` を読まず、
 使用率と `runIdleForTurnTimeout` だけで決める
 （[internal/orchestrator/turn.go:823-830](../../internal/orchestrator/turn.go#L823-L830)）。
 
@@ -176,22 +219,22 @@ git clone --depth 1 --branch v0.9.0 https://github.com/herdrdev/herdr.git
 | **`afterQuotaReset`**（[internal/orchestrator/turn.go:739-753](../../internal/orchestrator/turn.go#L739-L753)） | 枠明けに継続の指示を送るか | **`idle`/`done` が「送ってよい」。`working` は「送らない」。`blocked` は引き渡しへ回る**（[internal/orchestrator/turn.go:739-740](../../internal/orchestrator/turn.go#L739-L740)） | **送る側** |
 | **復元の引き継ぎ**（[internal/orchestrator/restore.go:733-764](../../internal/orchestrator/restore.go#L733-L764)） | 再起動後、その pane をどう引き継ぐか | **`idle`/`done` は引き継いで turn を送る**（[internal/orchestrator/restore.go:733-734](../../internal/orchestrator/restore.go#L733-L734) の `needsPrompt = true`。いちばん普通の経路）。`working` なら引き継ぐが turn は送らず、終わりを待つ。**`blocked` は `failure_state` へ落としてから pane を閉じる**（[internal/orchestrator/restore.go:743-759](../../internal/orchestrator/restore.go#L743-L759)。turn を送ると保留中の権限要求が承認されるため） | **pane を閉じる**（[internal/orchestrator/restore.go:760-764](../../internal/orchestrator/restore.go#L760-L764) の `default:`。`unknown` も同じ枝。**`failure_state` へは落とさない**） |
 
-**`blocked` は3通りに扱われている。**問A は打ち切り、問B は「止まっているに含めない」、
+**`blocked` は3通りに扱われている。**打ち切りの判定 は打ち切り、手放しの判定 は「止まっているに含めない」、
 **復元は `failure_state` へ落とす。**揃えようとするときは、3つとも見ること。
 
 **倒す向きは3通りある。**同じ信号の同じ失敗が、問いごとに違う解決をされている。
 
 | 向き | どこ |
 | --- | --- |
-| **`working` が「進んでいる」** | 問A・`stillWorkingAfterStop`・`confirmTurnEnd` |
-| **`idle`/`done` が「止まっている」** | 問A・問B |
+| **`working` が「進んでいる」** | 打ち切りの判定・`stillWorkingAfterStop`・`confirmTurnEnd` |
+| **`idle`/`done` が「止まっている」** | 打ち切りの判定・手放しの判定 |
 | **`idle`/`done` が「介入してよい」** | **`afterQuotaReset`。**読めなかったときも「送る側」へ倒す |
 
 **これは誤りではない。**問いが違うので、間違えたときの損も違う。
-**`confirmTurnEnd` の `working` でなければ進む**を問A・問B に合わせて書き換えてはならない。
+**`confirmTurnEnd` の `working` でなければ進む**を打ち切りの判定・手放しの判定 に合わせて書き換えてはならない。
 **差し戻して書き直させている最中を「終わった」と読むことになる**——5-1 の 2026-09-02 の事故である。
 
-**5節の9行10件のうち、問A・問B・問C に属するのは4件である。**
+**5節の9行10件のうち、打ち切りの判定・手放しの判定・レートリミット待ちの判定 に属するのは4件である。**
 **残りは、この表の場所と、turn の終わりの判定と、subagent の追跡で起きている。**
 **条件を強くしても、その6件は塞がらない。**
 
@@ -494,7 +537,7 @@ done
 `SessionStart` / `PreToolUse`（matcher `*`）/ `PostToolUse`（matcher `*`）。
 
 **hook の無音では、原理的に判定できない。**2026-08-18 の実測。
-**出典は [docs/plans/continuo_design.md:280-285](../plans/continuo_design.md#L280-L285) の 1-3 である**
+**出典は [docs/plans/continuo_design.md:279-285](../plans/continuo_design.md#L279-L285) の 1-3 である**
 （この文書の他の箇所が「`SPEC.md` 10.6」と書き分けているので、「設計」とだけ書いてはならない）。
 
 - **道具の実行中は hook が1つも飛ばない。**45秒の道具で 45.107〜45.116 秒、90秒の道具で 90.115 秒
@@ -504,7 +547,7 @@ done
 **これが 4-0 の「hook の無音は単独では使えない」の根拠である。**
 
 **どう測ったか。****叩いたコマンドは記録されていない。**
-[docs/plans/continuo_design.md:280-285](../plans/continuo_design.md#L280-L285) にも結果しか無い。
+[docs/plans/continuo_design.md:279-285](../plans/continuo_design.md#L279-L285) にも結果しか無い。
 **この文書で、手法を再現できない唯一の実測である。**
 
 **測り直すときの形。**hook は continuo の socket へ届くので、**受け側で時刻を取る。**
@@ -587,7 +630,7 @@ done
 **`SubagentStop` 自身が、いま終わったその subagent を `background_tasks` に `running` のまま載せて届けた**事故である。
 **あれは `backgroundSubagents` の側で起きている。**
 
-**問B（手放し）には使えない。**一度は3つ目の条件にして、取り下げた（5-2 の**2件目**。2026-09-07）。
+**手放しの判定（手放し）には使えない。**一度は3つ目の条件にして、取り下げた（5-2 の**2件目**。2026-09-07）。
 **一覧を空にする経路は4つあり、4つとも hook か次の turn で駆動する。**
 
 | 空にする経路 | どこ |
@@ -606,7 +649,7 @@ done
 [internal/orchestrator/turn.go:227](../../internal/orchestrator/turn.go#L227) が、
 `blocked` で人間へ引き渡す直前に `waitForRunningSubagents`
 （[internal/orchestrator/turn.go:350-381](../../internal/orchestrator/turn.go#L350-L381)）を呼ぶ。
-**5-2 の「取り下げた」は、問B の条件から外したという意味であって、コードから消したという意味ではない。**
+**5-2 の「取り下げた」は、手放しの判定 の条件から外したという意味であって、コードから消したという意味ではない。**
 
 **限界。**上と同じ理由で、**枠待ちの最中に subagent を抱えた run が `blocked` へ落ちると、
 `waitForRunningSubagents` は猶予（`claude.poll_wait_ms`。既定30秒）を丸ごと使い切ってから
@@ -614,7 +657,7 @@ done
 **これは 5-2 の記録から導ける帰結であって、実際に観測したものではない。**
 
 **2-1 の表には出てこない。**あの表は `agent_status` の定数を検索して作ったので、
-**`agent_status` を読まない判定は構造上1つも入らない**（問C も同じ理由で入っていない）。
+**`agent_status` を読まない判定は構造上1つも入らない**（レートリミット待ちの判定 も同じ理由で入っていない）。
 
 ---
 
@@ -626,7 +669,7 @@ done
 
 ### 4-0. 信号と問いの対応
 
-| 信号 | 問A（進んでいるか） | 問B（完全に止まっているか） | 問C（枠で止まっているか） |
+| 信号 | 打ち切りの判定 | 手放しの判定 | レートリミット待ちの判定 |
 | --- | --- | --- | --- |
 | **`agent_status`** | **使える。**`working` なら進んでいる | **使える。**`idle` / `done` が必要条件 | 使えない |
 | **`state_change_seq`** | **使えない**（`working` が続く間は動かない） | **使える。**「その間に状態が変わっていない」を証明する | 使えない |
@@ -636,7 +679,7 @@ done
 | **使用量 API** | 使えない | 使えない | **使える**（いま使っている） |
 | **`quota_auto_resume_*`** | 使えない | 使えない | **使えるが、読んでいない** |
 
-### 4-1. 問A「この run は進んでいるか」（打ち切り）
+### 4-1. 打ち切りの判定「この run は進んでいるか」
 
 **確定した条件。**
 
@@ -688,15 +731,15 @@ agent.get が誤りを返した                        →  進んでいない�
 **あれは continuo の pane では動かない**（3-2）。
 **つまり、正しい値を手に持ったまま、動かない値で判定していた。**
 
-#### 読めなかったときは、打ち切る側へ倒す。問B と逆である
+#### 読めなかったときは、打ち切る側へ倒す。手放しの判定と逆である
 
-**4-2 は「読めなかった」と「止まっている」を必ず分ける。問A は分けない。**
+**4-2 は「読めなかった」と「止まっている」を必ず分ける。打ち切りの判定 は分けない。**
 **わざとである。**間違えたときに失うものが逆だからである。
 
 | 問い | 読めなかったら | 間違えたときに失うもの |
 | --- | --- | --- |
-| **問A（打ち切り）** | **打ち切る側へ倒す**（[internal/orchestrator/reconcile.go:856-858](../../internal/orchestrator/reconcile.go#L856-L858) が `Warn` を出して段2 へ落とす。**打ち切るのは段2 を通り抜けた先である**） | worker が止まり、リトライが1つ積まれる。**担当も worktree もこの機械に残る** |
-| **問B（手放し）** | **手放さない側**（4-2） | `git push`・担当者・pane・会話の文脈。**取り返しがつかない** |
+| **打ち切りの判定（打ち切り）** | **打ち切る側へ倒す**（[internal/orchestrator/reconcile.go:856-858](../../internal/orchestrator/reconcile.go#L856-L858) が `Warn` を出して段2 へ落とす。**打ち切るのは段2 を通り抜けた先である**） | worker が止まり、リトライが1つ積まれる。**担当も worktree もこの機械に残る** |
+| **手放しの判定（手放し）** | **手放さない側**（4-2） | `git push`・担当者・pane・会話の文脈。**取り返しがつかない** |
 
 **そのうえで、読み取りの失敗だけで打ち切ることはない。**
 **入口に「無音が閾値を超えた」の門があり**（[internal/orchestrator/reconcile.go:805-807](../../internal/orchestrator/reconcile.go#L805-L807)）、
@@ -783,7 +826,7 @@ herdr agent list --json   # 2026-09-09。herdr 0.8.2。6つの agent
 #### 限界(三): `blocked`（人間の入力待ち）も打ち切る
 
 **4-2 は `blocked` を「止まっている」に含めない。**閉じると確認の画面ごと消えるためである。
-**問A は含める。**「それ以外」に入るので、閾値のあとで pane を閉じる。
+**打ち切りの判定 は含める。**「それ以外」に入るので、閾値のあとで pane を閉じる。
 
 **振る舞いを変えない。**`blocked` を打ち切りからも外すと、
 **その run を止める者が1人もいなくなる**（手放しも `blocked` を通さない）。
@@ -800,12 +843,12 @@ herdr agent list --json   # 2026-09-09。herdr 0.8.2。6つの agent
 **この猶予を伸ばす変更を「安全」と判断してはならない。**
 **打ち切りは、そこでの最後の安全網である。**
 
-**`state_change_seq` を問A に使ってはならない。**
+**`state_change_seq` を打ち切りの判定 に使ってはならない。**
 `working` が続く間は動かないので、**長いツール呼び出しでは `revision` と同じく恒真である。**
 **そのうえ、状態が往復する run**（巡回のたびに `idle` → `working` → `idle`）**では毎回動くので、
 永久に打ち切れなくなる。**
 
-### 4-2. 問B「この pane は完全に止まっているか」（手放し）
+### 4-2. 手放しの判定「この pane は完全に止まっているか」
 
 **確定した条件。**
 
@@ -856,7 +899,7 @@ state_change_seq が2回続けて同じ             かつ
 
 **4つ目がいちばん効く。**別の機械が入札し直し、**同じ worktree に2本目の Claude Code が立つ。**
 
-### 4-3. 問C「この run は枠で止まっているのか」（枠待ちの印）
+### 4-3. レートリミット待ちの判定「この run はレートリミットで止まっているのか」
 
 **確定した条件（いまのまま）。**
 
@@ -948,9 +991,9 @@ state_change_seq が2回続けて同じ             かつ
 [internal/orchestrator/reconcile.go:468](../../internal/orchestrator/reconcile.go#L468) の2箇所で、
 **後者は上の門を自分で置いている**（[internal/orchestrator/reconcile.go:439-453](../../internal/orchestrator/reconcile.go#L439-L453)）。
 
-#### `checkStalls` では、`working` が問C を短絡する
+#### `checkStalls` では、`working` がレートリミット待ちの判定を短絡する
 
-**打ち切りの段1 が `working` を見つけると `continue` するので、段2 の問C へ落ちてこない**
+**打ち切りの段1 が `working` を見つけると `continue` するので、段2 のレートリミット待ちの判定 へ落ちてこない**
 （[internal/orchestrator/reconcile.go:846-853](../../internal/orchestrator/reconcile.go#L846-L853)）。
 **そのうえ `noteWorking` が `LastSeenAt` を進めるので、次の巡回では入口の門も超えられない。**
 
@@ -970,11 +1013,11 @@ state_change_seq が2回続けて同じ             かつ
 
 ### 4-4. 3つの判定が同じ run を取り合わないための決まり
 
-**問A と問B は、同じ巡回で同じ run を触る。**過去の Critical はここに集中している。
+**打ち切りの判定 と手放しの判定 は、同じ巡回で同じ run を触る。**過去の Critical はここに集中している。
 
 | 決まり | なぜ |
 | --- | --- |
-| **「面倒を見ている」と名乗れるのは、問B が `idle`/`done` と連番を読めたときだけ** | それ以外は問B の経路で二度と進まない。**打ち切りに任せないと、止める者がいなくなる** |
+| **「面倒を見ている」と名乗れるのは、手放しの判定 が `idle`/`done` と連番を読めたときだけ** | それ以外は手放しの判定 の経路で二度と進まない。**打ち切りに任せないと、止める者がいなくなる** |
 | **守るのは、1回目の観測の直後の1巡回だけ** | 2回目以降も守ると、状態が往復する run が永久に守られる |
 | **手放しを撃ったあとは守らない** | 撃って失敗し続ける run を守ると、打ち切りもリトライも `failure_state` も来ない |
 | **枠の写しは、1回の巡回で1回だけ読む** | 2回読むと、判定した写しとログに出す数字が別の読み取りから作られる |
@@ -1052,12 +1095,12 @@ state_change_seq が2回続けて同じ             かつ
 ### 4-6. 打ち切りを切っている機械（`claude.turn_timeout_ms` が0以下）
 
 **`SPEC.md` 8.4 の流儀に合わせて、0以下なら打ち切りを行わない。**
-**その機械では、上の3つの問いのうち問A が丸ごと消え、問B の門が1つ外れる。**
+**その機械では、上の3つの問いのうち打ち切りの判定 が丸ごと消え、手放しの判定 の門が1つ外れる。**
 
 | 何が | どうなるか |
 | --- | --- |
-| **問A** | [internal/orchestrator/reconcile.go:774-777](../../internal/orchestrator/reconcile.go#L774-L777) の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
-| **問B の時間の門** | [internal/orchestrator/reconcile.go:467-471](../../internal/orchestrator/reconcile.go#L467-L471) の `silence > 0` と `!stallDetectionOff()` が両方偽になる。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
+| **打ち切りの判定** | [internal/orchestrator/reconcile.go:774-777](../../internal/orchestrator/reconcile.go#L774-L777) の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
+| **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go:467-471](../../internal/orchestrator/reconcile.go#L467-L471) の `silence > 0` と `!stallDetectionOff()` が両方偽になる。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
 | **残る条件** | **4-2 の5つの門のうち4つは残る**（agent 名を持っている／バックオフ中でない／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**外れるのは5つ目の時間の門だけである。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
 
 **時間の物差しが1つも残らない**（4-5 の #10）。**それを承知で、手放しだけは効かせている。**

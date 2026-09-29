@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "347ee23a1a99fc2a0637b259c00510bdd8f48cdb7f340d653599af6bf1894721", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "543eefbe1c311dcfa52a656cc30d1798fd069f3857444b6083817ee2e38019af", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **走査は片付けの入口である。**「worktree と branch を片付ける」のステップ2 と
 // ステップ3 で材料を取れなかった経路が、ここのテストに対応する。

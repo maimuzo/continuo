@@ -2,7 +2,7 @@
 
 - 対象: `docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md`
 - 作成日 / 作成モデル: 2026-08-29 / Claude Opus 5 (1M context)
-- 参照した根拠資料: `docs/plans/continuo_design.md`（3-77-0 / 3-77 / 3-77a / 3-77b / 3-77c / 3-27 / 3-16）、`internal/ratelimit/ratelimit.go`、`internal/orchestrator/orchestrator.go`、`internal/tracker/query.go`、`internal/config/default.go`
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-77-0 / 3-77 / 3-77a / 3-77b / 3-77c / 3-77i / 3-27 / 3-4f / 3-16）、`internal/ratelimit/ratelimit.go`、`internal/orchestrator/orchestrator.go`、`internal/orchestrator/quota.go`（`quotaFreshLocked`・`quotaRefreshInterval`・`OnAPISnapshot`）、`internal/orchestrator/handoff.go`、`internal/handoff/handoff.go`、`internal/tracker/query.go`、`internal/config/default.go`
 
 ## 判断一覧
 
@@ -10,20 +10,20 @@
 | --- | --- | --- | --- | --- | --- |
 | 1 | USE CASE NAME | issue の担当を入札で決める | 「担当を決める」までが1つの操作単位である。着手そのものは `issue を1件処理する` が持っている。動詞で終わる名詞句の規則も満たす | `docs/plans/continuo_design.md#3-77b`、`docs/spec/usecases/particular_case/issue を1件処理する.rucm.md` | 95% |
 | 2 | 配置ディレクトリ | `particular_case/` | 「1件の issue について、この機械が担当になるかどうかを決める」という単一目的の操作単位である。ほかのユースケースを取り込まない | rucm スキルの粒度ガイド | 95% |
-| 3 | BRIEF DESCRIPTION | 担当者を読む・入札する・締め切りまで待って勝敗を決める・担当者が自分なら入札しない の4つ | 設計 3-77 と 3-77b の主文をそのまま4文に落とした | `docs/plans/continuo_design.md#3-77`、`#3-77b` | 90% |
+| 3 | BRIEF DESCRIPTION | 巡回を起こす・巡回は statusline取得の値が届いた知らせでも起きる・担当者を読む・入札する・締め切りまで待って勝敗を決める・担当者が自分なら入札しない | 設計 3-77 と 3-77b の主文を文に落とした。**値が古ければ、usage API の次の読み取りか statusline取得で値が入ってから入札する。**statusline取得の値が届いた知らせで回した巡回でも入札する（設計 3-77i・3-4f）ので、巡回の契機を2文目に添えた | `docs/plans/continuo_design.md#3-77`、`#3-77b`、`#3-77i`、`#3-4f` | 90% |
 | 4 | PRIMARY ACTOR | 巡回タイマー | 担当の判定は巡回のたびに走る。**人間は関与しない。**`issue を1件処理する` と同じ主アクターにした | `docs/spec/usecases/particular_case/issue を1件処理する.rucm.md` | 90% |
-| 5 | SECONDARY ACTORS | GitHub Projects v2、Claude の usage API、ほかの機械 | 担当者とコメントを読み書きする相手・枠を読む相手・入札を競う相手である。**herdr と Claude Code は担当が決まったあとの段で出るので挙げない** | `docs/plans/continuo_design.md#3-77`、`#3-77b` | 85% |
+| 5 | SECONDARY ACTORS | GitHub Projects v2、ほかの機械 | 担当者とコメントを読み書きする相手・入札を競う相手である。**枠は保管している値を読むだけで、この段では誰にも問い合わせない**（設計 3-27）。**Claude の usage API は挙げない。**usage API を読むのは巡回の先頭（`pollAPI`）で、入札の段より前に済んでいる。読んだ値は保管値へ入り、入札の段はそれを読む。**herdr と Claude Code は担当が決まったあとの段で出るので挙げない**（statusline取得は巡回の最後に別の goroutine で開き、この段の外である） | `docs/plans/continuo_design.md#3-77`、`#3-77b` | 85% |
 | 6 | 「ほかの機械」をアクターに立てたこと | 立てた | 入札は**同じボードを見張るほかの機械の投稿が届くこと**を前提にしている。アクターに立てないと、締め切りまで待つ理由が文の中に現れない | `docs/plans/continuo_design.md#3-77`（締め切りは `bid_window_ms`） | 85% |
 | 7 | DEPENDENCY | なし | ほかの particular_case を取り込まない。着手の段は呼び出し側（`issue を1件処理する`）が持つ | rucm スキルのファイル規約 | 95% |
 | 8 | ステップ4（VALIDATES THAT） | 担当者が1人以下である | 「担当者が2人以上なら触らない」は**ほかのどの判定より先に効く**（人間が触っている証拠なので、hold の有無も期限も見る意味が無い） | `docs/plans/continuo_design.md#3-77b`（担当者が2人以上 → 触らない。WARN を出す） | 95% |
 | 9 | ステップ5（VALIDATES THAT） | 担当者が1人もいないか、担当者がこの機械の投稿者である | 「触ってよい」条件を1つの選言にまとめた。**偽の側が「担当者が他人1人」の3通りすべて**なので、代替フロー `他人の担当` の中で hold の有無と期限に分けられる | `docs/plans/continuo_design.md#3-77b`（見えているものと、その扱いの表） | 90% |
 | 10 | ステップ6（IF-ELSE） | 担当者が1人もいないかどうかで分岐した | **どちらも正常な結末**である（入札して担当になる／担当のまま進む）。`VALIDATES THAT` にすると、正常な「担当者が自分」が代替フロー扱いになる | rucm スキルの厳密規則11、`docs/plans/continuo_design.md#3-77b` | 95% |
 | 11 | 「担当者が自分」を ELSE に置いたこと | ELSE 側で「入札のコメントを1件も書かない」「hold のコメントを1件も書かない」の2ステップを置いた | **書かないことが確かめたい振る舞いそのもの**である。空の ELSE にすると、経路の一覧に「コメントが増えない」検査の置き場が無くなる | `docs/plans/continuo_design.md#3-77c`（コメントは1件も増えない） | 90% |
-| 12 | ステップ7（VALIDATES THAT） | usage API から5時間の枠と1週間の枠の使用率を読める | **読めなかった機械は投稿しない。**読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう | `docs/plans/continuo_design.md#3-77`（枠を読めなかった → 投稿しない） | 100% |
-| 13 | ステップ8 | **枠を1つずつ見て、余裕値が0以下のものが1つでもあれば入札しない**（選言） | **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、**選言でも、使っていない枠は判定へ効かない。****「いちばん大きい使用率を採る」ではない**（2026-09-06 に人間が線を余裕値へ移し、枠ごとにマージンを変えられるようにしたため。最大を1つ採ると、どちらの枠にも当たらない値になる） | `docs/plans/continuo_design.md#3-77`、`internal/handoff/handoff.go` の `Evaluate` | 95% |
-| 14 | ステップ9 を削除 | `rate_limit.pause_above_percent` の検証を消した | **人間の決定（2026-09-06）で設定ごと無くなった。**余裕値と同じことを2つの閾値で言っていて、既定では余裕値が先に効くので一度も発火していなかった | issue #173 の人間のコメント、`internal/handoff/handoff.go` の `Evaluate` | 100% |
+| 12 | ステップ7（VALIDATES THAT） | usage API かステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない | **値が新しくない機械は投稿しない。**読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。古い値も、正直に読めている機械に必ず勝つ。**リセット時刻を過ぎた期間が1つでもあれば写し全体を無効にする**（入札は写しに無い期間を使用率0と読むため）。**新しさの幅は状態で変わる**ので、キー名ではなく「新しさの幅」と書き、中身は本文の表に置いた | `docs/plans/continuo_design.md#3-77`（枠を読めなかった → 投稿しない）、`#3-77i`、`#3-27`（新しさの幅）、`internal/orchestrator/quota.go` の `quotaFreshLocked` と `quotaRefreshInterval` | 90% |
+| 13 | ステップ8 | 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る | **モデル別の枠（`weekly_scoped`）は最初から `limits` に現れる**（issue #199。「一定量を使うまで現れる」ではない）。**使っていなければ `percent: 0` で返り、`resets_at` は `null` である**（2026-08-29 の実測）。**だから最大を採れば、使っていない枠は自動的に判定へ効かない。**モデル別の枠は usage API しか運ばないので、`source: statusline` では保管値に入らず、usage API が誤りのあいだは保管値に残った値のまま使う | `docs/plans/continuo_design.md#3-77`、`#3-27`（`weekly_scoped` を使う判定）、`internal/handoff/handoff.go` の `WeeklyPercent` | 95% |
+| 14 | ステップ9（VALIDATES THAT）を削除 | `rate_limit.pause_above_percent` を見る段を消した | **人間の決定（2026-09-06。issue #173）である。**余裕値と同じことを2つの閾値で言っていて、既定（マージン10）では余裕値が90%で先に効くので、95%のこちらは一度も発火していなかった。**キーそのものは残っている**が、いまはモデル別の週次の枠について statusline取得を開くかを決めるためだけに使う（仕事を取るかどうかの門ではない） | issue #173 の人間のコメント、`internal/handoff/handoff.go` の `Evaluate`、`internal/orchestrator/statuslinefetch.go` の `statuslineFetchPointless` | 100% |
 | 15 | ステップ9 をステップ12 より前に置いたこと | 閾値の検査を先、余裕値の符号の検査をあとにした | **閾値を超えている機械は、マージンの設定にかかわらず投稿しない。**先に置けば、余裕値を計算する段へ来ない | `docs/plans/continuo_design.md#3-27`（新規の dispatch を止める閾値） | 70% |
-| 16 | ステップ10・11 | 100 から使用率とマージンを引いた値 | 設計の式をそのまま写した。**使用率は「0% が未使用、100% が使い切り」で、API が返す値そのものである** | `docs/plans/continuo_design.md#3-77` | 100% |
+| 16 | ステップ10・11 | 100 から使用率とマージンを引いた値 | 設計の式をそのまま写した。**使用率は「0% が未使用、100% が使い切り」で、usage API が返す値とステータスラインが運ぶ値そのものである** | `docs/plans/continuo_design.md#3-77` | 100% |
 | 17 | マージンの設定キー名 | **書かなかった。**「5時間マージン」「1週間マージン」とだけ書いた | 設計は「マージンは `WORKFLOW.md` に持つ。単位は %」までしか決めておらず、**キー名を決めていない。**ここで名前を作ると、設計に無い決定を仕様として固定してしまう | `docs/plans/continuo_design.md#3-77` | 85% |
 | 18 | ステップ12（VALIDATES THAT） | 5時間余裕値と1週間余裕値がどちらも 0 以上である | 「どちらかがマイナスなら投稿しない」をそのまま1つの検査にした | `docs/plans/continuo_design.md#3-77` | 100% |
 | 19 | ステップ13 | 判定スコア＝5時間余裕値の2倍と1週間余裕値の和 | 設計の式をそのまま写した | `docs/plans/continuo_design.md#3-77` | 100% |

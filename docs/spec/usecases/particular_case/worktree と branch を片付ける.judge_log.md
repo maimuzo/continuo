@@ -8,9 +8,9 @@
 
 | # | 判断対象 | 決定した値 | 合理的決定根拠 | 出典 | 自信 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | USE CASE NAME | worktree と branch を片付ける | 依頼で指定された名前をそのまま使う。**`worktree` と `branch` は英語のまま書く**（日本語へ直訳すると同じものに名前が2つできる） | 依頼文、`.claude/rules/reporting.md` | 100% |
+| 1 | USE CASE NAME | worktree と branch を片付ける | 依頼で指定された名前をそのまま使う。**`worktree` と `branch` は英語のまま書く**（日本語へ直訳すると同じものに名前が2つできる） | 依頼文、[.claude/rules/reporting.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/reporting.md)（消す前の版） | 100% |
 | 2 | 配置ディレクトリ | `particular_case/` | 「1つの worktree を片付ける」という単一目的の操作単位である | rucm スキルの粒度ガイド | 95% |
-| 3 | BRIEF DESCRIPTION | 走査する・取り直す・失うものを確かめる・消す の4文 | 設計の後始末の手順をそのまま4文へ落とした | `docs/plans/continuo_design.md#3-9` | 90% |
+| 3 | BRIEF DESCRIPTION | 走査する・取り直す・失うものを確かめる・消す の4文に、巡回は statusline取得の値が届いた知らせでも起きることを添えた | 設計の後始末の手順をそのまま4文へ落とした。**巡回を起こすのは巡回タイマーの刻みだけではない。**statusline取得で値が届くと巡回を1回すぐ回す（issue #284）ので、その契機を2文目に添えた | `docs/plans/continuo_design.md#3-9`、`#3-4f` | 90% |
 | 4 | PRECONDITION | 常駐している。身元ファイルを持つ worktree がある。利用者が Status を `cleanup.on_states` の選択肢へ動かしている。`cleanup.enabled` が true である | **片付けの契機は Status が `cleanup.on_states` に入ることだけである**。`cleanup.enabled` が false のときは代替フローで扱う | `docs/plans/continuo_design.md#3-9` の手順1 と手順5、`internal/workspace/cleanup.go` の `ShouldCleanup` | 95% |
 | 5 | PRIMARY ACTOR | 巡回タイマー | 片付けを起こすのは巡回の照合である（手順7）。**人間は Status を動かすだけで、片付けを要求しない** | `docs/plans/continuo_design.md#3-9` の手順7、`internal/orchestrator/reconcile.go` の `reconcileWorktrees` | 80% |
 | 6 | SECONDARY ACTORS | GitHub Projects v2、herdr、git | Status を取り直す相手・worktree を消す相手・branch を消す相手である。**branch は herdr が消さないので git を独立した副アクターにした** | `docs/plans/continuo_design.md#3-9` の手順4、`#8-1`（branch を消す） | 90% |

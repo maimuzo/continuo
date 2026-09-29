@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c2e26c7952eae88fca422e675ffb9ae190e2a87a68b01bb1906ce3801257aefd", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "459bb3cc1ce8aae1d9cebffacd8d8f6a2f7bf8aced0dcbb4dbe7bc9131afae57", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
@@ -63,14 +63,14 @@ func TestRUCMQuota_P010_枠を見ない設定なら枠明けを待たない(t *t
 // **枠を読めないときに「枠待ちかもしれない」と待ち続けると、止まった run を永久に抱える。**
 // 読めないなら枠の判定は諦め、通常の打ち切りとして扱う。
 //
-// 目的: usage API が読めない状態で hook も来なければ、`turn_timeout_ms` で打ち切ること。
+// 目的: 使用率を読めない状態で hook も来なければ、`turn_timeout_ms` で打ち切ること。
 // 与える情報: 枠の判定を無効にした設定（`source: none`）と、hook を1件も送らない run。
 // 成功条件（RUCM の POSTCONDITION）: pane が閉じられ、**印は残り**、
 // Status は `running_state` のままであること（リトライで再開するため）。
 func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			// **`agent_status` が `working` にならなければ短い時間で打ち切る。**
+			// **画面の版が止まったら短い時間で打ち切る。**
 			cfg.Claude.TurnTimeoutMs = 1200
 		},
 	})
@@ -82,7 +82,7 @@ func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// **hook を1件も送らないまま巡回を回す。**`agent_status` も `working` にならない。
+	// **hook を1件も送らないまま巡回を回す。**画面の版も動かない。
 	waitFor(t, 30*time.Second, "pane が閉じられる", func() bool {
 		fx.Orc.Tick(context.Background())
 		return fx.Herdr.CountMethod(herdr.MethodPaneClose) > 0

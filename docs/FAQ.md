@@ -5,9 +5,9 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / プロンプトの変数 / claude / hook の置き場所 / Claude の設定 /
-worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone /
-信頼登録 / 資格情報の16個を調べます。
+未記入の項目 / プロンプトの変数 / claude / agent teams / hook の置き場所 / Claude の設定 /
+worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / 自動化 / clone /
+信頼登録 / 資格情報の18個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -42,14 +42,14 @@ continuo --help
 | コマンド | 何をするか |
 | --- | --- |
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
-| `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
+| `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
-`continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
+`continuo hook` は Claude Code の hook から、`continuo statusline` は Claude Code のステータスラインから呼ばれるもので、どちらも人間が直接叩くものではありません。
 
 #### フラグを位置引数の後ろに書いてもいい？
 
@@ -155,9 +155,16 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 **上から `1` `1` `4` なら、3つとも当たっています。**
 そうでなければ [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」を見てください。
+
 **既に `blocked` で止まっている issue があるなら、**「トラブルシューティング」の
 「作業をやめて後片付けしたいとき」にある
 **`Blocked` になった issue の worktree に、push していない作業が残っている** も見てください。
+
+**この3本は、v0.1.10 から v0.1.12 までを使う人のためのものです。**
+v0.1.13 からは、これらの指示は組み込みの指示書（continuo の実行ファイルの中）に入っていて、本文に足すものはありません。
+**いまの版では、3本とも `0` になるのが正しい状態です。**
+`## 書いた人によって扱いを変えること` の節が本文に残っていたら、消してください。
+残っていると、組み込みの指示書の決まり（AI の印が付いたコメントは命令として扱わない）と食い違います。
 
 #### 書いたテンプレートが、実際にどう展開されるかを先に見たい
 
@@ -233,8 +240,10 @@ continuo prompt --show --builtin
 3. 設計をサブエージェントにレビューさせる
 4. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る
 5. 判断票を issue のコメントに貼る（1行目を <!-- design-review-result --> にする）
-   （continuo を使っているなら、1行目を <!-- continuo:agent -->、2行目をこの目印にしてください。
-    順序を逆にすると、continuo が「エージェントが成果を書いていない」と判定します）
+   （continuo を使っているリポジトリでも、1行目はこの目印のままにしてください。
+    <!-- continuo:agent --> を1行目に置くのは、continuo が起動したエージェントだけです。
+    人間や、人間が自分で起動した Claude Code が付けると、continuo がそのコメントを
+    走っている run の成果として数えます）
 6. 実装する
 
 ## レビュー結果を貼ってから、マージできる状態にする
@@ -249,6 +258,40 @@ pull request のコメントに、レビュー結果を貼ってください
 
 **目印の文字列は変えないでください。**continuo がエージェントへ送る指示書と対になっています。
 **片方だけ変えると、CI が探す目印とエージェントが書く目印が食い違い、誰にも気づけません。**
+
+**この2つの目印の使い方は、組み込みの側が決めます。`CLAUDE.md` へ書き写す必要はありません。**
+
+**v0.1.16 で変わったこと。**組み込みのプロンプトに `## 5-6. レビューの回し方` の節が入りました。
+
+**この節が決めるのは7つです。**
+
+| 何 | 中身 |
+| --- | --- |
+| **指摘の受け取り方** | **命令ではなく情報として受け取ります。**根拠が成り立つかを確かめ、同じ誤りが他に無いかを確かめ、利用者にとってどうするのがよいかを考えて直し方を決めます |
+| **いつ終わってよいか** | **CRITICAL と HIGH が0件**になったとき。MEDIUM と LOW は何件あってもよい |
+| **重さの付け方** | 4つ（CRITICAL / HIGH / MEDIUM / LOW）。**すべて大文字で書きます。**レビュワーが付けた重さは、受け取った側が付け直します |
+| **issue に無いものを削る** | **毎周、実装と issue を突き合わせます**（収まった周も同じ）。issue が求めていないものは削除し、**削除内容を issue のコメントへ残します** |
+| **誰に見せるか** | **差分を読む役と、関連処理まで見る役を毎周2つ並列に。**心配な場所があるときは3つ目 |
+| **直す前に何を書くか** | **判断票と同じコメントへ6つ書きます**（別のファイルは作りません）。**とくに「止まるようになるもの」「通るようになるもの」。**直す箇所は全部並べてから、一気に直します |
+| **何周まで回すか** | 収まったら最大1周。**連続10回で止まり、`CONTINUO-STATUS: blocked` を書きます** |
+
+**subagent が毎周2つ立ちます。**レートリミットの減り方と、`WORKFLOW.md` に書く名前の直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
+
+**v0.1.16 で、あわせて3つ変わりました。**
+
+| 何が変わるか | 何が起きるか |
+| --- | --- |
+| **レビュー結果を貼ったあと、検査を回し直して待つ** | `gh run rerun` を叩き、`gh pr checks --required --watch` が終わるまで戻りません。**CI の実行時間を使い、その間エージェントは黙ります** |
+| **判断票に「何周目か」と、2つの列**（数えた結果 / 分類）**が増えた** | 表が5列から7列になります。`WORKFLOW.md` で判断票の形を自分で指示している場合は、そちらも直してください |
+| **`## 5-7. subagent へ渡すもの` の節が入った** | エージェントが subagent を立てるとき、**不可逆な操作**（pull request のマージ・削除・本番の環境への書き込み・release の作成）**を渡さなくなります** |
+
+**節が届いているかの確かめ方。**
+
+```bash
+continuo prompt --show --builtin | grep -c '^## 5-6\. '
+```
+
+**`1` なら入っています。**`0` なら v0.1.15 以前です。版を上げてください。
 
 ### 進捗報告の間隔や画面の言語を変えたいとき
 
@@ -293,7 +336,7 @@ language: ja
 **`ja` と書いておく意味。**書かずにいると、`LANG` を持たない環境（CI・コンテナ・`env -i`）では
 英語になります。**日本語で使い続けたいなら書いてください。**
 
-**`language:` を読まないコマンドが4つあります。**
+**`language:` を読まないコマンドが5つあります。**
 
 | コマンド | なぜ読まないか |
 | --- | --- |
@@ -301,8 +344,9 @@ language: ja
 | `continuo hook` | Claude Code が呼ぶもので、人間が直接叩くものではありません |
 | `continuo version` | 版を1行出すだけです |
 | `continuo allow-keychain-access` | macOS で1回だけ叩くものです |
+| `continuo statusline` | Claude Code のステータスラインが呼ぶもので、人間が直接叩くものではありません。画面に出すのは固定の `continuo` の1語だけです |
 
-**この4つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
+**この5つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
 
 **残りのコマンドは `language:` に従います**（`continuo setup` の対話も、`continuo doctor` の検査結果も、
 `continuo abandon` も、常駐プロセスも同じです）。
@@ -403,7 +447,7 @@ continuo setup --owner <owner> --project <番号> ~/continuo-work
 #### `✗ カンバン  Status の選択肢名が設定と一致しません`
 
 **原因。**GitHub の既定の Status は `Todo` / `In Progress` / `Done` の3つだけです。
-continuo は5つの役割それぞれに別の選択肢を使います。
+continuo は5つの役割それぞれに別の選択肢を使います（6つ目の direct chat は飛ばせるので、5個あれば足ります）。
 GraphQL はエラーを出さずに0件を返し続けるので、起動時の検査でここで止めています。
 
 **直し方。****足りない選択肢は GitHub の画面から足します。**
@@ -412,7 +456,7 @@ GraphQL はエラーを出さずに0件を返し続けるので、起動時の�
 
 ```bash
 gh project field-list <番号> --owner <owner>   # いまの選択肢を確かめる
-continuo setup ~/continuo-work                      # 5つの役割に、どの選択肢を使うかを対話で決める
+continuo setup ~/continuo-work                      # 6つの役割に、どの選択肢を使うかを対話で決める
 ```
 
 **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
@@ -642,6 +686,144 @@ cleanup:
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
+### 途中から人間が直接チャットで進めたいとき（direct chat）
+
+**何度やり直しても収束しない issue は、人間が pane に入って直接話したほうが早いことがあります。**
+そのあいだ continuo に手を出させないための Status が1つあります。**`Direct Chat` です。**
+
+#### 何もしないとどうなるか
+
+**pane に入って話しかけても、continuo がその pane を閉じます。**理由は4つあります。
+
+| いつ | 何が起きるか |
+| --- | --- |
+| **あなたの発言への返事に `CONTINUO-STATUS: blocked` の1行が入っていた** | continuo がそれを読んで Status を `Blocked` へ動かし、**人間へ渡したものとして pane を閉じます** |
+| **先にカンバンで `Blocked` などへ動かした** | 巡回が「作業中でも完了でもない」と判断して pane を閉じます |
+| **あなたが考えている間、画面が変わらなかった** | `claude.turn_timeout_ms`（既定1時間）を超えると、止まったものとして打ち切ります |
+| **話している間も continuo が指示を送り続けた** | `agent.max_dispatch_turns`（既定20回）に達すると打ち切ります |
+
+**閉じられても会話そのものは残ります**（次に着手するとき同じセッションへ復帰します）が、**画面は消えます。**
+
+#### 使えるようにする
+
+**カンバンに Status の選択肢を1つ足すだけです。**`WORKFLOW.md` は既定で
+`tracker.direct_chat_state: "Direct Chat"` になっています。
+
+カンバンの `Settings` → 左の `Custom fields` の `Status` → `Options` の `Add option...` で
+**`Direct Chat` という選択肢を1つ足してください。**
+
+> **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
+> 選択肢の指定は全件の置き換えとして扱われ、GitHub が ID を採番し直すので、
+> **設定済みの Status の値が全部消えます。**
+
+**足すまでは、この機能が使えないだけです。**continuo は起動しますし、他の動きは1つも変わりません。
+**`continuo doctor` の `Status の名前` が `!` を出して、選択肢が無いことを知らせます。**
+
+**別の名前にしたいときは、`WORKFLOW.md` の `tracker.direct_chat_state` をその名前に書き換えてください。**
+`continuo setup` を実行すると、6つ目の質問として尋ねます。**番号 `0` で飛ばすと、この項目へ空文字を書きます**（＝この機能を使わない設定になります）。
+
+```yaml
+tracker:
+  direct_chat_state: "Direct Chat"   # 人間が pane で直接話すあいだだけ置く Status
+```
+
+**使わないなら、空文字にしてください。**空なら、この機能は一切効きません。
+
+**書き換えたら continuo を再起動してください。**このキーは動いている最中には読み直しません。
+**カンバンに選択肢を足したときも、continuo を再起動してください。**continuo はカンバンの選択肢を
+起動したときと `tracker.verify_states_every` の巡回ごと（既定20巡回）にしか読み直さないので、
+**再起動しないと、しばらく `Direct Chat` のカードを見に行きません。**
+
+#### 使う前に：担当者を、自分1人にする
+
+**`Direct Chat` へ動かす前に、その issue の担当者（assignee）を1人だけにしてください。**
+**その1人は、pane を開きたい PC の continuo が使っている `gh` のアカウントです。**
+
+| 担当者 | 何が起きるか |
+| --- | --- |
+| **自分（その PC の continuo のアカウント）1人** | その PC の continuo が pane を用意します（既に抱えていれば、そのまま渡します） |
+| **0人、または2人以上** | **continuo がカードを `Blocked`（`tracker.failure_state`）へ動かし、「担当者を1人に」というコメントを1件書きます。**担当者を直してから `Direct Chat` へ戻してください |
+| **1人で、別のアカウント** | その PC の continuo は何もしません。**そのアカウントで continuo を動かしている PC が pane を用意します** |
+
+**continuo が既に着手した issue は、continuo が自分を担当者に書いてある**ので、そのまま動かせます。
+**1台で使っている人も、自分で作った issue を動かすときは、自分のアカウントを担当者に付けてください。**
+
+**何台かの PC で同じカンバンを見張っていても使えます。**pane を持つのは、担当者のアカウントの PC だけです。
+
+**`Direct Chat` にあるあいだも、担当者は毎巡回見ます。**
+
+- **担当者を2人以上にする（または外す）と、`Blocked` へ動いてチャットが切れます**（pane が閉じます。会話は残ります）
+- **担当者を別の1人に替えると、いまの PC の continuo は pane を閉じて手を離し**、新しい担当者の PC が pane を用意します。
+  **いまの PC で push していない変更は、新しい PC からは見えません**
+
+#### 使い方
+
+| 順 | 何をするか |
+| --- | --- |
+| **1** | **担当者を自分1人にしてから、カードを `Direct Chat` へ動かす。**動かしてから最大1巡回（既定30秒）で continuo が手を離します |
+| **2** | **pane で好きなだけ話す。**continuo は指示を送らず、`CONTINUO-STATUS:` の行も読まず、Status も動かさず、pane も worktree も片付けません |
+| **3** | **切りがついたら、カードを `In Progress` か `Ready` へ戻す。**たいていは同じ pane・同じ会話のまま、続きの指示が飛びます（**最大2巡回、既定60秒かかります**）。`Ready` へ戻したときは、continuo が `In Progress` を書きます |
+
+**まだ着手していない issue も `Direct Chat` へ動かせます。**pane が無ければ continuo が1つ用意し、
+**「話しかけられます」というコメントを issue へ1件書きます。**そこから話しかけてください。
+
+**pane を用意するのは「continuo がその issue をまだ抱えていないとき」だけです。**
+**「抱えている」には、やり直し待ちの issue も入ります。**
+**着手に失敗して待っている issue は、pane が無くても抱えたままです。**
+そこへ動かしても、その場では pane ができません。**待ちが明けると抱えている状態が自分で解け、
+次の巡回で pane ができます**（合わせて最大5分半）。
+
+**既に走っている issue では、先にカードを動かしてから話しかけてください。**
+話しかけてから動かすと、その30秒の間に上の4つが走ることがあります。
+
+#### 作業中へ戻す以外の抜け方
+
+**`In Progress` か `Ready` 以外へ動かすと、pane が閉じます。**画面は予告なく消えます（会話そのものは残ります）。
+
+| どこへ動かしたか | 何が起きるか |
+| --- | --- |
+| **`In Review` / `Blocked`** | pane を閉じます。worktree は残します |
+| **`Done`** | pane を閉じ、`cleanup.on_states` に入っていれば worktree も片付けます（**コミットしていない変更や push していない commit があれば、片付けを断ります**）。**成果のコメントを書かせには行きません** |
+| **`Ice Box`** | issue へコメントを1件書いてから pane を閉じます。worktree は残します |
+
+**チャットの中で PR をマージしたときも、pane が閉じることがあります。**カンバンの `Workflows` で
+`Item closed` か `Pull request merged` が有効だと、PR をマージして issue が閉じた時点でカードが `Done` へ動くからです。
+**話し終えてからマージしてください。**マージのあとも同じ pane で話し続けたいなら、
+カンバンの `Workflows` でその自動化を切ってください。
+
+#### pane が来ないとき
+
+**`Direct Chat` にカードがあるのに pane が無いときは、原因にかかわらず、この順でやってください。**
+**原因は3つありますが、画面からは見分けられません。**この手順はどれでも正しく終わります。
+
+| 段 | 何をするか | どの原因に効くか |
+| --- | --- | --- |
+| **0** | **担当者が、pane を開きたい PC の continuo が使っている `gh` のアカウントの1人だけかを確かめ、違えば直す** | 担当者の食い違い（continuo を bot のアカウントで動かし、自分の個人アカウントを担当者にしたときなど） |
+| **1** | **最大5分半待つ** | やり直し待ちの issue を continuo が抱えていた場合（待ちが明けると自分で解けます） |
+| **2** | それでも来なければ、**その worktree の pane が残っていれば閉じ**（Claude Code を終了すると pane はシェルに戻って残ります。**その worktree を開いている herdr の workspace の pane は、別のディレクトリへ移ったシェルも含めて「その worktree の pane」に数えます**）、**カードを1度 `In Review` か `Blocked` へ動かしてから `Direct Chat` へ戻す**（1巡回、既定30秒で効きます） | pane が消えた場合と、pane はあるが Claude Code が居ない場合 |
+
+**段2 で `Ready` や `In Progress` へ動かさないでください。**そちらへ動かすと continuo が
+指示を送ろうとして失敗し、**さらに最大5分半待つことになります。**
+
+**pane がもう1枚でもあると、continuo は pane を用意しません。**その pane に Claude Code が居るかどうかを
+continuo は判別できず、**判別できないものへコマンドを送ると、あなたの会話に `claude …` という行が混ざる**ためです。
+**自分でその pane から `claude --resume` し直す必要はありません。**上の段2 のとおり pane を閉じれば、continuo が用意し直します。
+
+#### 気をつけること
+
+| 何 | 中身 |
+| --- | --- |
+| **`Direct Chat` のあいだも `agent.max_concurrent_agents` を1つ使います** | その pane では Claude Code が動いていて、レートリミットを実際に使います。**枠が尽きていると pane は来ません**（知らせは出しません。どれかの issue を `Direct Chat` から戻すと空きます） |
+| **レートリミットが減っていても pane は用意します** | direct chat は完全に手動なので、達していればその場で分かります。`rate_limit.pause_above_percent` は当てません |
+| **指示の回数は数え直しません** | `agent.max_dispatch_turns` に達していた issue を戻すと、1回目の指示で `Blocked` へ落ちます。**そのときは `Blocked` から `Ready` へ戻してください。**新しい着手として数え直します |
+| **用意した直後に1度も話さずに戻すと、続きの指示だけが届きます** | 1回目の指示書から始めたいときは、`Blocked` を経て `Ready` へ動かしてください（新しい着手になります） |
+| **確認の画面について** | 権限モードの既定は `auto` なので、判定役が会話を読んで判断します。**pane の中で「その操作を許可します」と書けば、その turn の中で通ります。**`dontAsk` を選んでいる場合は、`claude.permissions.allow` に無い道具が確認を出さずに拒否されます。**pane の中で切り替えられますが、切り替えたまま戻すと次の指示が確認の画面で止まります** |
+| **何台かで見張っているなら、戻したあとは進捗を報告します** | 戻したとき、continuo は担当を続けることを示すコメント（hold）を1件書き、そこから18時間（`idle_timeout_ms`）を数え直します。**ただし戻してから書くまでの1巡回のあいだに別の PC が見ると、古い記録で判定されます。**18時間を超えて `Direct Chat` に置いていた issue では、その窓で担当を引き取られることがあります（元の PC は push せずに止まります） |
+| **continuo を再起動した場合** | **pane はそのまま残り、continuo が引き取ります。**戻したときも同じ pane に続きの指示が飛びます。**引き取れなかったとき**（herdr が agent を登録し直していない、などの場合）**も pane は閉じません**が、戻した最初の巡回で閉じて作り直します。そのときは同じ会話へ復帰したうえで、1回目の指示書が送られます。**direct chat の最中に分けたシェルの pane も、再起動では閉じません** |
+| **`Direct Chat` に置いたまま再起動を重ねると、`Blocked` へ落ちることがあります** | 再起動して引き継いだ回数は、`Direct Chat` のあいだも数えます。**上限（`agent.max_takeover`、既定5）に達すると、戻したあとの再起動で引き継がずに `Blocked` へ落ちます**（`Direct Chat` のあいだに上限へ届いたときは、戻したときに pane を作り直し、1回目の指示書から始まります）。**会話は残ります。**再起動を何度も重ねる使い方なら、`agent.max_takeover` を上げてください |
+| **`continuo abandon` は3通りで断ります** | **(1) `--park` の行き先**（そこへ動かしても pane が閉じないので、待ち切れずに何も消せません）／**(2) `--to` の行き先**（片付けは通りますが、次の起動で worktree と pane を作り直します）／**(3) いまの Status が `Direct Chat`**（`--force` を付けると worktree だけ消えて、同時実行の枠を1つ持ったまま戻らなくなります）。**3つとも、起動する前に断ります。****`--force` でも通りません。**カードを `Direct Chat` の外へ動かしてから叩いてください |
+
+
 ### 何台かの PC で分担したいとき
 
 **担当が外れる・重なるといった困りごとは、「トラブルシューティング」の
@@ -742,7 +924,7 @@ tracker:
 | --- | --- | --- |
 | **1** | **代表の1人** | 共有するリポジトリの根で `continuo init` を叩く |
 | **2** | **同じ人** | `continuo setup` を叩いて、カンバンの Status の割り当てを入れる |
-| **3** | **同じ人** | **OS が混ざるチームなら、`rate_limit.token_source` の行を消す**（下の「OS が混ざるときの1行」） |
+| **3** | **同じ人** | **OS が混ざるチームなら、`rate_limit.token_source` の行を消す**（下の「OS が混ざるときの1行」）。**API キーの機械が1台でも混ざるなら、`rate_limit.source` を `none` にする**（下の「API キーの機械が混ざるとき」） |
 | **4** | **同じ人** | `trust.repositories` から、continuo に触らせないリポジトリの行を消す |
 | **5** | **同じ人** | front matter の下の本文に、チームの決まりを書く |
 | **6** | **同じ人** | commit して push する |
@@ -773,15 +955,16 @@ tracker:
 | どの OS で `continuo init` を叩いたか | 書かれる値 | Linux / WSL の機械 | macOS の機械 |
 | --- | --- | --- | --- |
 | **macOS** | `keychain` | **起動しません。**「`keychain` は macOS でだけ使える」で止まります | 動きます |
-| **Linux / WSL** | `claude_credentials` | 動きます | **起動はします。**ただし macOS では `~/.claude/.credentials.json` が無いのが普通なので、**枠を読めなくなります** |
+| **Linux / WSL** | `claude_credentials` | 動きます | **起動はします。**ただし macOS では `~/.claude/.credentials.json` が無いのが普通なので、**usage API から枠を読めなくなります** |
 
-**下の段が危ないほうです。**枠を読めない機械は、**入札を黙って見送ります。**
-**見送ったことは issue にも画面にも出ません。**気づける手がかりは2つです。
+**下の段が危ないほうです。**usage API から枠を読めない機械は、Claude Code のステータスラインへ切り替えて枠を読みます。
+**そのあいだ、値が古くなるたびに statusline取得（haiku の Claude Code を短く起動して使用率を取ること）をするので、使用量を少し消費します。**
+**モデル別の週次枠も見られなくなります。**気づける手がかりは2つです。
 
 | どこで気づくか | 何が出るか |
 | --- | --- |
 | **`continuo doctor`** | 資格情報の行に `!` |
-| **continuo のログ** | 「枠の読み取りに失敗しました」（既定のログレベルでも出ます） |
+| **continuo のログ** | usage API から枠を読めないので statusline へ切り替える、という `WARN`（切り替えたときに1回。既定のログレベルでも出ます） |
 
 **直し方は2つあります。**
 
@@ -792,6 +975,22 @@ tracker:
 
 **消したあとの注意。****`continuo doctor --missing-keys-patch … | patch` を当てると、
 その1行が `claude_credentials` として書き戻ります。****当てたら、その1行だけもう一度消してください。**
+
+##### API キーの機械が混ざるとき — `rate_limit.source`
+
+**全員が定額プランでログインしているなら、この節は読み飛ばしてかまいません。**既定の `oauth_usage_api` のままで動きます。
+
+**API キーで Claude Code を動かしている機械は、枠の使用率を読めません。**usage API は定額プランのログインを使い、
+ステータスラインが使用率を返すのも Pro / Max だけ（公式文書）だからです。
+**その機械は使用率が1つも入らないので、入札を黙って見送り続けます。**
+**その機械だけ `none` にすると、今度はその機械が使用率0として常に入札し、勝ち続けます**（下の表の `rate_limit.source`）。
+
+**だから、1人でも混ざるなら全員 `none` にしてください。**枠の余裕で担当を決めることはできなくなり、
+先に入札した機械が取るようになります。
+**`none` にしないと、API キーの機械では、continuo を起動するたびに haiku の会話が最大1回従量で課金されます**（下の「枠の使用率の読み方を知りたいとき」）。
+
+**各機械では、`trust.repositories` の信頼済みの clone が1つ要ります**（usage API が読めないあいだ statusline取得に使います）。
+手順の段10 の `continuo trust` を叩いていれば揃っています。
 
 ##### 揃っていないと壊れるキー
 
@@ -805,7 +1004,7 @@ tracker:
 | **`recheck_interval_ms`** | **0 を書いた機械は、走っている最中に担当を取られたことに気づきません** |
 | **`rate_limit.source`** | 片方だけ `none` にすると、**その機械が使用率0として常に入札し、勝ち続けます** |
 | **`herdr.worktree.branch_template`** | 担当が移ったとき、次の機械が前の機械の branch を同じ名前で見つけられません |
-| **`continuo setup` が書く8つの Status キー** | 機械ごとに違うと、片方が「作業中」と見ている issue を、もう片方が候補として拾い直します |
+| **`continuo setup` が書く9つの Status キー** | 機械ごとに違うと、片方が「作業中」と見ている issue を、もう片方が候補として拾い直します |
 
 **`on_assignee_gate` と `language` も揃いますが、揃っていなくても壊れません。**
 `on_assignee_gate` は issue へ案内を書くかどうか、`language` は画面に出す文言の言語です。
@@ -825,7 +1024,7 @@ tracker:
 
 ##### `continuo setup` を、あとから各自が叩いてよいか
 
-**叩いてかまいません。**書き換えるのは8つのキーの行だけで、
+**叩いてかまいません。**書き換えるのは9つのキーの行だけで、
 **他の行・空行・並び順・インデント・行の右側のコメントは1文字も変えません。**
 
 **ただし割り当てを決めるのは代表だけにしてください。**`continuo setup` は人間に番号で選ばせるので、
@@ -971,13 +1170,26 @@ tracker:
 
 | 理由 | 何が起きているか |
 | --- | --- |
-| **枠を読めない** | 直前の枠の読み取りに失敗しています。`rate_limit.source` の資格情報が読めていません |
+| **枠を読めない** | 枠の使用率が入っていないか、古くなっています。usage API から読めていれば次の読み取りまで、読めていなければ直近の `rate_limit.refresh_interval_ms`（既定5分）に値が届いていません。**値が古いまま入札すると、実際より暇に見えて勝ちうるので、見送ります** |
 | **余裕値が0以下** | 5時間・1週間のどちらかの枠で、`100 − 使用率 − マージン` が0以下になっています（マージンは既定10なので、使用率90%から） |
 
 **黙って見送るだけなので、issue にも画面にも何も出ません。**Ready のまま何も起きていないように見えます。
 
-**確かめ方。**まず、continuo のログで「枠の読み取りに失敗しました」を探してください。
-**これは既定のログレベル（`info`）でも出ます。**
+**「枠を読めない」は、たいてい一時的です。**usage API が読めなくなると、continuo は Claude Code のステータスラインへ切り替えます。
+値が古いと statusline取得（haiku の Claude Code を短く起動して使用率を取ること）をし、
+**値が届いたらすぐ巡回を1回回して入札します。**ふつうは十数秒で済みます（下の「枠の使用率の読み方を知りたいとき」）。
+**続くのは、usage API も statusline取得も値を取れていないときです。**
+**期間（5時間か7日）の区切りの直後にも、usage API の次の読み取り（最長 `rate_limit.poll_interval_ms`。既定5分）まで見送ります。**
+
+**確かめ方。**まず、continuo のログで usage API と statusline取得の `WARN` を探してください。
+**どちらも `WARN` なので、既定のログレベル（`info`）でも出ます。**
+
+```bash
+grep -E 'usage API|statusline取得' <ログの出力先>
+```
+
+**出ていれば、トラブルシューティングの「枠の使用率を読めないとき」の見出しから引いてください。**
+理由ごとに原因と直し方があります。
 
 **出ていなければ、`枠に余裕が無いので` か `枠を読めないので` の行を探してください。**
 **どちらも既定のログレベル（`info`）で出ます**（v0.1.15 から）。**理由がその行に出ます。**
@@ -990,7 +1202,7 @@ grep -E '枠に余裕が無いので|枠を読めないので' <ログの出力�
 
 | 理由 | 直し方 |
 | --- | --- |
-| **枠を読めない** | `continuo doctor` の `資格情報` の行を確認してください。`✗` ならその行の案内に従ってください |
+| **枠を読めない** | 上の `WARN` の理由から直してください。資格情報が読めないなら `continuo doctor` の `資格情報` の行を確認してください。**API キーの機械なら、`rate_limit.source: none` にしてください**（usage API もステータスラインも、使用率を返しません） |
 | **余裕値が0以下** | 待つか、`five_hour_margin_percent` / `weekly_margin_percent` を下げてください。**下げると、枠を使い切る手前まで入札を続けます**（マージンは人間が手で Claude Code を使うぶんの取り置きです） |
 
 **`rate_limit.source: none` にしている場合はここに当たりません。**その設定は「枠で判定しない」という
@@ -1106,6 +1318,148 @@ workspace_hooks.after_run は既に走らせたので、この run が完走し�
 
 **`idle_timeout_ms` と `0` の意味が逆です。**
 `idle_timeout_ms: 0` は「既定の18時間」ですが、**`weekly_wait_limit_minutes: 0` は「上限を設けない」です。**
+### 枠の使用率の読み方を知りたいとき
+
+#### continuo は、枠の使用率をどこから読んでいる？
+
+**主に、Anthropic の usage API からです**（`rate_limit.source: oauth_usage_api`。既定）。
+Claude Code の資格情報（macOS は Keychain、ほかの OS は `~/.claude/.credentials.json`）を読み、`rate_limit.poll_interval_ms`（既定5分）ごとに読みます。
+**5時間・7日・モデル別の週次の上限（`weekly_scoped`）の期間ごとに値を1つ持ち、実行時ディレクトリの `quota.json` にも置きます。**立て直しても、上限の最中かどうかを覚えています。
+
+**usage API が誤りを返しているあいだは（どの誤りでも）、Claude Code のステータスラインへ切り替えます。**
+切り替えたときに `WARN` を1回出し、次に読んでよい時刻（429 なら `Retry-After` との長いほう）に読み直して、読めたら戻ります（戻ったときに `INFO` を1行）。
+**資格情報のファイルが無い・壊れている、Keychain に項目が無いなどで読めないときは、continuo を立て直すまで usage API を読み直しません。**直したら立て直してください。
+
+**ステータスラインの値は、continuo が起動した Claude Code から受け取ります。**
+continuo が起動する Claude Code の設定に `statusLine` を足しておき、描き直すたびに届く使用率を受け取ります（`oauth_usage_api` でも受け取ります。費用はかかりません）。
+**公式文書によると、ステータスラインが使用率を返すのは Pro / Max だけです。**
+
+| `rate_limit.source` | 何から読むか |
+| --- | --- |
+| **`oauth_usage_api`（既定）** | usage API。誤りのあいだはステータスライン |
+| `statusline` | ステータスラインだけ（usage API も資格情報も読みません。`weekly_scoped` は見ません） |
+| `none` | 読みません。使用率0として常に入札します |
+
+**usage API が誤りのあいだ、入札に使うのは、最長で `rate_limit.refresh_interval_ms`（既定5分）前の値です。**
+**それより古ければ、continuo は statusline取得をします。**`trust.repositories` を上から見て、手元に clone があって信頼済みの最初の1つの中で
+haiku の Claude Code を短く起動し、`hello` を1回送って、値が届いたら閉じます。
+**値が届くまで、その issue への入札は見送ります。**届いたらすぐ巡回を1回回して入札します。
+**issue を処理している pane から5分以内に値が届いていれば、statusline取得はしません。**
+
+| 何 | 値 |
+| --- | --- |
+| **回数** | **usage API が誤りのあいだ、何もしていない機械で最大5分に1回、1日最大288回**（`source: statusline` ではいつも） |
+| **1回の量** | haiku に `hello` を1回。**入力は約600トークン**（システムプロンプトを差し替え、道具を外しています。実測） |
+| **減らしたいとき** | `rate_limit.refresh_interval_ms` を伸ばしてください（`polling.interval_ms` より長く）。**伸ばすと、値が古くなりやすく、入札が遅れやすくなります** |
+
+**上限に当たっている間（5時間か7日の期間が 100 のまま）は、statusline取得をしません。**上限で断られるだけで値は変わらないためです。
+**`weekly_scoped` が `rate_limit.pause_above_percent` を超えているあいだも、しません。**ステータスラインはこの上限を運ばないので、取り直しても判定が変わらないためです。
+
+**`weekly_scoped` は usage API だけが運びます。**usage API が誤りのあいだは更新されません。
+**上限に当たったとき、ステータスラインが 100 を運ぶかは確かめていません**（「枠の使用率を読めないとき」の「上限に当たった run が、回復を待たずに `Blocked` になった」）。
+
+#### API キーの機械で、haiku の会話が課金された
+
+**`rate_limit.source` を `none` にしていないからです。**API キーの機械では usage API が読めないので、continuo はステータスラインへ切り替え、
+statusline取得で haiku に `hello` を送ります。**API キーでは、この会話が従量で課金されます。**
+
+**`oauth_usage_api`（既定）では、課金は continuo を起動するたびに最大1回で止まります。**
+起動してから1度も使用率を読めていない機械で、statusline取得が値を受け取れずに終わると、それ以後 statusline取得をしないためです（取得止め。「枠の使用率を読めないとき」）。
+**`statusline` にしていると止まらず、何もしていない機械で最大5分に1回課金されます。**
+
+**直し方。**`WORKFLOW.md` の `rate_limit.source` を `none` にして、continuo を立て直します。
+
+```yaml
+rate_limit:
+  source: none
+```
+
+#### herdr の画面に `continuo statusline fetch` という workspace が現れては消える
+
+**statusline取得です。異常ではありません。**使用率が古いとき、continuo が haiku の Claude Code を短く起動しています。
+**値が届いたら閉じます。**多くは十数秒です。
+
+**会話の記録は残りません。**`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を付けて起動するので、`~/.claude/projects/` に記録のファイルができません。
+pane には「Transcript saving is off」と出ます。
+
+**残ったものは、herdr の画面で手で閉じてかまいません。**continuo も、次の statusline取得の前か、次に起動したときに閉じ直します。
+
+**usage API が読めていれば、出ません。**出たなら、usage API が誤りを返しているあいだです（「枠の使用率を読めないとき」）。
+**出したくないなら `rate_limit.source: none` にしてください。**枠を見なくなります。
+
+#### continuo の pane で、自分のステータスラインが出なくなった
+
+**continuo が、その pane の Claude Code の `statusLine` を自分のものに差し替えているからです。**
+ステータスラインには固定の `continuo` の1語が出ます。**使用率を受け取るための仕掛けなので、`rate_limit.source` が `oauth_usage_api`（既定）か `statusline` なら外せません。**
+
+**あなたが自分で起動した Claude Code は変わりません。**差し替えるのは continuo が起動した Claude Code だけです。
+**`rate_limit.source: none` にすると、continuo の pane でもあなたのステータスラインが出ます。**
+
+#### statusline取得が開いている間、issue の着手が待たされる
+
+**仕様です。**statusline取得の workspace が開いている clone では、その clone の issue の着手を、それが閉じるまで待たせます。
+**同じ clone で issue の worktree を開くと、herdr が statusline取得の workspace を issue の親にしてしまい、閉じられなくなるためです。**
+
+| 何が待つか | どのくらい |
+| --- | --- |
+| **その clone の issue の着手** | **多くは十数秒、長いと数分**（statusline取得1回の上限は `herdr.startup_timeout_ms` の2倍と3分の和。既定で5分） |
+| **同じ巡回で着手する、別の clone の issue** | **その間、同じく待ちます** |
+| **その clone で終わった run の片付け** | 待つ間、その run が同時に動かせる数を1つ占めるので、次の着手もそのぶん遅れます |
+
+**値が届かない状態が続くと（「枠の使用率を読めないとき」の `WARN` が出続けると）、`trust.repositories` の先頭の clone が、5分のうち3分あまり押さえられます。**
+**その clone の issue が遅れて困るなら、別のリポジトリを `trust.repositories` の先頭へ動かし、continuo を立て直してください。**
+
+#### statusline取得は、自分の設定ファイルを読む？
+
+**読みません。**`--restricted` を付けて起動するので、利用者・プロジェクト・ローカルの設定ファイル（`~/.claude/settings.json` など）を読みません。
+**MCP サーバー・利用者のプラグインとスキル・`permissions.allow`・CLAUDE.md・hook も読み込まれません**（実測）。
+道具を外し、`--permission-mode dontAsk` で起動するので、clone のファイルを書き換えることもありません。
+
+**そのため、利用者の設定ファイルの `env` に頼っているもの（プロキシなど）は効きません。**
+**要る環境変数は、`WORKFLOW.md` の `claude.env` に書いてください。**issue の run にも statusline取得にも渡ります。
+
+```yaml
+claude:
+  env:
+    HTTPS_PROXY: "http://proxy.example.com:8080"
+```
+
+**組織が managed settings に書いたものは効きます。**`--restricted` でも managed settings は読まれます。
+**managed settings に `statusLine` が書かれている機械では、continuo の `statusLine` がそれを上書きできず、値が1行も届きません。**`rate_limit.source: none` にしてください。
+
+#### statusline取得のせいで、古い会話の記録が消えない？
+
+**公式文書を読む限り、消えません。ただし確かめていません。**
+Claude Code は、`~/.claude/projects/` の古い記録を `cleanupPeriodDays`（既定30日）より古いものから消します。
+公式文書は、**利用者の設定が外され、ほかのどこも `cleanupPeriodDays` を持たないとき、この掃除は止まる**と書いています。
+statusline取得の起動はこれに当たるので、掃除は走らないはずです。
+
+**実測はしていません。**実物の記録で測ると、止まらなかったときに記録を消してしまうためです。
+**止まらなかった場合、`cleanupPeriodDays` を30日より延ばしている人は、30日より古い記録を消されえます。**
+**心配なら `rate_limit.source: none` にしてください。**
+
+#### Claude Code のアカウントを替えた・契約を上げた
+
+**アカウントを替えたら、continuo を止めて `quota.json` を消し、立て直してください。**
+**usage API が読めていれば、次の読み取り（最長 `rate_limit.poll_interval_ms`）で新しいアカウントの値に置き換わりますが、読めないあいだと `source: statusline` では置き換わりません。**
+**立て直すだけでは直らないことがあります。**`quota.json` には替える前のアカウントの値が残っており、立て直すと読み戻されます。
+**その値に 100% の期間があると、continuo は新しい着手を止めたうえで、その期間が明けるまで statusline取得もしません**（上限の最中に取りに行っても、値は下がらず消費だけするためです）。
+**替える前のアカウントが上限に当たっていたなら、最長で7日の期間が明けるまで1件も着手しません。**
+**走っている run も、止まっていても stall と判定されず、回復待ちのまま同時実行の枠を占め続けます。**
+ログには、巡回のたびに INFO「枠に余裕が無いので、入札の要る issue には着手しません」が出ます。**`rate_limit.pause_above_percent` を上げても直りません**（この閾値は着手の門ではありません。100% の期間が残るあいだは値を取り直さないので、入札は値を読めずに見送り続けます）。
+**替える前から開いている pane が、期間が切れる時刻かプロンプトキャッシュの期限（`expires_at`）に描き直し、替える前の7日の値を送ることもあります。**そのときも、もう一度止めて `quota.json` を消し、立て直してください。
+
+**契約を上げたときは、使用率が下がっても、その期間が終わるまで高い値が残ります。**
+continuo は、同じ期間の中では使用率が下がらない前提で値を保管するためです（止まっているセッションが送ってくる古い値で下げないため）。
+**次の5時間の区切りを過ぎてから、continuo を止めて `quota.json` を消し、立て直してください。**上げる前の値が戻ったら、もう一度 `quota.json` を消して立て直します。
+
+**`quota.json` は、`continuo doctor` の `hook の置き場所` の行に出る socket と同じディレクトリにあります。**
+
+```bash
+cd ~/continuo-work && continuo doctor | grep 'hook の置き場所'
+# ✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
+ls "$TMPDIR/continuo/quota.json"    # 上の行に出たディレクトリに合わせてください
+```
 
 ### コードの置き場所を変えたいとき
 
@@ -1120,7 +1474,7 @@ workspace_hooks.after_run は既に走らせたので、この run が完走し�
 
 | 要るもの | なぜ |
 | --- | --- |
-| **`OWNER` / `MEMBER` / `COLLABORATOR` が issue に「コードは別のリポジトリにある」と書いていること** | **public のリポジトリでは誰でも issue に書けます。**絞らないと、外部の人が1行書くだけで worktree の commit と push を飛ばせます |
+| **`OWNER` / `MEMBER` / `COLLABORATOR` が issue の本文かコメントに「コードは別のリポジトリにある」と書いていること。**ただし、本文の先頭に AI の印（`<!-- continuo:` などで始まる HTML コメント）があるコメントでは発動しません | **public のリポジトリでは誰でも issue に書けます。**絞らないと、外部の人が1行書くだけで worktree の commit と push を飛ばせます。**同じアカウントの AI が書いた分析でも発動させません** |
 | **本文に、成果の出し方が書いてあること** | **書いていなければ、譲る先がありません** |
 
 **片方でも欠けていれば、いままでどおり commit と push を求めます。**
@@ -1541,9 +1895,9 @@ claude --version && ls -la ~/.claude.json
 continuo allow-keychain-access
 ```
 
-**読めないままでも continuo は起動します。**枠の判定ができないだけです。
+**読めないままでも continuo は起動します。**usage API から枠を読めないので、Claude Code のステータスラインへ切り替えて動きます（上の「枠の使用率を読めないとき」）。
 やめるなら `WORKFLOW.md` の `rate_limit.token_source` を `env` にして `token_env` に環境変数名を書くか、
-`rate_limit.source` を `none` にします。
+`rate_limit.source` を `statusline`（usage API を読まない）か `none`（枠を見ない）にします。
 
 項目そのものを確かめたいときは次を叩きます。**`-w` は付けないでください**（トークンが端末に出ます）。
 
@@ -1567,11 +1921,18 @@ continuo allow-keychain-access
 **原因。**continuo が想定している herdr の socket の protocol 版と、入っている herdr の版が食い違っています。
 
 **直し方。**herdr を設定に合う版へ更新するか、`WORKFLOW.md` の `herdr.protocol` を herdr が返した版に合わせます。
-**herdr 0.8.2 は protocol 20、0.8.0 は 19 です。**
+**herdr 0.9.1 と 0.9.0 は protocol 22、0.8.2 は 20、0.8.0 は 19 です。**
+
+**v0.1.15 までの `continuo init` で作った `WORKFLOW.md` には `protocol: 20` が書いてあります。**書いてある値は continuo の既定値より優先されるので、
+**continuo を上げても、この行は手で直す必要があります**（[docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」）。
+
+**版は `herdr --version` ではなく `continuo doctor` の行で確かめてください。**照合するのは、動いている herdr の server が返す値です。
+herdr 0.9.0 以降は client だけを上げて server を古いまま残せるので、`herdr --version` が新しくても server は古いままのことがあります。
+**doctor の行に出る版が古ければ、herdr の server を立て直してください。**
 
 ```bash
-herdr --version
 grep -n "protocol:" ~/continuo-work/WORKFLOW.md
+continuo doctor    # ✓ herdr  protocol 22（設定と一致）／herdr 0.9.1／… の行を見る
 ```
 
 #### `! clone` `! 信頼登録` と出るが、何が悪いのか分からない
@@ -1666,6 +2027,176 @@ cd ~/continuo-work && continuo prompt --show
 **検査は完全ではありません。**continuo は作り物の issue で2回試すだけなので、
 `{{if eq .issue.state "Done"}}` のように**値そのもので分かれる枝の中**までは届きません。
 
+### 枠の使用率を読めないとき
+
+**言いたいこと。**`rate_limit.source: oauth_usage_api`（既定）では、continuo は usage API から枠の使用率を読みます。
+**usage API が誤りを返すと、Claude Code のステータスラインへ切り替えた `WARN` が1回出ます**（下の「usage API から枠を読めない」）。
+切り替えているあいだと `rate_limit.source: statusline` では、値が古いと continuo が statusline取得をします。
+**statusline取得は、`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を短く起動し、`hello` を1回送って、ステータスラインが運ぶ使用率を受け取ることです。**
+**取れなかったときは、理由を括弧に入れた `WARN` が毎回出ます。**下の見出しは、その括弧の中の理由で引けます。
+**取れない間は、入札を見送ります。**走っている issue が無い機械では値が1つも入らないので、自動の着手が止まり続けます。
+
+```bash
+grep -E 'usage API|statusline取得' <ログの出力先>
+```
+
+**どの理由でも、枠を見ずに動かすなら `rate_limit.source: none` にできます。**そのときは使用率0として常に入札します
+（複数の機械で見張っているなら、全員を揃えてください。「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」）。
+
+#### usage API から枠を読めない（ステータスラインへ切り替えた `WARN` が出る）
+
+**原因。**usage API がどれかの誤りを返しました。**誤りの種類を問わず、ステータスラインへ切り替えます。**
+
+| 誤り | 何が起きているか | 次に読み直すのは |
+| --- | --- | --- |
+| **429** | usage API が混んでいるか、扱いを変えた。**2026-09-24 から 429 を返し続けたことがあります** | `rate_limit.poll_interval_ms` と `Retry-After` の長いほう（最長24時間） |
+| **5xx・通信の失敗・使用率の無い 200** | usage API の側の不調 | 同上 |
+| **401・403** | トークンが失効している。**API キーの機械で、以前 claude.ai でログインしたときのトークンが残っているとき**にも出ます | `rate_limit.poll_interval_ms` のあと |
+| **Keychain の読み取りが期限内に終わらない** | 確認のダイアログに誰も答えていない | `rate_limit.poll_interval_ms` のあと（答えるまで、そのたびにダイアログが出えます） |
+| **資格情報のファイルが無い・壊れている、Keychain に項目が無い、`token_env` の環境変数が空、など** | 資格情報を読めない | **立て直すまで読み直しません** |
+
+**直し方。**429・5xx・通信の失敗なら、対処は要りません。読めるようになれば戻り、`INFO` が1行出ます。
+資格情報が読めないなら、`continuo doctor` の `資格情報` の行の案内に従い、continuo を立て直してください。
+**Keychain のダイアログが原因なら、`continuo allow-keychain-access` を叩いて「常に許可」を選んでください**（下の「`✗ 資格情報  Keychain の項目 "Claude Code-credentials" を読めません`」）。
+**API キーの機械なら、`rate_limit.source` を `none` にしてください**（上の「API キーの機械で、haiku の会話が課金された」）。
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+#### statusline取得を止めた `WARN` が出て、それ以後 statusline取得をしない
+
+**原因。**usage API から読めずにステータスラインへ切り替えているあいだに、statusline取得が haiku に `hello` を送ったのに使用率を受け取れずに終わり、
+しかも continuo を起動してから使用率を1度も読めていません。**API キーの機械では、ここで止めないと会話が5分ごとに課金されるので、止めています**（取得止め）。
+
+**直し方。**
+
+| あなたの機械 | どうするか |
+| --- | --- |
+| **API キーで動かしている** | `rate_limit.source` を `none` にして、continuo を立て直してください |
+| **Pro / Max で、起動した直後に上限に当たっていた** | 上限の最中は、statusline取得の最初の応答が断られるので、API キーの機械と見分けられません。**usage API が読めるようになるか、走っている issue の pane から使用率が届けば、自動で解けます。**走っている issue も無ければ、上限が明けてから continuo を立て直してください |
+| **それ以外** | usage API の `WARN` と、その直前の statusline取得の `WARN` の理由を直してから、continuo を立て直してください |
+
+**一度でも使用率を読めていれば、取得止めにはなりません。**`rate_limit.source: statusline` でもなりません。
+
+#### 「statusline取得ができません（使える clone が無い: …）」と出る
+
+**原因。**`trust.repositories` に書いたリポジトリのうち、手元に clone があって Claude Code に信頼されているものが1つもありません。
+**statusline取得は、利用者が既に信頼している clone の中でしか Claude Code を起動しません。**
+
+**直し方。**`trust.repositories` に1つ書き、`continuo trust` を叩いてから、continuo を立て直します。
+**`trust.repositories` は走行中に読み直さないので、立て直しが要ります。**
+
+```bash
+cd ~/continuo-work && grep -n -A5 '^  repositories:' WORKFLOW.md
+continuo trust --dry-run ~/continuo-work
+continuo trust ~/continuo-work
+```
+
+#### 「statusline取得ができません（確認の画面で止まった: …）」と出る
+
+**原因。**選んだ clone を、Claude Code が信頼済みと見なしていません。起動した Claude Code が信頼の確認の画面で止まりました。
+**continuo はこの画面に答えません。**何も送らずに閉じます。
+
+**直し方。**`~/.claude.json` の記録と、Claude Code の版を確かめます。`continuo trust` を叩き直すと、記録が入り直します。
+
+```bash
+claude --version
+continuo trust ~/continuo-work
+```
+
+#### 「statusline取得ができません（起動しなかった: …）」と出る
+
+**原因。**起動した Claude Code が、`herdr.startup_timeout_ms` までに入力を受け付ける状態になりませんでした。
+**statusline取得は `--restricted` を付けて起動します。これは Claude Code 2.1.248 からのものです。**それより古い版では起動しません。
+
+**直し方。**Claude Code を上げてください。**確かめたのは macOS の 2.1.282〜2.1.283 です。**
+
+```bash
+claude --version
+```
+
+#### 「statusline取得ができません（応答はあったが値が無い: …）」と出る
+
+**原因。**Claude Code は応答しましたが、ステータスラインが使用率を運んできませんでした。
+**公式文書によると、ステータスラインが使用率を返すのは Pro / Max だけです。**それ以外の契約と API キーでは、この `WARN` が出続けます。
+**上限に当たっているときにも出ることがあります。**
+
+**直し方。**Pro / Max 以外の契約か API キーなら、`WORKFLOW.md` の `rate_limit.source` を `none` にして、continuo を立て直します。
+
+```yaml
+rate_limit:
+  source: none
+```
+
+**API キーの機械で `none` にしていないと、statusline取得の会話（1回の入力は約600トークン）が従量で課金されます。**`oauth_usage_api`（既定）なら continuo を起動するたびに最大1回、`statusline` なら何もしていなくても最大5分に1回です。
+
+#### 「statusline取得ができません（値が1行も届かなかった: …）」と出る
+
+**原因。**3分の間に、Claude Code の応答が1度もありませんでした。考えられるのは次のとおりです。
+
+| 原因 | 直し方 |
+| --- | --- |
+| **上限に当たっている** | 待ってください。期間が明けると届きます |
+| **組織が managed settings に `statusLine` を書いている** | **continuo の `statusLine` は、managed settings の同じキーを上書きできません**（公式文書）。**値が1行も届かないので、`rate_limit.source: none` にしてください** |
+| **Claude Code が API へ繋がらない**（プロキシなど、利用者の設定ファイルの `env` に頼って繋いでいる） | statusline取得は利用者の設定ファイルを読みません。**要る環境変数を `WORKFLOW.md` の `claude.env` に書いてください**（下の「statusline取得は、自分の設定ファイルを読む？」） |
+| **古い herdr が、信頼の確認の画面で「入力を受け付ける」と答えた** | 選んだ clone が信頼されていません。`continuo trust` を叩き直し、herdr を 0.9.1 へ上げてください |
+
+#### 「statusline取得ができません（途中の誤り…）」と出る
+
+**原因。**clone を選ぶ判定そのもの（`ghq` が無い・`~/.claude.json` を読めないなど）か、herdr への呼び出しか、
+statusline取得用のファイルの書き込みが失敗しました。**`error=` に誤りの文面が出ます。**
+
+**直し方。**文面に従ってください。`ghq` と herdr が使えるかは `continuo doctor` で確かめられます。
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+#### 「statusline取得の workspace が issue の親にされたので、子の issue の workspace が閉じたあとに閉じます」と出る
+
+**原因。**statusline取得の workspace を開いている間に、**同じ clone で issue の worktree が開かれました。**
+herdr は、その clone に既に開いている workspace を、issue の worktree の親にします。**子が居る親は、閉じると herdr に断られます。**
+
+**同じ continuo の中では、ふつうは起きません。**statusline取得の workspace が開いている clone では、issue の着手をそれが閉じるまで待たせるためです。
+**起きるのは、次のどれかのときです。**
+
+- `--id` を分けて動かしている2つ目の continuo が、同じ clone で issue の worktree を開いた（continuo は別のプロセスとは順番を決めません）
+- `continuo abandon` が、同じ clone を扱った
+- 人間が herdr の画面で、同じ clone の worktree を開いた
+- 閉じられずに残った statusline取得の workspace がある clone で、あとから issue の worktree が開かれた
+
+**直し方。****対処は要りません。**continuo は閉じずに残し、子の issue の workspace が閉じたあとに閉じます。
+**同じ clone の別の issue が走っている間は、閉じるのを待ちます**（herdr の一覧は、どれがどれの子かを返さないので、同じ clone の worktree が1つでも残っていれば子が居ると見なします）。
+**herdr 0.8.x では確かめていません。**0.8.x は親を閉じると配下の pane も閉じるので、閉じる直前に別のプロセスが同じ clone で worktree を開くと、その issue の pane が消えることがあります。待たずに消したいなら、herdr の画面で手で閉じてもかまいません。
+**そのときは、同じ clone の issue の worktree が全部片付いてから閉じてください。**配下が残っているうちに画面から閉じると、herdr は配下の pane ごと閉じます。
+
+#### 「statusline取得ができません（閉じられなかった: …）」と出る
+
+**原因。**statusline取得の workspace を閉じられませんでした。herdr の画面に `continuo statusline fetch` という workspace が残ります。
+
+**直し方。****対処は要りません。**次の statusline取得の前か、次に continuo を起動したときに閉じ直します。
+**herdr の画面で手で閉じてもかまいません。**
+
+**continuo が一覧に控える前に落ちたときは、閉じ直しの対象になりません。**
+workspace を作ってから控えるまでの間に continuo が落ちたときです。
+**作る呼び出しの応答だけが期限を過ぎたときは、作る前と後の workspace の一覧を比べ、増えていた `continuo statusline fetch` の workspace を閉じ直しの対象に足します。**そのとき一覧を引けなかったときは、対象になりません。
+**`continuo statusline fetch` の workspace が残り続けていたら、herdr の画面で手で閉じてください。**
+
+#### 上限に当たった run が、回復を待たずに `Blocked` になった
+
+**原因。**continuo は、上限に当たった run を「回復待ち」として待たせ、明けたら続けさせます。
+**その判定に、usage API とステータスラインから届いた使用率（100）を使います。**usage API が読めていれば、次の読み取り（最長 `rate_limit.poll_interval_ms`）で 100 が入ります。
+**usage API が誤りのあいだは、3つの場合に、判定が効かないことがあります。**
+
+| 場合 | 何が起きているか |
+| --- | --- |
+| **上限に当たったとき、ステータスラインが 100 を運ぶか** | **確かめていません。**運ばなければ、回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められます |
+| **モデル別の週次の上限に当たった** | **ステータスラインはモデル別の週次の上限（`weekly_scoped`）を運びません。**usage API が誤りのあいだ（と `rate_limit.source: statusline`）は、回復待ちと判定されず、stall として止められることがあります |
+| **版を上げる前から走っていた run** | その run は `statusLine` の無い設定のまま動いているので、pane から使用率が届きません（[upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」） |
+
+**直し方。**issue のコメントを読み、期間が明けてから、その issue を `Ready` へ戻してください（「issue が急に `Blocked` になった」）。
+
 ### カンバンに載せたのに issue が始まらないとき
 
 #### カンバンに載せた item が1件も処理されない。エラーも出ない
@@ -1706,7 +2237,8 @@ grep -E '枠に余裕が無いので|空きスロットが尽きた|必須のラ
 | **空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません** | 同時に動かせる数を使い切りました。**上限は2つあります**（全体と、Status ごと） | **走っているものが終われば順に着手します。**増やすには、**ログの `上限に達した設定` に出ている名前**を上げてください |
 | **必須のラベルが揃っていないので飛ばします** | `tracker.required_labels` に書いたラベルが、その issue に付いていません。**足りないラベルの名前が全部、同じ行に出ます** | **ラベルを付けるか、`required_labels` を見直してください**。この行は**足りないラベルの組み合わせごとに1回だけ**出ます（1つ付けて、まだ足りなければもう1回出ます） |
 
-**3つとも出ていないときは、担当者を見てください。**
+**3つとも出ていないときは、まず入札を疑ってください。**
+**usage API か `statusline取得` の `WARN` が出ていれば、枠の使用率が入っていないので入札していないことがあります**（「枠の使用率を読めないとき」）。
 
 **止まる使用率は1つだけです**（v0.1.15 から。それまでは `rate_limit.pause_above_percent` という2本目がありました）。
 
@@ -1936,16 +2468,13 @@ herdr:
 
 #### 「起動直後に確認の画面で止まりました」と出る
 
-**原因。**そのフォルダが Claude Code に信頼登録されていないか、許可されていないコマンドを実行しようとしました。
+**よくある原因。**そのフォルダが Claude Code に信頼登録されていないことです。**何が確認の画面を出したかは、continuo の側に残りません。**
 
-**直し方。**まず画面を読みます。
-
-```bash
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
-```
+**直し方。****continuo はこの通知を書いたあとで pane を閉じるので、画面は残っていません。**worktree の中身を見てください。
 
 信頼登録が足りないなら `continuo trust ~/continuo-work`。
-許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します。
+許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します（`auto` では狭い規則で）。
+**足したら continuo を再起動してください。**走行中は設定を読み直しません。
 
 #### 「作業の途中で確認の画面に止まりました」と出る
 
@@ -1972,17 +2501,41 @@ git -C <worktree のパス> diff
 **待っても確認の画面は消えません。**待つのは「別のサブエージェントが書き終えるのを待つ」ためであって、
 **待てば作業が再開する、という意味ではありません。**この issue は人間が見ないと進みません。
 
-**`claude.permissions.allow` に足しても直らない止まり方があります。**
-continuo は Claude Code を `--permission-mode dontAsk` で起動します。
-**このモードでは、許可の一覧に無いツールは確認の画面を出さずに、その場で拒否されます。**
-拒否は静かに起きるので、**確認の画面が出て止まったのなら、それは許可の一覧の不足とは別の原因です。**
+**直し方は `claude.permission_mode` の値で変わります。**まず値を見てください。
 
-**直し方。**記録を読んで、何をしようとして止まったのかを確かめます。
-**許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
-Status を着手待ちへ戻してください。
+```bash
+grep -n 'permission_mode' ~/continuo-work/WORKFLOW.md
+```
+
+**`auto` のとき**（v0.1.16 からの既定）**は、判定役が実行の前に確かめます。**
+**判定役は issue のコメントを読みません。**判定役への要求から道具の結果は取り除かれ、
+issue のコメントは `gh` の出力、つまり道具の結果として届くためです
+（公式文書の permission modes のページ。2026-09-18 に取得して確かめました）。
+
+**許してよい操作だと分かったときは、`claude.permissions.allow` に狭い規則を足します**
+（例: `Bash(gh:*)`）。
+**`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされます。**
+**`.claude/` 配下と `.mcp.json` への書き込みは、許可の規則に当たっていても判定役へ回ります。**足すものはありません。
+
+**狭い規則の書き方。**`dontAsk` で実測して確かめてある形は次の3つです。**`auto` で残るかは測っていません。**
+
+| 書き方 | 何に当たるか |
+| --- | --- |
+| `Bash(gh:*)` | `gh` で始まるコマンド全部。**`:*` は末尾でしか認識されません** |
+| `Bash(ls *)` | `ls` に引数が付いたもの。**空白を挟むと語境界が入ります** |
+| `Bash(ls*)` | `ls` で始まるもの。**ワイルドカード付きなので、`auto` で落とされる側に当たるかは測っていません** |
+
+**拒否されたコマンドは、引き渡しの通知の【調べるところ】に挙げた記録で見てください。**
+
+**`dontAsk` のときは、許可の一覧に無いツールが確認の画面を出さずに、その場で拒否されます。**
+拒否は静かに起きるので、**確認の画面が出て止まったのなら、それは許可の一覧の不足とは別の原因です。**
+**許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足してください。
+
+**どちらの場合も、足したら continuo を再起動してください。**走行中は設定を読み直しません。
+**そのあと Status を着手待ちへ戻してください。**
 
 **それでも、何が確認の画面を出したのか分からないときは、次の節を読んでください。**
-**agent teams が有効だと、`dontAsk` で起動していても確認の画面が出ます。**
+**agent teams が有効だと、`dontAsk` を選んでいても確認の画面が出ます。**
 
 #### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
 
@@ -2009,8 +2562,8 @@ continuo はそれを「人間の入力を待っている」と読み、esc を�
 出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
 
 **上の節の「`dontAsk` では確認の画面が出ない」と食い違って見えますが、両方とも起きます。**
-continuo は `--permission-mode dontAsk` で起動するので、**リード自身は確認の画面を出しません。**
-**ところが teammate はそれを継がず、`default` で走ることが観測されています**
+continuo は `--permission-mode auto`（既定）で起動します。公式文書は、判定役が3回続けて、または通算20回遮断すると確認の画面へ戻ると書いています（continuo では観測できていません）。`dontAsk` を選んだときは、許可の一覧の外がその場で拒否されます。
+**ところが teammate はリードの権限モードを継がず、`default` で走ることが観測されています**
 （2026-08-27、外部の利用者の実測。報告された `meta.json` が3件とも `permissionMode: "default"` でした）。
 **公式は「teammate はリードの許可設定を継ぐ」と書いており、この観測と食い違っています。**
 **理由は分かっていません。**
@@ -2139,9 +2692,10 @@ user の設定より後に当たる。だからそのどれかに、この変数
 #### エージェントが叩いたコマンドが「危ない」と断られる
 
 **原因。**v0.1.10 から、**公開リポジトリの issue では、`Bash` の呼び出しを実行の前に検査します**
-（`claude.tool_gate`。**書いていなければ既定で有効です**）。
+（`claude.tool_gate`。**v0.1.16 から、書いていなければ既定で無効です。**それより前は既定で有効でした）。
 公開の issue とコメントは誰でも書けるので、**外部の人が書いた文がそのままコマンドになる経路**を狭めるためのものです。
-**非公開リポジトリの issue には、既定では掛かりません。**
+**掛けるには `claude.tool_gate.mode` に `public_only` か `on` を書きます。**
+`public_only` は公開リポジトリの issue にだけ掛けます。
 
 **まず知っておくこと。****断られても turn は止まりません。**
 断った理由がコマンドのエラーとしてエージェントへ返り、エージェントは別のやり方を試します。
@@ -2161,7 +2715,7 @@ grep -c '"type": "prompt"' "$(jq -r .settings_path .continuo.json)"
 | どうするか | 書く行 | 引き換えに失うもの |
 | --- | --- | --- |
 | **そのままにする** | なし | ありません（断ってほしい操作なら、守れています） |
-| **判定を止める** | `claude.tool_gate.mode: off` | **外部の人が書いた指示を止める仕掛けが1つ減ります** |
+| **判定を止める** | `claude.tool_gate.mode: "off"` | **外部の人が書いた指示を止める仕掛けが1つ減ります** |
 
 **止めるときは、`claude.tool_gate.mode` の値を書き換えます。**
 
@@ -2185,7 +2739,7 @@ front matter が重複キーになることはありません。
 claude:
   # …（ほかの設定）
   tool_gate:
-    mode: off      # 既定は public_only。この値を書き換える
+    mode: "public_only"   # v0.1.16 からの既定は off。掛けたいならこの値を書き換える
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -2200,6 +2754,11 @@ claude:
 「## 書いた人によって扱いを変えること」の節そのものがありません。
 **この節は v0.1.10 で入りました。**足りないのはキーの名前ではなく、節そのものです。
 
+**v0.1.13 以降を使っているなら、下の確かめ方は当てはまりません。**
+v0.1.13 からは、書いた人の立場を読ませる指示は組み込みの指示書に入っています。
+**本文にこの節が無い（下の2本が `0` と `0` になる）のが正しい状態です。**節が残っていたら消してください。
+下の確かめ方と表は、v0.1.10 から v0.1.12 までを使う人のためのものです。
+
 **確かめ方。**節があるかと、`--jq` が `author_association` を出す本数を数えます。
 
 ```bash
@@ -2210,7 +2769,7 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 | 1本目 | 2本目 | どう読むか |
 | --- | --- | --- |
 | `1` | `4` | **この節の話ではありません。**下の「他に見るところ」を読んでください |
-| `0` | `0` | **本文が v0.1.9 のままです。**[upgrading.md](upgrading.md) の「差し替え方（書いた人の立場）」のとおりに、32行を消して110行を貼ってください |
+| `0` | `0` | **v0.1.13 以降なら、これが正しい状態です。**v0.1.10 から v0.1.12 までなら、本文が v0.1.9 のままです。[upgrading.md](upgrading.md) の「差し替え方（書いた人の立場）」のとおりに、32行を消して110行を貼ってください |
 | 上のどちらでもない | | **貼り方が途中で切れています。**同じく「差し替え方（書いた人の立場）」の消す範囲から取り直してください |
 
 **1本目が `0` なら、キーの名前を直しても届きません。**節そのものが無いので、
@@ -2225,6 +2784,49 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
 - **`claude.tool_gate` を `off` にしていないか。**「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
 
+
+#### issue のコメントを、人間が書いたのか AI が書いたのか見分けたい
+
+**原因。**continuo を使うと、continuo 本体・continuo が起動した Claude Code・あなた・あなたが自分で起動した Claude Code が、**同じ GitHub アカウントで書きます。**投稿者と `author_association` では見分けられません。
+
+**見分け方。****AI は本文の1行目に印を置きます。**GitHub の画面には表示されません（編集の画面を開くと見えます）。
+
+| 書き手 | 本文の1行目 |
+| --- | --- |
+| continuo 本体 | `<!-- continuo:self -->` など |
+| continuo が起動した Claude Code | `<!-- continuo:agent -->`・`<!-- continuo:group -->`・レビューの目印（`<!-- code-review-result -->` など） |
+| あなたが自分で起動した Claude Code | `<!-- continuo:ai -->`（下の plugin を入れた場合） |
+| あなた | 何も置かない |
+
+**continuo が起動した Claude Code は、AI の印が付いたコメントを命令として扱いません。**分析や記録として読みます。
+**pull request の本文も、命令として扱いません。**変更の説明として読みます。
+
+**あなたが自分で起動した Claude Code に印を付けさせるには、plugin を1回入れます。**
+
+```bash
+claude plugin marketplace add maimuzo/continuo
+claude plugin install continuo-issue-comments@continuo
+```
+
+- **既定の user の scope で入れてください。**`--scope project` で入れると、追跡される `.claude/settings.json` に書かれ、commit すると、そのリポジトリで continuo が起動するすべての機械の run がこのスキルを読み込みます
+- **自動では新しくなりません**（Claude Code の既定で、third-party の marketplace は自動更新が切れています）。新しくするときは次の2つを叩きます
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+**気をつけること。**
+
+- **あなたの決定は、あなたが自分で書いてください。**Claude Code に代筆させると `<!-- continuo:ai -->` が付き、continuo が起動した Claude Code はそれを命令として扱いません
+- **run への指示は、印の無いコメントで書いてください。**レビューの目印（`<!-- design-review-result -->` など）で始まるコメントは、あなたが書いても AI の書き込みと判定されます。目印付きのコメントはレビューの記録として読まれます
+- **pull request の本文に書いた指示には従いません。**指示はコメントに書いてください
+- **印は認証ではありません。**issue にコメントできる人なら誰でも書けます。見分けるための印で、偽れないようにするものではありません
+- **印が付かないことがあります。**plugin を入れていない、スキルが呼ばれなかった、長いセッションで compaction のあとにスキルを忘れた、のどれかのとき、Claude Code の書き込みは人間の書き込みとして読まれます
+- **過去のコメントには付きません。**どれを AI が書いたかを決める手がかりがありません
+
+**`version` を書いていない理由。**plugin の `plugin.json` には `version` がありません。Git で配る marketplace の中の plugin は、`version` が無ければ commit の SHA を版にするので、`claude plugin update` が更新を見つけられます。`claude plugin validate` の `No version specified` の警告は、そのために出ます。
+
 #### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
 **原因。**`claude` が PATH に無い / 起動が途中で失敗した / そのフォルダが信頼登録されていない、のどれかです。
@@ -2233,9 +2835,9 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 ```bash
 command -v claude
-herdr agent explain continuo-hello-world-42
-herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```
+
+**continuo はこの通知を書いたあとで pane を閉じるので、`herdr agent explain` も `herdr agent read` も agent を見つけられません。**
 
 `continuo doctor` は `claude` という見出し語で PATH 上の実行ファイルを調べています。
 
@@ -2420,27 +3022,84 @@ jq -r .base <worktree のパス>/.continuo.json
 | **計画のコメントに図が入る** | **mermaid の `flowchart` か `sequenceDiagram`。**GitHub がそのまま図として表示するので、あなたの側に要るものはありません |
 | **人間へ読ませるコメントの節に、4つの見出しが入る** | `### 何に対する返答か` / `### 前提条件` / `### 単語の説明` / `### 何が問題なのか` |
 
-**当たるのは3種類です。**計画・判断票・何をしたかの報告。
+**当たるのは4種類です。**計画・判断票・何をしたかの報告・削除の記録。
 **途中経過の報告と、まとめて直したときの報告には当たりません。**
 どちらも形が別に決まっていて、4つを置く場所がないためです。
 
 **印の行は、いままでどおり先頭のままです。**4つの見出しは、その下に入ります。
 
+**v0.1.16 から。**その4つが7つになりました。
+
+| 順 | 見出し | 中身 |
+| --- | --- | --- |
+| 1 | （見出しは付きません） | **引用。**その節が答えている原文だけ |
+| 2 | `### 三行まとめ` | 3行以内で結論 |
+| 3 | `### 前提` | その話が成り立つために要る条件 |
+| 4 | `### 単語の説明` | その節で使う語が何を指すか |
+| 5 | `### 既存の構造がどうなっているか` | いまどう作られていて、何がどの順で起きるか |
+| 6 | `### 何が問題なのか` | 症状と、放っておくと何が起きるか |
+| 7 | `### 詳細` | 根拠・仕組み・データ |
+
+**引用の置き方も変わりました。**v0.1.15 は節ごとに `### 何に対する返答か` の見出しを立て、その下に引用を置いていました。
+**v0.1.16 からは見出しを付けず、節の先頭に引用を置きます。**
+
+**あわせて、説明にシーケンス図を多用し、何を渡して何を受け取るかを具体的な値で書きます。**
+**技術用語は英語のまま書きます。**
+**人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊きません。**
+**判断票は、指摘をまとめた表を、その節の `### 詳細` の中に置きます。**
+
+**入っているかは、送る文面で確かめられます。**v0.1.15 と v0.1.16 で見出しが違うので、2本数えます。
+
+```bash
+cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 既存の構造がどうなっているか'
+cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対する返答か'
+```
+
+**`--builtin` を付けるのは、組み込みの指示書だけを数えるためです。**付けないと `WORKFLOW.md` の本文も数えるので、本文に同じ見出しを書いた人は版を取り違えます。
+
+| 1本目 | 2本目 | 入っている形 |
+| --- | --- | --- |
+| `1` 以上 | 問わない | **v0.1.16 の7つの見出しです** |
+| `0` | `1` 以上 | **v0.1.15 の4つの見出しです。**この節の症状は直っています |
+| `0` | `0` | **v0.1.14 までの形です。**上げてください |
+
+**件数そのものは見ないでください。**在るかどうかだけで見分けられます。いくつ出るかは指示書の書き方で変わります。
+
+#### エージェントのコメントで、backtick で囲んだ語が消えている
+
+**v0.1.16 で直りました。**上げてください。**設定に足すものはありません。**
+
+**v0.1.15 まで何が起きていたか。**組み込みの指示書は、コメントや PR の本文を `--body "…"` の二重引用符の中へ直に書かせていました。
+**二重引用符の中では、シェルが backtick と `$( )` をコマンドとして実行します。**
+報告に `` `auto` `` と書くと、`auto` というコマンドが worktree の中で走り、その部分はコマンドの出力（無ければ空）に置き換わります。
+issue から `$(…)` を含む文を引いた場合も同じです。
+
+**v0.1.16 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
+計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
+
 **入っているかは、送る文面で確かめられます。**
 
 ```bash
-cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
+cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-file "$F"'
 ```
 
-**`1` が返れば入っています。**
+**`1` 以上なら v0.1.16 の形です。**`0` なら上げてください。
+
+**`WORKFLOW.md` の本文で `--body "…"` の形を自分で指示している場合は、そこも直してください。**直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
 
 ### issue が勝手に止まる・戻るとき
+
+#### 計画を書いたところで、どの issue も `Blocked` になる
+
+**正常です。**エージェントは計画を書いたら、設計レビューへ進む前に、あなたの確認を待って止まります。
+**了承するときは、了承することを issue のコメントにはっきり書いてから `Ready` へ戻してください。**Status を戻すだけでは進みません。
+**レビューの途中で質問して止まったときは、回答を issue のコメントに書いてから `Ready` へ戻してください。**
 
 #### issue が急に `Blocked` になった
 
 **原因。**エージェントが判断を仰いだか、打ち切られました。
-打ち切りは、**herdr が見ている agent の状態が一度も `working` にならないまま**
-`claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
+**計画を書いた直後に `Blocked` になるのは、毎回の正常な動きです**（上の「計画を書いたところで、どの issue も `Blocked` になる」）。
+打ち切りは、**herdr が見ている画面の版が変わらないまま** `claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
 
 **直し方。****issue のコメントを開いてください。**何が起きたか・どう確かめるか・どう直すかが書いてあります。
 対応方法をコメントに書いて `Ready` へ戻せば続きが動きます。
@@ -2616,10 +3275,13 @@ gh pr view <PR番号> --repo <owner>/<repo> --json closingIssuesReferences --jq 
 **直し方。**PR の本文へ1行足します。エージェントが次に起動されたときから見えるようになります。
 
 ```bash
-gh pr edit <PR番号> --repo <owner>/<repo> --body "$(gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body)
-
-Closes #<issue の番号>"
+F=$(mktemp)
+gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body > "$F" \
+  && printf '\nCloses #<issue の番号>\n' >> "$F" \
+  && gh pr edit <PR番号> --repo <owner>/<repo> --body-file "$F"
 ```
+
+**本文を読めなかったときは、書き戻しません。**読めないまま書き戻すと、本文が足した1行だけになります。
 
 **組み込みのプロンプトは、この1行を入れるようエージェントに指示しています。**
 **それでも落ちていたときの直し方が、これです。**
@@ -3307,6 +3969,7 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 ```
 
 **label は人間が見分けるための表示名で、continuo は読み戻しません。**
+**例外は statusline取得の workspace（label は `continuo statusline fetch`）だけです。**閉じ残しを閉じ直す前に、label が合うかを見ます。
 復元の照合は pane の cwd と worktree のパス1本なので、
 古い形式の label が付いた pane が残っていても引き継ぎは壊れません。
 

@@ -10,6 +10,10 @@ import (
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
 // 確認済みである（docs/plans/continuo_design.md 2-1 の
 // 「socket API の実在するメソッドと引数」。protocol=19 / herdr 0.8.0）。
+// 2026-09-24 に herdr 0.9.1（protocol=22）の `herdr api schema --json` と照合し、continuo が使う
+// メソッドが1つも消えていないことを確かめた。**`workspace.close` に任意の `close_group` が増えた**
+// （continuo は送らない。workspace.go）。**`worktree.create` / `worktree.open` / `worktree.list` /
+// `worktree.remove` に任意の `trust_repository` が増えた**（continuo は送らない）。
 // result に出てくる値の形は types.go を参照すること。
 const (
 	// MethodPaneSplit は pane を作るメソッド名である。
