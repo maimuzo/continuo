@@ -1742,9 +1742,13 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 //
 // **人間が直接叩くものではない。**continuo が issue ごとの設定ファイルと statusline取得用の
 // 設定ファイルの `statusLine` に書き、Claude Code がステータスラインを描き直すたびに実行する。
-// 標準入力の使用率を `--socket` の `sl.sock` へ1行で送り、固定の1行 `continuo` を出す。
+// 標準入力の使用率を `--socket` の `sl.sock` へ1行で送り、そのあと利用者のステータスラインへ転送する。
+// **転送先が無ければ固定の1行 `continuo`、あれば転送した出力を出す**（設計 3-84）。
+// 転送先は環境変数 `CONTINUO_STATUSLINE_COMMAND` から読み、`statuslineclient.Run` へ引数で渡す
+// （continuo が着手のときに issue ごとの設定ファイルの `env` へ書く。テストが実行した環境に
+// 左右されないよう、Run の中では読まない）。
 //
-// **どんな失敗でも終了コード 0 で終える。**引数が読めないときも、何も送らずに固定の1行を出す。
+// **どんな失敗でも終了コード 0 で終える。**引数が読めないときは、何も送らず転送もせずに固定の1行を出す。
 // **使うフラグは `--socket` だけである。**フラグを足したり名前を変えたりすると、新しい本体が
 // 書いた設定ファイルを古い実行ファイルが読めなくなる（hook と同じく、描き直すたびに実行ファイルを
 // exec する約束である）。
@@ -1761,7 +1765,7 @@ func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
 		fmt.Fprintln(stdout, statuslineclient.Output)
 		return 0
 	}
-	return statuslineclient.Run(stdin, stdout, *socketFlag)
+	return statuslineclient.Run(stdin, stdout, *socketFlag, os.Getenv(statuslineclient.EnvForwardCommand))
 }
 
 // runHook は `continuo hook` サブコマンドである（設計 3-2）。

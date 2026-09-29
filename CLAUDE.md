@@ -125,7 +125,7 @@ os.Rename(tmp.Name(), path)
 **何が起きるか。**continuo は常駐プロセスである。`go build -o ~/.local/bin/continuo ./cmd/continuo` は
 **rename で実行ファイルを差し替える**ので inode が変わり、**動いている continuo は、開いたままの古い実体で最後まで走り切る。**
 **ところが Claude Code の hook は、turn ごとにそのパスを exec する**
-（[internal/orchestrator/settings.go:387-388](internal/orchestrator/settings.go#L387-L388) が
+（[internal/orchestrator/settings.go:392-393](internal/orchestrator/settings.go#L392-L393) が
 `<continuo のパス> hook --socket <パス> --pending-dir <パス>` を組み立て、issue ごとの設定ファイルへ書く）。
 **つまり「本体は古い・hook は新しい」という混ざった状態が、ビルドするたびに必ず起きる。**
 
@@ -140,17 +140,17 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 **`continuo statusline` も、同じ約束の上にある。**Claude Code はステータスラインを描き直すたびに、
 [internal/orchestrator/settings.go:106](internal/orchestrator/settings.go#L106) が組み立てた
 `'<continuo のパス>' statusline --socket '<sl.sock のパス>'` を exec する
-（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:438](internal/orchestrator/statuslinefetch.go#L438)）の両方に書く）。
+（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:563](internal/orchestrator/statuslinefetch.go#L563)）の両方に書く）。
 **ビルドするたびに「本体は古い・statusline は新しい」が混ざるのも、hook と同じである。**
 **この項目の「やること」は、`continuo statusline` の挙動を変える変更にも当てる**（人間の決定。2026-09-28）。
 「挙動が変わる」とは、下の表のどれかである。
 
 | 何が変わるか | 例 |
 | --- | --- |
-| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1657-1666](internal/cli/cli.go#L1657-L1666) の `runStatusline`） |
+| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1760-1769](internal/cli/cli.go#L1760-L1769) の `runStatusline`） |
 | **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:826](internal/daemon/daemon.go#L826)） |
 | **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:144](internal/orchestrator/quota.go#L144) の `OnStatusline`） |
-| **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**固定の1行** `continuo`（[internal/statuslineclient/client.go:31](internal/statuslineclient/client.go#L31)。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
+| **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**標準出力**（転送先が無ければ固定の1行 `continuo`（[internal/statuslineclient/client.go:55](internal/statuslineclient/client.go#L55)）、あれば転送した利用者のステータスラインの出力（設計 3-84）。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
 
 **hook と違うところ。**ステータスラインは hook ではない。**壊れても、hook が届けている turn の終わりには効かない。**
 効くのは使用率である。動いている本体へ値が届かなくなり、次の2つが起きる。
@@ -279,7 +279,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方（`hooks.sock` と `sl.sock`）。ずれると hook と statusline の宛先が消える |
 | [internal/orchestrator/orchestrator.go:1486-1490](internal/orchestrator/orchestrator.go#L1486-L1490) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
-| [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・固定の1行 `continuo`・終了コード 0） |
+| [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・標準出力（転送先が無ければ固定の1行 `continuo`、あれば転送した出力。設計 3-84）・終了コード 0） |
 | [internal/orchestrator/statuslinefetch.go](internal/orchestrator/statuslinefetch.go) | statusline取得用の設定ファイルに statusLine を書く場所 |
 | [internal/orchestrator/quota.go](internal/orchestrator/quota.go) | 届いた1行の解釈（`OnStatusline`）。**受ける側の解釈そのもの** |
 | [internal/daemon/daemon.go](internal/daemon/daemon.go) | `sl.sock` と `hooks.sock` のパスを決めて本体へ渡す場所。ずれると宛先が消える |
@@ -439,7 +439,7 @@ git worktree remove "$ROLLBACK"
 - **毎周、判断票をそのまま人間へ報告する。返事は待たずに次を回す。**周の途中で「続けてよいか」を訊かない（止まるのは連続10回のときと、人間に訊かないと決められないことが出たとき）
 - **突き合わせの結果が「いまのまま」になってもよい。**何かを変えるために変えない
 - **削除が起きた周に回す設計の敵対的レビューは、設計レビューの側に数える。**設計レビューの回数は、pull request を作ったときの本文へ書き写す
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:11301](docs/plans/continuo_design.md#L11301) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:11567](docs/plans/continuo_design.md#L11567) が認めている）。**人間がやるのは、設計文書の 4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **worker へ渡す製品の説明は、次の段落をそのまま渡す。要約しない**
 
   > **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、

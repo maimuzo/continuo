@@ -142,7 +142,8 @@ func logCount(fx *fixture, substr string) int {
 //     `--disable-slash-commands`・`--session-id`
 //   - 送る文は `hello`
 //   - statusline取得用の設定ファイルは `statusLine` と `env` だけを持ち、`env` は `claude.env` から
-//     `CLAUDE_CODE_RETRY_WATCHDOG` を除いて `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足したもの。0600
+//     `CLAUDE_CODE_RETRY_WATCHDOG` を除いて `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` と空の
+//     `CONTINUO_STATUSLINE_COMMAND` を足したもの（設計 3-84a）。0600
 //
 // 与える情報: `claude.env` に架空のプロキシと `CLAUDE_CODE_RETRY_WATCHDOG` を書いた設定。
 // hello を受けたら値を送る Claude Code。
@@ -235,9 +236,12 @@ func TestStatuslineFetch_信頼済みのcloneでhaikuを起動しhelloを送っ�
 	wantEnv := map[string]string{
 		"HTTPS_PROXY":                     "http://proxy.example.com:8080",
 		"CLAUDE_CODE_SKIP_PROMPT_HISTORY": "1",
+		// **転送はしない**（設計 3-84a）。空文字で書き、pane が受け継いだ同じ名前の変数を拾わせない。
+		"CONTINUO_STATUSLINE_COMMAND": "",
 	}
-	if len(env) != len(wantEnv) || env["HTTPS_PROXY"] != wantEnv["HTTPS_PROXY"] ||
-		env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] != "1" {
+	if forward, ok := env["CONTINUO_STATUSLINE_COMMAND"]; len(env) != len(wantEnv) ||
+		env["HTTPS_PROXY"] != wantEnv["HTTPS_PROXY"] ||
+		env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] != "1" || !ok || forward != "" {
 		t.Errorf("env が違う: %v（want %v）", env, wantEnv)
 	}
 	var sl struct {

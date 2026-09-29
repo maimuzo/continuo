@@ -16,6 +16,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/statuslineclient"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -553,6 +554,8 @@ type statuslineFetchSettings struct {
 //
 // **env は claude.env から CLAUDE_CODE_RETRY_WATCHDOG を除き、CLAUDE_CODE_SKIP_PROMPT_HISTORY=1 を
 // 足したもの**（会話の記録を残さない。issue の run と同じく設定ファイルの env で受け取る）。
+// **CONTINUO_STATUSLINE_COMMAND はいつも空文字で書く**（設計 3-84a）。statusline取得は利用者の設定を
+// 読まない仕組みなので転送しない。空文字で書くのは、pane が受け継いだ同じ名前の変数を拾わないためである。
 //
 // 戻り値: 書いたファイルの絶対パス。
 func (o *Orchestrator) writeStatuslineFetchSettings() (string, error) {
@@ -568,6 +571,7 @@ func (o *Orchestrator) writeStatuslineFetchSettings() (string, error) {
 		env[k] = v
 	}
 	env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1"
+	env[statuslineclient.EnvForwardCommand] = ""
 	data, err := json.MarshalIndent(statuslineFetchSettings{
 		StatusLine: o.statusLineSetting(),
 		Env:        env,
