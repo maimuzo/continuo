@@ -46,6 +46,36 @@ const (
 // **`agent.prompt` は走っていない。**この待ちは goroutine を1つ寝かせるだけである。
 const terminatingPollInterval = 500 * time.Millisecond
 
+// waitWhileTerminating は、終わらせる印（`terminating`）が下りるまで待つ
+// （issue #173。実装レビュー6周目の HIGH）。
+//
+// **待ち受けから戻ったあと、turn の結末を処理する前に呼ぶ。**
+// **印が立っているあいだに結末を処理すると、手放しがカンバンへ書かないと
+// 約束しているのに、turn の側が Status を動かしてコメントを投稿する。**
+//
+// **ループの先頭の待ちと同じ間隔で見る。**下りたことを知らせる仕掛けが無いためである。
+//
+// ctx: turn ループのコンテキスト。
+// rs: 対象の run。
+// epoch: この turn ループの世代。
+// 戻り値: **結末を処理してよければ true。**取り返しのつかない印が立ったか
+// コンテキストが切れたら false（呼び出し元は抜ける）。
+func (o *Orchestrator) waitWhileTerminating(ctx context.Context, rs *runState, epoch int) bool {
+	for {
+		if rs.workerRetired(epoch) {
+			return false
+		}
+		if rs.currentWorker(epoch) {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(terminatingPollInterval):
+		}
+	}
+}
+
 // startTurnLoop は run ごとの turn ループの goroutine を起こす（設計 3-8）。
 //
 // **巡回のループはこれでブロックしない。**`agent.prompt` を wait つきで呼ぶと turn の
@@ -148,7 +178,9 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **最長で `claude.turn_timeout_ms`（既定1時間）かかる。**
 			// **そのあいだ、この goroutine は 500ms ごとに目を覚ます**（1時間で約7200回）。
 			// **目を覚ましてすることは、印を1回読むことだけである。**
-			// **後者では `workerRetired` が先に真になるので、上の枝で抜ける。**
+			// **後者でも、`markWorkerStopped` が呼ばれるのは `ensureAgentComment` を抜けたあとである。**
+			// **だから1時間のあいだ `workerRetired` は偽で、ここで待ち続ける。**
+			// **抜けるのは、その次の目覚めである。**
 			select {
 			case <-ctx.Done():
 				return
@@ -248,9 +280,27 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **`currentWorker` ではなく `workerRetired` を見る**（issue #173）。
 			// **`terminating` は一時的な印なので、それで抜けると
 			// 手放しを見送ったときに指示を送る者がいなくなる。**
-			// **待つのはループの先頭が受け持つ。**
 			o.logger.Debug("待ち受けから戻ったときには別の経路が run を終わらせていました",
 				"identifier", snap.Identifier)
+			return
+		}
+		// **終わらせる印が立っているあいだは、この turn の結末を処理しない**
+		// （実装レビュー6周目の HIGH）。
+		//
+		// **抜けてはならない**（上の理由）。**だが、そのまま進んでもならない。**
+		// **手放しは `beginTerminal` を同期で取ってから、最大90秒かけて段1〜段4 を走る**
+		// （担当の確かめに `quotaReleaseCheckBudget`、`after_run` に `workspace_hooks.timeout_ms`、
+		// GitHub への書き込みに `quotaReleaseWriteBudget`）。
+		// **その窓で turn が終わると、`turnEnded` の処理が Status を動かしてコメントを投稿する。**
+		// **手放しは「カンバンへは1バイトも書かない」と約束しているので、
+		// 同じ issue に食い違う2つの話が残る。**
+		// **`turnBlocked` の枝はさらに悪い。**`after_run`（利用者が書いた `git push`）が
+		// 走っている最中に、pane へ esc が飛ぶ。
+		//
+		// **だから、印が下りるまで待ってから結末を処理する。**
+		// **手放しが成功すれば `workerRetired` が真になって抜ける。**
+		// **見送れば印が下りて、そのまま結末を処理できる。**
+		if !o.waitWhileTerminating(ctx, rs, epoch) {
 			return
 		}
 		// **止められただけなら、run を諦めない。**
@@ -287,9 +337,11 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// 待っても解けない。引き渡しは直後に pane を閉じる（`finishRun`）ので、
 			// 待たずに esc を送ると、そのとき書きかけだった編集がまるごと消える。
 			o.waitForRunningSubagents(waitCtx, rs)
-			if ctx.Err() != nil || rs.workerRetired(epoch) {
+			if ctx.Err() != nil || rs.workerRetired(epoch) || !o.waitWhileTerminating(ctx, rs, epoch) {
 				// **待っている間に、別の経路がこの run を終わらせていた**（上の分岐と同じ理由）。
 				// **`workerRetired` を見る理由も同じである**（issue #173）。
+				// **`waitWhileTerminating` も同じ理由で置く**（実装レビュー6周目の HIGH）。
+				// **手放しが走っているあいだに esc を送ると、`after_run` の `git push` と重なる。**
 				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
 				// コメントも二重に投稿される（設計 3-21）。
 				o.logger.Debug("サブエージェントを待っている間に、別の経路が run を終わらせていました",

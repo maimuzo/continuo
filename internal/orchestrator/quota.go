@@ -521,6 +521,31 @@ func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
 	return snapshotOf(o.quota.windows, now, o.quota.freshAt)
 }
 
+// quotaForPoll は、巡回が使う2つの写しを1回のロックで返す（設計 3-27。issue #173。
+// 実装レビュー6周目の MEDIUM）。
+//
+// **2回に分けて読んではならない。**`OnStatusline` は statusline の受け口の goroutine から
+// 同じ mutex を取って保管値を差し替えるので、**2回のあいだに差し替わると、
+// 片方が「余裕が無い」と控えた時刻を、もう片方が「余裕がある」で消しうる。**
+// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
+//
+// **`checkStalls` はこれを1回だけ呼ぶ。**`quotaSnapshot` と `quotaForBid` を続けて
+// 呼ぶ形へ戻してはならない。
+//
+// 戻り値の1つ目: **新しさを問わない写し。**回復待ちと閾値の判定が読む（設計 3-77i）。
+// 戻り値の2つ目: **新しさを問う写し。**手放しと、その起点の記録が読む（設計 3-27）。
+// **新しくなければ nil。**
+func (o *Orchestrator) quotaForPoll() (*ratelimit.Snapshot, *ratelimit.Snapshot) {
+	now := o.now()
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	stale := snapshotOf(o.quota.windows, now, o.quota.freshAt)
+	if !o.quotaFreshLocked(now) {
+		return stale, nil
+	}
+	return stale, snapshotOf(o.quota.windows, now, now)
+}
+
 // snapshotOf は保管値から、期限内の期間だけの写しを作る。
 //
 // 戻り値: 写し。期限内の期間が無ければ nil。

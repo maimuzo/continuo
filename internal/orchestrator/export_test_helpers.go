@@ -68,9 +68,9 @@ func (o *Orchestrator) AbortTerminalForHumanForTest(ctx context.Context, issueID
 // （issue #197。実装レビュー5周目の MEDIUM）。
 //
 // **着手とやり直しの入口を、検査から作るための入り口である。**
-// **`Adopt` は `SendFirstPrompt` を立てない**（走っている worker を引き継ぐので、
-// 送るのは継続の指示である）。**だから、1回目の指示をまだ送っていない run を
-// `Adopt` だけでは作れない。**
+// **`Adopt` は2経路とも `SendFirstPrompt` を立てない**（`AwaitTurnEnd` の経路は turn を
+// 走らせており、`needsPrompt` の経路は次の巡回で継続の指示を受ける。設計 3-4 の段5c）。
+// **だから、1回目の指示をまだ送り始めていない run を `Adopt` だけでは作れない。**
 //
 // **手放しの門の1つが、その状態を見ている**（`releaseQuotaWaitExceeded` の `SendFirstPrompt`）。
 // **門を外しても落ちない検査しか無い状態にしないために、ここから作る。**

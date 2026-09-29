@@ -211,7 +211,7 @@ sequenceDiagram
 
 | どこ | 何を決めるか | どこへ倒すか | 読めなかったら |
 | --- | --- | --- | --- |
-| **`confirmStartup`**（[internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go)） | 起動できたと見なすか、`agent.start` をやり直すか | **`idle`/`done` かつ `interactive_ready` が成功。**`working` と `unknown` はどちらも `herdr.startup_timeout_ms` まで待つが、**超えたときの向きが逆である**——`working` は包まないので**やり直さない**（同じ関数の `working` の枝）、`unknown` は `ErrStartupRetryable` を包むので**やり直す**（同じ関数の `unknown` の枝）。`blocked` は `esc` を送って失敗 | **3通りに割れる。**(一) `agent_not_found` で、作業中にしか出ない hook が届いていれば `ErrStartupBusy`（やり直さない。同じ関数の `agent_not_found` の枝）。(二) `agent_not_found` で届いていなければ `ErrStartupRetryable`（やり直す）。**(三) それ以外の読み取り失敗は包まないので、やり直さずに失敗する**（同じ関数の、包まずに返す枝） |
+| **`confirmStartup`**（[internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go)） | 起動できたと見なすか、`agent.start` をやり直すか | **`idle`/`done` かつ `interactive_ready` が成功。**`working` と `unknown` はどちらも `herdr.startup_timeout_ms` まで待つが、**超えたときの向きが逆である**——`working` は包まないので**やり直さない**（同じ関数の `working` の枝）、`unknown` は `ErrStartupRetryable` を包むので**やり直す**（同じ関数の `default:`。`unknown` はここで受ける。`case herdr.AgentStatusUnknown` は無い）。`blocked` は `esc` を送って失敗 | **3通りに割れる。**(一) `agent_not_found` で、作業中にしか出ない hook が届いていれば `ErrStartupBusy`（やり直さない。同じ関数の `agent_not_found` の枝）。(二) `agent_not_found` で届いていなければ `ErrStartupRetryable`（やり直す）。**(三) それ以外の読み取り失敗は包まないので、やり直さずに失敗する**（同じ関数の `case err != nil:`。`agent_not_found` 以外の読み取り失敗） |
 | **`sendTurn`**（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go)） | 待ち受けが返った直後、引き渡すか turn の終わりを確かめるか | `blocked` なら引き渡し。**それ以外は全部 `confirmTurnEnd` へ**（`working` と `unknown` も。「想定外なので `Stop` を確かめてから判断する」） | — |
 | **`afterWaitTimeout` の待ち直し**（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go)） | 枠待ちの最中に待ちを終えるか | `blocked` なら引き渡し。`idle` かつ `Stop` を受けていれば終わり | — |
 | **`confirmTurnEnd`**（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go)） | 差し戻して書き直させている最中を、終わったと読むか | **順に3つ見る。**(一) 枠待ちなら待ちへ。(二) `blocked` なら引き渡し。**(三) 書き直しを待っている窓でだけ、`working` でなければ turn の終わりとして進む** | **進む側**（(三) の条件に `stErr != nil` が入っている） |
@@ -906,10 +906,11 @@ state_change_seq が2回続けて同じ             かつ
 | 2 | **agent 名を持っている** | まだ起動していない run を手放す |
 | 3 | **別の経路が終わらせている最中でない** | `finishRun` の途中で pane が閉じた run へ `agent.get` を投げ、run ごとに1回の info を使い切る |
 | 4 | **バックオフ中でない** | **打ち切られて pane を閉じた run へ `agent.get` を投げ続ける。**毎巡回1行ずつログが積まれる（4-5 の #5 が減らそうとしているものである） |
-| 5 | **1週間の枠の余裕が無く、待つ上限を超えている** | **枠と無関係に手放す。**手放しは枠のための仕組みである |
-| 6 | **`LastSeenAt` がゼロでない** | 時計を持たない run で、経過を 1970 年から測る |
-| 7 | **`LastBusyHookAt` からの無音が閾値に達している／`runIdleForTurnTimeout` が真** | **指示を送った直後の run が「進んでいない」と読まれ、`idle` が2回続いた時点で手放される。**turn の開始から2巡回（既定60秒）である。**見るのは `LastSeenAt` ではない**——あれは `clearWaitingQuota` も進めるので、**5時間の枠が明けるたびにこの門が `claude.turn_timeout_ms` ぶん再武装し、`weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく** |
-| 8 | **打ち切りを切っている機械では、余裕が無くなってからの経過が上限を超えている** | `claude.turn_timeout_ms` が0以下の機械で、**時間の物差しが1つも残らない。**枠の余裕が無くなった瞬間に、動いている run を手放す。**これは床であって、turn の進み具合は見ていない**（4-5 の #10） |
+| 5 | **1回目の指示をまだ送り始めていない** | **`beginAttempt` から `beginTurn` までの窓で手放す。**その run は agent 名を持っているが、まだ1回も指示を投げていない |
+| 6 | **1週間の枠の余裕が無く、待つ上限を超えている** | **枠と無関係に手放す。**手放しは枠のための仕組みである |
+| 7 | **`LastSeenAt` がゼロでない** | 時計を持たない run で、経過を 1970 年から測る |
+| 8 | **`LastBusyHookAt` からの無音が閾値に達している／`runIdleForTurnTimeout` が真** | **指示を送った直後の run が「進んでいない」と読まれ、`idle` が2回続いた時点で手放される。**turn の開始から2巡回（既定60秒）である。**見るのは `LastSeenAt` ではない**——あれは `clearWaitingQuota` も進めるので、**5時間の枠が明けるたびにこの門が `claude.turn_timeout_ms` ぶん再武装し、`weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく** |
+| 9 | **打ち切りを切っている機械では、余裕が無くなってからの経過が上限を超えている** | `claude.turn_timeout_ms` が0以下の機械で、**時間の物差しが1つも残らない。**枠の余裕が無くなった瞬間に、動いている run を手放す。**これは床であって、turn の進み具合は見ていない**（4-5 の #10） |
 
 **どの門に検査が在るかを、変異で測った**（2026-09-29。門を1本だけ外して `go test ./test/...` を回した）。
 
@@ -919,18 +920,26 @@ state_change_seq が2回続けて同じ             かつ
 | 2 agent 名を持っている | **赤**（`TestQuota_画面を持っていないrunは手放さない`） |
 | 3 別の経路が終わらせている最中でない | **緑**（検査が無い。**外から `terminalBusy` の状態を作る手立てが無い**） |
 | 4 バックオフ中でない | **緑**（検査が無い。**外から `BackoffUntil` を立てるには stall を1回起こす必要があり、この判定と両立しない**） |
-| 5 1週間の枠の余裕が無く、上限を超えている | **赤**（`TestQuota_リセット時刻が読めず経過も溜まっていなければ手放さない`） |
-| 6 `LastSeenAt` がゼロでない | **緑**（**いまは到達不能である。**ゼロが入る経路が将来できたときのための門） |
-| 7 無音が閾値に達している | **緑**（`if` が2本あるので、両方外したときだけ落ちる。`TestQuota_忙しいhookを受けた直後のrunは手放さない`） |
-| 8 打ち切りを切っている機械の床 | **赤**（`TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない`） |
+| 5 1回目の指示をまだ送り始めていない | **赤**（`TestQuota_1回目の指示をまだ送り始めていないrunは手放さない`） |
+| 6 1週間の枠の余裕が無く、上限を超えている | **赤**（`TestQuota_リセット時刻が読めず経過も溜まっていなければ手放さない`） |
+| 7 `LastSeenAt` がゼロでない | **緑**（**いまは到達不能である。**ゼロが入る経路が将来できたときのための門） |
+| 8 無音が閾値に達している | **緑**（`if` が2本あるので、両方外したときだけ落ちる。`TestQuota_忙しいhookを受けた直後のrunは手放さない`） |
+| 9 打ち切りを切っている機械の床 | **赤**（`TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない`） |
 
 **3と4には検査が無い。**外からその状態を作る手立てが無いためである。
+
+**手放しの最中に turn の結末を処理しない待ち**（`turn.go` の `waitWhileTerminating`）**にも検査が無い。**
+**待ちを2箇所とも外して `go test ./test/...` を回したが、落ちたのは差分の外の1件だけだった**
+（2026-09-29 に測った）。**理由は、その窓を検査から作れないことである。**
+`terminating` を外から立てる入り口が無く（`AbortTerminalForHumanForTest` は立てた直後に打ち切りまで走る）、
+**その印が立っているあいだに turn の結末を作るには、`Stop` hook と印の両方を同じ窓へ入れる必要がある。**
+**入り口を足して測る形は、検査専用の API を3つ増やすことになるので採らなかった。**
 **「門を外すと落ちる検査を足した」と書くときは、その門だけを外して測ること**
 （2026-09-29 に、冗長な相手がある門について「1本外しても落ちる」と誤って申告した）。
 
-**1つ目と7つ目がいちばん効く。**
+**1つ目と8つ目がいちばん効く。**
 **1つ目**（人間が引き取っていない）**を落とすと、人間が話している pane で `git push` が走り、担当が外れる。**
-**7つ目**（無音が閾値に達している）**を落とすと、別の機械が入札し直し、同じ worktree に2本目の Claude Code が立つ。**
+**8つ目**（無音が閾値に達している）**を落とすと、別の機械が入札し直し、同じ worktree に2本目の Claude Code が立つ。**
 **`internal/orchestrator/reconcile.go` へのリンクは、この文書では行番号を書かない**
 （2026-09-29 に決めた）。**関数名と門の名前で指す。**
 **理由は実測である。**同じ pull request の中で2周続けて、付け替えた行番号が
@@ -1151,7 +1160,7 @@ state_change_seq が2回続けて同じ             かつ
 | --- | --- |
 | **打ち切りの判定** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `if silence <= 0 { return }` の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
 | **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の無音の門2本 の `silence > 0` と `!stallOff` が両方偽になる（`stallOff` は巡回の先頭で1回だけ作るローカル変数である。`stallDetectionOff()` は呼び出し元が0件になったので消した）。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
-| **残る条件** | **4-2 の表のうち、外れるのは7つ目（無音の門）だけである。**残りは全部残る（人間が引き取っていない／agent 名を持っている／別の経路が終わらせている最中でない／バックオフ中でない／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**そのうえで、8つ目の床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**だから「時間の物差しが1つも残らない」ではない。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
+| **残る条件** | **4-2 の表のうち、外れるのは8つ目（無音の門）だけである。**残りは全部残る（人間が引き取っていない／agent 名を持っている／別の経路が終わらせている最中でない／バックオフ中でない／**1回目の指示を送り始めている**／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**そのうえで、9つ目の床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**だから「時間の物差しが1つも残らない」ではない。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
 
 **無音の門は外れる**（4-5 の #10）。**代わりに床が効く**——`WeeklyShortSince` からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**それを承知で、手放しだけは効かせている。**
 **効かせないと、`weekly_wait_limit_minutes` がその設定の機械で一度も効かない。**

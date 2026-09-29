@@ -652,29 +652,32 @@ func TestQuota_人間が引き取っている最中に担当が移ったらpane�
 	}
 }
 
-// TestQuota_1回目の指示をまだ送っていないrunは手放さない は、設計 3-27 の門の6つ目のあとの門を
-// 確かめる（実装レビュー5周目の MEDIUM）。
+// TestQuota_1回目の指示をまだ送り始めていないrunは手放さない は、設計 3-27 の門の5つ目を
+// 確かめる（実装レビュー5周目の MEDIUM。**6周目に名前と説明を直した**）。
 //
 // 目的: **無音の門は、この窓では2本とも開く。**
 // 1本目（`LastBusyHookAt`）は、やり直した attempt では**前の attempt の時刻**が残っており、
 // それは必ず閾値より古い。新しく着手した run ではゼロ値で、こちらも門を通す。
 // 2本目（`runIdleForTurnTimeout`）は、`hookSeenThisTurn` が偽のとき**無条件に真**を返す。
-//
 // **残る守りは `paneStopped` の2巡回（既定60秒）だけになる。**
-// **1回目の指示が届かずに agent が `idle` のまま座っていると、
-// 60秒で `after_run`（利用者が書いた `git push`）が走り、担当者が外れ、pane が閉じる。**
-// **その run は、まだ1バイトも仕事をしていない。**
+//
+// **この門が塞ぐのは、`beginAttempt` から `beginTurn` までの窓だけである。**
+// **`beginTurn` は `agent.prompt` を投げる前に `SendFirstPrompt` を下ろす**ので、
+// **「指示を投げたのに hook が1件も戻らない run」は門の外である。**
+// **5周目はそちらも塞いだと書いたが、それは誤りだった**——`beginTurn` を通した状態を作って
+// 測ると手放しは起きる（2026-09-29 に測った）。
+// **門の外の窓は、設計 3-27 が「通してよい」と決めている。**塞ぐなら先に設計を直すこと。
 //
 // 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
-// **`beginAttempt` を通して、1回目の指示を送る前の状態にした run。**
+// **`beginAttempt` を通して、1回目の指示を送り始める前の状態にした run。**
 // 成功条件: 手放さないこと。担当者が変わらず、pane が1つも閉じられないこと。
-func TestQuota_1回目の指示をまだ送っていないrunは手放さない(t *testing.T) {
+func TestQuota_1回目の指示をまだ送り始めていないrunは手放さない(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_FIRSTPROMPT")
-	// **`Adopt` は `SendFirstPrompt` を立てない**（走っている worker を引き継ぐ形なので、
-	// 送るのは継続の指示である）。**着手とやり直しの入口を通して、1回目の指示を送る前にする。**
+	// **`Adopt` は2経路とも `SendFirstPrompt` を立てない。**
+	// **着手とやり直しの入口を通して、1回目の指示を送り始める前にする。**
 	if !fx.Orc.BeginAttemptForTest(issue.ID) {
 		t.Fatal("印を持つ run が無い")
 	}
@@ -686,13 +689,13 @@ func TestQuota_1回目の指示をまだ送っていないrunは手放さない(
 	}
 
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
-		t.Fatalf("1回目の指示をまだ送っていない run の担当者を書き換えた: %v\n%s", got, fx.Logs.String())
+		t.Fatalf("1回目の指示をまだ送り始めていない run の担当者を書き換えた: %v\n%s", got, fx.Logs.String())
 	}
 	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
-		t.Fatalf("1回目の指示をまだ送っていない run の pane を閉じた: %v", ids)
+		t.Fatalf("1回目の指示をまだ送り始めていない run の pane を閉じた: %v", ids)
 	}
 	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
-		t.Fatalf("1回目の指示をまだ送っていない run を手放した:\n%s", got)
+		t.Fatalf("1回目の指示をまだ送り始めていない run を手放した:\n%s", got)
 	}
 }
 

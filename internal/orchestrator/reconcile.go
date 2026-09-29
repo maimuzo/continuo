@@ -608,6 +608,30 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
 			continue
 		}
+		// **1回目の指示をまだ送り始めていない run は手放さない**（実装レビュー5周目の MEDIUM。
+		// **6周目に説明と位置を直した**）。
+		//
+		// **この門が塞ぐのは、`beginAttempt` から `beginTurn` までの窓だけである。**
+		// **`SendFirstPrompt` を下ろすのは `beginTurn` で、`sendTurn` はその1行目で呼ぶ。**
+		// **つまり `agent.prompt` を投げる前に下りる。**「送り終えた」ではなく「送り始めた」である。
+		// **5周目は「送り終えていない run は手放さない」と書いたが、それは誤りだった。**
+		// `beginTurn` を通した状態を作って測ると、手放しは起きる（2026-09-29 に測った）。
+		//
+		// **指示を投げたのに hook が1件も戻らない run は、この門の外である。**
+		// **そちらは下の `paneStopped` が `idle` か `done` を2巡回続けて読むまで手放さない。**
+		// **設計 3-27 が「1度も忙しい hook を受けていない run は、ゼロ値のままここを通る。通してよい」
+		// と決めている。**塞ぐなら、先に設計を直すこと。
+		//
+		// **`Adopt` は2経路とも `SendFirstPrompt` を立てない**ので、引き継いだ run はこの門の外である。
+		// **`AwaitTurnEnd` の経路は turn を走らせており、`needsPrompt` の経路は
+		// 次の巡回で継続の指示を受ける**（設計 3-4 の段5c）。
+		//
+		// **位置は、枠の一覧を走査する門より前である。**あちらは run ごとに closure を2つ確保する
+		// （`weeklyWaitExceededWith` の「組み立てるのは、下の門を全部抜けてから」と同じ向き）。
+		// **こちらは bool を1つ読むだけなので、先に落とすほうが安い。**
+		if snap.SendFirstPrompt {
+			continue
+		}
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
 		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
 		// **印を門にすると、100%でしか手放せなくなり、
@@ -641,24 +665,6 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **ゼロが入る経路が将来できたとき、1970年からの経過として通ってしまう。**
 		// **通ると、着手した瞬間の run が「上限を超えた」と読まれて手放される。**
 		if snap.LastSeenAt.IsZero() {
-			continue
-		}
-		// **1回目の指示をまだ送り終えていない run は手放さない**（実装レビュー5周目の MEDIUM）。
-		//
-		// **下の無音の門は、この窓では2本とも開く。**
-		// 1本目（`LastBusyHookAt`）は、やり直した attempt では**前の attempt の時刻**が残っており、
-		// それは必ず閾値より古い。**新しく着手した run ではゼロ値で、こちらも門を通す。**
-		// 2本目（`runIdleForTurnTimeout`）は、`hookSeenThisTurn` が偽のとき**無条件に真**を返す。
-		//
-		// **残る守りは `paneStopped` の2巡回（既定60秒）だけになる。**
-		// **1回目の指示が届かずに agent が `idle` のまま座っていると、
-		// 60秒で `after_run`（利用者が書いた `git push`）が走り、担当者が外れ、pane が閉じる。**
-		// **その run は、まだ1バイトも仕事をしていない。**
-		//
-		// **`SendFirstPrompt` は `beginAttempt` が真に戻す**ので、やり直した attempt も守られる。
-		// **走っている最中に引き継いだ run（`AwaitTurnEnd`）では偽なので、そちらは守らない。**
-		// あちらは既に turn を走らせている。
-		if snap.SendFirstPrompt {
 			continue
 		}
 		// **この門は「指示を送った直後の run を手放さない」ために在る**（issue #197）。
@@ -982,10 +988,15 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	//
 	// **枠の写しは、この巡回で1回だけ読む**（設計 3-27。issue #197）。
 	// **手放しの側と、下の `noteWeeklyShort` の側で別々に読んではならない。**
-	// `pollQuota` は turn の goroutine から並行に走るので、2回のあいだに写しが差し替わると、
-	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
+	// `pollQuota` は turn の goroutine から、`OnStatusline` は statusline の受け口の
+	// goroutine から、それぞれ同じ mutex を取って保管値を差し替える。
+	// **2回のあいだに差し替わると、片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
+	//
+	// **だから `quotaForPoll` が2つの写しを1回のロックで返す**（実装レビュー6周目の MEDIUM）。
+	// **`quotaSnapshot` と `quotaForBid` を続けて呼ぶ形へ戻してはならない。**
+	// **あれは別々にロックを取るので、この不変条件を破る。**
 	now := o.now()
-	quotaSnap := o.quotaSnapshot()
+	quotaSnap, quotaFresh := o.quotaForPoll()
 	// **手放しと、その起点の記録にだけは、新しさを問う写しを渡す**（設計 3-27。実装レビュー3周目の HIGH）。
 	//
 	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
@@ -1000,7 +1011,6 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **印を外す側（`clearQuotaWaitWhenBack`）と立てる側（`isQuotaWaitingWith`）は、
 	// いまのまま新しさを問わない。**あちらは不可逆ではなく、
 	// **止めると印が永久に残る**（1周目の MEDIUM）。
-	quotaFresh := o.quotaForBid()
 	releasing := o.releaseQuotaWaitExceeded(ctx, quotaFresh, now)
 	// **時刻を取り直す**（issue #173）。
 	// **`releaseQuotaWaitExceeded` は run ごとに herdr を1回叩く。**
