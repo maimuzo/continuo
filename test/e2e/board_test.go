@@ -670,7 +670,7 @@ func commentsPayload(b *ghBoard, vars map[string]any) map[string]any {
 		"comments": map[string]any{"nodes": nodes}}}
 }
 
-// relayCommentsPayload は relay 専用のコメントの問い合わせに答える（設計 3-84。issue #246）。
+// relayCommentsPayload は relay 専用のコメントの問い合わせに答える（設計 3-85。issue #246）。
 //
 // **共用の応答に、投稿者の立場と、隠されているかを足したものである。**投稿者の立場は、
 // カンバンの持ち主（gh の持ち主）が書いたものを `OWNER`、それ以外を `NONE` とする。

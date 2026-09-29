@@ -23,7 +23,7 @@ import (
 // `gh` の JSON 出力（`gh issue view --json comments` と REST）で自分で読む。
 // **テキスト表示（`--comments`）は使わせない**（設計 3-72）。
 // **例外は1つだけある。**閉じた記録より後に信頼できる人間が書いたコメントを、
-// 組み立てたあとの末尾に付ける（relay。設計 3-84）。付けるのは呼び出し側の `buildTurnText` であり、
+// 組み立てたあとの末尾に付ける（relay。設計 3-85）。付けるのは呼び出し側の `buildTurnText` であり、
 // ここ（と `continuo prompt --show`）の文面には入らない。
 //
 // issue: 対象の issue。

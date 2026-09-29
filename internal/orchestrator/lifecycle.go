@@ -1045,7 +1045,7 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // `turn を送れませんでした（agent is no longer running）` を WARN で印字する。
 // **それは外の障害ではなく、continuo が1秒前に自分で pane を閉じた結果である。**
 //
-// **閉じたら、閉じた記録を issue へ書く**（設計 3-84。issue #246。`settleClosedRecord`）。
+// **閉じたら、閉じた記録を issue へ書く**（設計 3-85。issue #246。`settleClosedRecord`）。
 // 書くのは、閉じた pane でその run の `agent.start` が済んでいたときか、保留が立っているとき
 // （閉じる pane が無くても書く）である。**閉じ損ねたら書かない。**`mode` で書かない・保留するを指定する。
 //
@@ -1067,7 +1067,7 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closed
 	// `tracker.direct_chat_state` のあいだは巡回も dispatch もその issue を触らないので、
 	// pane はそのまま残る。
 	if rs.inDirectChatMode() {
-		// **閉じた記録は書かない。保留も残す**（設計 3-84）。direct chat を抜けて閉じるときに書く。
+		// **閉じた記録は書かない。保留も残す**（設計 3-85）。direct chat を抜けて閉じるときに書く。
 		o.logger.Info("人間が引き取っているので pane を閉じません（direct chat のままです）",
 			"identifier", rs.issue().Identifier)
 		return false
@@ -1079,7 +1079,7 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closed
 	// **閉じる前に伝える。**順番を入れ替えてはならない。
 	rs.markWorkerStopped()
 	if paneID == "" {
-		// **保留が立っていれば、閉じる pane が無くても書く**（設計 3-84）。
+		// **保留が立っていれば、閉じる pane が無くても書く**（設計 3-85）。
 		// 報告の書かせ直しの段2 で閉じたあと、段3 以降で抜けた道がここへ来る。
 		o.settleClosedRecord(ctx, rs, "", false, mode)
 		return true
@@ -1116,13 +1116,13 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closed
 	}
 	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
 		if paneAlreadyGone(err) {
-			// **その pane はもう無い。**Claude Code は動いていないので、閉じたとみなす（設計 3-84）。
+			// **その pane はもう無い。**Claude Code は動いていないので、閉じたとみなす（設計 3-85）。
 			o.logger.Info("閉じようとした pane はもうありませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID)
 			o.settleClosedRecord(ctx, rs, paneID, true, mode)
 			return true
 		}
 		o.logger.Warn("pane を閉じられませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)
-		// **閉じ損ねたら記録を書かない。保留も捨てる**（設計 3-84）。Claude Code が生きたまま記録を付けない。
+		// **閉じ損ねたら記録を書かない。保留も捨てる**（設計 3-85）。Claude Code が生きたまま記録を付けない。
 		o.settleClosedRecord(ctx, rs, paneID, false, mode)
 		return false
 	}
@@ -1284,7 +1284,7 @@ func limitStrings(in []string, n int) []string {
 //
 // **成果の要約は書かない**（設計 3-29）。**continuo が書くコメントは、self_marker（空でないとき）か
 // `<!-- continuo:` の印で始まる**（この通知・Status を動かした記録（`postStatusMove`）・
-// direct chat の案内・関門の案内・入札・Claude Code を閉じた記録（設計 3-84）など）。
+// direct chat の案内・関門の案内・入札・Claude Code を閉じた記録（設計 3-85）など）。
 //
 // **1つの run について1件だけ投稿する。**2件目以降は理由をログに残して捨てる。
 //

@@ -16,13 +16,13 @@ import (
 // 外から組み立てさせる用途は無い。**検査だけが要る。**
 //
 // mode: `claude.permission_mode` の値。
-// relay: relay が有効かどうか（設計 3-84）。
+// relay: relay が有効かどうか（設計 3-85）。
 // 戻り値: permissionRemedyText と同じ文面。
 func PermissionRemedyTextForTest(mode string, relay bool) string {
 	return permissionRemedyText(mode, relay)
 }
 
-// 以下は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-84。issue #246）を
+// 以下は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-85。issue #246）を
 // test/internal/orchestrator から確かめるための入り口である。**本体の振る舞いは変えない。**
 
 // RelayMaxRunesForTest は、最初のメッセージに付ける節の長さの上限（rune 数）である。
@@ -200,4 +200,22 @@ func (o *Orchestrator) QuotaRefreshIntervalForTest() time.Duration {
 // PollAPIForTest は pollAPI を1回呼ぶ（巡回のほかの段を通さずに、usage API の読み取りだけを確かめる）。
 func (o *Orchestrator) PollAPIForTest(ctx context.Context) {
 	o.pollAPI(ctx)
+}
+
+// ResolveStatuslineForwardForTest は、利用者のステータスラインの転送先を決める処理
+// （resolveStatuslineForward）を test/internal/orchestrator から呼ぶための入り口である（設計 3-84a）。
+//
+// **優先順位と「キーはあるが条件に合わない」の扱いは、着手を通すと組み合わせが多すぎる**ので、
+// ここで直に確かめる。
+//
+// worktree: issue の worktree の絶対パス。
+// configDir: 利用者の設定ディレクトリ。
+// 戻り値の1つ目: 転送先のコマンド。見つからなければ空。
+// 戻り値の2つ目: 読めずに飛ばしたファイルのパス。
+func ResolveStatuslineForwardForTest(worktree, configDir string) (string, []string) {
+	var skipped []string
+	cmd := resolveStatuslineForward(statuslineForwardSources(worktree, configDir), func(path string, _ error) {
+		skipped = append(skipped, path)
+	})
+	return cmd, skipped
 }

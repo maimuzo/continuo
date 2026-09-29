@@ -2452,7 +2452,7 @@ const (
 	// （設計 3-83d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
 	KeyOrchestratorDirectChatReady Key = "orchestrator.direct_chat.ready"
 	// KeyOrchestratorRelayClosedRecord は、continuo が Claude Code を起動した pane を閉じたときに
-	// issue へ書く「閉じた記録」の2行目である（設計 3-84。issue #246）。1行目は `<!-- continuo:closed -->`
+	// issue へ書く「閉じた記録」の2行目である（設計 3-85。issue #246）。1行目は `<!-- continuo:closed -->`
 	// で、その印はコードが付ける（言語で変えない）。差し込む値は無い。
 	KeyOrchestratorRelayClosedRecord Key = "orchestrator.relay.closed_record"
 	// KeyOrchestratorDirectChatAssigneesInvalid は、direct chat のカードの担当者が1人ではないので

@@ -406,7 +406,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		if allClosed && inSet {
 			o.removeFromCloseSet(orph.identity.ProjectItemID)
 		}
-		// **閉じる対象を全部閉じられ、かつ1枚以上閉じたときだけ、閉じた記録を書く**（設計 3-84。issue #246）。
+		// **閉じる対象を全部閉じられ、かつ1枚以上閉じたときだけ、閉じた記録を書く**（設計 3-85。issue #246）。
 		// 0枚のときは書かない（印に入っていない active の worktree ごとに、巡回のたびにここへ来る）。
 		// 閉じ損ねた pane が残っていれば書かない（Claude Code が生きたまま記録を付けない）。
 		//
@@ -418,7 +418,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 	}
 }
 
-// recordOrphanClosed は、印に入っていない worktree の pane を閉じたあとで、閉じた記録を書く（設計 3-84）。
+// recordOrphanClosed は、印に入っていない worktree の pane を閉じたあとで、閉じた記録を書く（設計 3-85）。
 //
 // **書く前に、取り直した issue が worktree の置き場所と同じリポジトリのものかを確かめる**
 // （`issueAgreesWithPath` と同じ照合。身元ファイルの `project_item_id` はエージェントが書き換えられるので、
@@ -465,7 +465,7 @@ func (o *Orchestrator) recordOrphanClosed(
 // **閉じ損ねたら WARN を1行出し、偽を返す。**呼び出し側は集合に残して次の巡回でやり直す
 // （黙って着手されない issue を作らないため）。
 //
-// **閉じた枚数も返す**（設計 3-84）。1枚も無かったときも「全部閉じられた」は真なので、
+// **閉じた枚数も返す**（設計 3-85）。1枚も無かったときも「全部閉じられた」は真なので、
 // 閉じた記録を書くかはそれだけでは決められない。**その pane は既に無かった（`pane_not_found`）は、
 // 閉じられたものとして数える。**
 //
@@ -527,7 +527,7 @@ func (o *Orchestrator) closeOrphanPane(
 			"agent 名が無くても閉じる", includeUnnamed)
 		if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: p.PaneID}); err != nil {
 			if paneAlreadyGone(err) {
-				// **その pane はもう無い。**閉じられたものとして数える（設計 3-84）。
+				// **その pane はもう無い。**閉じられたものとして数える（設計 3-85）。
 				closed++
 				continue
 			}

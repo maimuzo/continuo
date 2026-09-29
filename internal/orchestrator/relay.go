@@ -1,7 +1,7 @@
 package orchestrator
 
 // 人間が issue に書いたコメントを、次に Claude Code を起動したときの最初のメッセージに付けて渡す
-// 機能（relay）である（設計 3-84。issue #246）。
+// 機能（relay）である（設計 3-85。issue #246）。
 //
 // **何のためにあるか。**`auto` の判定役（classifier）は user メッセージにある人間の意図しか許可として
 // 数えず、`gh` で読んだ issue のコメントは道具の結果として取り除く。**人間が issue のコメントで
@@ -32,18 +32,18 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// relayFetchTimeout は、最初のメッセージの直前にコメントを読む処理全体の期限の既定である（設計 3-84）。
+// relayFetchTimeout は、最初のメッセージの直前にコメントを読む処理全体の期限の既定である（設計 3-85）。
 //
 // **期限を過ぎたら、節を付けずに最初のメッセージだけを送る。**読めないことで着手を止めない。
 const relayFetchTimeout = 60 * time.Second
 
-// closedRecordWriteTimeout は、閉じた記録を1件書くときの期限である（設計 3-84）。
+// closedRecordWriteTimeout は、閉じた記録を1件書くときの期限である（設計 3-85）。
 //
 // **pane を閉じる期限とは別に取る。**止められた ctx からは `context.WithoutCancel` で切り離す
 // （後片付けの先例と同じ）。**やり直さない。**`addComment` は同じものを2回書くことがある。
 const closedRecordWriteTimeout = 10 * time.Second
 
-// relayMaxRunes は、最初のメッセージに付ける節の全体の長さの上限（rune 数）である（設計 3-84）。
+// relayMaxRunes は、最初のメッセージに付ける節の全体の長さの上限（rune 数）である（設計 3-85）。
 const relayMaxRunes = 30000
 
 // relayTrustedAssociations は、渡してよい投稿者の立場である（組み込みの指示書 4-1 の `trusted_comment` と同じ）。
@@ -59,7 +59,7 @@ var relayFixedAIMarkers = []string{
 	"<!-- design-review-skipped -->",
 }
 
-// closedRecordMode は、pane を閉じたときに閉じた記録をどう扱うかである（設計 3-84）。
+// closedRecordMode は、pane を閉じたときに閉じた記録をどう扱うかである（設計 3-85）。
 type closedRecordMode int
 
 const (
@@ -75,7 +75,7 @@ const (
 	closedRecordDefer
 )
 
-// closedRecordState は、run が持ち越している閉じた記録の状態である（設計 3-84）。
+// closedRecordState は、run が持ち越している閉じた記録の状態である（設計 3-85）。
 type closedRecordState int
 
 const (
@@ -91,7 +91,7 @@ const (
 	closedRecordCloseFailed
 )
 
-// relayEnabled は、relay が有効かを返す（設計 3-84）。
+// relayEnabled は、relay が有効かを返す（設計 3-85）。
 //
 // **記録を書く側・読む側・案内の文面の3か所が、これ1つで決める。**
 //
@@ -109,7 +109,7 @@ func relayEnabled(cfg config.Config) bool {
 }
 
 // relayRequestedWithoutSelfMarker は、relay を選んでいるのに self_marker が空で効かないかを返す
-// （起動時の WARN に使う。設計 3-84）。
+// （起動時の WARN に使う。設計 3-85）。
 //
 // cfg: 設定。
 // 戻り値: auto で relay_trusted_comments が真なのに self_marker が空なら true。
@@ -119,7 +119,7 @@ func relayRequestedWithoutSelfMarker(cfg config.Config) bool {
 		strings.TrimSpace(cfg.Tracker.Comments.SelfMarker) == ""
 }
 
-// relayAIMarkers は、AI が書いたとみなす本文の先頭の印を全部返す（設計 3-84）。
+// relayAIMarkers は、AI が書いたとみなす本文の先頭の印を全部返す（設計 3-85）。
 //
 // cfg: 設定。
 // 戻り値: 固定の4つに、空でない `tracker.comments.marker` と `self_marker` を足したもの。
@@ -133,7 +133,7 @@ func relayAIMarkers(cfg config.Config) []string {
 	return out
 }
 
-// relayAgentMarkers は、「前の回が閉じられたことを確かめられない」の判定に使う印を返す（設計 3-84）。
+// relayAgentMarkers は、「前の回が閉じられたことを確かめられない」の判定に使う印を返す（設計 3-85）。
 //
 // **`<!-- continuo:agent -->` と、空でない `tracker.comments.marker` である。**
 // 空の前方一致は全部のコメントに当たるので、空なら足さない。
@@ -148,7 +148,7 @@ func relayAgentMarkers(cfg config.Config) []string {
 	return out
 }
 
-// startsWithMarker は、本文の1行目が印で始まるかを返す（行頭の照合。設計 3-84）。
+// startsWithMarker は、本文の1行目が印で始まるかを返す（行頭の照合。設計 3-85）。
 //
 // **飛ばすのは前の空白・タブ・改行（`[ \t\r\n]*`）だけである**（組み込みの指示書 4-1 の jq の式と同じ）。
 // 全角空白などは飛ばさない。jq と違う判定にすると、エージェントが自分で読んだ結果と食い違う。
@@ -166,7 +166,7 @@ func startsWithMarker(body string, markers []string) bool {
 	return false
 }
 
-// trustedAssociation は、投稿者の立場が信頼できるものかを返す（設計 3-84）。
+// trustedAssociation は、投稿者の立場が信頼できるものかを返す（設計 3-85）。
 //
 // association: `authorAssociation` の値。
 // 戻り値: OWNER / MEMBER / COLLABORATOR のどれかなら true。
@@ -179,7 +179,7 @@ func trustedAssociation(association string) bool {
 	return false
 }
 
-// commentNumber は、コメントの URL の `#issuecomment-<番号>` から番号を読む（設計 3-84）。
+// commentNumber は、コメントの URL の `#issuecomment-<番号>` から番号を読む（設計 3-85）。
 //
 // **同じ秒に書かれたコメントの前後を決めるためだけに使う。**GitHub の作成時刻は秒までしか無い。
 //
@@ -202,7 +202,7 @@ func commentNumber(rawURL string) (int64, bool) {
 	return n, true
 }
 
-// relayOrder は、あるコメントが境目より後かを返す（設計 3-84）。
+// relayOrder は、あるコメントが境目より後かを返す（設計 3-85）。
 //
 // **作成時刻で決める。**同じ秒なら URL の番号を数として比べ、大きいほうを後とみなす。
 //
@@ -235,7 +235,7 @@ func lastTouched(c tracker.Comment) time.Time {
 	return c.CreatedAt
 }
 
-// relayVerdict は、コメントを選んだ結果の種類である（設計 3-84）。
+// relayVerdict は、コメントを選んだ結果の種類である（設計 3-85）。
 type relayVerdict int
 
 const (
@@ -259,7 +259,7 @@ type relaySelection struct {
 	Boundary tracker.Comment
 }
 
-// selectRelayComments は、渡すコメントを選ぶ（設計 3-84）。
+// selectRelayComments は、渡すコメントを選ぶ（設計 3-85）。
 //
 //	境目       … 信頼できる立場が書いた閉じた記録のうち、作成時刻がいちばん新しいもの
 //	渡すもの   … 境目より後に作られ、信頼できる立場で、AI の印が無く、隠されていないコメント
@@ -340,7 +340,7 @@ func selectRelayComments(
 	return relaySelection{Verdict: relayOK, Picked: picked, Boundary: boundary}
 }
 
-// sanitizeRelayBody は、渡すコメントの本文から制御文字を落とす（設計 3-84）。
+// sanitizeRelayBody は、渡すコメントの本文から制御文字を落とす（設計 3-85）。
 //
 // **改行とタブは残す。**本文の段落を崩さないためである。`\r` は落とす（改行は `\n` に揃う）。
 // hook から来た文字列を均す先例（`sanitizeSubagentField`）と同じく `unicode.IsControl` で見る。
@@ -360,7 +360,7 @@ func sanitizeRelayBody(body string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// buildRelaySection は、最初のメッセージの末尾に付ける節を組み立てる（設計 3-84）。
+// buildRelaySection は、最初のメッセージの末尾に付ける節を組み立てる（設計 3-85）。
 //
 // **長さの上限（relayMaxRunes）は節の全体に掛ける。**新しいものから本文を丸ごと入れ、
 // **最初に入らなかった1件で止める**（それより古いものは短くても入れない。途中を飛ばすと、
@@ -413,7 +413,7 @@ func buildRelaySection(picked []tracker.Comment) string {
 	return b.String()
 }
 
-// relaySectionFor は、最初のメッセージに付ける節を読んで組み立てる（設計 3-84）。
+// relaySectionFor は、最初のメッセージに付ける節を読んで組み立てる（設計 3-85）。
 //
 // **relay が無効なら何もしない**（試みたことにもしない）。draft issue（ノード ID が無い）も同じ。
 // **失敗はエラーにしない。**読めなかった・読み切れなかった・期限切れ・「記録が確かめられないとき」は、
@@ -476,7 +476,7 @@ func (o *Orchestrator) relaySectionFor(ctx context.Context, rs *runState) (strin
 	return buildRelaySection(sel.Picked), true
 }
 
-// paneAlreadyGone は、`pane.close` の失敗が「その pane は無い」かを返す（設計 3-84）。
+// paneAlreadyGone は、`pane.close` の失敗が「その pane は無い」かを返す（設計 3-85）。
 //
 // **無いなら Claude Code は動いていないので、閉じたとみなす**（閉じた記録を書く）。
 // herdr が返す形は 2026-09-29 に herdr 0.9.1 で測った（`herdr.ErrCodePaneNotFound`）。
@@ -488,7 +488,7 @@ func paneAlreadyGone(err error) bool {
 }
 
 // settleClosedRecord は、pane を閉じようとしたあとで、閉じた記録を書くか・保留するか・捨てるかを決める
-// （設計 3-84。issue #246）。
+// （設計 3-85。issue #246）。
 //
 // **書くのは次のどちらかのときである。**
 //
@@ -535,7 +535,7 @@ func (o *Orchestrator) settleClosedRecord(
 	o.recordWorkerClosed(ctx, rs.issue())
 }
 
-// closeFailedPanes は、この run が閉じ損ねた pane をもう一度閉じてみる（設計 3-84d）。
+// closeFailedPanes は、この run が閉じ損ねた pane をもう一度閉じてみる（設計 3-85d）。
 //
 // **pane の ID だけでは閉じない。**herdr は pane の ID を使い回しうるので、別の issue の pane を閉じないよう、
 // `pane.list` で cwd がこの run の worktree（かその内側）にある pane だけを閉じる。
@@ -605,7 +605,7 @@ func (o *Orchestrator) closeFailedPanes(ctx context.Context, rs *runState) bool 
 	return empty
 }
 
-// recordWorkerClosed は、issue へ閉じた記録を1件書く（設計 3-84。issue #246）。
+// recordWorkerClosed は、issue へ閉じた記録を1件書く（設計 3-85。issue #246）。
 //
 // **書くのは relay が有効なときだけである。**draft issue にはコメントできないので書かない。
 // **担当者が他人のアカウント1人のときは書かない**（担当が別の機械へ移ったあと。設計 3-77c・3-83h）。

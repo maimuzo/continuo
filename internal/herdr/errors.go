@@ -30,7 +30,7 @@ const ErrCodeAgentNotFound = "agent_not_found"
 // `{"error":{"code":"pane_not_found","message":"pane <ID> not found"}}` が返る）。
 //
 // **`pane.close` でこれが返ったら、その pane の Claude Code はもう動いていない。**
-// orchestrator は閉じたものとみなして、閉じた記録を書く（設計 3-84。issue #246）。
+// orchestrator は閉じたものとみなして、閉じた記録を書く（設計 3-85。issue #246）。
 const ErrCodePaneNotFound = "pane_not_found"
 
 // ErrCodeTimeout は、待ち受けつきの呼び出し（agent.prompt の wait / agent.wait）が

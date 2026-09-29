@@ -197,7 +197,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 						"\n元のエラー: %v", err))
 				return
 			}
-			// **relay を試みたあとは、読めたかどうかに関わらず、送る前の確認をもう一度通す**（設計 3-84）。
+			// **relay を試みたあとは、読めたかどうかに関わらず、送る前の確認をもう一度通す**（設計 3-85）。
 			// コメントを読んでいるあいだ（最大 60 秒）に、止められた・別の経路が run を終わらせた・
 			// 人間が direct chat へ引き取った、が起きうる。ループの先頭と同じものを見て、終わらせている
 			// 最中（`isTerminating`）も足す。**送る合図を立て直すのは、ループの先頭と同じく
@@ -455,7 +455,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // **「この停止は拒否とは別の原因のことがある」の書き方である。**第三者への注意と再起動は両方に入る。
 // **issue のコメントに許可を書いても、`gh` で読ませただけでは届かない。**判定役への要求から道具の結果は
 // 取り除かれ、issue のコメントは `gh` の出力（道具の結果）として届くためである
-// （公式文書の permission modes のページ。2026-09-18 取得）。**例外は relay である**（設計 3-84）。
+// （公式文書の permission modes のページ。2026-09-18 取得）。**例外は relay である**（設計 3-85）。
 // 閉じた記録のあとに書いたコメントは、次の着手の最初のメッセージに付けて渡すので、判定役に届く。
 //
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
@@ -507,7 +507,7 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string) string
 // **issue のコメントは `gh` の出力、つまり道具の結果として届く。**
 // 2026-09-18 に実測でも確かめた（OWNER が許可を書いたあと `[CI Bypass]` で拒否された）。
 //
-// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-84。issue #246）。
+// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-85。issue #246）。
 // 閉じた記録（`<!-- continuo:closed -->`）のあとに新しく書いたコメントは、次の着手の最初のメッセージ
 // （user メッセージ）に付けて渡すので、判定役に届く。**記録より前に書いたものは渡らない**ので、
 // 「記録が付いてから書く」と「効かなかったら記録のあとに書き直す」を添える。
@@ -553,7 +553,7 @@ func permissionRemedyText(mode string, relay bool) string {
 			thirdParty +
 			restart
 	}
-	// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-84）。
+	// **relay が有効なときだけ、コメントで許可を出す書き方を足す**（設計 3-85）。
 	commentGrant := ""
 	if relay {
 		commentGrant = "\n**ただし、continuo が1行目に `" + config.ClosedMarker + "` を置いた" +
@@ -601,7 +601,7 @@ func permissionRemedyText(mode string, relay bool) string {
 // **試行回数（`.attempt`）は再着手で埋まる。**1回目の着手では nil である
 // （`RetryCount` が 0 のため）。
 //
-// **1回目の本文にだけ、人間のコメントの節を付ける**（relay。設計 3-84。issue #246）。
+// **1回目の本文にだけ、人間のコメントの節を付ける**（relay。設計 3-85。issue #246）。
 // 継続の指示（「続けてください」）には付けない（人間の決定）。**テンプレートの展開に失敗したら読まない。**
 // relay の失敗はエラーにしない（エラーで返すと turnLoop が `failRun` へ落とすため）。
 //

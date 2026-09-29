@@ -109,7 +109,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 
 	// 段2: 先に worker を止める（同じセッション UUID が2つ生きるのを防ぐ）。
 	//
-	// **閉じた記録は書かずに保留する**（設計 3-84。issue #246）。ここで書くと、人間がその記録を見て
+	// **閉じた記録は書かずに保留する**（設計 3-85。issue #246）。ここで書くと、人間がその記録を見て
 	// 書いた許可が、段8 のあとの記録より前になり黙って落ちる。**段2 のあとの道は、どれも最後に
 	// 呼び出し側の `stopWorker`（`finishRunClaimed` / `failRun` / `abandonRunClaimed`）か、段8・段9 の
 	// `stopWorker` を通るので、そこで書く。**人間が direct chat で引き取った道は `abortTerminalForHuman` が書く。

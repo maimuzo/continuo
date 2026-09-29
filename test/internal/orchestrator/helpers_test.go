@@ -850,7 +850,7 @@ type fakeTracker struct {
 	// **巡回の途中に何かを起こすために使う**（issue #284。statusline取得の知らせが
 	// 巡回の途中に届く状況・巡回が長引く状況を作る）。錠の外で呼ぶ。
 	onStates func()
-	// relayErr は FetchRelayComments が返すエラーである（設計 3-84）。
+	// relayErr は FetchRelayComments が返すエラーである（設計 3-85）。
 	relayErr error
 	// relayTruncated は FetchRelayComments が「古い側を読み切れなかった」と名乗るかである。
 	relayTruncated bool
@@ -1170,7 +1170,7 @@ func (ft *fakeTracker) SetStateByAutomation(id, state string) {
 // isHandoffComment は、そのコメントが引き渡しの通知かどうかを返す。
 //
 // **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**（設計 3-29）。
-// 引き渡しの通知・Status を動かした記録・direct chat の案内・入札・Claude Code を閉じた記録（設計 3-84）などがある。
+// 引き渡しの通知・Status を動かした記録・direct chat の案内・入札・Claude Code を閉じた記録（設計 3-85）などがある。
 // **引き渡しの通知と Status を動かした記録はどちらにも self_marker が付くので、
 // `IsSelf` だけでは区別できない。**本文で選り分ける。
 func isHandoffComment(c tracker.Comment) bool {
@@ -1570,7 +1570,7 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
 		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
 		Author: ft.viewer.Login,
-		// **投稿者の立場を入れる**（設計 3-84）。本物の GitHub は、リポジトリの持ち主のアカウントが
+		// **投稿者の立場を入れる**（設計 3-85）。本物の GitHub は、リポジトリの持ち主のアカウントが
 		// 書いたコメントに `OWNER` を付ける。入れないと、continuo が書いた閉じた記録を境目として読めない。
 		AuthorAssociation: "OWNER",
 	}
@@ -1598,7 +1598,7 @@ func (ft *fakeTracker) FetchAllComments(
 	return out, ft.commentsTruncated, nil
 }
 
-// FetchRelayComments は、最初のメッセージに付けて渡すためにコメントを1件残らず返す（設計 3-84。issue #246）。
+// FetchRelayComments は、最初のメッセージに付けて渡すためにコメントを1件残らず返す（設計 3-85。issue #246）。
 //
 // **ctx を読む。**`relayGate` が立っていれば、閉じられるか ctx が切れるまで返らない
 // （期限切れと、読んでいる最中に止められた場面を作るため）。
@@ -1629,7 +1629,7 @@ func (ft *fakeTracker) FetchRelayComments(ctx context.Context, issueNodeID strin
 	return out, ft.relayTruncated, nil
 }
 
-// SetRelayError は FetchRelayComments が返すエラーを差し替える（設計 3-84）。
+// SetRelayError は FetchRelayComments が返すエラーを差し替える（設計 3-85）。
 //
 // err: 返すエラー。nil なら成功にする。
 func (ft *fakeTracker) SetRelayError(err error) {
@@ -1638,7 +1638,7 @@ func (ft *fakeTracker) SetRelayError(err error) {
 	ft.relayErr = err
 }
 
-// SetRelayTruncated は、FetchRelayComments が「古い側を読み切れなかった」と名乗るかを決める（設計 3-84）。
+// SetRelayTruncated は、FetchRelayComments が「古い側を読み切れなかった」と名乗るかを決める（設計 3-85）。
 //
 // truncated: 真なら名乗る。
 func (ft *fakeTracker) SetRelayTruncated(truncated bool) {
@@ -1647,7 +1647,7 @@ func (ft *fakeTracker) SetRelayTruncated(truncated bool) {
 	ft.relayTruncated = truncated
 }
 
-// HoldRelay は、FetchRelayComments を返り値の関数を呼ぶまで（か ctx が切れるまで）返さないようにする（設計 3-84）。
+// HoldRelay は、FetchRelayComments を返り値の関数を呼ぶまで（か ctx が切れるまで）返さないようにする（設計 3-85）。
 //
 // 戻り値: 待たせるのをやめる関数。
 func (ft *fakeTracker) HoldRelay() func() {
@@ -1666,14 +1666,14 @@ func (ft *fakeTracker) HoldRelay() func() {
 	}
 }
 
-// RelayCalls は FetchRelayComments が呼ばれた回数を返す（設計 3-84）。
+// RelayCalls は FetchRelayComments が呼ばれた回数を返す（設計 3-85）。
 func (ft *fakeTracker) RelayCalls() int {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	return ft.relayCalls
 }
 
-// AddCommentAs は、投稿者の立場（`authorAssociation`）と URL を指定して issue にコメントを足す（設計 3-84）。
+// AddCommentAs は、投稿者の立場（`authorAssociation`）と URL を指定して issue にコメントを足す（設計 3-85）。
 //
 // nodeID: issue のノード ID。
 // body: 本文。
@@ -1693,7 +1693,7 @@ func (ft *fakeTracker) AddCommentAs(nodeID, body, association, url string, creat
 	})
 }
 
-// ClosedRecordsOf は issue に付いた「閉じた記録」（`<!-- continuo:closed -->`）だけを返す（設計 3-84）。
+// ClosedRecordsOf は issue に付いた「閉じた記録」（`<!-- continuo:closed -->`）だけを返す（設計 3-85）。
 func (ft *fakeTracker) ClosedRecordsOf(nodeID string) []tracker.Comment {
 	var out []tracker.Comment
 	for _, c := range ft.CommentsOf(nodeID) {
@@ -1704,7 +1704,7 @@ func (ft *fakeTracker) ClosedRecordsOf(nodeID string) []tracker.Comment {
 	return out
 }
 
-// isClosedRecord は、そのコメントが閉じた記録かどうかを返す（設計 3-84）。
+// isClosedRecord は、そのコメントが閉じた記録かどうかを返す（設計 3-85）。
 func isClosedRecord(c tracker.Comment) bool {
 	return strings.HasPrefix(strings.TrimLeft(c.Body, " \t\r\n"), config.ClosedMarker)
 }
@@ -2138,6 +2138,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatalf("ホームディレクトリを作成できません: %v", err)
 	}
+	// **利用者の設定ディレクトリを、この一時ディレクトリの下へ向ける**（設計 3-84a）。
+	// 向けないと、着手のたびにテストを走らせた人の `~/.claude/settings.json` を読み、
+	// その人のステータスラインが issue ごとの設定ファイルの env へ入る（読むだけだが、結果が人で変わる）。
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 
 	// 信頼の検査が読む ~/.claude.json（**読むだけで書き換えない**）。
 	toplevel := runGit(t, repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")

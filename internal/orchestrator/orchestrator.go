@@ -120,13 +120,13 @@ type Tracker interface {
 	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig, selfLogin string) ([]tracker.Comment, error)
 	// PostComment は continuo 自身のコメントを書く。
 	// **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**
-	// （設計 3-29。Claude Code を閉じた記録は後者。設計 3-84）。成果の要約は書かない。
+	// （設計 3-29。Claude Code を閉じた記録は後者。設計 3-85）。成果の要約は書かない。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// FetchAllComments は issue のコメントを1件残らず取る（設計 3-77a）。
 	// **持ち回りの印が付いたコメントも落とさない。**担当の持ち回りの判定はこれを読む。
 	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, bool, error)
 	// FetchRelayComments は、人間のコメントを最初のメッセージに付けて渡すためにコメントを1件残らず取る
-	// （設計 3-84。issue #246）。**投稿者の立場と、隠されているかも取る**（relay 専用の問い合わせ）。
+	// （設計 3-85。issue #246）。**投稿者の立場と、隠されているかも取る**（relay 専用の問い合わせ）。
 	// 2つ目の戻り値は、ページ数の上限で古い側を読み切れなかったら true である。
 	FetchRelayComments(ctx context.Context, issueNodeID string) ([]tracker.Comment, bool, error)
 	// FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
@@ -292,7 +292,7 @@ type Orchestrator struct {
 	ws              *workspace.Manager
 	// rl は usage API の読み取りである（issue #284）。nil なら読まない。
 	rl *ratelimit.Reader
-	// relayTimeout は、最初のメッセージの直前にコメントを読む処理全体の期限である（設計 3-84）。
+	// relayTimeout は、最初のメッセージの直前にコメントを読む処理全体の期限である（設計 3-85）。
 	// **0 以下なら relayFetchTimeout（60秒）を使う。**テストが短く差し替える。
 	relayTimeout time.Duration
 	// slSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。空なら使わない。
@@ -642,7 +642,7 @@ func New(opts Options) (*Orchestrator, error) {
 			"polling.interval_ms", opts.Config.Polling.IntervalMs,
 			"扱う値_ms", 2*opts.Config.Polling.IntervalMs)
 	}
-	// **relay を選んでいるのに self_marker が空なら、起動時に1回だけ知らせる**（設計 3-84。issue #246）。
+	// **relay を選んでいるのに self_marker が空なら、起動時に1回だけ知らせる**（設計 3-85。issue #246）。
 	// 空だと continuo 自身の「Status を動かしました」などに目印が付かず、人間のコメントとして
 	// 渡ってしまうので、relay は効かない（`relayEnabled`）。起動は止めない。
 	if relayRequestedWithoutSelfMarker(opts.Config) {

@@ -516,7 +516,7 @@ func (fg *fakeGitHub) respond(query string, vars map[string]any) (string, map[st
 	case strings.Contains(query, "updateProjectV2ItemFieldValue"):
 		return "update_status", fg.updateStatus(vars)
 	case strings.Contains(query, "comments(first: $first") && strings.Contains(query, "authorAssociation"):
-		// **relay 専用の問い合わせ**（設計 3-84。issue #246）。共用の問い合わせと別に数える。
+		// **relay 専用の問い合わせ**（設計 3-85。issue #246）。共用の問い合わせと別に数える。
 		return "relay_comments", map[string]any{"node": fg.relayCommentsPayload(vars)}
 	case strings.Contains(query, "comments(first: $first"):
 		return "comments", map[string]any{"node": fg.commentsPayload(vars)}
@@ -676,7 +676,7 @@ func (fg *fakeGitHub) commentsPayload(vars map[string]any) map[string]any {
 	return map[string]any{"__typename": "Issue", "comments": map[string]any{"nodes": nodes}}
 }
 
-// relayCommentsPayload は relay 専用のコメントの問い合わせに答える（設計 3-84。issue #246）。
+// relayCommentsPayload は relay 専用のコメントの問い合わせに答える（設計 3-85。issue #246）。
 //
 // **共用の応答に、投稿者の立場（`OWNER`）と、隠されているか（偽）を足したものである。**
 // URL は `#issuecomment-<番号>` の形にする（同じ秒の前後を番号で決めるため）。

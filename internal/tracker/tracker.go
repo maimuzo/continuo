@@ -108,12 +108,12 @@ type Comment struct {
 	// 投稿者を照合していないので、食い違いを見つけようがない。
 	MarkedByOther bool
 	// AuthorAssociation は投稿者とリポジトリの関係である（`OWNER` / `MEMBER` / `COLLABORATOR` など。
-	// 設計 3-84。issue #246）。
+	// 設計 3-85。issue #246）。
 	//
 	// **`FetchRelayComments` だけが埋める。**ほかの読み取りでは空文字である
 	// （共用の問い合わせにこの項目を足すと、持たない GitHub Enterprise Server で読み書きが全部落ちる）。
 	AuthorAssociation string
-	// IsMinimized は、そのコメントが隠されているかである（設計 3-84）。
+	// IsMinimized は、そのコメントが隠されているかである（設計 3-85）。
 	//
 	// **`FetchRelayComments` だけが埋める。**ほかの読み取りでは偽である。
 	IsMinimized bool

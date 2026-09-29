@@ -3,6 +3,7 @@
 // **Claude Code がステータスラインを描き直すたびに exec するコマンドである。**
 // hook と同じく、新しい本体が書いた設定ファイルを別の版の実行ファイルが読むことがあるので、
 // 引数が読めなくても終了コード 0 と固定の1行 `continuo` を守ることを確かめる。
+// 転送先（環境変数 `CONTINUO_STATUSLINE_COMMAND`）があれば、その出力を返すことも確かめる（設計 3-84）。
 package cli_test
 
 import (
@@ -104,6 +105,8 @@ func newStatuslineSink(t *testing.T) (string, <-chan string) {
 // 成功条件: 終了コードが 0、標準出力が `continuo\n` ちょうど、標準エラーが空、
 // 常駐の本体が1回も呼ばれないこと。
 func TestRunStatusline_本体へ落ちずに固定の1行を出して0で終わる(t *testing.T) {
+	// **実行環境の転送先に左右されない**（continuo が走らせたエージェントの Bash にはこの変数が入っている）。
+	t.Setenv(statuslineclient.EnvForwardCommand, "")
 	dir, err := os.MkdirTemp("", "slnone")
 	if err != nil {
 		t.Fatalf("一時ディレクトリを作成できません: %v", err)
@@ -207,6 +210,8 @@ func TestRunStatusline_相対パスのsocketには何も送らない(t *testing.
 // 読むと session_id・api_ms（小数は切り捨て）・five_hour・seven_day が標準入力と一致すること。
 // 終了コードが 0、標準出力が `continuo\n` ちょうどであること。
 func TestRunStatusline_標準入力の使用率を1行で受け口へ送る(t *testing.T) {
+	// **実行環境の転送先に左右されない**（continuo が走らせたエージェントの Bash にはこの変数が入っている）。
+	t.Setenv(statuslineclient.EnvForwardCommand, "")
 	socketPath, received := newStatuslineSink(t)
 
 	code, stdout, stderr := runCLI([]string{"statusline", "--socket", socketPath}, statuslineInput)
@@ -241,6 +246,33 @@ func TestRunStatusline_標準入力の使用率を1行で受け口へ送る(t *t
 	}
 	if got.SevenDay == nil || got.SevenDay.UsedPercentage != 41 || got.SevenDay.ResetsAt != 1790800000 {
 		t.Errorf("seven_day が違う: %+v", got.SevenDay)
+	}
+}
+
+// TestRunStatusline_環境変数の転送先へ転送する は、転送先を環境変数から読むことを確かめる（設計 3-84b の段0）。
+//
+// **フラグは足さない。**転送先は continuo が issue ごとの設定ファイルの `env` に書いた
+// `CONTINUO_STATUSLINE_COMMAND` で受け取る（古い実行ファイルは無視するだけで済む）。
+//
+// 目的: `CONTINUO_STATUSLINE_COMMAND` に書いたコマンドの出力が、そのままステータスラインへ出ること。
+// 使用率の1行は、いままでどおり受け口へ届くこと。
+// 与える情報: 固定の文字列を出すコマンドを置いた環境変数と、本物の Unix socket の絶対パス。
+// 成功条件: 終了コードが 0、標準出力がコマンドの出力ちょうど、受け口が1行を受け取ること。
+func TestRunStatusline_環境変数の転送先へ転送する(t *testing.T) {
+	socketPath, received := newStatuslineSink(t)
+	t.Setenv(statuslineclient.EnvForwardCommand, "printf 'user statusline'")
+
+	code, stdout, stderr := runCLI([]string{"statusline", "--socket", socketPath}, statuslineInput)
+	if code != 0 {
+		t.Errorf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if stdout != "user statusline" {
+		t.Errorf("転送した出力を出していない: %q", stdout)
+	}
+	select {
+	case <-received:
+	case <-time.After(statuslineReceiveTimeout):
+		t.Fatal("転送するときに受け口が1行も受け取らなかった")
 	}
 }
 

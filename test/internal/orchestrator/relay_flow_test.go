@@ -1,5 +1,5 @@
 // 人間のコメントを最初のメッセージに付けて渡す機能（relay）と、Claude Code を閉じた記録の、
-// 流れの検査である（設計 3-84。issue #246）。
+// 流れの検査である（設計 3-85。issue #246）。
 //
 // **外部へ1回も接続しない。**偽の tracker と偽の herdr だけを使う。
 package orchestrator_test

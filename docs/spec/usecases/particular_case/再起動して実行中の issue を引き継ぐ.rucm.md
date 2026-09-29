@@ -10,7 +10,7 @@
 - `docs/plans/continuo_design.md#3-18`（身元ファイルと引き継いだ回数）
 - `docs/plans/continuo_design.md#3-19`（落ちている間に届かなかった通知を取り戻す）
 - `docs/plans/continuo_design.md#8-1`（再起動後は引き渡し状態の worker を止めない）
-- `docs/plans/continuo_design.md#3-84c`（引き継がない pane を閉じたら、閉じた記録を書く）
+- `docs/plans/continuo_design.md#3-85c`（引き継がない pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#3-49`（身元を確かめられない worktree の復元と、止まり方）
 - `internal/orchestrator/restore.go` の `Restore`、`scanIdentities`、`refetchByIdentities`、`matchPanes`、`decideOne`、`restoreWithoutPane`、`applyOrphanRunningAction`
 - `internal/orchestrator/turn.go` の `startTurnLoop`
@@ -214,7 +214,7 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 
 ## 引き継がずに pane を閉じたら、閉じた記録を書く
 
-**引き継がずに pane を閉じる道（「状態の不明」「権限の確認での停止」「引き継ぎの上限」と、Status が cleanup.on_states のとき）では、閉じた直後に「Claude Code を閉じました」のコメントを1件書く**（設計 3-84c）。
+**引き継がずに pane を閉じる道（「状態の不明」「権限の確認での停止」「引き継ぎの上限」と、Status が cleanup.on_states のとき）では、閉じた直後に「Claude Code を閉じました」のコメントを1件書く**（設計 3-85c）。
 次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
 **agent 名は見ない。**再起動のときは Claude Code が動いていたかが分からないので、書き漏らすより書くほうを取る（書いて起きるのは、閉じる前に書いた許可を書き直すことだけである）。
 書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、pane を閉じ損ねたときは書かない。

@@ -246,7 +246,7 @@ func TestCheckStalls_打ち切りの文面は原因と対処を必ず書く(t *t
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		// **pane を閉じたので、閉じた記録も1件付く**（設計 3-84。issue #246）。数えるのは引き渡しの通知だけにする。
+		// **pane を閉じたので、閉じた記録も1件付く**（設計 3-85。issue #246）。数えるのは引き渡しの通知だけにする。
 		comments := fx.Tracker.HandoffCommentsOf("I_node188")
 		if len(comments) != 1 {
 			t.Fatalf("引き渡しの通知が1件だけ付いていない: %d 件", len(comments))

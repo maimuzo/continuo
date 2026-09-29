@@ -593,7 +593,7 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
 		t.Errorf("確かめていない原因を断定している:\n%s", body)
 	}
-	// **relay が有効（fixture の既定）なので、閉じた記録のあとにコメントで許可を出す書き方が入る**（設計 3-84）。
+	// **relay が有効（fixture の既定）なので、閉じた記録のあとにコメントで許可を出す書き方が入る**（設計 3-85）。
 	// relay が無効なときに入らないことは permission_remedy_test.go と handoff_remedy_paths_test.go が見る。
 	if !strings.Contains(body, commentGrantGuidance) {
 		t.Errorf("relay が有効なのに、引き渡しにコメントで許可を出す書き方が入っていない:\n%s", body)

@@ -195,7 +195,7 @@ usage API はいままでどおり主に使い、読めるようになれば戻�
 | **usage API が誤りのとき** | 資格情報の誤り・401・403 では枠の判定を諦める。429・5xx は巡回のたび（30秒ごと）に叩き直す | **Claude Code のステータスラインへ切り替える。**`rate_limit.poll_interval_ms` と `Retry-After` の長いほうのあとに読み直し、読めたら戻る |
 | **`rate_limit.source` の値** | `oauth_usage_api`（既定）/ `none` | **`oauth_usage_api`（既定）/ `statusline` / `none`**。`statusline` は usage API を読まず、ステータスラインだけを使う |
 | **`rate_limit.refresh_interval_ms`** | 無かった | **足しました**（既定 `300000`）。usage API が誤りのあいだ、入札に使ってよい値の古さの上限で、statusline取得の間隔でもあります |
-| **continuo が起動した pane のステータスライン** | あなたのステータスライン | **固定の `continuo` の1語**（使用率を受け取るため） |
+| **continuo が起動した pane のステータスライン** | あなたのステータスライン | **あなたのステータスライン**（`continuo statusline` が使用率を受け取ったあとで、あなたの `statusLine` のコマンドを呼びます。見つからないか失敗したときだけ、固定の `continuo` の1語） |
 | **`continuo allow-keychain-access` と `continuo doctor` の `資格情報`** | あった | **いままでどおりです** |
 
 **`WORKFLOW.md` から消すキーはありません。**書き換えなくても起動します。
@@ -206,9 +206,21 @@ usage API はいままでどおり主に使い、読めるようになれば戻�
 
 | 何が起きるか | いつ |
 | --- | --- |
-| **continuo が起動した pane で、あなたのステータスラインが固定の `continuo` の1語に替わる** | いつも。**あなたが自分で起動した Claude Code は変わりません** |
+| **continuo が起動した pane で、あなたのステータスラインが固定の `continuo` の1語に替わる** | **あなたの `statusLine` が見つからないか、5秒で終わらない・終了コードが 0 でない・何も出さないとき**（下の「continuo の pane のステータスライン」）。**あなたが自分で起動した Claude Code は変わりません** |
 | **haiku の Claude Code が短く起動する**（statusline取得。herdr の画面に `continuo statusline fetch` という workspace がしばらく現れて消える） | usage API が誤りを返していて、使用率が `rate_limit.refresh_interval_ms`（既定5分）より古いとき。**何もしていない機械で最大5分に1回、1回の入力は約600トークン**です |
 | **`continuo doctor` の `未記入の項目` が1つ増える**（`rate_limit.refresh_interval_ms`） | いつも。書かなければ既定の5分が使われます。**`continuo doctor --missing-keys-patch` で足せます**（上） |
+
+#### continuo の pane のステータスライン
+
+**continuo は、自分が起動した Claude Code の `statusLine` を `continuo statusline` に差し替えます**（使用率を受け取るため）。
+**`continuo statusline` は、使用率を受け取ったあとで、あなたの `statusLine` のコマンドを同じ入力で呼び、その出力を出します。**
+
+**どのコマンドを呼ぶかは、着手のときに決まります。**worktree の `.claude/settings.local.json` → worktree の `.claude/settings.json` →
+`CLAUDE_CONFIG_DIR`（無ければ `~/.claude`）の `settings.json` の順に読み、最初に `statusLine` を持つファイルだけで決めます。
+**着手のあとで設定を変えても、その issue が次に着手されるまで効きません。**`refreshInterval` などは写しません。
+
+**あなたのステータスラインが出ないときは、issue ごとの設定ファイルの `env` の `CONTINUO_STATUSLINE_COMMAND` を見てください**（見つからなければ空です）。
+置き場所と確かめ方は [FAQ.md](FAQ.md) の「continuo の pane で、自分のステータスラインが出なくなった」にあります。
 
 #### API キーの機械は、`rate_limit.source: none` にしてください
 

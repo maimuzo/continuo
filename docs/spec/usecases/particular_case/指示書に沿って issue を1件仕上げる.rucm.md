@@ -6,7 +6,7 @@
 - `docs/plans/continuo_design.md#5-3c`（送るプロンプトを3つの断片から組み立てる）
 - `docs/plans/continuo_design.md#5-3d`（`WORKFLOW.md` の本文に何を書くか）
 - `docs/plans/continuo_design.md#5-3f`（`continuo prompt --show`）
-- `docs/plans/continuo_design.md#3-84`（前の回のあとに人間が書いたコメントを、最初のメッセージの末尾に付ける。`continuo prompt --show` には出ない）
+- `docs/plans/continuo_design.md#3-85`（前の回のあとに人間が書いたコメントを、最初のメッセージの末尾に付ける。`continuo prompt --show` には出ない）
 - `docs/plans/continuo_design.md#5-3h`（長い作業の途中でも、状況を書かせる）
 - `docs/plans/continuo_design.md#5-3i`（PR はエージェントが出す）
 - `docs/plans/continuo_design.md#5-3m`（送る文面から、案内のコメントと空になった見出しを落とす）
@@ -184,7 +184,7 @@ sequenceDiagram
 
 ## 最初のメッセージには、前の回のあとに人間が書いたコメントが付く
 
-**relay が有効なとき（既定の `auto` で、`agent.relay_trusted_comments` が真で、`self_marker` が空でない）、システムは最初のメッセージの末尾に「権限確認済みの人間からのメッセージ」の節を付ける**（設計 3-84）。
+**relay が有効なとき（既定の `auto` で、`agent.relay_trusted_comments` が真で、`self_marker` が空でない）、システムは最初のメッセージの末尾に「権限確認済みの人間からのメッセージ」の節を付ける**（設計 3-85）。
 中身は、いちばん新しい「Claude Code を閉じました」のコメント（1行目が `<!-- continuo:closed -->`）より後に、`OWNER` / `MEMBER` / `COLLABORATOR` が AI の印を付けずに書いたコメントである。
 判定役（auto mode の classifier）は user メッセージにある人間の意図しか許可として数えないので、エージェントが `gh` で読んだだけのコメントの許可は届かない。そのための節である。
 

@@ -299,7 +299,7 @@ query($issueId: ID!, $first: Int!, $after: String) {
 }
 `
 
-// relayCommentsQueryTemplate は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-84）
+// relayCommentsQueryTemplate は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-85）
 // だけが送るコメントの問い合わせである（issue #246）。
 //
 // **共用の `commentsQueryTemplate` と `addCommentMutation` へ項目を足してはならない。**

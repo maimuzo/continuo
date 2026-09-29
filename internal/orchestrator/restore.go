@@ -772,7 +772,7 @@ func (o *Orchestrator) decideOne(
 			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 			return
 		}
-		// **その issue の worktree の pane を閉じたら、閉じた記録を書く**（設計 3-84。issue #246）。
+		// **その issue の worktree の pane を閉じたら、閉じた記録を書く**（設計 3-85。issue #246）。
 		// **agent 名は見ない。**起動済みの Claude Code を見つけたとき（`ErrStartupBusy`）や人間が手で起こしたときは、
 		// Claude Code が動いていても agent 名が無い。再起動のときは動いていたかが分からないので、
 		// 書き漏らすより書くほうを取る（書いて起きるのは、閉じる前に書いた許可を書き直すことだけである）。
@@ -1116,7 +1116,7 @@ func (o *Orchestrator) closePane(ctx context.Context, paneID string) bool {
 // paneID: 閉じる pane の ID。
 // result: 復元の記録。
 // 戻り値: 閉じられたら true。**その pane が既に無かったときも true を返す**（閉じた記録を書くため。
-// 設計 3-84）。ただし `result.ClosedPanes` へは積まない（continuo が閉じたのではない）。
+// 設計 3-85）。ただし `result.ClosedPanes` へは積まない（continuo が閉じたのではない）。
 func (o *Orchestrator) closePaneInto(ctx context.Context, paneID string, result *RestoreResult) bool {
 	if paneID == "" {
 		return false

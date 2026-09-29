@@ -371,7 +371,7 @@ type runState struct {
 	// `agent.start` の前に `PaneID` を立てるので、`PaneID` だけでは Claude Code が居るかを決められない。**
 	// **復元で引き取った run は、引き取った pane の ID を入れる**（`Adopt`）。
 	startedPaneID string
-	// closedRecord は、この run の「閉じた記録」（設計 3-84。issue #246）の持ち越しである。
+	// closedRecord は、この run の「閉じた記録」（設計 3-85。issue #246）の持ち越しである。
 	//
 	// **立てるのは2か所だけである。**報告の書かせ直しの段2（`ensureAgentComment`）が、
 	// 記録を書く代わりに「保留」を立てる。pane を閉じ損ねたときは「閉じ損ねた」を立てる
@@ -379,7 +379,7 @@ type runState struct {
 	// **下ろすのは、その run の次の閉じ方である**（保留なら書いて下ろす。`settleClosedRecord`）。
 	// 「閉じ損ねた」は、閉じ損ねた pane（`failedPaneIDs`）が全部無くなったときに下ろす。
 	closedRecord closedRecordState
-	// failedPaneIDs は、この run が閉じ損ねた pane の ID である（設計 3-84d）。
+	// failedPaneIDs は、この run が閉じ損ねた pane の ID である（設計 3-85d）。
 	//
 	// **run 全体の「閉じ損ねた」だけで持つと、やり直しのあいだ一度も下りない。**
 	// 巡回は run が受け持っている worktree を見ないので、閉じ損ねた pane は run が終わるまで誰も閉じない。
@@ -1332,7 +1332,7 @@ func (rs *runState) setIssue(issue tracker.Issue) {
 	rs.Issue = issue
 }
 
-// setAssigneesFrom は、控えのカードの担当者だけを、取り直したカードのものへ差し替える（設計 3-84。issue #246）。
+// setAssigneesFrom は、控えのカードの担当者だけを、取り直したカードのものへ差し替える（設計 3-85。issue #246）。
 //
 // **カード全体は差し替えない。**取り直したカードは timeline を持たないなど、控えと欄の揃い方が違う。
 // 閉じた記録を書くかは控えのカードの担当者で決める（`recordWorkerClosed`）ので、担当者だけは新しくしておく。
@@ -1888,7 +1888,7 @@ func (rs *runState) setStartedPane(paneID string) {
 }
 
 // takePaneClosed は、pane を閉じようとした結果を控え、閉じた記録の持ち越しと合わせて
-// 「いま閉じた記録を書くべきか」の材料を返す（設計 3-84。issue #246）。
+// 「いま閉じた記録を書くべきか」の材料を返す（設計 3-85。issue #246）。
 //
 // **閉じられたなら `startedPaneID` を空に戻す。**pane の ID が使い回されたときに、
 // 起動していない pane を起動済みと読まないためである。
@@ -1923,7 +1923,7 @@ func (rs *runState) takePaneClosed(paneID string, closed bool) (bool, closedReco
 	return started, rs.closedRecord
 }
 
-// failedPanes は、この run が閉じ損ねた pane の ID の写しを返す（設計 3-84d）。
+// failedPanes は、この run が閉じ損ねた pane の ID の写しを返す（設計 3-85d）。
 //
 // 戻り値: 閉じ損ねた pane の ID。無ければ空。
 func (rs *runState) failedPanes() []string {
@@ -1932,7 +1932,7 @@ func (rs *runState) failedPanes() []string {
 	return slices.Clone(rs.failedPaneIDs)
 }
 
-// forgetFailedPane は、閉じ損ねた pane がもう無いことを控える（設計 3-84d）。
+// forgetFailedPane は、閉じ損ねた pane がもう無いことを控える（設計 3-85d）。
 //
 // **最後の1枚が無くなったら「閉じ損ねた」を下ろす。**
 //
@@ -1962,7 +1962,7 @@ func (rs *runState) dropFailedPaneLocked(paneID string) bool {
 	return true
 }
 
-// setClosedRecord は閉じた記録の持ち越しを差し替える（設計 3-84）。
+// setClosedRecord は閉じた記録の持ち越しを差し替える（設計 3-85）。
 //
 // **「閉じ損ねた」は上書きしない。**閉じ損ねた Claude Code が生きているかもしれないあいだ、
 // この run は記録を書かない。下ろすのは `dropFailedPaneLocked` だけである。

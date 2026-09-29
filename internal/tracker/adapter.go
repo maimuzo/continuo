@@ -1183,7 +1183,7 @@ func (a *Adapter) FetchComments(
 //
 // **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**
 // （設計 3-29。引き渡しの通知・Status を動かした記録・direct chat の案内・関門の案内・入札・
-// Claude Code を閉じた記録（設計 3-84）など）。成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
+// Claude Code を閉じた記録（設計 3-85）など）。成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。
 //
@@ -1255,7 +1255,7 @@ func (a *Adapter) FetchAllComments(
 	return out, truncated, nil
 }
 
-// FetchRelayComments は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-84）の
+// FetchRelayComments は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-85）の
 // ためにコメントを読む（issue #246）。
 //
 // **`FetchAllComments` と同じく1件も落とさずに読むが、問い合わせは relay 専用である**

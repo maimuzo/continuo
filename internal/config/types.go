@@ -54,7 +54,7 @@ type Config struct {
 // プロンプトへ渡すためではない（設計 3-29）。issue の中身はプロンプトに埋め込まず、
 // エージェントが gh の JSON 出力で自分で読む（設計 3-72。テキスト表示は使わせない）。
 // **例外は1つだけある。**信頼できる人間のコメントだけを、最初のメッセージの末尾に付けて渡す
-// （`agent.relay_trusted_comments`。設計 3-84）。それは別の問い合わせで読み、この設定は使わない。
+// （`agent.relay_trusted_comments`。設計 3-85）。それは別の問い合わせで読み、この設定は使わない。
 //
 // **取得そのものを止める設定は持たない。**取得しないと、成功した run も
 // 「エージェントがコメントを書いていない」と判定されて failure_state へ落ちる。
@@ -356,7 +356,7 @@ type AgentConfig struct {
 	// 尽きたら tracker.failure_state へ落とす。0 ならリトライしない。
 	MaxRetries int `yaml:"max_retries"`
 	// RelayTrustedComments は、人間が issue に書いたコメントを、次に Claude Code を起動したときの
-	// 最初のメッセージの末尾に付けて渡すかである（設計 3-84。issue #246）。**既定は true。**
+	// 最初のメッセージの末尾に付けて渡すかである（設計 3-85。issue #246）。**既定は true。**
 	//
 	// **渡すのは、continuo が最後に Claude Code を閉じた記録（`<!-- continuo:closed -->`）より後に、
 	// OWNER / MEMBER / COLLABORATOR が書いた、AI の目印の無いコメントだけである。**
@@ -390,7 +390,7 @@ type ClaudePermissionsConfig struct {
 // （公式の permission modes のページ。2026-09-18 に取得）、**issue のコメントは `gh` の出力、
 // つまり道具の結果として届く。**2026-09-18 に実測でも確かめた。
 // **例外は、continuo が最初のメッセージ（user メッセージ）の末尾に付けて渡した人間のコメントである**
-// （`agent.relay_trusted_comments`。設計 3-84。issue #246）。それは判定役が人間の意図として読む。
+// （`agent.relay_trusted_comments`。設計 3-85。issue #246）。それは判定役が人間の意図として読む。
 // **`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされる。**
 // `Bash(npm test)` のような狭い規則は残る（同じページ）。
 const ClaudePermissionModeAuto = "auto"
@@ -458,7 +458,7 @@ type ClaudeToolGateConfig struct {
 	//
 	// **既定を off にする理由。**
 	// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
-	// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-84）、
+	// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-85）、
 	// この判定はそれも見ない。設計 3-11）。
 	// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 	// **公開リポジトリの issue が誰でも書けることは変わらない**ので、掛けたい人は

@@ -4,7 +4,7 @@
 // 書くと、それを読んだ第三者が同じ文を書ける」ためだったが、**第三者が書いても届かない。**
 // 判定役への要求から道具の結果は取り除かれ、issue のコメントは `gh` の出力として届く
 // （公式の permission modes のページ。2026-09-18 に取得。同じ日に実測でも確かめた）。
-// **例外は relay である**（`agent.relay_trusted_comments`。設計 3-84。issue #246）。閉じた記録のあとに
+// **例外は relay である**（`agent.relay_trusted_comments`。設計 3-85。issue #246）。閉じた記録のあとに
 // OWNER / MEMBER / COLLABORATOR が書いたコメントだけを、次の着手の最初のメッセージに付けて渡す。
 // **relay が有効なときだけ、その書き方を案内する。**
 //
@@ -20,7 +20,7 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// commentGrantGuidance は、issue のコメントで許可を出す案内である（設計 3-84）。
+// commentGrantGuidance は、issue のコメントで許可を出す案内である（設計 3-85）。
 // **relay が有効な auto の引き渡しにだけ入る。**relay が無効なとき・dontAsk のときは1文字も入ってはならない
 // （届かない書き方を案内すると、人間は書いたのにまた止まる）。
 const commentGrantGuidance = "issue へ新しいコメントとして許可を書いてから"
@@ -115,7 +115,7 @@ func TestBlockedHandoff_見出しはモード名から作る(t *testing.T) {
 	}
 }
 
-// 目的: relay が有効な auto の対処が、閉じた記録のあとにコメントで許可を出す書き方を案内することを固定する（設計 3-84）。
+// 目的: relay が有効な auto の対処が、閉じた記録のあとにコメントで許可を出す書き方を案内することを固定する（設計 3-85）。
 //
 // **案内が無いと、人間は許可を WORKFLOW.md に足すしかないと思い、1回だけ許したい操作まで恒久に許す。**
 // **「記録が付いてから書く」が落ちると、記録より前に書いた許可が黙って渡らない。**

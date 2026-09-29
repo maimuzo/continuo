@@ -36,7 +36,7 @@ type remedyCase struct {
 //
 // **文面は3通りとも同じになる。**分けていたのは「公開の場所へ『ここへ許可を書けば通る』と
 // 書くと第三者が同じ文を書ける」ためだったが、**第三者が書いても判定役へ届かない**
-// （公式の permission modes のページ。2026-09-18 に取得）。relay（設計 3-84）が渡すのも、
+// （公式の permission modes のページ。2026-09-18 に取得）。relay（設計 3-85）が渡すのも、
 // OWNER / MEMBER / COLLABORATOR のコメントだけである。
 //
 // **それでも3通りを回す。**`RepoIsPrivate` は `tool_gate` の判定が使い続けており
@@ -76,7 +76,7 @@ func handoffBodyOf(fx *fixture, nodeID string) string {
 // `internal/orchestrator/restore.go` の呼び出しが消えたら、この検査が落ちる。
 // **一部だけを `Contains` で見ると、呼び出しが消えても別の行に同じ語があれば通ってしまう。**
 //
-// **relay（`agent.relay_trusted_comments`。設計 3-84）の有無の2通りも回す。**有効なら、閉じた記録のあとに
+// **relay（`agent.relay_trusted_comments`。設計 3-85）の有無の2通りも回す。**有効なら、閉じた記録のあとに
 // コメントで許可を出す書き方が入り、無効なら1文字も入らない。
 //
 // 与える情報: `In Progress` の issue（非公開 / 公開 / 取れなかった）と、agent_status が blocked の pane。
@@ -98,7 +98,7 @@ func TestHandoff_復元したrunがblockedなら対処を載せる(t *testing.T)
 
 // testRestoredBlockedRemedy は、経路2 を1通り確かめる。
 //
-// **relay が有効なら、コメントで許可を出す書き方が入る。無効なら1文字も入らない**（設計 3-84。issue #246）。
+// **relay が有効なら、コメントで許可を出す書き方が入る。無効なら1文字も入らない**（設計 3-85。issue #246）。
 //
 // tc: 公開・非公開のどちらとして issue を置くか。
 // relay: `agent.relay_trusted_comments` の値。

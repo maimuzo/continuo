@@ -81,7 +81,7 @@ const ProgressMarker = "<!-- continuo:progress -->"
 const PlanMarker = "<!-- continuo:plan -->"
 
 // ClosedMarker は、continuo が Claude Code を起動した pane を閉じたときに issue へ書く
-// 「閉じた記録」の1行目である（設計 3-84。issue #246）。
+// 「閉じた記録」の1行目である（設計 3-85。issue #246）。
 //
 // **この記録より後に、信頼できる立場の人間が書いたコメントだけを、次の起動の最初のメッセージに
 // 付けて渡す。**記録を書いた時点で、その issue の Claude Code はもう動いていないので、
@@ -182,7 +182,7 @@ func DefaultConfig() *Config {
 			MaxTakeover:                5,
 			MaxRetryBackoffMs:          300000,
 			MaxRetries:                 3,
-			// **既定で渡す**（設計 3-84。issue #246）。人間が issue のコメントで出した許可を、
+			// **既定で渡す**（設計 3-85。issue #246）。人間が issue のコメントで出した許可を、
 			// 次に Claude Code を起動したときの最初のメッセージに付けて判定役へ届ける。
 			RelayTrustedComments: true,
 		},
@@ -226,7 +226,7 @@ func DefaultConfig() *Config {
 			},
 			// **既定では判定を掛けない。**
 			// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
-			// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-84）、
+			// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-85）、
 			// この判定はそれも見ない。設計 3-11）。
 			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 			// 掛けたい人は public_only か on を書く。

@@ -3,7 +3,7 @@
 ## 根拠資料
 
 - `docs/plans/continuo_design.md#3-9`（後始末の手順0 から手順7b）
-- `docs/plans/continuo_design.md#3-84c`（印に入っていない worktree の pane を閉じたら、閉じた記録を書く）
+- `docs/plans/continuo_design.md#3-85c`（印に入っていない worktree の pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#3-18`（身元ファイル。片付けを見送った時刻）
 - `docs/plans/continuo_design.md#3-20`（worktree が置き場所の内側にあることを検査する）
 - `docs/plans/continuo_design.md#3-22`（worktree の置き場所は gwq の規則に合わせる）
@@ -362,14 +362,14 @@ branch は1度も作られない。**そこを片付けたとき「branch が残
 
 ## pane を閉じたときだけ、閉じた記録を書く
 
-**「片付けの対象外」で pane を閉じたときは、閉じる対象を全部閉じられ、1枚以上閉じたときだけ、「Claude Code を閉じました」のコメントを1件書く**（設計 3-84c）。
+**「片付けの対象外」で pane を閉じたときは、閉じる対象を全部閉じられ、1枚以上閉じたときだけ、「Claude Code を閉じました」のコメントを1件書く**（設計 3-85c）。
 次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
 1枚でも閉じ損ねたら書かない（Claude Code が生きたまま記録が付くのを防ぐ）。次の巡回で閉じたときに書く。
 **巡回の中で書き終えるまで待つ**（設計 3-8 の例外。10秒の期限で1回）。同じ巡回の着手より前に記録を付けるためである。
 書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、取り直した issue が worktree の置き場所と違うリポジトリのときは書かない。
 
 **worktree を消す基本フローでは書かない（書けない）。**`worktree.remove` と後始末の `workspace.close` は pane を `pane.close` で閉じないためである。
-これは設計 3-84h の残る心配に入れてある。
+これは設計 3-85h の残る心配に入れてある。
 
 ## フローチャート
 
