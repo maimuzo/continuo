@@ -83,9 +83,11 @@ const (
 	closedRecordNone closedRecordState = iota
 	// closedRecordPending は、書かせ直しの段2 で記録を保留している。
 	closedRecordPending
-	// closedRecordCloseFailed は、この run で pane を閉じ損ねた。**以後この run は記録を書かない。**
-	// 閉じ損ねた Claude Code が生きたまま記録を付けると、その Claude Code が後で書いたものが
-	// 人間のコメントとして渡りうる。閉じ損ねた pane は、次の巡回の `closeOrphanPane` が閉じるときに書く。
+	// closedRecordCloseFailed は、この run で pane を閉じ損ね、その pane がまだ残っているかもしれない。
+	// **そのあいだこの run は記録を書かない。**閉じ損ねた Claude Code が生きたまま記録を付けると、
+	// その Claude Code が後で書いたものが人間のコメントとして渡りうる。
+	// **次に pane を閉じるときに、閉じ損ねた pane をもう一度閉じてみる**（`closeFailedPanes`）。
+	// 全部無くなったら下ろして記録を書く。run が終わるまで残ったら、巡回の `closeOrphanPane` が閉じるときに書く。
 	closedRecordCloseFailed
 )
 
@@ -512,7 +514,15 @@ func (o *Orchestrator) settleClosedRecord(
 		return
 	}
 	if state == closedRecordCloseFailed {
-		return
+		if paneID != "" && !closed {
+			// いま閉じ損ねた。
+			return
+		}
+		if !o.closeFailedPanes(ctx, rs) {
+			return
+		}
+		// **閉じ損ねていた pane で Claude Code が動いていたかもしれないので、書く。**
+		started = true
 	}
 	if !started && state != closedRecordPending {
 		return
@@ -523,6 +533,76 @@ func (o *Orchestrator) settleClosedRecord(
 	}
 	rs.setClosedRecord(closedRecordNone)
 	o.recordWorkerClosed(ctx, rs.issue())
+}
+
+// closeFailedPanes は、この run が閉じ損ねた pane をもう一度閉じてみる（設計 3-84d）。
+//
+// **pane の ID だけでは閉じない。**herdr は pane の ID を使い回しうるので、別の issue の pane を閉じないよう、
+// `pane.list` で cwd がこの run の worktree（かその内側）にある pane だけを閉じる。
+// 一覧に無い pane は、もう無いものとして外す。cwd が worktree の外にある pane は、使い回された別の pane として外す。
+// **worktree か pane の cwd のパスを解決できないときは、どちらとも決められないので、控えたまま書かない。**
+//
+// ctx: 呼び出しに適用するコンテキスト（止められていたら切り離し、herdr の読み取りの期限を付ける）。
+// rs: 対象の run。
+// 戻り値: 閉じ損ねた pane が1枚も残っていなければ true。
+func (o *Orchestrator) closeFailedPanes(ctx context.Context, rs *runState) bool {
+	ids := rs.failedPanes()
+	if len(ids) == 0 {
+		return true
+	}
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx),
+			time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+		defer cancel()
+	}
+	identifier := rs.issue().Identifier
+	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
+	if err != nil {
+		o.logger.Warn("閉じ損ねた pane が残っているかを確かめられないので、Claude Code を閉じた記録は書きません",
+			"identifier", identifier, "pane_id", ids, "error", err)
+		return false
+	}
+	root, rootOK := resolvePath(rs.WorktreePath)
+	if !rootOK {
+		// **worktree の場所が分からないと、残っている pane がこの run のものかを決められない。**控えたまま書かない。
+		o.logger.Warn("worktree のパスを解決できないので、閉じ損ねた pane を確かめられません（Claude Code を閉じた記録は書きません）",
+			"identifier", identifier, "pane_id", ids, "path", rs.WorktreePath)
+		return false
+	}
+	cwdOf := make(map[string]string, len(list.Panes))
+	for _, p := range list.Panes {
+		cwdOf[p.PaneID] = p.Cwd
+	}
+	empty := false
+	for _, id := range ids {
+		cwd, alive := cwdOf[id]
+		if !alive {
+			empty = rs.forgetFailedPane(id)
+			continue
+		}
+		got, ok := resolvePath(cwd)
+		if !ok {
+			// **cwd が解決できない pane は、この run のものかを決められない。**控えたまま書かない。
+			o.logger.Warn("閉じ損ねた pane の cwd を解決できないので、Claude Code を閉じた記録は書きません",
+				"identifier", identifier, "pane_id", id, "cwd", cwd)
+			return false
+		}
+		if got != root && !isUnder(root, got) {
+			o.logger.Warn("閉じ損ねた pane の ID が別の場所の pane に使われているので、閉じません",
+				"identifier", identifier, "pane_id", id, "cwd", cwd)
+			empty = rs.forgetFailedPane(id)
+			continue
+		}
+		if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: id}); err != nil && !paneAlreadyGone(err) {
+			o.logger.Warn("閉じ損ねた pane をもう一度閉じられませんでした（Claude Code を閉じた記録は書きません）",
+				"identifier", identifier, "pane_id", id, "error", err)
+			return false
+		}
+		o.logger.Info("閉じ損ねていた pane を閉じました", "identifier", identifier, "pane_id", id)
+		empty = rs.forgetFailedPane(id)
+	}
+	return empty
 }
 
 // recordWorkerClosed は、issue へ閉じた記録を1件書く（設計 3-84。issue #246）。

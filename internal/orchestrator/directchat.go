@@ -384,6 +384,11 @@ func (o *Orchestrator) finishDirectChatSetup(ctx context.Context, rs *runState, 
 		}
 	}
 	o.mu.Unlock()
+	if haveCurrent && (outcome == setupLost || outcome == setupAbandon) {
+		// **閉じる前に、控えの担当者を取り直したものへ差し替える**（設計 3-84）。閉じた記録を書くかは
+		// 控えの担当者で決めるので、古いままだと、担当者が他人へ替わったのに記録を書いてしまう。
+		rs.setAssigneesFrom(current)
+	}
 
 	switch outcome {
 	case setupEnter:

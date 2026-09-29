@@ -10987,14 +10987,26 @@ Claude Code を閉じました。このコメントより後に OWNER / MEMBER /
 | **人間が direct chat で引き取り、run を手放す**（`abortTerminalForHuman` の、run を direct chat に残さない枝。`stopWorker` を通らない唯一の道） | **pane の ID が空なら、run を手放す前に書く。**段4 のあと段5 の前（`agent.start` 前のシェルがある）なら、**シェルを閉じられたら書く** |
 | **人間が direct chat で引き取り、run を direct chat に残す**（同じ関数のもう1つの枝） | **保留を残す。**direct chat を抜けて閉じるときに書く |
 | **担当が移った**（`stopBecauseHandoffLost`・`letGoOfDirectChatAsync`） | **捨てる**（3-84c の表） |
-| **pane を閉じ損ねた** | **捨てる。**閉じ損ねた pane は、次の巡回の `closeOrphanPane` が閉じるときに記録が付く |
+| **pane を閉じ損ねた** | **捨てる。**閉じ損ねた pane は、その run の次の閉じ方がもう一度閉じてみて、全部無くなったときに記録が付く（下）。run が終わるまで残ったら、巡回の `closeOrphanPane` が閉じるときに付く |
 
 **閉じ損ねを見分けるために、`stopWorker` と `closeDirectChatSetupPane` は「閉じられたか」を返す。**
 どちらも閉じる**前に** run の pane の ID を空にするので、**ID が空なだけでは「一度も開いていない」と「閉じ損ねた」を見分けられない。**
 呼び出し側が要らなければ、戻り値は捨ててよい。
 
 **run が持つのは真偽値ではなく、3つの値である**（`runstate.go` の `closedRecord`）。「持ち越しなし」「保留」「閉じ損ねた」。
-**閉じ損ねたら、その run はそれ以後、閉じた記録を書かない。**閉じ損ねた Claude Code が生きたまま、そのあとの閉じ方（呼び出し側の `stopWorker` など、pane の ID が空で閉じる前に戻る道）で記録が付くのを防ぐためである。
+**閉じ損ねたら、その pane の ID を run に控え（`failedPaneIDs`）、控えた pane が全部無くなるまで、その run は閉じた記録を書かない。**閉じ損ねた Claude Code が生きたまま、そのあとの閉じ方（呼び出し側の `stopWorker` など、pane の ID が空で閉じる前に戻る道）で記録が付くのを防ぐためである。
+
+**控えた pane は、その run の次の閉じ方がもう一度閉じてみる**（`closeFailedPanes`）。**巡回に任せない。**巡回（`reconcileWorktrees`）は run が受け持っている worktree を見ないので、やり直し（リトライ）のあいだは誰も閉じず、run 全体の「閉じ損ねた」が下りないまま、正しく閉じたやり直しの回でも記録が付かない。すると境目より後にその run のエージェントの報告が残り、次の起動は「記録が確かめられないとき」に当たって何も渡さない（実装レビュー1周目で見つかった）。
+
+| 控えた pane が `pane.list` で | どうするか |
+| --- | --- |
+| **一覧に無い** | もう無いものとして外す |
+| **cwd がその run の worktree（かその内側）** | `pane.close` で閉じる。閉じられたか `pane_not_found` なら外す。閉じ損ねたら控えたまま、記録を書かない |
+| **cwd が worktree の外** | **閉じない。**herdr が pane の ID を使い回し、別の issue の pane になっているかもしれない。控えから外す |
+| **`pane.list` が取れない。worktree か pane の cwd のパスを解決できない** | 控えたまま、記録を書かない（その pane がこの run のものかを決められない） |
+
+**全部外れたら「閉じ損ねた」を下ろし、記録を書く。**閉じ損ねていた pane で Claude Code が動いていたかもしれないので、いま閉じた pane で `agent.start` が済んでいたかは問わない。
+やり直しの回が閉じ損ねた pane をそのまま使い回して閉じたときも、同じ pane の ID なので控えから外れる。
 
 **止められて Claude Code が生きたまま戻る道**（書かせ直しの途中で continuo が止められたとき）でも、記録は呼び出し側が閉じたあとに付く。
 
