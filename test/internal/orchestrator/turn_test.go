@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9a3a1a926f2ca090dd2e7f529c2df64f99445920525e7a467dc8c02509dd8e57", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "13e2d58e0fbe60d5dca110674bb2e65458a838c33c4abd9952a44339743abb92", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -593,10 +593,10 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
 		t.Errorf("確かめていない原因を断定している:\n%s", body)
 	}
-	// **コメントで許可を出す案内を書かない**（issue #259）。
-	// 判定役への要求から道具の結果は取り除かれるので、issue のコメントは判定役へ届かない。
-	if strings.Contains(body, "コメントに「その操作を許可します」と書いてください") {
-		t.Errorf("引き渡しに、コメントで許可を出す案内が入っている:\n%s", body)
+	// **relay が有効（fixture の既定）なので、閉じた記録のあとにコメントで許可を出す書き方が入る**（設計 3-84）。
+	// relay が無効なときに入らないことは permission_remedy_test.go と handoff_remedy_paths_test.go が見る。
+	if !strings.Contains(body, commentGrantGuidance) {
+		t.Errorf("relay が有効なのに、引き渡しにコメントで許可を出す書き方が入っていない:\n%s", body)
 	}
 }
 

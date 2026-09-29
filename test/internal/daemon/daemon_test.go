@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "0bed93f700e890f472a288bc015de57981694b82a9fa45ec388db06f46fbcae5", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "573d60c6b08f0055b5a269560a3987f23e93a30ef590f035749b024d8e80c635", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 起動と中断に関わるパスを検査する。

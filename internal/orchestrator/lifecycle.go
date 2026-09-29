@@ -658,7 +658,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 		return
 	}
 	o.runAfterRun(ctx, rs)
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 
 	// **最後まで通った run は、過去の失敗の記録を消す。**次に失敗したら0から数え直す。
 	o.forgetFailure(rs.IssueID)
@@ -751,7 +751,7 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 		return
 	}
 	o.runAfterRun(ctx, rs)
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
 	}
@@ -839,7 +839,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 			return
 		}
 		o.runAfterRun(ctx, rs)
-		o.stopWorker(ctx, rs)
+		o.stopWorker(ctx, rs, closedRecordWrite)
 		if o.abortTerminalForHuman(ctx, rs, reason) {
 			return
 		}
@@ -855,7 +855,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 	if o.abortTerminalForHuman(ctx, rs, reason) {
 		return
 	}
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 
 	backoff := retryBackoff(snap.RetryCount, time.Duration(o.cfg.Agent.MaxRetryBackoffMs)*time.Millisecond)
 	count := rs.addRetry(o.now(), backoff)
@@ -912,7 +912,7 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 			context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 		defer cancel()
 		o.runAfterRun(cleanupCtx, rs)
-		o.stopWorker(cleanupCtx, rs)
+		o.stopWorker(cleanupCtx, rs, closedRecordWrite)
 		// **`release` の直前にも見る**（設計 3-83f）。入口は断るが、入口のあと `after_run` の最中に
 		// direct chat へ動かすと、印だけ外れる。
 		if o.abortTerminalForHuman(cleanupCtx, rs, "worker を止めて印から外すところでした") {
@@ -1045,12 +1045,19 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // `turn を送れませんでした（agent is no longer running）` を WARN で印字する。
 // **それは外の障害ではなく、continuo が1秒前に自分で pane を閉じた結果である。**
 //
+// **閉じたら、閉じた記録を issue へ書く**（設計 3-84。issue #246。`settleClosedRecord`）。
+// 書くのは、閉じた pane でその run の `agent.start` が済んでいたときか、保留が立っているとき
+// （閉じる pane が無くても書く）である。**閉じ損ねたら書かない。**`mode` で書かない・保留するを指定する。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
+// mode: 閉じた記録の扱い（ふつうは closedRecordWrite）。
+// 戻り値: pane が残っていないなら true（閉じられた・その pane は既に無かった・閉じる pane が無かった）。
+// **direct chat の門で閉じずに戻ったときと、閉じ損ねたときは false。**要らない呼び出し側は捨ててよい。
+func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closedRecordMode) bool {
 	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-83）。
 	//
-	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは12箇所あり、
+	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは13箇所あり、
 	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
 	// 最大 `claude.turn_timeout_ms`（既定1時間）待っている間 / 「issue がカンバンから
 	// 見えなくなった」ループ / 担当が別の機械へ移ったとき）。**1箇所でも漏らすと、
@@ -1060,9 +1067,10 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// `tracker.direct_chat_state` のあいだは巡回も dispatch もその issue を触らないので、
 	// pane はそのまま残る。
 	if rs.inDirectChatMode() {
+		// **閉じた記録は書かない。保留も残す**（設計 3-84）。direct chat を抜けて閉じるときに書く。
 		o.logger.Info("人間が引き取っているので pane を閉じません（direct chat のままです）",
 			"identifier", rs.issue().Identifier)
-		return
+		return false
 	}
 	rs.mu.Lock()
 	paneID := rs.PaneID
@@ -1071,17 +1079,21 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// **閉じる前に伝える。**順番を入れ替えてはならない。
 	rs.markWorkerStopped()
 	if paneID == "" {
-		return
+		// **保留が立っていれば、閉じる pane が無くても書く**（設計 3-84）。
+		// 報告の書かせ直しの段2 で閉じたあと、段3 以降で抜けた道がここへ来る。
+		o.settleClosedRecord(ctx, rs, "", false, mode)
+		return true
 	}
 	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に同じセッションへ
 	// 復帰したときに発火する「前のバックグラウンドコマンドに完了の記録が無い」という
 	// 通知の出どころを、人間が辿れない。**
 	//
 	// **`waitForBackgroundTasks` ではなくここに置く。**`stopWorker` の呼び出しは
-	// **12箇所・10関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
+	// **13箇所・11関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
 	// `finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
-	// `ensureAgentComment` の段2 / `failCommentRecovery` / コメントが書けたので閉じる道 /
-	// 知らない Status / 担当が移った / 着手をやめた）。
+	// `ensureAgentComment` の段2 / `failCommentRecovery` / `failCommentRecoveryBusy` /
+	// コメントが書けたので閉じる道 / 知らない Status / 担当が移った（`stopBecauseHandoffLost`）/
+	// direct chat の担当者が替わった（`letGoOfDirectChatAsync`）/ 着手をやめた）。
 	// **direct chat の用意に失敗した道は、ここを通らない**（`closeDirectChatSetupPane` が
 	// pane ID を直接閉じる。設計 3-83）。
 	// **待つのは1つだけだが、道連れにするのは全部だからである。**
@@ -1103,10 +1115,20 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 		defer cancel()
 	}
 	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
+		if paneAlreadyGone(err) {
+			// **その pane はもう無い。**Claude Code は動いていないので、閉じたとみなす（設計 3-84）。
+			o.logger.Info("閉じようとした pane はもうありませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID)
+			o.settleClosedRecord(ctx, rs, paneID, true, mode)
+			return true
+		}
 		o.logger.Warn("pane を閉じられませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)
-		return
+		// **閉じ損ねたら記録を書かない。保留も捨てる**（設計 3-84）。Claude Code が生きたまま記録を付けない。
+		o.settleClosedRecord(ctx, rs, paneID, false, mode)
+		return false
 	}
 	o.logger.Info("pane を閉じました", "identifier", rs.issue().Identifier, "pane_id", paneID)
+	o.settleClosedRecord(ctx, rs, paneID, true, mode)
+	return true
 }
 
 // runAfterRun は workspace_hooks.after_run を実行する（設計 3-9 の段0）。
@@ -1260,8 +1282,9 @@ func limitStrings(in []string, n int) []string {
 
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
-// **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
-// Status を動かした記録（`postStatusMove`）の2つだけである。
+// **成果の要約は書かない**（設計 3-29）。**continuo が書くコメントは、self_marker（空でないとき）か
+// `<!-- continuo:` の印で始まる**（この通知・Status を動かした記録（`postStatusMove`）・
+// direct chat の案内・関門の案内・入札・Claude Code を閉じた記録（設計 3-84）など）。
 //
 // **1つの run について1件だけ投稿する。**2件目以降は理由をログに残して捨てる。
 //

@@ -371,6 +371,13 @@ type runState struct {
 	// `agent.start` の前に `PaneID` を立てるので、`PaneID` だけでは Claude Code が居るかを決められない。**
 	// **復元で引き取った run は、引き取った pane の ID を入れる**（`Adopt`）。
 	startedPaneID string
+	// closedRecord は、この run の「閉じた記録」（設計 3-84。issue #246）の持ち越しである。
+	//
+	// **立てるのは2か所だけである。**報告の書かせ直しの段2（`ensureAgentComment`）が、
+	// 記録を書く代わりに「保留」を立てる。pane を閉じ損ねたときは「閉じ損ねた」を立てる
+	// （保留は捨てる。Claude Code が生きたまま記録を付けないため）。
+	// **下ろすのは、その run の次の閉じ方である**（保留なら書いて下ろす。`settleClosedRecord`）。
+	closedRecord closedRecordState
 	// directExitToTerminal は「direct chat から `terminal_states` へ直接抜けた」印である（設計 3-83g）。
 	//
 	// **立っていたら `ensureAgentComment` は入口で抜ける。**人間が Claude Code を終了させてから
@@ -1857,6 +1864,50 @@ func (rs *runState) setStartedPane(paneID string) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.startedPaneID = paneID
+}
+
+// takePaneClosed は、pane を閉じようとした結果を控え、閉じた記録の持ち越しと合わせて
+// 「いま閉じた記録を書くべきか」の材料を返す（設計 3-84。issue #246）。
+//
+// **閉じられたなら `startedPaneID` を空に戻す。**pane の ID が使い回されたときに、
+// 起動していない pane を起動済みと読まないためである。
+// **閉じ損ねたなら保留を捨て、「閉じ損ねた」を残す。**以後この run は記録を書かない
+// （閉じ損ねた pane は、次の巡回の `closeOrphanPane` が閉じるときに書く）。
+//
+// paneID: 閉じようとした pane の ID。空なら閉じる pane が無かった。
+// closed: 閉じられた（か、その pane は既に無かった）なら true。paneID が空なら見ない。
+// 戻り値の1つ目: 閉じた pane で `agent.start` が済んでいたなら true。
+// 戻り値の2つ目: いまの持ち越しの状態（閉じ損ねたなら `closedRecordCloseFailed`）。
+func (rs *runState) takePaneClosed(paneID string, closed bool) (bool, closedRecordState) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if paneID == "" {
+		return false, rs.closedRecord
+	}
+	if !closed {
+		rs.closedRecord = closedRecordCloseFailed
+		return false, rs.closedRecord
+	}
+	started := paneID == rs.startedPaneID
+	if started {
+		rs.startedPaneID = ""
+	}
+	return started, rs.closedRecord
+}
+
+// setClosedRecord は閉じた記録の持ち越しを差し替える（設計 3-84）。
+//
+// **「閉じ損ねた」は上書きしない。**閉じ損ねた Claude Code が生きているかもしれないあいだ、
+// この run は記録を書かない。
+//
+// state: 新しい状態。
+func (rs *runState) setClosedRecord(state closedRecordState) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.closedRecord == closedRecordCloseFailed {
+		return
+	}
+	rs.closedRecord = state
 }
 
 // paneState は、打ち切りの終え方を決めるための pane の状態を返す（設計 3-83f）。

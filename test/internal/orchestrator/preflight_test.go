@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9a3a1a926f2ca090dd2e7f529c2df64f99445920525e7a467dc8c02509dd8e57", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "13e2d58e0fbe60d5dca110674bb2e65458a838c33c4abd9952a44339743abb92", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // dispatch 直前の検査（段0）の検査である。

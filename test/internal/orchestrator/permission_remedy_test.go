@@ -1,9 +1,12 @@
 // 権限で止まったときの【対処】の文面の検査である（設計 3-11。issue #259）。
 //
 // **公開・非公開で文面は変わらない。**分けていたのは「公開の場所へ『ここへ許可を書けば通る』と
-// 書くと、それを読んだ第三者が同じ文を書ける」ためだったが、**そもそも誰が書いても届かない。**
+// 書くと、それを読んだ第三者が同じ文を書ける」ためだったが、**第三者が書いても届かない。**
 // 判定役への要求から道具の結果は取り除かれ、issue のコメントは `gh` の出力として届く
 // （公式の permission modes のページ。2026-09-18 に取得。同じ日に実測でも確かめた）。
+// **例外は relay である**（`agent.relay_trusted_comments`。設計 3-84。issue #246）。閉じた記録のあとに
+// OWNER / MEMBER / COLLABORATOR が書いたコメントだけを、次の着手の最初のメッセージに付けて渡す。
+// **relay が有効なときだけ、その書き方を案内する。**
 //
 // **公開・非公開の3通りで本文が変わらないことは、引き渡しの経路で見る**
 // （handoff_remedy_paths_test.go）。**そちらが実際に投稿される本文を組み立てる。**
@@ -17,9 +20,10 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// commentGrantGuidance は、issue のコメントで許可を出す案内である。
-// **どのモードの引き渡しにも、これが1文字も入ってはならない。**
-const commentGrantGuidance = "コメントに「その操作を許可します」と書いてください"
+// commentGrantGuidance は、issue のコメントで許可を出す案内である（設計 3-84）。
+// **relay が有効な auto の引き渡しにだけ入る。**relay が無効なとき・dontAsk のときは1文字も入ってはならない
+// （届かない書き方を案内すると、人間は書いたのにまた止まる）。
+const commentGrantGuidance = "issue へ新しいコメントとして許可を書いてから"
 
 // allowGuidance は、許可の一覧に足す案内である。**どのモードでも入る。**
 const allowGuidance = "`claude.permissions.allow` に"
@@ -38,13 +42,13 @@ const thirdPartyGuidance = "書いた人を確かめてください"
 // **広い規則は auto に入るときに落とされる**（公式の permission modes のページ）。
 // **「allow に足してください」だけだと、`Bash` のような広い規則を足して、また止まる。**
 //
-// 与える情報: permission_mode が auto。
+// 与える情報: permission_mode が auto で、relay が無効。
 // 成功条件: コメントで許可を出す案内が入らず、狭い規則と再起動が案内されること。
 func TestBlockedHandoff_autoは狭い規則と再起動を案内する(t *testing.T) {
-	got := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto)
+	got := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto, false)
 
 	if strings.Contains(got, commentGrantGuidance) {
-		t.Errorf("コメントで許可を出す案内が入っている。判定役はそれを読まない:\n%s", got)
+		t.Errorf("relay が無効なのに、コメントで許可を出す案内が入っている。判定役はそれを読まない:\n%s", got)
 	}
 	for _, want := range []string{
 		allowGuidance,
@@ -71,7 +75,7 @@ func TestBlockedHandoff_autoは狭い規則と再起動を案内する(t *testin
 // 与える情報: permission_mode が dontAsk。
 // 成功条件: allow と再起動を案内し、会話で許可を出す案内は入らないこと。
 func TestBlockedHandoff_dontAskもallowと再起動を案内する(t *testing.T) {
-	got := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeDontAsk)
+	got := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeDontAsk, false)
 
 	if strings.Contains(got, commentGrantGuidance) {
 		t.Errorf("dontAsk なのに、会話で許可を出す案内が入っている:\n%s", got)
@@ -96,7 +100,7 @@ func TestBlockedHandoff_dontAskもallowと再起動を案内する(t *testing.T)
 // 成功条件: それぞれの文面が、自分のモード名だけを見出しに持つこと。
 func TestBlockedHandoff_見出しはモード名から作る(t *testing.T) {
 	for _, mode := range []string{config.ClaudePermissionModeAuto, config.ClaudePermissionModeDontAsk} {
-		got := orchestrator.PermissionRemedyTextForTest(mode)
+		got := orchestrator.PermissionRemedyTextForTest(mode, false)
 		if !strings.Contains(got, "【"+mode+" について】") {
 			t.Errorf("%s の文面に、そのモード名の見出しがありません:\n%s", mode, got)
 		}
@@ -107,6 +111,33 @@ func TestBlockedHandoff_見出しはモード名から作る(t *testing.T) {
 			if strings.Contains(got, "【"+other+" について】") {
 				t.Errorf("%s の文面に、別のモード %s の見出しが入っています:\n%s", mode, other, got)
 			}
+		}
+	}
+}
+
+// 目的: relay が有効な auto の対処が、閉じた記録のあとにコメントで許可を出す書き方を案内することを固定する（設計 3-84）。
+//
+// **案内が無いと、人間は許可を WORKFLOW.md に足すしかないと思い、1回だけ許したい操作まで恒久に許す。**
+// **「記録が付いてから書く」が落ちると、記録より前に書いた許可が黙って渡らない。**
+//
+// 与える情報: permission_mode が auto で、relay が有効。
+// 成功条件: コメントで許可を出す案内・閉じた記録の印・「記録が付いてから」・書き直しの案内・tool_gate の但し書きが入り、
+// relay が無効なときの文面（allow と再起動の案内）も残っていること。
+func TestBlockedHandoff_relayが有効ならコメントでの許可の出し方を案内する(t *testing.T) {
+	got := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto, true)
+
+	for _, want := range []string{
+		commentGrantGuidance,
+		config.ClosedMarker,
+		"記録が付いてから書いてください",
+		"書き直してください",
+		"`claude.tool_gate` の検査はコメントでは通りません",
+		allowGuidance,
+		restartGuidance,
+		thirdPartyGuidance,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("relay が有効な auto の対処に %q がありません:\n%s", want, got)
 		}
 	}
 }

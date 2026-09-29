@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // PermissionRemedyTextForTest は permissionRemedyText を test/internal/orchestrator から呼ぶための入り口である
@@ -14,9 +16,60 @@ import (
 // 外から組み立てさせる用途は無い。**検査だけが要る。**
 //
 // mode: `claude.permission_mode` の値。
+// relay: relay が有効かどうか（設計 3-84）。
 // 戻り値: permissionRemedyText と同じ文面。
-func PermissionRemedyTextForTest(mode string) string {
-	return permissionRemedyText(mode)
+func PermissionRemedyTextForTest(mode string, relay bool) string {
+	return permissionRemedyText(mode, relay)
+}
+
+// 以下は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-84。issue #246）を
+// test/internal/orchestrator から確かめるための入り口である。**本体の振る舞いは変えない。**
+
+// RelayMaxRunesForTest は、最初のメッセージに付ける節の長さの上限（rune 数）である。
+const RelayMaxRunesForTest = relayMaxRunes
+
+// RelayEnabledForTest は relayEnabled を呼ぶ。
+//
+// cfg: 設定。
+// 戻り値: relay が有効なら true。
+func RelayEnabledForTest(cfg config.Config) bool {
+	return relayEnabled(cfg)
+}
+
+// SelectRelayCommentsForTest は、設定から印を組み立てて selectRelayComments を呼ぶ。
+//
+// cfg: 設定（印を組み立てるのに使う）。
+// comments: 読んだコメント。
+// truncated: 古い側を読み切れなかったなら true。
+// 戻り値の1つ目: 結果の種類（"no_boundary" / "unverified" / "incomplete" / "ok"）。
+// 戻り値の2つ目: 渡すコメント（古い順）。
+func SelectRelayCommentsForTest(cfg config.Config, comments []tracker.Comment, truncated bool) (string, []tracker.Comment) {
+	sel := selectRelayComments(comments, truncated, relayAIMarkers(cfg), relayAgentMarkers(cfg))
+	switch sel.Verdict {
+	case relayNoBoundary:
+		return "no_boundary", nil
+	case relayUnverified:
+		return "unverified", nil
+	case relayIncomplete:
+		return "incomplete", nil
+	default:
+		return "ok", sel.Picked
+	}
+}
+
+// BuildRelaySectionForTest は buildRelaySection を呼ぶ。
+//
+// picked: 渡すコメント（古い順）。
+// 戻り値: 最初のメッセージに付ける節。
+func BuildRelaySectionForTest(picked []tracker.Comment) string {
+	return buildRelaySection(picked)
+}
+
+// SetRelayTimeoutForTest は、最初のメッセージの直前にコメントを読む処理の期限を差し替える。
+//
+// d: 新しい期限。
+func (o *Orchestrator) SetRelayTimeoutForTest(d time.Duration) {
+	o.relayTimeout = d
 }
 
 // DispatchBlockedStatesForTest は dispatchBlockedStates を test/internal/orchestrator から

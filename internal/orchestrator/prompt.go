@@ -22,6 +22,9 @@ import (
 // **issue の本文とコメントは入れない**（設計 3-29）。エージェントが
 // `gh` の JSON 出力（`gh issue view --json comments` と REST）で自分で読む。
 // **テキスト表示（`--comments`）は使わせない**（設計 3-72）。
+// **例外は1つだけある。**閉じた記録より後に信頼できる人間が書いたコメントを、
+// 組み立てたあとの末尾に付ける（relay。設計 3-84）。付けるのは呼び出し側の `buildTurnText` であり、
+// ここ（と `continuo prompt --show`）の文面には入らない。
 //
 // issue: 対象の issue。
 // attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として

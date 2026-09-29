@@ -366,6 +366,7 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 
 **`WORKFLOW.md` の本文が、エージェントへ送る指示書のうち人間が書く部分である。**
 残りは continuo の実行ファイルの中にある。**送られる全文はこう読む。**
+（前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、送る直前に issue のコメントから組み立てるので、ここには出ない）
 
 ```bash
 cd ~/continuo-try && /tmp/continuo prompt --show

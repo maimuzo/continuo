@@ -7,6 +7,7 @@
 - `docs/plans/continuo_design.md#3-5`（完了検知の3層と、1つの turn で何が起きるか）
 - `docs/plans/continuo_design.md#3-6`（dispatch の直前に issue ごとに検査するもの）
 - `docs/plans/continuo_design.md#3-8`（turn ループ。1回目の本文と継続の指示、max_dispatch_turns）
+- `docs/plans/continuo_design.md#3-84`（pane を閉じるたびに閉じた記録を書き、次の起動の最初のメッセージに人間のコメントを付ける）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番。段-1 から段11）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイル）
 - `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
@@ -91,8 +92,9 @@ BASIC FLOW:
 45. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
 46. システムは workspace_hooks の after_run を実行する。
 47. システムは herdr の pane を閉じる。
-48. システムは印を外す。
-POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。issue の担当者はこの機械の投稿者1人のままである。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。
+48. システムは Claude Code を閉じた記録を issue に1件コメントする。
+49. システムは印を外す。
+POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。issue の担当者はこの機械の投稿者1人のままである。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は外れている。worktree と branch は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 走行中のissue:
 RFS BASIC FLOW 3
@@ -158,8 +160,9 @@ RFS BASIC FLOW 26
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
 3. システムは herdr の pane を閉じる。
-4. システムは印を外す。
-5. ABORT
+4. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
+5. システムは印を外す。
+6. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。止まった起動は新しいセッション UUID の指定つきの起動である。
 
 SPECIFIC ALTERNATIVE FLOW 起動の待ち直し:
@@ -176,8 +179,9 @@ RFS 起動の待ち直し 2
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
 3. システムは issue に起動できなかった理由を1件コメントする。
 4. システムは herdr の pane を閉じる。
-5. システムは印を外す。
-6. ABORT
+5. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
+6. システムは印を外す。
+7. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。断念した起動は新しいセッション UUID の指定つきの起動である。
 
 SPECIFIC ALTERNATIVE FLOW paneがまだ使えない:
@@ -192,8 +196,9 @@ RFS paneがまだ使えない 2
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは issue に pane が使えなかった理由を1件コメントする。
 3. システムは herdr の pane を閉じる。
-4. システムは印を外す。
-5. ABORT
+4. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
+5. システムは印を外す。
+6. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW turnループの重なり:
@@ -207,8 +212,9 @@ RFS BASIC FLOW 29
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは issue に打ち切りの理由を1件コメントする。
 3. システムは herdr の pane を閉じる。
-4. システムは印を外す。
-5. ABORT
+4. システムは Claude Code を閉じた記録を issue に1件コメントする。
+5. システムは印を外す。
+6. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。
 
 SPECIFIC ALTERNATIVE FLOW 本文の組み立ての失敗:
@@ -217,8 +223,9 @@ RFS BASIC FLOW 30
 2. システムは issue にテンプレートの直し方を1件コメントする。
 3. システムは workspace_hooks の after_run を実行する。
 4. システムは herdr の pane を閉じる。
-5. システムは印を外す。
-6. ABORT
+5. システムは Claude Code を閉じた記録を issue に1件コメントする。
+6. システムは印を外す。
+7. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW turnの終わりの取りこぼし:
@@ -226,9 +233,10 @@ RFS BASIC FLOW 32
 1. システムは VALIDATES THAT リトライの回数が agent.max_retries に達していない。
 2. システムは workspace_hooks の after_run を実行する。
 3. システムは herdr の pane を閉じる。
-4. システムはリトライの回数を1つ増やす。
-5. システムはバックオフの期限を印に書く。
-6. ABORT
+4. システムは Claude Code を閉じた記録を issue に1件コメントする。
+5. システムはリトライの回数を1つ増やす。
+6. システムはバックオフの期限を印に書く。
+7. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW リトライの尽き:
@@ -238,8 +246,9 @@ RFS turnの終わりの取りこぼし 1
 3. システムは issue に今回の run が書いたコメントを確かめる段を通す。
 4. システムは workspace_hooks の after_run を実行する。
 5. システムは herdr の pane を閉じる。
-6. システムは印を外す。
-7. ABORT
+6. システムは Claude Code を閉じた記録を issue に1件コメントする。
+7. システムは印を外す。
+8. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。印は外れている。issue に打ち切りの理由のコメントが1件ある。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 騙りのhook:
@@ -261,55 +270,60 @@ RFS BASIC FLOW 39
 2. システムは branch へ1バイトも push しない。
 3. システムは workspace_hooks の after_run を実行する。
 4. システムは herdr の pane を閉じる。
-5. システムは印を外す。
-6. ABORT
-POSTCONDITION: issue の担当者はこの機械の投稿者ではない。この機械は branch へ1バイトも push していない。turn はこの turn の終わりで止まっている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じている。印は外れている。worktree は残っている。
+5. システムは Claude Code を閉じた記録を issue に書かない。
+6. システムは印を外す。
+7. ABORT
+POSTCONDITION: issue の担当者はこの機械の投稿者ではない。この機械は branch へ1バイトも push していない。turn はこの turn の終わりで止まっている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントは増えていない。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW ボードから消えたissue:
 RFS BASIC FLOW 41
 1. システムは issue がボードから見えなくなったことを記録に残す。
 2. システムは workspace_hooks の after_run を実行する。
 3. システムは herdr の pane を閉じる。
-4. システムはリトライの回数を1つ増やす。
-5. システムはバックオフの期限を印に書く。
-6. ABORT
+4. システムは Claude Code を閉じた記録を issue に1件コメントする。
+5. システムはリトライの回数を1つ増やす。
+6. システムはバックオフの期限を印に書く。
+7. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
 RFS BASIC FLOW 45
 1. システムは herdr の pane を閉じる。
-2. システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。
-3. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
-4. システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。
-5. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
-6. システムは issue のコメントを読み直す。
-7. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
-8. RESUME STEP 46
-POSTCONDITION: issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。
+2. システムは Claude Code を閉じた記録を書かずに保留する。
+3. システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。
+4. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
+5. システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。
+6. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
+7. システムは issue のコメントを読み直す。
+8. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
+9. RESUME STEP 46
+POSTCONDITION: issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。Claude Code を閉じた記録は保留したままで、基本フローに戻ってから pane を閉じる段で書く。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗:
-RFS コメントの取り戻し 7
+RFS コメントの取り戻し 8
 1. システムは herdr の pane を閉じる。
-2. システムはボードの issue の Status に failure_state の選択肢を書く。
-3. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
-4. システムは印を外す。
-5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。
-
-SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗:
-RFS コメントの取り戻し 4
-1. システムは復帰できなかった理由を記録に残す。
-2. システムは herdr の pane を閉じる。
+2. システムは Claude Code を閉じた記録を issue に1件コメントする。
 3. システムはボードの issue の Status に failure_state の選択肢を書く。
 4. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
 5. システムは印を外す。
 6. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。
+
+SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗:
+RFS コメントの取り戻し 5
+1. システムは復帰できなかった理由を記録に残す。
+2. システムは herdr の pane を閉じる。
+3. システムは Claude Code を閉じた記録を issue に1件コメントする。
+4. システムはボードの issue の Status に failure_state の選択肢を書く。
+5. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
+6. システムは印を外す。
+7. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 復元の断念:
-RFS コメントの取り戻し 2
+RFS コメントの取り戻し 3
 1. システムは復元の材料が足りない理由を記録に残す。
-2. RESUME STEP 8
+2. RESUME STEP 9
 POSTCONDITION: issue にエージェントが書いたコメントがない。issue の Status は表明の値の遷移先の選択肢である。片付けは続いている。
 
 GLOBAL ALTERNATIVE FLOW 壊れたref:
@@ -336,8 +350,9 @@ WHEN worktree の用意から Claude Code の起動までのあいだに git・g
 2. システムは issue に失敗した段と直し方を1件コメントする。
 3. システムは workspace_hooks の after_run を実行する。
 4. システムは herdr の pane を閉じる。
-5. システムは印を外す。
-6. ABORT
+5. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
+6. システムは印を外す。
+7. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 復帰の失敗:
@@ -359,17 +374,19 @@ WHEN herdr の待ち受けが blocked を返した場合
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
 3. システムは herdr の pane を閉じる。
-4. システムは印を外す。
-5. ABORT
+4. システムは Claude Code を閉じた記録を issue に1件コメントする。
+5. システムは印を外す。
+6. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 送信の失敗:
 BRANCH FROM BASIC FLOW 31
 WHEN herdr が指示の送信そのものを断った場合
 1. システムは herdr の pane を閉じる。
-2. システムはリトライの回数を1つ増やす。
-3. システムはバックオフの期限を印に書く。
-4. ABORT
+2. システムは Claude Code を閉じた記録を issue に1件コメントする。
+3. システムはリトライの回数を1つ増やす。
+4. システムはバックオフの期限を印に書く。
+5. ABORT
 POSTCONDITION: turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
@@ -377,9 +394,10 @@ BRANCH FROM BASIC FLOW 33
 WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合
 1. システムは herdr に agent_status と pane の画面の版を要求する。
 2. システムは herdr の pane を閉じる。
-3. システムはリトライの回数を1つ増やす。
-4. システムはバックオフの期限を印に書く。
-5. ABORT
+3. システムは Claude Code を閉じた記録を issue に1件コメントする。
+4. システムはリトライの回数を1つ増やす。
+5. システムはバックオフの期限を印に書く。
+6. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 既に同じStatus:
@@ -738,6 +756,20 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 **その順番は変えられない。**引き渡しの通知は1つの run につき1件しか投稿できないので、
 コメントの取り戻しより先に本当の理由が投稿枠を取らなければならない。
 
+## pane を閉じたら、閉じた記録を書く
+
+**Claude Code を起動した pane を閉じた段のあとには、「Claude Code を閉じました」のコメント（1行目が `<!-- continuo:closed -->`）を1件書く段を置いた**（設計 3-84c）。
+次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
+**書くのは、relay が有効なとき（既定の `auto` で、`agent.relay_trusted_comments` が真で、`self_marker` が空でない）だけである。**
+記述を読みやすくするため、各段にはこの条件を書いていない。**担当者が他人のアカウントのとき・pane を閉じ損ねたときも書かない。**
+
+| 閉じ方 | 記録 |
+| --- | --- |
+| 起動を確かめる前の閉じ方（「起動直後の確認画面」「起動の断念」「paneの断念」「着手の途中の失敗」） | **その pane で Claude Code の起動が成功していたときだけ書く**（起動していない pane で書くと、人間の許可が一度も渡らないまま境目より前へ押し出される） |
+| 「担当が移った」 | **書かない。**担当を外された機械は issue へ書かない（設計 3-77c） |
+| 「コメントの取り戻し」の最初の閉じ方 | **書かずに保留する。**取り戻しのあとで閉じたとき（基本フローへ戻った段か、取り戻しの失敗の段）に書く（設計 3-84d） |
+| それ以外 | 書く |
+
 ## フローチャート
 
 ```mermaid
@@ -789,7 +821,7 @@ flowchart TD
     B45{"45. VALIDATES THAT 今回の run のコメントがある"}
     B46["46. workspace_hooks の after_run を実行する"]
     B47["47. herdr の pane を閉じる"]
-    B48["48. 印を外す"]
+    B49["49. 印を外す"]
     BPOST(["POSTCONDITION 表明どおりに Status が動き worker が止まっている"])
 
     B1 --> B2 --> B3
@@ -835,7 +867,7 @@ flowchart TD
     B42 -- 偽 --> B29
     B42 -- 真 --> B43 --> B44 --> B45
     B45 -- 偽 --> N23S1
-    B45 -- 真 --> B46 --> B47 --> B48 --> BPOST
+    B45 -- 真 --> B46 --> B47 --> B48["48. 閉じた記録をコメントする"] --> B49 --> BPOST
     B16 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> N25S1
     B16 -. "着手の途中の失敗: WHEN git・ghq・herdr の呼び出しが失敗した場合" .-> N27S1
     B24 -. "復帰の失敗: WHEN 復帰つきの起動が理由を問わず完了しなかった場合" .-> N34S1
@@ -883,7 +915,7 @@ flowchart TD
     end
 
     subgraph SG10 ["SPECIFIC ALTERNATIVE FLOW 起動直後の確認画面 / RFS BASIC FLOW 26"]
-        N10S1["1. pane に esc を送る"] --> N10S2["2. Status に failure_state を書く"] --> N10S3["3. pane を閉じる"] --> N10S4["4. 印を外す"] --> N10S5["5. ABORT"]
+        N10S1["1. pane に esc を送る"] --> N10S2["2. Status に failure_state を書く"] --> N10S3["3. pane を閉じる"] --> N10S4["4. 起動が成功していた pane なら閉じた記録をコメントする"] --> N10S5["5. 印を外す"] --> N10S6["6. ABORT"]
     end
 
     subgraph SG11 ["SPECIFIC ALTERNATIVE FLOW 起動の待ち直し / RFS BASIC FLOW 26"]
@@ -892,7 +924,7 @@ flowchart TD
     end
 
     subgraph SG12 ["SPECIFIC ALTERNATIVE FLOW 起動の断念 / RFS 起動の待ち直し 2"]
-        N12S1["1. max_retries までバックオフして着手をやり直す"] --> N12S2["2. Status に failure_state を書く"] --> N12S3["3. 起動できなかった理由をコメントする"] --> N12S4["4. pane を閉じる"] --> N12S5["5. 印を外す"] --> N12S6["6. ABORT"]
+        N12S1["1. max_retries までバックオフして着手をやり直す"] --> N12S2["2. Status に failure_state を書く"] --> N12S3["3. 起動できなかった理由をコメントする"] --> N12S4["4. pane を閉じる"] --> N12S5["5. 起動が成功していた pane なら閉じた記録をコメントする"] --> N12S6["6. 印を外す"] --> N12S7["7. ABORT"]
     end
 
     subgraph SG13 ["SPECIFIC ALTERNATIVE FLOW paneがまだ使えない / RFS BASIC FLOW 24"]
@@ -901,7 +933,7 @@ flowchart TD
     end
 
     subgraph SG14 ["SPECIFIC ALTERNATIVE FLOW paneの断念 / RFS paneがまだ使えない 2"]
-        N14S1["1. Status に failure_state を書く"] --> N14S2["2. pane が使えなかった理由をコメントする"] --> N14S3["3. pane を閉じる"] --> N14S4["4. 印を外す"] --> N14S5["5. ABORT"]
+        N14S1["1. Status に failure_state を書く"] --> N14S2["2. pane が使えなかった理由をコメントする"] --> N14S3["3. pane を閉じる"] --> N14S4["4. 起動が成功していた pane なら閉じた記録をコメントする"] --> N14S5["5. 印を外す"] --> N14S6["6. ABORT"]
     end
 
     subgraph SG15 ["SPECIFIC ALTERNATIVE FLOW turnループの重なり / RFS BASIC FLOW 27"]
@@ -909,20 +941,20 @@ flowchart TD
     end
 
     subgraph SG16 ["SPECIFIC ALTERNATIVE FLOW 上限での打ち切り / RFS BASIC FLOW 29"]
-        N16S1["1. Status に failure_state を書く"] --> N16S2["2. 打ち切りの理由をコメントする"] --> N16S3["3. pane を閉じる"] --> N16S4["4. 印を外す"] --> N16S5["5. ABORT"]
+        N16S1["1. Status に failure_state を書く"] --> N16S2["2. 打ち切りの理由をコメントする"] --> N16S3["3. pane を閉じる"] --> N16S4["4. 閉じた記録をコメントする"] --> N16S5["5. 印を外す"] --> N16S6["6. ABORT"]
     end
 
     subgraph SG17 ["SPECIFIC ALTERNATIVE FLOW 本文の組み立ての失敗 / RFS BASIC FLOW 30"]
-        N17S1["1. Status に failure_state を書く"] --> N17S2["2. テンプレートの直し方をコメントする"] --> N17S3["3. after_run を実行する"] --> N17S4["4. pane を閉じる"] --> N17S5["5. 印を外す"] --> N17S6["6. ABORT"]
+        N17S1["1. Status に failure_state を書く"] --> N17S2["2. テンプレートの直し方をコメントする"] --> N17S3["3. after_run を実行する"] --> N17S4["4. pane を閉じる"] --> N17S5["5. 閉じた記録をコメントする"] --> N17S6["6. 印を外す"] --> N17S7["7. ABORT"]
     end
 
     subgraph SG18 ["SPECIFIC ALTERNATIVE FLOW turnの終わりの取りこぼし / RFS BASIC FLOW 32"]
         N18S1{"1. VALIDATES THAT リトライの回数が max_retries に達していない"}
-        N18S1 -- 真 --> N18S2["2. after_run を実行する"] --> N18S3["3. pane を閉じる"] --> N18S4["4. リトライの回数を1つ増やす"] --> N18S5["5. バックオフの期限を印に書く"] --> N18S6["6. ABORT"]
+        N18S1 -- 真 --> N18S2["2. after_run を実行する"] --> N18S3["3. pane を閉じる"] --> N18S4["4. 閉じた記録をコメントする"] --> N18S5["5. リトライの回数を1つ増やす"] --> N18S6["6. バックオフの期限を印に書く"] --> N18S7["7. ABORT"]
     end
 
     subgraph SG19 ["SPECIFIC ALTERNATIVE FLOW リトライの尽き / RFS turnの終わりの取りこぼし 1"]
-        N19S1["1. Status に failure_state を書く"] --> N19S2["2. 打ち切りの理由をコメントする"] --> N19S3["3. 今回の run のコメントを確かめる段を通す"] --> N19S4["4. after_run を実行する"] --> N19S5["5. pane を閉じる"] --> N19S6["6. 印を外す"] --> N19S7["7. ABORT"]
+        N19S1["1. Status に failure_state を書く"] --> N19S2["2. 打ち切りの理由をコメントする"] --> N19S3["3. 今回の run のコメントを確かめる段を通す"] --> N19S4["4. after_run を実行する"] --> N19S5["5. pane を閉じる"] --> N19S6["6. 閉じた記録をコメントする"] --> N19S7["7. 印を外す"] --> N19S8["8. ABORT"]
     end
 
     subgraph SG20 ["SPECIFIC ALTERNATIVE FLOW 騙りのhook / RFS BASIC FLOW 34"]
@@ -934,22 +966,22 @@ flowchart TD
     end
 
     subgraph SG36 ["SPECIFIC ALTERNATIVE FLOW 担当が移った / RFS BASIC FLOW 39"]
-        N36S1["1. 担当が移った先のアカウント名と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 印を外す"] --> N36S6["6. ABORT"]
+        N36S1["1. 担当が移った先のアカウント名と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 閉じた記録を書かない"] --> N36S6["6. 印を外す"] --> N36S7["7. ABORT"]
     end
 
     subgraph SG22 ["SPECIFIC ALTERNATIVE FLOW ボードから消えたissue / RFS BASIC FLOW 41"]
-        N22S1["1. ボードから見えなくなったことを記録に残す"] --> N22S2["2. after_run を実行する"] --> N22S3["3. pane を閉じる"] --> N22S4["4. リトライの回数を1つ増やす"] --> N22S5["5. バックオフの期限を印に書く"] --> N22S6["6. ABORT"]
+        N22S1["1. ボードから見えなくなったことを記録に残す"] --> N22S2["2. after_run を実行する"] --> N22S3["3. pane を閉じる"] --> N22S4["4. 閉じた記録をコメントする"] --> N22S5["5. リトライの回数を1つ増やす"] --> N22S6["6. バックオフの期限を印に書く"] --> N22S7["7. ABORT"]
     end
 
     subgraph SG23 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻し / RFS BASIC FLOW 45"]
-        N23S1["1. pane を閉じる"] --> N23S2{"2. VALIDATES THAT セッション UUID と設定ファイルのパスを読める"}
-        N23S2 -- 真 --> N23S3["3. worktree とリポジトリ本体を渡して開き直し pane を引く"] --> N23S4{"4. VALIDATES THAT 復帰つきで起動でき idle か done になる"}
-        N23S4 -- 真 --> N23S5["5. コメントへの記録を要求する"] --> N23S6["6. コメントを読み直す"] --> N23S7{"7. VALIDATES THAT コメントがある"}
-        N23S7 -- 真 --> N23S8["8. RESUME STEP 46"]
+        N23S1["1. pane を閉じる"] --> N23S2["2. 閉じた記録を書かずに保留する"] --> N23S3{"3. VALIDATES THAT セッション UUID と設定ファイルのパスを読める"}
+        N23S3 -- 真 --> N23S4["4. worktree とリポジトリ本体を渡して開き直し pane を引く"] --> N23S5{"5. VALIDATES THAT 復帰つきで起動でき idle か done になる"}
+        N23S5 -- 真 --> N23S6["6. コメントへの記録を要求する"] --> N23S7["7. コメントを読み直す"] --> N23S8{"8. VALIDATES THAT コメントがある"}
+        N23S8 -- 真 --> N23S9["9. RESUME STEP 46"]
     end
 
-    subgraph SG24 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 7"]
-        N24S1["1. pane を閉じる"] --> N24S2["2. Status に failure_state を書く"] --> N24S3["3. 成果を確かめてほしいことをコメントする"] --> N24S4["4. 印を外す"] --> N24S5["5. ABORT"]
+    subgraph SG24 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 8"]
+        N24S1["1. pane を閉じる"] --> N24S2["2. 閉じた記録をコメントする"] --> N24S3["3. Status に failure_state を書く"] --> N24S4["4. 成果を確かめてほしいことをコメントする"] --> N24S5["5. 印を外す"] --> N24S6["6. ABORT"]
     end
 
     subgraph SG25 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 16"]
@@ -962,27 +994,27 @@ flowchart TD
     end
 
     subgraph SG27 ["GLOBAL ALTERNATIVE FLOW 着手の途中の失敗 / BRANCH FROM BASIC FLOW 16"]
-        N27S1["1. Status に failure_state を書く"] --> N27S2["2. 失敗した段と直し方をコメントする"] --> N27S3["3. after_run を実行する"] --> N27S4["4. pane を閉じる"] --> N27S5["5. 印を外す"] --> N27S6["6. ABORT"]
+        N27S1["1. Status に failure_state を書く"] --> N27S2["2. 失敗した段と直し方をコメントする"] --> N27S3["3. after_run を実行する"] --> N27S4["4. pane を閉じる"] --> N27S5["5. 起動が成功していた pane なら閉じた記録をコメントする"] --> N27S6["6. 印を外す"] --> N27S7["7. ABORT"]
     end
 
     subgraph SG28 ["GLOBAL ALTERNATIVE FLOW 権限の確認 / BRANCH FROM BASIC FLOW 31"]
-        N28S1["1. pane に esc を送る"] --> N28S2["2. Status に failure_state を書く"] --> N28S3["3. pane を閉じる"] --> N28S4["4. 印を外す"] --> N28S5["5. ABORT"]
+        N28S1["1. pane に esc を送る"] --> N28S2["2. Status に failure_state を書く"] --> N28S3["3. pane を閉じる"] --> N28S4["4. 閉じた記録をコメントする"] --> N28S5["5. 印を外す"] --> N28S6["6. ABORT"]
     end
 
     subgraph SG29 ["GLOBAL ALTERNATIVE FLOW 送信の失敗 / BRANCH FROM BASIC FLOW 31"]
-        N29S1["1. pane を閉じる"] --> N29S2["2. リトライの回数を1つ増やす"] --> N29S3["3. バックオフの期限を印に書く"] --> N29S4["4. ABORT"]
+        N29S1["1. pane を閉じる"] --> N29S2["2. 閉じた記録をコメントする"] --> N29S3["3. リトライの回数を1つ増やす"] --> N29S4["4. バックオフの期限を印に書く"] --> N29S5["5. ABORT"]
     end
 
     subgraph SG30 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 33"]
-        N30S1["1. agent_status と画面の版を要求する"] --> N30S2["2. pane を閉じる"] --> N30S3["3. リトライの回数を1つ増やす"] --> N30S4["4. バックオフの期限を印に書く"] --> N30S5["5. ABORT"]
+        N30S1["1. agent_status と画面の版を要求する"] --> N30S2["2. pane を閉じる"] --> N30S3["3. 閉じた記録をコメントする"] --> N30S4["4. リトライの回数を1つ増やす"] --> N30S5["5. バックオフの期限を印に書く"] --> N30S6["6. ABORT"]
     end
 
     subgraph SG31 ["GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗 / BRANCH FROM BASIC FLOW 31"]
         N31S1["1. 本文が届いたかどうかを判断しない"] --> N31S2["2. 本文を送り直さない"] --> N31S3["3. turn の終わりを待ち直す印を立てる"] --> N31S4["4. ABORT"]
     end
 
-    subgraph SG32 ["SPECIFIC ALTERNATIVE FLOW 復元の断念 / RFS コメントの取り戻し 2"]
-        N32S1["1. 復元の材料が足りない理由を記録に残す"] --> N32S2["2. RESUME STEP 8"]
+    subgraph SG32 ["SPECIFIC ALTERNATIVE FLOW 復元の断念 / RFS コメントの取り戻し 3"]
+        N32S1["1. 復元の材料が足りない理由を記録に残す"] --> N32S2["2. RESUME STEP 9"]
     end
 
     subgraph SG33 ["GLOBAL ALTERNATIVE FLOW 既に同じStatus / BRANCH FROM BASIC FLOW 43"]
@@ -993,8 +1025,8 @@ flowchart TD
         N34S1["1. 新しいセッション UUID を採番する"] --> N34S2["2. hook の引き当ての索引を新しいセッション UUID へ張り替える"] --> N34S3["3. トークンの集計の基準を作り直す"] --> N34S4["4. 身元ファイルのセッション UUID を書き直し、書き直せなければ警告を残す"] --> N34S5["5. 復帰できなかった UUID と新しい UUID と理由を記録に残す"] --> N34S6["6. 起動フラグを新しいセッション UUID の指定つきへ差し替える"] --> N34S7["7. 前の Claude Code を止めずに同じ pane を使い続ける"] --> N34S8["8. RESUME STEP 24"]
     end
 
-    subgraph SG35 ["SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗 / RFS コメントの取り戻し 4"]
-        N35S1["1. 復帰できなかった理由を記録に残す"] --> N35S2["2. pane を閉じる"] --> N35S3["3. Status に failure_state を書く"] --> N35S4["4. 成果を確かめてほしいことをコメントする"] --> N35S5["5. 印を外す"] --> N35S6["6. ABORT"]
+    subgraph SG35 ["SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗 / RFS コメントの取り戻し 5"]
+        N35S1["1. 復帰できなかった理由を記録に残す"] --> N35S2["2. pane を閉じる"] --> N35S3["3. 閉じた記録をコメントする"] --> N35S4["4. Status に failure_state を書く"] --> N35S5["5. 成果を確かめてほしいことをコメントする"] --> N35S6["6. 印を外す"] --> N35S7["7. ABORT"]
     end
 
     N13S2 -- 偽 --> N14S1
@@ -1004,13 +1036,13 @@ flowchart TD
     N18S1 -- 偽 --> N19S1
     N20S3 --> B33
     N21S2 --> B33
-    N23S4 -- 偽 --> N35S1
-    N23S7 -- 偽 --> N24S1
-    N23S8 --> B46
+    N23S5 -- 偽 --> N35S1
+    N23S8 -- 偽 --> N24S1
+    N23S9 --> B46
     N25S1 -- 偽 --> N26S1
     N25S4 --> B16
-    N23S2 -- 偽 --> N32S1
-    N32S2 --> N23S8
+    N23S3 -- 偽 --> N32S1
+    N32S2 --> N23S9
     N33S2 --> B45
     N34S8 --> B24
 ```
@@ -1084,6 +1116,7 @@ sequenceDiagram
                                 H-->>S: 使えるシェルの pane ではないと30秒のあいだ応答し続ける
                                 S->>GH: Status への failure_state の書き込みを要求する
                                 S->>H: pane の close を要求する
+                                S->>GH: 起動が成功していた pane なら、Claude Code を閉じた記録のコメントの投稿を要求する
                                 Note over S: ABORT 残っていた前の Claude Code も pane ごと終わる
                             else pane がシェルのプロンプトへ戻っている
                                 H->>CC: 会話履歴を持たないセッションで Claude Code を起動する
@@ -1116,11 +1149,13 @@ sequenceDiagram
                         S->>CC: turn の本文を送る
                         alt herdr が送信そのものを断る
                             S->>H: pane の close を要求する
+                            S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                             Note over S: ABORT 本文は届いていない。リトライを1つ積む
                         end
                         S->>S: 待ち受けが返ってから settle_ms のあいだに Stop hook が届くことを検証する
                         alt Stop hook が届かない
                             S->>H: pane の close を要求する
+                            S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                             Note over S: ABORT リトライを1つ積む。尽きていれば人間へ渡す
                         end
                         CC-->>S: Stop hook を届ける
@@ -1137,12 +1172,13 @@ sequenceDiagram
                             GH-->>S: 担当者と released の印のコメントを応答する
                             alt 担当者がこの機械の投稿者でなくなっている
                                 S->>H: pane の close を要求する
-                                Note over S: ABORT この turn の終わりで止まる。branch へは push しない
+                                Note over S: ABORT この turn の終わりで止まる。branch へは push しない。閉じた記録は書かない
                             end
                             S->>GH: Status の取り直しを要求する
                             GH-->>S: 現在の Status を応答する
                             alt issue がボードから返らない
                                 S->>H: pane の close を要求する
+                                S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                                 Note over S: ABORT リトライを1つ積む
                             end
                         end
@@ -1157,6 +1193,7 @@ sequenceDiagram
                     GH-->>S: コメントの一覧を応答する
                     alt 今回の run のコメントがない
                         S->>H: pane の close を要求する
+                        S->>S: Claude Code を閉じた記録を書かずに保留する
                         S->>S: 身元ファイルからセッション UUID と設定ファイルのパスを読む
                         alt 復元の材料が足りない
                             Note over S: 復元をあきらめて片付けへ進む
@@ -1167,6 +1204,7 @@ sequenceDiagram
                         alt 復帰つきの起動が完了しない
                             H-->>S: 起動が完了しなかったことを応答する
                             S->>H: pane の close を要求する
+                            S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                             S->>GH: Status への failure_state の書き込みを要求する
                             S->>GH: 成果を確かめてほしい通知のコメントの投稿を要求する
                             Note over S: ABORT 着手と違って新しいセッションでは立て直さない
@@ -1178,6 +1216,7 @@ sequenceDiagram
                     end
                     S->>S: workspace_hooks の after_run を実行する
                     S->>H: pane の close を要求する
+                    S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                     S->>S: 印を外す
                 end
             end

@@ -3,12 +3,12 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "04b42c41187808b86cb22353cb55250c4c9b1cdb726a4a21a6eeb1ed7e95906e"
+    "rucm_block_sha256": "16bfaf0436678fabb32d3f8a94ccdfa92d8a981e2e3cc828299a18e4eee75e86"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。"
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。"
     },
     "知らない表明": {
       "rfs": {
@@ -26,7 +26,7 @@
           5
         ]
       },
-      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。"
+      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。"
     },
     "コメントの取り戻し": {
       "rfs": {
@@ -35,16 +35,16 @@
           12
         ]
       },
-      "postcondition": "issue にエージェントが書いたコメントが1件以上ある。issue の Status は引き渡しの選択肢のままである。worktree は残っている。"
+      "postcondition": "issue にエージェントが書いたコメントが1件以上ある。issue の Status は引き渡しの選択肢のままである。Claude Code を閉じた記録は保留したままで、基本フローに戻ってから pane を閉じる段で書く。worktree は残っている。"
     },
     "コメントの取り戻しの失敗": {
       "rfs": {
         "flow": "コメントの取り戻し",
         "steps": [
-          6
+          7
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。"
     },
     "知らないStatus": {
       "when": "issue の Status が設定に名前の無い選択肢へ動く場合",
@@ -56,7 +56,7 @@
           ]
         }
       ],
-      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。印は外れている。"
     },
     "自動化の書き戻し": {
       "rfs": {
@@ -82,7 +82,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            16
+            17
           ]
         }
       ],
@@ -179,27 +179,34 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは印を外す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "利用者はボードの issue のコメントを読む。"
+      "statement": "システムは印を外す。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "利用者はボードの issue に判断の回答をコメントする。"
+      "statement": "利用者はボードの issue のコメントを読む。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
+      "statement": "利用者はボードの issue に判断の回答をコメントする。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
       "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
     },
     {
@@ -249,13 +256,20 @@
       "type": "action",
       "flow": "完了済みのissue",
       "step": 4,
-      "statement": "システムは印を外す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "完了済みのissue-5",
-      "type": "abort",
+      "type": "action",
       "flow": "完了済みのissue",
       "step": 5,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "完了済みのissue-6",
+      "type": "abort",
+      "flow": "完了済みのissue",
+      "step": 6,
       "statement": "ABORT"
     },
     {
@@ -270,41 +284,48 @@
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 2,
-      "statement": "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。"
+      "statement": "システムは Claude Code を閉じた記録を書かずに保留する。"
     },
     {
       "id": "コメントの取り戻し-3",
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 3,
-      "statement": "システムは pane でエージェントのセッションをセッション UUID で復帰させる。"
+      "statement": "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。"
     },
     {
       "id": "コメントの取り戻し-4",
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 4,
-      "statement": "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。"
+      "statement": "システムは pane でエージェントのセッションをセッション UUID で復帰させる。"
     },
     {
       "id": "コメントの取り戻し-5",
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 5,
-      "statement": "システムは issue のコメントを読み直す。"
+      "statement": "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。"
     },
     {
       "id": "コメントの取り戻し-6",
-      "type": "condition",
+      "type": "action",
       "flow": "コメントの取り戻し",
       "step": 6,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+      "statement": "システムは issue のコメントを読み直す。"
     },
     {
       "id": "コメントの取り戻し-7",
-      "type": "resume",
+      "type": "condition",
       "flow": "コメントの取り戻し",
       "step": 7,
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+    },
+    {
+      "id": "コメントの取り戻し-8",
+      "type": "resume",
+      "flow": "コメントの取り戻し",
+      "step": 8,
       "statement": "RESUME STEP 13"
     },
     {
@@ -312,27 +333,41 @@
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 1,
-      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+      "statement": "システムは herdr の pane を閉じる。"
     },
     {
       "id": "コメントの取り戻しの失敗-2",
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 2,
-      "statement": "システムは issue に引き渡しの通知を1件コメントする。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "コメントの取り戻しの失敗-3",
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 3,
-      "statement": "システムは印を外す。"
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
     },
     {
       "id": "コメントの取り戻しの失敗-4",
-      "type": "abort",
+      "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 4,
+      "statement": "システムは issue に引き渡しの通知を1件コメントする。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-5",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 5,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-6",
+      "type": "abort",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 6,
       "statement": "ABORT"
     },
     {
@@ -375,13 +410,20 @@
       "type": "action",
       "flow": "知らないStatus",
       "step": 6,
-      "statement": "システムは印を外す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "知らないStatus-7",
-      "type": "abort",
+      "type": "action",
       "flow": "知らないStatus",
       "step": 7,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "知らないStatus-8",
+      "type": "abort",
+      "flow": "知らないStatus",
+      "step": 8,
       "statement": "ABORT"
     },
     {
@@ -547,14 +589,19 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-16",
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-17",
       "to": "レビューの完了-1",
       "kind": "global",
       "condition": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合"
     },
     {
-      "from": "BASIC FLOW-17",
-      "to": "BASIC FLOW-18",
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
       "kind": "seq"
     },
     {
@@ -588,6 +635,11 @@
       "kind": "seq"
     },
     {
+      "from": "完了済みのissue-5",
+      "to": "完了済みのissue-6",
+      "kind": "seq"
+    },
+    {
       "from": "コメントの取り戻し-1",
       "to": "コメントの取り戻し-2",
       "kind": "seq"
@@ -615,17 +667,22 @@
     {
       "from": "コメントの取り戻し-6",
       "to": "コメントの取り戻し-7",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-7",
+      "to": "コメントの取り戻し-8",
       "kind": "true",
       "condition": "issue に今回の run が書いたコメントがある"
     },
     {
-      "from": "コメントの取り戻し-6",
+      "from": "コメントの取り戻し-7",
       "to": "コメントの取り戻しの失敗-1",
       "kind": "false",
       "condition": "NOT issue に今回の run が書いたコメントがある"
     },
     {
-      "from": "コメントの取り戻し-7",
+      "from": "コメントの取り戻し-8",
       "to": "BASIC FLOW-13",
       "kind": "resume"
     },
@@ -642,6 +699,16 @@
     {
       "from": "コメントの取り戻しの失敗-3",
       "to": "コメントの取り戻しの失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-4",
+      "to": "コメントの取り戻しの失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-5",
+      "to": "コメントの取り戻しの失敗-6",
       "kind": "seq"
     },
     {
@@ -689,6 +756,11 @@
       "kind": "seq"
     },
     {
+      "from": "知らないStatus-7",
+      "to": "知らないStatus-8",
+      "kind": "seq"
+    },
+    {
       "from": "自動化の書き戻し-1",
       "to": "自動化の書き戻し-2",
       "kind": "seq"
@@ -719,7 +791,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -735,7 +807,8 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18"
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -749,6 +822,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
@@ -774,6 +848,7 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -789,6 +864,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -800,7 +876,7 @@
       "id": "P003",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -818,12 +894,14 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18"
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -837,6 +915,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
@@ -845,6 +924,7 @@
         "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
@@ -873,10 +953,12 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -892,6 +974,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
@@ -900,6 +983,7 @@
         "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -911,7 +995,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -928,10 +1012,13 @@
         "コメントの取り戻し-4",
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
         "コメントの取り戻しの失敗-1",
         "コメントの取り戻しの失敗-2",
         "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4"
+        "コメントの取り戻しの失敗-4",
+        "コメントの取り戻しの失敗-5",
+        "コメントの取り戻しの失敗-6"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -945,12 +1032,15 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
         "システムは印を外す。",
@@ -961,7 +1051,7 @@
       "id": "P006",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -977,7 +1067,8 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18"
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -992,6 +1083,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
@@ -1017,6 +1109,7 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -1033,6 +1126,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -1044,7 +1138,7 @@
       "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1062,12 +1156,14 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18"
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -1082,6 +1178,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
@@ -1090,6 +1187,7 @@
         "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
@@ -1118,10 +1216,12 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -1138,6 +1238,7 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
@@ -1146,6 +1247,7 @@
         "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "利用者はボードの issue のコメントを読む。",
         "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -1157,7 +1259,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1174,10 +1276,13 @@
         "コメントの取り戻し-4",
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
         "コメントの取り戻しの失敗-1",
         "コメントの取り戻しの失敗-2",
         "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4"
+        "コメントの取り戻しの失敗-4",
+        "コメントの取り戻しの失敗-5",
+        "コメントの取り戻しの失敗-6"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -1192,12 +1297,15 @@
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
         "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
         "システムは印を外す。",
@@ -1208,7 +1316,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "完了済みのissue",
-      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。",
+      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1219,7 +1327,8 @@
         "完了済みのissue-2",
         "完了済みのissue-3",
         "完了済みのissue-4",
-        "完了済みのissue-5"
+        "完了済みのissue-5",
+        "完了済みのissue-6"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -1231,6 +1340,7 @@
         "システムはボードの issue の Status を書かない。",
         "システムはエージェントが動かした Status をそのまま残す。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -1262,7 +1372,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "知らないStatus",
-      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1272,7 +1382,8 @@
         "知らないStatus-4",
         "知らないStatus-5",
         "知らないStatus-6",
-        "知らないStatus-7"
+        "知らないStatus-7",
+        "知らないStatus-8"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -1283,6 +1394,7 @@
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -1339,9 +1451,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 50,
-    "nodes_covered": 50,
-    "edges_total": 51,
-    "edges_covered": 51
+    "nodes_total": 56,
+    "nodes_covered": 56,
+    "edges_total": 57,
+    "edges_covered": 57
   }
 }

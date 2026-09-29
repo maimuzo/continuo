@@ -115,6 +115,9 @@ func respond(b *ghBoard, query string, vars map[string]any) (string, map[string]
 		return "items", itemsByQuery(b, q), nil
 	case strings.Contains(query, "updateProjectV2ItemFieldValue"):
 		return "update_status", updateStatusPayload(b, vars), nil
+	case strings.Contains(query, "comments(first: $first") && strings.Contains(query, "authorAssociation"):
+		// **relay 専用の問い合わせ**（設計 3-84。issue #246）。共用の問い合わせと別に数える。
+		return "relay_comments", relayCommentsPayload(b, vars), nil
 	case strings.Contains(query, "comments(first: $first"):
 		return "comments", commentsPayload(b, vars), nil
 	case strings.Contains(query, "addComment"):

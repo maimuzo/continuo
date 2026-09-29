@@ -377,9 +377,9 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 //
 // **3つの形がある。**
 //
-//	continuo prompt --show [ディレクトリ]             送る文面の全文。**変数は展開しない**
+//	continuo prompt --show [ディレクトリ]             送る文面の全文（relay の節を除く）。**変数は展開しない**
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
-//	continuo prompt --show --url <issue の URL>       送る文面の全文。**変数をその issue の値で展開する**
+//	continuo prompt --show --url <issue の URL>       送る文面の全文（relay の節を除く）。**変数をその issue の値で展開する**
 //
 // **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。

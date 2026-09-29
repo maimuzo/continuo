@@ -107,6 +107,16 @@ type Comment struct {
 	// **持ち主が取れていないとき（selfLogin が空文字）は立たない。**そのときは
 	// 投稿者を照合していないので、食い違いを見つけようがない。
 	MarkedByOther bool
+	// AuthorAssociation は投稿者とリポジトリの関係である（`OWNER` / `MEMBER` / `COLLABORATOR` など。
+	// 設計 3-84。issue #246）。
+	//
+	// **`FetchRelayComments` だけが埋める。**ほかの読み取りでは空文字である
+	// （共用の問い合わせにこの項目を足すと、持たない GitHub Enterprise Server で読み書きが全部落ちる）。
+	AuthorAssociation string
+	// IsMinimized は、そのコメントが隠されているかである（設計 3-84）。
+	//
+	// **`FetchRelayComments` だけが埋める。**ほかの読み取りでは偽である。
+	IsMinimized bool
 }
 
 // WrittenBy は、このコメントの投稿者が login かどうかを返す（設計 3-65）。

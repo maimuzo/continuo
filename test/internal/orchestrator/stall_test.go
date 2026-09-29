@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9a3a1a926f2ca090dd2e7f529c2df64f99445920525e7a467dc8c02509dd8e57", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "13e2d58e0fbe60d5dca110674bb2e65458a838c33c4abd9952a44339743abb92", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -246,9 +246,13 @@ func TestCheckStalls_打ち切りの文面は原因と対処を必ず書く(t *t
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		comments := fx.Tracker.CommentsOf("I_node188")
+		// **pane を閉じたので、閉じた記録も1件付く**（設計 3-84。issue #246）。数えるのは引き渡しの通知だけにする。
+		comments := fx.Tracker.HandoffCommentsOf("I_node188")
 		if len(comments) != 1 {
 			t.Fatalf("引き渡しの通知が1件だけ付いていない: %d 件", len(comments))
+		}
+		if n := len(fx.Tracker.ClosedRecordsOf("I_node188")); n != 1 {
+			t.Errorf("pane を閉じたのに閉じた記録が1件ではない: %d 件", n)
 		}
 		body := comments[0].Body
 		for _, want := range []string{
