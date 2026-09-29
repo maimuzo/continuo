@@ -102,7 +102,7 @@ func TestRun_4つの欄を1行にしてsocketへ送る(t *testing.T) {
 	path, ch := listenOnce(t)
 	var stdout bytes.Buffer
 
-	code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, path)
+	code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, path, "")
 
 	assertFixedOutput(t, code, &stdout)
 	line := recvLine(t, ch)
@@ -152,7 +152,7 @@ func TestRun_rate_limitsがnullでもsession_idとapi_msを送る(t *testing.T) 
 			path, ch := listenOnce(t)
 			var stdout bytes.Buffer
 
-			code := statuslineclient.Run(strings.NewReader(input), &stdout, path)
+			code := statuslineclient.Run(strings.NewReader(input), &stdout, path, "")
 
 			assertFixedOutput(t, code, &stdout)
 			line := recvLine(t, ch)
@@ -183,7 +183,7 @@ func TestRun_期間が片方だけならその期間だけを送る(t *testing.T
 
 	code := statuslineclient.Run(strings.NewReader(
 		`{"session_id":"s1","cost":{"total_api_duration_ms":12},"rate_limits":{"seven_day":{"used_percentage":90,"resets_at":1790622000}}}`),
-		&stdout, path)
+		&stdout, path, "")
 
 	assertFixedOutput(t, code, &stdout)
 	var got statuslineserver.Line
@@ -207,7 +207,7 @@ func TestRun_送れなかったときも固定の1行を出して0で終える(t
 	t.Run("socketが無い", func(t *testing.T) {
 		var stdout bytes.Buffer
 		missing := filepath.Join(shortDir(t), "sl.sock")
-		code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, missing)
+		code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, missing, "")
 		assertFixedOutput(t, code, &stdout)
 	})
 
@@ -222,7 +222,7 @@ func TestRun_送れなかったときも固定の1行を出して0で終える(t
 			path, ch := listenOnce(t)
 			var stdout bytes.Buffer
 
-			code := statuslineclient.Run(strings.NewReader(input), &stdout, path)
+			code := statuslineclient.Run(strings.NewReader(input), &stdout, path, "")
 
 			assertFixedOutput(t, code, &stdout)
 			select {
@@ -253,7 +253,7 @@ func TestRun_本物の受け口へ届く(t *testing.T) {
 	t.Cleanup(func() { _ = srv.Close() })
 
 	var stdout bytes.Buffer
-	code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, path)
+	code := statuslineclient.Run(strings.NewReader(sampleInput), &stdout, path, "")
 	assertFixedOutput(t, code, &stdout)
 
 	select {

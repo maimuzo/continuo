@@ -952,7 +952,7 @@ func (o *Orchestrator) startRunFromWorktree(
 	}
 
 	// 段5: Claude Code の設定ファイルを worktree の外に作る（再 dispatch でも作り直す）。
-	settingsPath, err := o.writeSettingsFile(issue)
+	settingsPath, err := o.writeSettingsFile(issue, prepared.Path)
 	if err != nil {
 		return err
 	}

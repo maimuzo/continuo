@@ -12,7 +12,11 @@
 | --- | --- | --- |
 | **continuo 本体** | **ロックファイル1本につき1つ**（`flock(2)` で二重起動を止める。`--id <名前>` を付けるとロックが分かれ、1台で2本以上動く。設計 3-17b） | 巡回・表明の読み取り・後片付けを、**同じプロセスの中の goroutine で回す** |
 | **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送るだけ |
-| **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送り、標準出力へ固定の `continuo` を出すだけ |
+| **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送る。そのあと、利用者の `statusLine` のコマンドを**子のプロセス**として起動し、その出力を返す。転送先が無いか転送に失敗したら、固定の `continuo` を出す（設計 3-84） |
+
+**`continuo statusline` が起動する子のプロセスは、continuo のプロセスではない。**利用者の `statusLine` のコマンド（例: `~/.claude/my-statusline.sh`）で、
+continuo が着手のときに設定ファイルから決め、issue ごとの設定ファイルの `env` の `CONTINUO_STATUSLINE_COMMAND` に書く（設計 3-84a）。
+`/bin/sh -c` で新しいプロセスグループに起動し、5秒で打ち切る。子の環境からは `CONTINUO_STATUSLINE_COMMAND` を外すので、子がまた `continuo statusline` を呼んでも1段で止まる。
 
 **Claude Code がイベントのたびに `continuo hook` を exec する。**
 
@@ -24,7 +28,7 @@
     Stop / UserPromptSubmit / SubagentStop / SubagentStart / Notification / SessionStart   … 節目ごとに1回
     PreToolUse / PostToolUse（matcher は `*`）                                             … 道具を叩くたびに1回ずつ
 
-そのコマンド行は [internal/orchestrator/settings.go:387-388](../../internal/orchestrator/settings.go#L387-L388) が組み立てて、
+そのコマンド行は [internal/orchestrator/settings.go:392-393](../../internal/orchestrator/settings.go#L392-L393) が組み立てて、
 issue ごとの設定ファイルへ書く。
 
 ```
@@ -42,7 +46,7 @@ issue ごとの設定ファイルへ書く。
 ```
 
 **`continuo statusline` は hook の socket へ送らない。**hook の socket は、`session_id` が知っている run のものなら stall の時計を進め直すので、
-ステータスラインの行を混ぜると、固まった run を止められなくなる（設計 3-23）。**逃がし先も持たない。**送れなければ何も書かずに終了コード 0 で終わる。
+ステータスラインの行を混ぜると、固まった run を止められなくなる（設計 3-23）。**逃がし先も持たない。**送れなくても何も書かずに転送へ進み、終了コード 0 で終わる（設計 3-84b）。
 
 **usage API はプロセスを増やさない。**`rate_limit.source: oauth_usage_api`（既定）では、continuo 本体の巡回が、その先頭で usage API を HTTPS で読む（`poll_interval_ms` ごと）。
 **ステータスラインは、usage API が誤りのあいだの受け口である**（設計 3-27）。issue の pane の値は、どの状態でも同じ保管値へ入る。statusline取得を開くのは、usage API が誤りで値が古いときだけである。
@@ -84,10 +88,15 @@ flowchart LR
         SC["statuslineclient"]
     end
 
+    subgraph P4["利用者の statusLine のコマンド（転送先があるときだけ。5秒で打ち切る）"]
+        UC["例: ~/.claude/my-statusline.sh"]
+    end
+
     A["Claude Code<br/>（pane の中）"] -->|"イベントごとに exec<br/>（道具1つにつき2回）"| P2
     A -->|"描き直すたびに exec"| P3
     HC -->|"hooks.sock<br/>1行の JSON"| HS
     SC -->|"sl.sock<br/>1行の JSON"| SS
+    SC -->|"/bin/sh -c で起動<br/>同じ標準入力を渡し、出力を受ける"| P4
     HC -.->|"socket が死んでいるときだけ<br/>ファイルへ書く"| F[("pending/<br/>&lt;時刻&gt;-&lt;イベント名&gt;.json")]
     F -.->|"次の起動時に読む"| P1
     Q -.->|"変わるたびに書く"| QF[("quota.json")]

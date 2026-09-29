@@ -2015,6 +2015,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatalf("ホームディレクトリを作成できません: %v", err)
 	}
+	// **利用者の設定ディレクトリを、この一時ディレクトリの下へ向ける**（設計 3-84a）。
+	// 向けないと、着手のたびにテストを走らせた人の `~/.claude/settings.json` を読み、
+	// その人のステータスラインが issue ごとの設定ファイルの env へ入る（読むだけだが、結果が人で変わる）。
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 
 	// 信頼の検査が読む ~/.claude.json（**読むだけで書き換えない**）。
 	toplevel := runGit(t, repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
