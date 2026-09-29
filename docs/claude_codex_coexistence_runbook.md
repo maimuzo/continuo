@@ -13,9 +13,8 @@ Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・`CLAUDE.md` が指す文�
 - プロジェクト固有のskillを持つ場合だけ、そのskillディレクトリをプロジェクトの `.agents/skills/` へ、個人のskillを `~/.agents/skills/` へskill単位でsymlink
 - 同じmarketplaceからCodexへ必要なpluginだけを導入（`CLAUDE.md` が規則の置き場としてpluginのskillを指す場合は、そのpluginを含める）
 - Claude内からCodexを呼ぶ公式pluginと、HerdrからCodexを直接起動する経路
-- Codex native hooksから、互換性を確認したClaude hook scriptを直接呼ぶ経路
 
-Claudeのhook設定JSONをCodexへsymlinkしない。共有候補は、Codexのevent payloadとoutput契約が一致するhook script、`name`・`description`を持つskill、依存コマンドと参照資料が対象環境にあるpluginである。transcript依存hook、`context: fork`、Claude agent、MCP secretは追加検証が終わるまで有効化しない。
+Claudeのhook設定JSONをCodexへsymlinkしない。共有候補は、Codexのevent payloadとoutput契約が一致するhook script、`name`・`description`を持つskill、依存コマンドと参照資料が対象環境にあるpluginである。hookは基本セットアップに含めない。12節の確認が済んだものだけを追加候補として接続する。transcript依存hook、`context: fork`、Claude agent、MCP secretは追加検証が終わるまで有効化しない。
 
 ## 2. 作業前の確認とバックアップ
 

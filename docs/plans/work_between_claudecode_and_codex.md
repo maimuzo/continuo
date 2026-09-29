@@ -328,8 +328,8 @@ Codex側で無効化したskillの設定はplugin cacheのバージョン付き�
 リポジトリの変更はcommitで戻し、ホーム配下の設定は個人バックアップで戻す。
 Gitの取り消しだけでは個人設定は復元されない。後から加えた変更がある場合は丸ごと上書きしない。
 
-導入前のcommitは `1355524d`。導入完了のcommitは、この文書と、`git log -- .agents/skills/worker-briefing` が返す履歴（そのsymlinkを足したcommit）から確認できる。
-リポジトリの未コミット変更を保護したうえで、完了commitだけを `git revert <完了commit>` で取り消す。履歴や無関係の変更を消す `git reset --hard` は使わない。
+リポジトリ側には、Codexが読む設定を置いていない。`.agents/skills/` も無く、足しているのはこの文書と手順書の2本だけである。
+そのため、リポジトリ側で戻すものは無い。文書を消したいときは、2本を消すcommitを新しく作る。履歴や無関係の変更を消す `git reset --hard` は使わない。
 
 個人設定のバックアップ先は `~/.codex/backups/claude-coexistence-20260914/`。
 セットアップ担当が導入前に `config.before.toml`、導入後に `config.after.toml` と `CLAUDE.after.md`、復元用の `RESTORE.md` を保存している。
