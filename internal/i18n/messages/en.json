@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "d8cafb024558a32fabd3ca30d866b1233afe072e5a80d90d490246912918481c",
+  "_source_sha256": "6c7c5e5886b7aceaefd5a483db834ad95f622934a6ad3e9b9bb62f2f3670fe98",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -553,7 +553,7 @@
   "handoff.released.do_not_push": "**Do not push the work that was running under %s to this branch.**",
   "handoff.released.reassign": "**The assignee of this issue was removed. The next assignee is decided by a new round of bids.**",
   "handoff.released.weekly_wait_limit": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** workspace_hooks.after_run has already run. **If it includes `git push`, the next machine that picks up this branch can continue from the remote.** If it does not, the commits exist only in this worktree (the worktree has been kept).",
-  "handoff.released.weekly_wait_limit_no_push": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** **It could not confirm that workspace_hooks.after_run pushed** (either it is not configured, or it ran and failed — **the log says which**). The remote for this branch may not have the latest commits. The worktree has been kept.",
+  "handoff.released.weekly_wait_limit_no_push": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** **It could not confirm that workspace_hooks.after_run pushed** (**the log says why**: it is not configured, it ran and failed, or it had already run in this worktree). The remote for this branch may not have the latest commits. The worktree has been kept.",
   "herdr.agent.invalid_name": "The agent name does not fit herdr's allowed pattern (`^[a-z][a-z0-9_-]{0,31}$`; it must start with a lowercase letter and be at most 32 characters): %q",
   "herdr.agent.send_keys_empty": "%s needs at least one key",
   "herdr.call.canceled": "the call to herdr was canceled (method=%s)",

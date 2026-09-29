@@ -1,7 +1,10 @@
-// {"RUCM-CFG-SHA256": "af3aebfea7324d55c97dbfc97ddc697941587d2e6b2357d5c1ba132a839bc9b2", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33fe453c5d236ce82a0ba1ffd08222a6315dc1005f0177e62105f632c319218b", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
-// 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
+// 11本のパスは、9通りの終端フロー（と、どのフローにも属さない周回1本）の組み合わせである。
+// **終端フローごとに代表を1本ずつ**対応づける。
+// **件数は `.cfg.json` を数えた実測である**（2026-09-29。実装レビュー3周目の MEDIUM で直した。
+// **以前は「15本・6通り」と書いていたが、それは `origin/main` の時点の値である**）。
 package orchestrator_test
 
 import (

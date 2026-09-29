@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "af3aebfea7324d55c97dbfc97ddc697941587d2e6b2357d5c1ba132a839bc9b2", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33fe453c5d236ce82a0ba1ffd08222a6315dc1005f0177e62105f632c319218b", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 //
@@ -12,6 +12,7 @@ package orchestrator_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,6 +107,28 @@ func weeklyWaitFixtureWith(
 	extra func(*config.Config),
 ) (*stubFixture, tracker.Issue, *testClock) {
 	t.Helper()
+	return weeklyWaitFixtureAdopted(t, limits, limitMinutes, tokenEnv, extra, nil)
+}
+
+// weeklyWaitFixtureAdopted は weeklyWaitFixtureWith に、印へ入れる内容を差し替える手立てを付けたものである
+// （issue #197）。
+//
+// **`Adopt` は、同じ issue がすでに印に在れば何もしない。**
+// **だから、組み立てたあとに呼び直しても差し替わらない。**
+// **agent 名を持たない run の検査は、最初からその形で入れる必要がある。**
+//
+// t: 呼び出し元のテスト。
+// limits: usage API が返す枠の一覧。
+// limitMinutes: `rate_limit.weekly_wait_limit_minutes` に入れる値。
+// tokenEnv: トークンを入れる環境変数の名前（テストごとに変える）。
+// extra: 既定の設定を書いたあとに呼ぶ手立て。nil なら何もしない。
+// adopted: 印へ入れる内容。nil なら既定（agent 名と pane を持つ run）。
+// 戻り値: 組み立てた一式・印へ入れた issue・進められる時計。
+func weeklyWaitFixtureAdopted(
+	t *testing.T, limits []map[string]any, limitMinutes int, tokenEnv string,
+	extra func(*config.Config), adopted *orchestrator.AdoptedRun,
+) (*stubFixture, tracker.Issue, *testClock) {
+	t.Helper()
 	endpoint, _ := newUsageServer(t, limits)
 	reader := newUsageReader(t, endpoint, tokenEnv)
 	clock := newTestClock()
@@ -133,12 +156,16 @@ func weeklyWaitFixtureWith(
 	// **担当者をこの機械にした issue を、印へ入れる。**
 	issue := assignedIssue(188, "In Progress", testGHLogin)
 	fx.Tracker.AddIssue(issue)
-	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+	run := orchestrator.AdoptedRun{
 		AgentName:        normalize.SafeName("continuo-hello-world-188"),
 		PaneID:           "w1:p1",
 		SessionUUID:      "session-188",
 		HerdrWorkspaceID: "w1",
-	}, false)
+	}
+	if adopted != nil {
+		run = *adopted
+	}
+	fx.Orc.Adopt(issue, run, false)
 
 	// **枠待ちの条件その2 を満たす**（turn_timeout_ms のあいだ hook が来ていない）。
 	clock.Advance(2 * time.Minute)
@@ -244,7 +271,7 @@ func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
 // TestQuota_担当が移っていたらafter_runを走らせずに止める は、代替フロー「待つ上限を超えた」の
 // 担当の確かめで引き返す枝を検査する（設計 3-27 / 3-77c。issue #197）。
@@ -278,9 +305,16 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
 		t.Fatalf("担当が移っているのに手放しの経路を通っている:\n%s", got)
 	}
+	// **この経路の段に「pane を閉じる」がある**（RUCM の `担当が移っていた` の段3。
+	// 実装レビュー3周目の MEDIUM）。**`stopHandoffLostClaimed` が
+	// `leaveDirectChatMode` を先に呼ばないと、`stopWorker` が門で止まって pane が残り、
+	// そのあとの `release` が run の登録から外す。**確かめないと、その直しが消えても緑になる。
+	if ids := fx.Herdr.ClosedPanes(); len(ids) == 0 {
+		t.Fatalf("担当が移った run の pane を閉じていない:\n%s", fx.Logs.String())
+	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P010"}
 //
 // TestQuota_1週間の枠のリセットが上限より先なら担当を手放す は、#197 の本体を確かめる
 // （時刻で測る側）。
@@ -358,27 +392,26 @@ func TestQuota_人間が引き取っているrunは上限を超えても手放�
 
 // TestQuota_100の枠が1つも無ければ上限は効かず打ち切りが受け持つ は、#197 の境界を確かめる。
 //
-// 目的: **`rate_limit.weekly_wait_limit_minutes` は「レートリミットの回復を待っている run」を
-// 打ち切るための上限である。**待っていない run には効かない。
+// 目的: **リセット時刻を読めない枠では、経過で測る枝しか無い**（設計 3-27。issue #197）。
+// **その枝の起点は `WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）で、
+// 巡回のたびに控え直される。****控える前に時計を進めても、経過は0のままである。**
 //
-// **待っているかどうかは「使用率が 100 に達した枠があるか」で決まる**（設計 3-27 の条件その1）。
-// **100 の枠が1つも無ければ、その run は枠待ちの印を持たない。**
-// **黙っているだけの run なので、`claude.turn_timeout_ms` を超えた時点で打ち切りが受け持つ。**
-//
-// **この境界を検査に残す理由。**「1週間の枠に余裕が無い」だけで手放すようにすると、
-// **使用率90%の機械が、動いている run を次々に手放すことになる。**
-// **手放しは `git push` していない変更を失いうる操作である**（別の機械が拾うと worktree を作り直す）。
+// **枠待ちの印は門ではない**（実装レビュー3周目の HIGH で名前と説明を直した）。
+// **以前この検査は「100 の枠が1つも無ければ上限は効かない」と名乗っていたが、それは実装に無い規則である。**
+// 同じファイルの `TestQuota_92パーセントでも打ち切られずに手放される` が、
+// **100 の枠を1つも持たない状態で手放すことを確かめている**（人間の決定。2026-09-06）。
 //
 // 与える情報: 1週間のモデル別の枠が 95%（余裕値は `100 − 95 − 10 = −15` で0以下）。
-// **100 に達した枠は1つも無い。**上限は10分。
-// 成功条件: **担当を手放さないこと。**印から外れるのは打ち切りによってであり、
-// 「担当を手放しました」は1行も出ないこと。
-func TestQuota_100の枠が1つも無ければ上限は効かず打ち切りが受け持つ(t *testing.T) {
+// **`resets_at` は `null` なので、時刻で測る枝は「分からない」と答える。**上限は10分。
+// **巡回のあいだ時計を進めない**（`clock.Advance` はループの外で1回だけ）。
+// 成功条件: **担当を手放さないこと。**「担当を手放しました」が1行も出ず、担当者が変わらないこと。
+func TestQuota_リセット時刻が読めず経過も溜まっていなければ手放さない(t *testing.T) {
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_scoped", "percent": 95, "resets_at": nil, "severity": "normal"},
 	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W2")
 
-	// **20分進める。**上限（10分）を超えるが、枠待ちではないので効かない。
+	// **20分進める。**上限（10分）を超えるが、**起点を控える前なので経過は0である。**
+	// **このあとのループでは時計を進めない**ので、経過は溜まらない。
 	clock.Advance(20 * time.Minute)
 	for range 5 {
 		fx.Orc.Tick(context.Background())
@@ -386,11 +419,120 @@ func TestQuota_100の枠が1つも無ければ上限は効かず打ち切りが�
 	}
 
 	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
-		t.Fatalf("100 の枠が1つも無いのに担当を手放した:\n%s", got)
+		t.Fatalf("経過が溜まっていないのに担当を手放した:\n%s", got)
 	}
-	// **担当者は残る。**打ち切りは担当者に触らない。
+	// **担当者は残る。**
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
-		t.Fatalf("打ち切りが担当者を触った: %v", got)
+		t.Fatalf("担当者を触った: %v", got)
+	}
+}
+
+// {"RUCM-PATH": "P008"}
+//
+// TestQuota_担当を確かめられないうちは手放さない は、代替フロー「手放さずに待ち続ける」を確かめる
+// （設計 3-27 の段0a。issue #197）。
+//
+// 目的: **段0a の答えは3つある。「はい」「いいえ」「分からない」である。**
+// **「分からない」を「はい」へ畳んではならない。**畳むと、issue を1回読めなかっただけで
+// **利用者が書いた `git push` が、別の機械の branch へ飛ぶ。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **issue の取り直しが誤りを返す状態**（`FetchIssuesByIDs` が落ちる）。
+// 成功条件: 手放さないこと。担当者が変わらず、pane が1つも閉じられず、
+// 見送りの1行が出ること。
+func TestQuota_担当を確かめられないうちは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_UNKNOWN_ASSIGNEE")
+	// **issue を取り直せない状態にする。**`mayReleaseOwnWork` は「分からない」を返す。
+	fx.Tracker.SetIDsError(errors.New("取り直せません（検査）"))
+
+	for range 10 {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatalf("担当を確かめられないのに印から外した:\n%s", fx.Logs.String())
+		}
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("担当を確かめられないのに担当者を書き換えた: %v", got)
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+		t.Fatalf("担当を確かめられないのに pane を閉じた: %v", ids)
+	}
+	if got := fx.Logs.String(); !strings.Contains(got, "いまの担当を確かめられないので見送ります") {
+		t.Fatalf("見送った理由を出していない:\n%s", got)
+	}
+}
+
+// TestQuota_画面を持っていないrunは手放さない は、設計 3-27 の門の2つ目を確かめる（issue #197）。
+//
+// 目的: **`agent.get` が届かない run では、止まったかどうかを確かめられない。**
+// **確かめられない pane を閉じて担当を外す道は無い。**
+// **門を落とすと、`paneStopped` が run の数だけ誤りを返し、巡回のたびにログが積む**
+// （issue #173 が読めるようにしようとしているログを埋める）。
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。**agent 名を持たない run。**
+// 成功条件: 手放さないこと。担当者が変わらないこと。
+func TestQuota_画面を持っていないrunは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	// **最初から agent 名を持たない形で印へ入れる。**
+	// **`Adopt` は同じ issue が既に在れば何もしないので、あとから差し替えられない。**
+	fx, issue, clock := weeklyWaitFixtureAdopted(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_NOAGENT", nil, &orchestrator.AdoptedRun{
+		AgentName:        "",
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		HerdrWorkspaceID: "w1",
+	})
+
+	for range 10 {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("画面を持っていない run の担当者を書き換えた: %v\n%s", got, fx.Logs.String())
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("画面を持っていない run を手放した:\n%s", got)
+	}
+}
+
+// TestQuota_忙しいhookを受けた直後のrunは手放さない は、設計 3-27 の門の7つ目を確かめる
+// （issue #197）。
+//
+// 目的: **この門を落とすと、指示を送った直後の run が「進んでいない」と読まれ、
+// `idle` が2回続いた時点で手放される**（turn の開始から2巡回。既定60秒）。
+// **別の機械が入札し直し、同じ worktree に2本目の Claude Code が立つ。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **巡回のたびに忙しい hook を1件入れる**（無音が `claude.turn_timeout_ms`（この一式では60秒）に達しない）。
+// 成功条件: 手放さないこと。担当者が変わらないこと。
+func TestQuota_忙しいhookを受けた直後のrunは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_BUSYHOOK")
+
+	for range 10 {
+		// **忙しい hook を入れてから、時計を無音の閾値より短く進める。**
+		fx.Orc.OnHook(subagentStartEvent("session-188", "", "a1f9f743842d397e1", "Explore"))
+		clock.Advance(10 * time.Second)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("忙しい hook を受けている run の担当者を書き換えた: %v", got)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("忙しい hook を受けている run を手放した:\n%s", got)
 	}
 }
 
@@ -470,7 +612,7 @@ func TestQuota_連番を返さない版では手放さない(t *testing.T) {
 	t.Fatalf("連番を読めない run が、手放されも打ち切られもせずに残っています:\n%s", fx.Logs.String())
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P010"}
 //
 // TestQuota_92パーセントでも打ち切られずに手放される は、90〜99%の帯を確かめる
 // （issue #173 / #197）。

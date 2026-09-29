@@ -321,7 +321,7 @@ tracker:
 #### 画面に出る文言の言葉を変えたい（英語にしたい・日本語で固定したい）
 
 **書く場所。**`WORKFLOW.md` の `language:` です。**設定は `LANG` より強いので、書けば必ずその言語が選ばれます。**
-**例外は、`WORKFLOW.md` を読まない4つのコマンドだけです**（下に書きました）。
+**例外は、`WORKFLOW.md` を読まないコマンドだけです**（下の表に並べました）。
 
 ```yaml
 language: ja
@@ -604,8 +604,9 @@ tracker:
 | **大文字小文字だけが違う左が2つ** | どちらに当たるかが、実行のたびに変わります |
 | **左が空、または右が空** | Status 名として存在しません |
 
-**「`tracker` の他のキー」は6つです。**`active_states` / `terminal_states` / `running_state` /
-`dispatch_state` / `failure_state` / `status_signal_map` の遷移先。
+**「`tracker` の他のキー」は7つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `direct_chat_state` / `status_signal_map` の遷移先。
+**`direct_chat_state` は `v0.1.16` で増えました**（`internal/config/states.go` の `KnownStates`）。
 **`tracker` の外（`cleanup` など）は見ません。**
 
 **足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」にあります。**
@@ -1223,6 +1224,7 @@ grep -E '枠に余裕が無いので|枠を読めないので' <ログの出力�
 worktree は残します。カンバンへは書きません）
   identifier=octocat/hello-world#188 外した担当者=octocat
   after_run が成功したか=true
+  after_run を走らせなかった理由=
   weekly_wait_limit_minutes=300 余裕の無い1週間の枠=weekly_scoped
 ```
 
@@ -1230,6 +1232,16 @@ worktree は残します。カンバンへは書きません）
 **`true` なら、あなたが `workspace_hooks.after_run` に書いた `git push` が走り切っています。**
 **`false` なら走り切っていません。**手元の commit が残っている可能性があるので、
 worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてください。
+
+**`false` のときは、隣の `after_run を走らせなかった理由` にどれかが入ります。**
+**成功したときは空です。**
+
+| 理由 | 何が起きたか |
+| --- | --- |
+| `workspace_hooks.after_run が設定されていません` | **`WORKFLOW.md` に書いていません**（既定の雛形は書いていないので、これがいちばん多いです）。continuo は自分では push しないので、エージェントが push していなければ手元にだけ commit が残ります |
+| `workspace_hooks.after_run が失敗しました` | 走ったが終了コードが0以外でした。**同じ巡回に別の WARN が出ており、そこにコマンドの誤りが入っています** |
+| `workspace_hooks.after_run は、この worktree で既に走っていました` | 前に1度走っています。**成功したとは言えません**（印は実行の前に立つので、失敗しても残ります）。そのあとに積んだ commit は push されていません |
+| `worktree のパスを持っていません` | continuo の内部の異常です。**issue を立ててください** |
 
 **次に `余裕の無い1週間の枠` を見てください。**`weekly_scoped` は**モデル別の週次の枠**です。
 **claude.ai の画面に出る週次の全体（`weekly_all`）が30%でも、
@@ -1268,15 +1280,16 @@ workspace_hooks.after_run は既に走らせたので、この run が完走し�
 | **worktree** | **残ります。**消しません |
 | **カンバンの Status** | **動きません。**`In Progress` のままです |
 | **herdr の pane** | **閉じます** |
-| **`workspace_hooks.after_run`** | **担当を外す前に走ります。**ここに `git push` を書いている人は、手放す前に push されます。**ただし下の表の4つに当たると、1回も走りません** |
+| **`workspace_hooks.after_run`** | **担当を外す前に走ります。**ここに `git push` を書いている人は、手放す前に push されます。**ただし下の表に当たると、1回も走りません** |
 | **会話の文脈** | **同じ機械が拾い直せば引き継がれます**（身元ファイルのセッションの識別子から復帰します） |
 | **push していない変更** | **別の機械が先に拾うと失われます。**その機械は worktree を新しく作ります |
 
 **`after_run` に push を書いていない場合、失われるのは最後のエージェントの push 以降ぶんです。**
 **エージェントは `progress_interval_ms`（既定1時間）ごとに push するよう指示されています。**
 
-**`after_run` が走らない場合。**次の8つのどれかに当たると走りません。
-**うち7つは「手放しそのものを見送る」で、1つだけは「手放さずに run を畳む」です**（表のいちばん下）。
+**`after_run` が走らない場合。**下の表のどれかに当たると走りません。
+**表のいちばん下の1行だけは「手放さずに run を畳む」で、残りは「手放しそのものを見送る」です。**
+**件数は書きません**（門の一覧は設計 3-27 が持っており、増えたときにここだけ古くなります）。
 **この2つは結果が違うので、分けて読んでください。**
 
 **見送った run が、そのあとどうなるかも書いてあります。**
@@ -1311,9 +1324,18 @@ workspace_hooks.after_run は既に走らせたので、この run が完走し�
 
 | どうしたいか | どう書くか |
 | --- | --- |
-| **待たずに早く手放したい**（他の機械に任せたい） | 短くする。例: `weekly_wait_limit_minutes: 60` |
+| **待たずに早く手放したい**（他の機械に任せたい） | 短くする。例: `weekly_wait_limit_minutes: 60`。**ただし、たいていの機械では変わりません**（下の断り） |
 | **待ち続けたい**（1台で動かしていて、他に拾う機械が無い） | **`weekly_wait_limit_minutes: 0`。**上限を設けません |
 | 既定のまま | 5時間。**1週間の枠が5時間以内に明けるなら待ちます** |
+
+**断り。**`weekly_wait_limit_minutes` を短くしても、**手放す時刻はたいてい変わりません。**
+**判定は「リセット時刻 − いま > この値」で、1週間の枠は最長で7日先までリセットされません。**
+**だから 300 でも 60 でも、条件はどちらも真になります。**
+**実際に手放す時刻を決めているのは `claude.turn_timeout_ms`（既定1時間）です。**
+continuo は、その run から1時間 hook が1件も来ていないことを確かめてから手放します。
+**「もっと早く手放したい」なら、`claude.turn_timeout_ms` を短くしてください。**
+**この値が効くのは、1週間の枠が数時間以内に明けるときだけです**（例: 明けるまで3時間・この値が 60 なら手放し、
+この値が 300 なら待ち続けます）。
 
 **複数の機械で見張るなら、`tracker.provider.handoff.idle_timeout_ms`（既定18時間）より短くしてください。**
 **長いと、別の機械が先に担当を外すので、この値は一度も効きません。**

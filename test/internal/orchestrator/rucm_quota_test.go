@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "af3aebfea7324d55c97dbfc97ddc697941587d2e6b2357d5c1ba132a839bc9b2", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33fe453c5d236ce82a0ba1ffd08222a6315dc1005f0177e62105f632c319218b", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
@@ -17,9 +17,9 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P007"}
 //
-// TestRUCMQuota_P010_枠を見ない設定なら枠明けを待たない は、代替フロー「応答のあるrun」の前提を検査する。
+// TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない は、代替フロー「応答のあるrun」の前提を検査する。
 //
 // **枠待ちの条件は2つある**（設計 3-27）。枠が100%であることと、
 // **その run が `turn_timeout_ms` のあいだ hook を1件も受けていないこと。**
@@ -30,7 +30,7 @@ import (
 // 与える情報: 枠を見ない設定と、hook を1件も送らない run。
 // 成功条件（RUCM の POSTCONDITION）: run の枠待ちの印が立たないこと
 // （`agent.wait` を1回も送らないことで確かめる）。
-func TestRUCMQuota_P010_枠を見ない設定なら枠明けを待たない(t *testing.T) {
+func TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = "none"

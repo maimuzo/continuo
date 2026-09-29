@@ -454,7 +454,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 	//
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
 	// **`stale` で止めてはならない。**
-	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) が
+	// 設計 3-77i が
 	// 「**止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
 	// 最後に読めた値を使い続ける（**読めないことを理由に走行中の run を捨てない**）」と決めている。
 	//
@@ -959,7 +959,22 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	now := o.now()
 	quotaSnap := o.quotaSnapshot()
-	releasing := o.releaseQuotaWaitExceeded(ctx, quotaSnap, now)
+	// **手放しと、その起点の記録にだけは、新しさを問う写しを渡す**（設計 3-27。実装レビュー3周目の HIGH）。
+	//
+	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
+	// 資格情報が切れて写しが凍っている機械は、1件も手放さない」と決めている。**
+	// **3-77i の「最後に読めた値を使い続ける」は「止める」側の判断で、
+	// 手放しは pane を閉じて担当を外す不可逆な操作なので、同じ向きに倒してはならない。**
+	//
+	// **09:00 に資格情報が切れた機械は、そのときの「週次100%」を1日中返し続ける。**
+	// **倒すと、その機械が抱えている run を毎巡回で1件ずつ手放す。**
+	// **口座を切り替えた機械では、実際の枠は回復している。**
+	//
+	// **印を外す側（`clearQuotaWaitWhenBack`）と立てる側（`isQuotaWaitingWith`）は、
+	// いまのまま新しさを問わない。**あちらは不可逆ではなく、
+	// **止めると印が永久に残る**（1周目の MEDIUM）。
+	quotaFresh := o.quotaForBid()
+	releasing := o.releaseQuotaWaitExceeded(ctx, quotaFresh, now)
 	// **時刻を取り直す**（issue #173）。
 	// **`releaseQuotaWaitExceeded` は run ごとに herdr を1回叩く。**
 	// `herdr.read_timeout_ms`（既定5000ミリ秒）まで待つので、
@@ -979,13 +994,17 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **nil の写しは「余裕がある」と答えるので、そのまま控えると
 	// `WeeklyShortSince` がゼロへ戻り、経過で測る道が閉じる。**
 	// **手放しの側が同じ理由で拒んでいるものを、こちらだけ受け入れてはならない。**
-	// **新しさは問わない**（issue #284。上と同じ理由）。
+	//
+	// **新しさも問う**（実装レビュー3周目の HIGH）。**手放しと同じ写しを使う。**
+	// **ここだけ古い写しを受け入れると、凍った写しで起点が進み続け、
+	// 次に値が1度読めた瞬間に「上限を超えた」と判定して手放す。**
+	// **手放しへ新しさを求めた意味が無くなる。**
 	//
 	// **判定は門の中で作る**（issue #173）。**外に出すと、写しが古い巡回でも
 	// 枠の一覧を走査して closure を2つ確保することになる。**捨てる値である。
-	if quotaSnap != nil {
+	if quotaFresh != nil {
 		// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
-		weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
+		weeklyShort := quotaFresh.AnySelected(handoff.ShortWeekly(o.bidMargins()))
 		for _, rs := range o.snapshotRuns() {
 			rs.noteWeeklyShort(weeklyShort, now)
 		}
@@ -998,8 +1017,8 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	//
 	// **立てる側と外す側で、非対称にしてはならない。**
 	// **立てる側**（下の段2 の `isQuotaWaitingWith`）**にも、古い写しの門は置いていない。**
-	// **どちらも、最後に読めた値をそのまま使う**（6周目に決着させた。
-	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840)）。
+	// **どちらも、最後に読めた値をそのまま使う**（6周目に決着させた。設計 3-77i）。
+	// **手放しだけは別で、新しさを問う**（設計 3-27。上の `quotaForBid` の理由）。
 	// **片側だけ止めると、古い写しで立った印を誰も外せなくなる。**
 	// **資格情報が切れた機械は、切れる直前の値を1日中返す。**
 	// **その値が100%だったら、待っている run の打ち切りの時計が永久に止まる。**

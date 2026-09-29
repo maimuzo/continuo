@@ -733,11 +733,15 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 //
 // **順番を入れ替えてはならない。**
 //
-//  0. 外す相手を確かめる                    … **決まらなければ after_run を走らせずに戻る**
-//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
-//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
-//  3. worker を止める                        … pane を閉じる
-//  4. 印から外す                             … スロットを空ける
+//	0a. まだ自分が担当か                     … **分からなければ after_run を走らせずに戻る**
+//	0b. 外す相手が決まるか                    … **決まらなければ after_run を走らせずに戻る**
+//	1.  workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く。**不可逆である**
+//	2.  自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
+//	3.  worker を止める                       … pane を閉じる
+//	4.  印から外す                            … スロットを空ける
+//
+// **段の名前は設計 3-27 の表と同じにする**（実装レビュー3周目の LOW）。
+// **段0a を落とすと、6段を5段と数えることになり、設計と突き合わせられない。**
 //
 // **worker を先に止めてはならない。**止めると `paneStopped` が二度と真を返さず
 // （`agent.get` が「居ない」で誤りを返す）、**段2 に失敗したときのやり直しが永久に来ない。**
@@ -882,20 +886,28 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// （既定60秒）を自分で掛ける。**ここで同じ長さをもう1枚重ねると、
 	// 外側のほうが先に始まっているぶん先に切れ、hook の側の後始末を通らずに
 	// `context deadline exceeded` だけが残る。**
-	afterRunOK, afterRunSkip := o.runAfterRunOK(keepCtx, rs)
-	if !afterRunOK {
-		// **`released` の本文が「どちらかはログに出ています」と約束している**ので、出す
-		// （実装レビュー2周目の MEDIUM）。**未設定と「worktree のパスが無い」は、
-		// それまで1行も出していなかった。**既定の `WORKFLOW.md` は `after_run` を持たないので、
-		// **未設定のほうが普通の状態である。**
-		//
-		// **run ごとに1回だけの札は付けない。**この段は手放しのたびに1回しか通らない
-		// （通ったあとは担当を外して印から外れる。外せなかったときは `noteQuotaReleaseFailed`
-		// の札が付いた行が出る）。**毎巡回で積む経路が無い。**
-		o.logger.Info("枠の上限で担当を手放しますが、workspace_hooks.after_run では push できていません"+
-			"（remote の中身を確かめてください）",
-			"identifier", issue.Identifier, "理由", afterRunSkip)
+	// **段1 の直前で、人間が引き取っていないかをもう1度見る**（実装レビュー3周目の HIGH）。
+	//
+	// **巡回の門（`releaseQuotaWaitExceeded` の `snap.DirectChatMode`）は写しを1回見るだけである。**
+	// **そこからここへ着くまでに最大90秒ある**（`paneStopped` が run ごとに
+	// `herdr.read_timeout_ms`、段0a が `quotaReleaseCheckBudget`）。
+	// **`reconcileRunning` は `terminalBusy` を見ずに `updateDirectChatMode` を呼ぶ**ので、
+	// **その窓で人間がカードを `direct_chat_state` へ動かすと印が立つ。**
+	//
+	// **立ったまま進むと3つが起きる。**段1 が利用者の `after_run`（`git push`）を
+	// **人間が編集中の worktree で走らせ**、段3 の `stopWorker` は門で止まって pane を閉じず、
+	// 段4 が run の登録から外す。**人間が居る pane が残ったまま、continuo がその run を忘れる。**
+	//
+	// **ここで戻る。**`after_run` をまだ1バイトも走らせていないので、取り返しがつく。
+	if rs.inDirectChatMode() {
+		o.logger.Info("枠の上限で担当を手放そうとしましたが、人間が引き取ったので見送ります"+
+			"（pane も worktree も担当者もそのまま残します）",
+			"identifier", issue.Identifier)
+		rs.endTerminal()
+		return false
 	}
+
+	afterRunOK, afterRunSkip := o.runAfterRunOK(keepCtx, rs)
 
 	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
@@ -931,6 +943,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 				"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
 				"identifier", issue.Identifier,
 				"after_run が成功したか", afterRunOK,
+				"after_run を走らせなかった理由", afterRunSkip,
 				"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
 				"余裕の無い1週間の枠", shortKinds)
 		}
@@ -939,6 +952,16 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	}
 
 	// **段3。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	//
+	// **先に direct chat を抜けさせる**（実装レビュー3周目の HIGH）。
+	// **段2 を通った時点で、issue の担当者からこの機械は外れている。**
+	// **担当でない機械の pane を残してはならない**（3-77c の「担当を外された機械は、
+	// その branch へ push してはならない」と同じ向きである）。
+	// **抜けさせないと `stopWorker` が門で止まり、pane を閉じないまま
+	// 下の `release` が run の登録から外す。**
+	// **上の段1 の直前の門をすり抜けた窓（段1 と段2 のあいだに人間が引き取った）だけが、ここへ来る。**
+	// **`leaveDirectChatMode` は印が立っていなければ偽を返して何もしない。**
+	rs.leaveDirectChatMode()
 	cleanupCtx, cancel := context.WithTimeout(
 		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
@@ -949,6 +972,11 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		"（次の担当は入札で決め直します。worktree は残します。カンバンへは書きません）",
 		"identifier", issue.Identifier, "外した担当者", login,
 		"after_run が成功したか", afterRunOK,
+		// **`released` の本文が「どちらかはログに出ています」と約束している**ので、理由を載せる
+		// （実装レビュー2周目の MEDIUM。3周目に別の行から、この行の欄へ移した）。
+		// **別の行にすると、段2 が落ち続ける run で毎巡回積む**（3周目の MEDIUM）。
+		// **成功したときは空である。**
+		"after_run を走らせなかった理由", afterRunSkip,
 		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
 		"余裕の無い1週間の枠", shortKinds)
 	return true

@@ -641,7 +641,7 @@ done
 | **`background_tasks` が空で届く**（`Stop` に限らない） | [internal/orchestrator/runstate.go:838-841](../../internal/orchestrator/runstate.go#L838-L841)（`backgroundSubagents` だけを nil にする） |
 
 **枠待ちの最中は、4つとも起きない。**次の turn は枠が明けるまで送られず、hook も来ないためである
-（[internal/orchestrator/reconcile.go:736](../../internal/orchestrator/reconcile.go#L736) が
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `paneStopped` の「`runningSubagentList()` は使えない」の注 が
 「`runningSubagentList()` は使えない」と書いている）。
 **枠が尽きた瞬間に subagent が走っていた run は、一覧が永久に空にならない。**
 
@@ -695,24 +695,27 @@ agent.get が誤りを返した                        →  進んでいない�
 **この箱は `paneStopped` の契約ではなく、`checkStalls` の段1 である。**
 **4-2 と同じく、その前に門がある。**
 
-#### 上の箱は段1 だけである。打ち切りまでには、あと5つの門と段2 がある
+#### 上の箱は段1 だけである。打ち切りまでには、いくつもの門と段2 がある
 
-**`checkStalls` は、`agent.get` を呼ぶ前に5つの `continue` を通す**
-（[internal/orchestrator/reconcile.go:1018-1062](../../internal/orchestrator/reconcile.go#L1018-L1062)）。
-**箱だけを実装すると、この5つと段2 が落ちる。**
+**`checkStalls` は、`agent.get` を呼ぶ前にいくつもの `continue` を通す**
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls`）。
+**箱だけを実装すると、それらと段2 が落ちる。**
+**件数は書かない**（実装レビュー3周目の MEDIUM。増えたときにここだけ古くなる）。
 
-| 門 | どこ | 無いとどうなるか |
-| --- | --- | --- |
-| **枠待ちの印が立っていない** | [internal/orchestrator/reconcile.go:1030-1032](../../internal/orchestrator/reconcile.go#L1030-L1032) | 枠明けを待っている run を打ち切る |
-| **手放しが面倒を見ていない**（`releasing`） | [internal/orchestrator/reconcile.go:1045-1047](../../internal/orchestrator/reconcile.go#L1045-L1047) | **90〜99%の帯で、打ち切りが毎回先に殺し、手放しが1回も成立しない。**枠が足りないだけの issue が `failure_state` へ落ちる（5-3 の事故） |
-| **バックオフ中でない** | [internal/orchestrator/reconcile.go:1054-1056](../../internal/orchestrator/reconcile.go#L1054-L1056) | リトライ待ちの run を毎巡回また打ち切る |
-| **agent 名を持ち、`LastSeenAt` がゼロでない** | [internal/orchestrator/reconcile.go:1057-1059](../../internal/orchestrator/reconcile.go#L1057-L1059) | まだ起動していない run を打ち切る |
-| **無音が閾値を超えている** | [internal/orchestrator/reconcile.go:1060-1062](../../internal/orchestrator/reconcile.go#L1060-L1062) | **turn を送った直後の run を打ち切る** |
+| 門 | 無いとどうなるか |
+| --- | --- |
+| **人間が引き取っていない**（`DirectChatMode`） | 人間が話している pane を閉じ、`failure_state` を書く。**direct chat を抜けた次の巡回で pane が消える** |
+| **枠待ちの印が立っていない** | 枠明けを待っている run を打ち切る |
+| **別の経路が終わらせている最中でない**（`terminalBusy`） | 終わらせる処理と打ち切りが同じ run を取り合う |
+| **手放しが面倒を見ていない**（`releasing`） | **90〜99%の帯で、打ち切りが毎回先に殺し、手放しが1回も成立しない。**枠が足りないだけの issue が `failure_state` へ落ちる（5-3 の事故） |
+| **バックオフ中でない** | リトライ待ちの run を毎巡回また打ち切る |
+| **agent 名を持ち、`LastSeenAt` がゼロでない** | まだ起動していない run を打ち切る |
+| **無音が閾値を超えている** | **turn を送った直後の run を打ち切る** |
 
-**そして段1 のあとに段2 がある**（[internal/orchestrator/reconcile.go:1110-1112](../../internal/orchestrator/reconcile.go#L1110-L1112)）。
+**そして段1 のあとに段2 がある**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段2（`isQuotaWaitingWith`））。
 **枠待ちなら印を立てて次の run へ進み、打ち切らない。**
 **実際に打ち切るのは、段2 を通り抜けた先の
-[internal/orchestrator/reconcile.go:1129](../../internal/orchestrator/reconcile.go#L1129) の `abandonRunAsync` である。**
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `abandonRunAsync` の `abandonRunAsync` である。**
 
 **2つ目の門を落とすと、この issue が直そうとしている症状そのものが戻る。**
 
@@ -721,7 +724,7 @@ agent.get が誤りを返した                        →  進んでいない�
 **これが「1つの指示に何時間かかっても打ち切らない」という約束を果たす唯一の信号である。**
 
 **実装した**（2026-09-08。issue #173）。
-[internal/orchestrator/reconcile.go:1096-1098](../../internal/orchestrator/reconcile.go#L1096-L1098) が
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段1（`agent_status` が `working` か） が
 `agentInfo` の応答の `agent.AgentStatus` を見て、`working` なら
 [internal/orchestrator/runstate.go:1350](../../internal/orchestrator/runstate.go#L1350) の
 `noteWorking` で `LastSeenAt` を進め、その巡回を飛ばす。
@@ -738,11 +741,11 @@ agent.get が誤りを返した                        →  進んでいない�
 
 | 問い | 読めなかったら | 間違えたときに失うもの |
 | --- | --- | --- |
-| **打ち切りの判定（打ち切り）** | **打ち切る側へ倒す**（[internal/orchestrator/reconcile.go:1103-1105](../../internal/orchestrator/reconcile.go#L1103-L1105) が `Warn` を出して段2 へ落とす。**打ち切るのは段2 を通り抜けた先である**） | worker が止まり、リトライが1つ積まれる。**担当も worktree もこの機械に残る** |
+| **打ち切りの判定（打ち切り）** | **打ち切る側へ倒す**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の「状態を読めなかった」枝 が `Warn` を出して段2 へ落とす。**打ち切るのは段2 を通り抜けた先である**） | worker が止まり、リトライが1つ積まれる。**担当も worktree もこの機械に残る** |
 | **手放しの判定（手放し）** | **手放さない側**（4-2） | `git push`・担当者・pane・会話の文脈。**取り返しがつかない** |
 
 **そのうえで、読み取りの失敗だけで打ち切ることはない。**
-**入口に「無音が閾値を超えた」の門があり**（[internal/orchestrator/reconcile.go:1060-1062](../../internal/orchestrator/reconcile.go#L1060-L1062)）、
+**入口に「無音が閾値を超えた」の門があり**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の無音の門）、
 **hook が1件でも届いていれば `LastSeenAt` が進むので、そこまで落ちてこない。**
 **そのあとにも段2（枠待ちか）がある。**
 
@@ -758,7 +761,7 @@ Claude Code の process が1回のツール呼び出しの途中で固まって�
 画面には `esc to interrupt` の行が残るので、herdr は `working` を返し続ける。
 
 **打ち切りが飛ばされるだけではない。**手放しの側も、`agent_status` を見る前に落ちる
-（[internal/orchestrator/reconcile.go:672-674](../../internal/orchestrator/reconcile.go#L672-L674) の門は
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の無音の門 の門は
 `LastBusyHookAt`——turn を処理している間にしか出ない hook を最後に受けた時刻——を見ており、
 **固まった Claude Code はその直前まで hook を出していたはずだからである**）。
 **4-2 の条件を緩めても手放せない。**
@@ -885,26 +888,42 @@ state_change_seq が2回続けて同じ             かつ
 
 #### 上の3条件は `paneStopped` の契約であって、手放しの条件ではない
 
-**手放しは、`paneStopped` を呼ぶ前に7つの門を通す**
-（[internal/orchestrator/reconcile.go:520-700](../../internal/orchestrator/reconcile.go#L520-L700)）。
-**この7つを落として上の3条件だけを実装すると、健全な run を手放す。**
-**設計では 3-27 の「段0 へ入る前に外すもの」が同じ7つを持っている**（そちらが正である）。
+**手放しは、`paneStopped` を呼ぶ前にいくつもの門を通す**
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded`）。
+**門を落として上の3条件だけを実装すると、健全な run を手放す。**
 
-| 門 | どこ | 無いとどうなるか |
+**門の一覧と件数は、設計 3-27 の「段0 へ入る前に外すもの」の表が持つ**（`docs/plans/continuo_design.md`）。
+**ここには写さない。**
+**2026-09-29 に、この表と設計の表が別の7つを持っている状態が見つかった。**
+**写した表は、片方だけ直ると必ず食い違う。**
+
+**この節が持つのは、門ごとの「無いとどうなるか」だけである。**
+**設計の表の順番で並べる。**
+
+| 順 | 門 | 無いとどうなるか |
 | --- | --- | --- |
-| **人間が引き取っていない**（Status が `direct_chat_state` でない） | [internal/orchestrator/reconcile.go:583-585](../../internal/orchestrator/reconcile.go#L583-L585) | **人間が pane で黙って読んでいるだけで手放す。**書きかけの木で `after_run`（利用者が書いた `git push`）が走り、担当者が外れ、`released` が出て、**別の機械の入札を呼ぶ。**`stopWorker` の門では防げない（あれは pane を閉じないだけである） |
-| **agent 名を持っている** | [internal/orchestrator/reconcile.go:595-597](../../internal/orchestrator/reconcile.go#L595-L597) | まだ起動していない run を手放す |
-| **別の経路が終わらせている最中でない**（終端の権利を取れる） | [internal/orchestrator/reconcile.go:606-608](../../internal/orchestrator/reconcile.go#L606-L608) | `finishRun` の途中で pane が閉じた run へ `agent.get` を投げ、run ごとに1回の info を使い切る |
-| **バックオフ中でない** | [internal/orchestrator/reconcile.go:609-611](../../internal/orchestrator/reconcile.go#L609-L611) | **打ち切られて pane を閉じた run へ `agent.get` を投げ続ける。**毎巡回1行ずつログが積まれる（4-5 の #5 が減らそうとしているものである） |
-| **1週間の枠の余裕が無く、待つ上限を超えている** | [internal/orchestrator/reconcile.go:616-618](../../internal/orchestrator/reconcile.go#L616-L618) | **枠と無関係に手放す。**手放しは枠のための仕組みである |
-| **`LastSeenAt` がゼロでない** | [internal/orchestrator/reconcile.go:644-646](../../internal/orchestrator/reconcile.go#L644-L646) | 時計を持たない run で、経過を 1970 年から測る |
-| **`LastBusyHookAt` からの無音が閾値に達している／`runIdleForTurnTimeout` が真** | [internal/orchestrator/reconcile.go:672-677](../../internal/orchestrator/reconcile.go#L672-L677) | **指示を送った直後の run が「進んでいない」と読まれ、`idle` が2回続いた時点で手放される。**turn の開始から2巡回（既定60秒）である。**見るのは `LastSeenAt` ではない**——あれは `clearWaitingQuota` も進めるので、**5時間の枠が明けるたびにこの門が `claude.turn_timeout_ms` ぶん再武装し、`weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく** |
+| 1 | **人間が引き取っていない** | **人間が pane で黙って読んでいるだけで手放す。**書きかけの木で `after_run`（利用者が書いた `git push`）が走り、担当者が外れ、`released` が出て、**別の機械の入札を呼ぶ。**`stopWorker` の門では防げない（あれは pane を閉じないだけである） |
+| 2 | **agent 名を持っている** | まだ起動していない run を手放す |
+| 3 | **別の経路が終わらせている最中でない** | `finishRun` の途中で pane が閉じた run へ `agent.get` を投げ、run ごとに1回の info を使い切る |
+| 4 | **バックオフ中でない** | **打ち切られて pane を閉じた run へ `agent.get` を投げ続ける。**毎巡回1行ずつログが積まれる（4-5 の #5 が減らそうとしているものである） |
+| 5 | **1週間の枠の余裕が無く、待つ上限を超えている** | **枠と無関係に手放す。**手放しは枠のための仕組みである |
+| 6 | **`LastSeenAt` がゼロでない** | 時計を持たない run で、経過を 1970 年から測る |
+| 7 | **`LastBusyHookAt` からの無音が閾値に達している／`runIdleForTurnTimeout` が真** | **指示を送った直後の run が「進んでいない」と読まれ、`idle` が2回続いた時点で手放される。**turn の開始から2巡回（既定60秒）である。**見るのは `LastSeenAt` ではない**——あれは `clearWaitingQuota` も進めるので、**5時間の枠が明けるたびにこの門が `claude.turn_timeout_ms` ぶん再武装し、`weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく** |
+| 8 | **打ち切りを切っている機械では、余裕が無くなってからの経過が上限を超えている** | `claude.turn_timeout_ms` が0以下の機械で、**時間の物差しが1つも残らない。**枠の余裕が無くなった瞬間に、動いている run を手放す。**これは床であって、turn の進み具合は見ていない**（4-5 の #10） |
 
 **1つ目と7つ目がいちばん効く。**
 **1つ目**（人間が引き取っていない）**を落とすと、人間が話している pane で `git push` が走り、担当が外れる。**
 **7つ目**（無音が閾値に達している）**を落とすと、別の機械が入札し直し、同じ worktree に2本目の Claude Code が立つ。**
-**以前は5つの表で、1つ目と3つ目が無く、「5つ目がいちばん効く」と書いていた**（2026-09-29 に直した）。
-**6つ目**（`LastSeenAt` がゼロでない）**の帰結は、経過を 1970 年から測ることである。**上の表の行と突き合わせること。
+**`internal/orchestrator/reconcile.go` へのリンクは、この文書では行番号を書かない**
+（2026-09-29 に決めた）。**関数名と門の名前で指す。**
+**理由は実測である。**同じ pull request の中で2周続けて、付け替えた行番号が
+**同じ commit の別の編集でずれた**（コメントを6行消した／門を1つ足した）。
+**「実装へのリンクを直したら中身で検算する」という規則を置いても、
+編集とリンクの直しが同じ commit に入るかぎり、検算のあとにずれる。**
+
+**以前は5つの表で、行番号でコードを指していた。**
+**行番号は、同じ pull request が同じファイルを編集するたびにずれる**（2周で2回ずれた）。
+**だから行番号は書かない。**関数名と、設計の表の順番で指す。
 
 ### 4-3. レートリミット待ちの判定「この run はレートリミットで止まっているのか」
 
@@ -920,7 +939,7 @@ state_change_seq が2回続けて同じ             かつ
 `beginTurn` が毎 turn 偽へ戻すので、**指示を送った直後は必ず真である**（3-7 の落とし穴）。
 
 **それでも枠待ちと誤判定しないのは、外側に門があるからである。**
-`checkStalls` は [internal/orchestrator/reconcile.go:1060](../../internal/orchestrator/reconcile.go#L1060) で
+`checkStalls` は [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の無音の門 で
 無音が閾値を超えたことを確かめてから、この判定へ入る。
 **この述語を別の場所から呼ぶときは、同じ門を自分で置くこと。**
 **置かないと、指示を送った直後の run が枠待ちと名乗り、打ち切りの時計が止まったまま戻らない。**
@@ -935,7 +954,7 @@ state_change_seq が2回続けて同じ             かつ
 
 | どこ | 無音の門 | 何をするか |
 | --- | --- | --- |
-| **巡回**（[internal/orchestrator/reconcile.go:1110-1112](../../internal/orchestrator/reconcile.go#L1110-L1112)） | **ある**（[internal/orchestrator/reconcile.go:1060](../../internal/orchestrator/reconcile.go#L1060)） | 印を立てて、打ち切りの時計を止める |
+| **巡回**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段2（`isQuotaWaitingWith`）） | **ある**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の無音の門） | 印を立てて、打ち切りの時計を止める |
 | **待ち受けが時間切れになったとき**（[internal/orchestrator/turn.go:598-616](../../internal/orchestrator/turn.go#L598-L616)） | **無い** | 述語が真なら印を立て、枠明けまで待つ |
 | **turn の終わりを確かめる窓**（[internal/orchestrator/turn.go:1018](../../internal/orchestrator/turn.go#L1018)） | **無い** | 述語が真なら枠待ちの待ちへ移る |
 
@@ -995,13 +1014,13 @@ state_change_seq が2回続けて同じ             かつ
 **この節が数えている述語は2つある。**表は `setWaitingQuota` と `isQuotaWaiting` を数えたが、
 **門を要求している述語は `runIdleForTurnTimeout` である。**
 それを直接呼ぶのは [internal/orchestrator/turn.go:829](../../internal/orchestrator/turn.go#L829) と
-[internal/orchestrator/reconcile.go:675](../../internal/orchestrator/reconcile.go#L675) の2箇所で、
-**後者は上の門を自分で置いている**（[internal/orchestrator/reconcile.go:672-674](../../internal/orchestrator/reconcile.go#L672-L674)）。
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の `runIdleForTurnTimeout` の門 の2箇所で、
+**後者は上の門を自分で置いている**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の無音の門）。
 
 #### `checkStalls` では、`working` がレートリミット待ちの判定を短絡する
 
 **打ち切りの段1 が `working` を見つけると `continue` するので、段2 のレートリミット待ちの判定 へ落ちてこない**
-（[internal/orchestrator/reconcile.go:1096-1098](../../internal/orchestrator/reconcile.go#L1096-L1098)）。
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段1（`agent_status` が `working` か））。
 **そのうえ `noteWorking` が `LastSeenAt` を進めるので、次の巡回では入口の門も超えられない。**
 
 **つまり、枠待ちの pane が herdr に `working` と見えている場合、
@@ -1028,14 +1047,14 @@ state_change_seq が2回続けて同じ             かつ
 | **守るのは、1回目の観測の直後の1巡回だけ** | 2回目以降も守ると、状態が往復する run が永久に守られる |
 | **手放しを撃ったあとは守らない** | 撃って失敗し続ける run を守ると、打ち切りもリトライも `failure_state` も来ない |
 | **枠の写しは、1回の巡回で1回だけ読む** | 2回読むと、判定した写しとログに出す数字が別の読み取りから作られる |
-| **段1（`working` か）を段2（枠待ちか）より前に置く** | 枠待ちの2条件は「枠を待っている」と「長い1つの仕事をしている」を区別できない。**後ろに置くと、正常に走っている run が枠待ちと名乗り、打ち切りの時計が止まったまま戻らない**（[internal/orchestrator/reconcile.go:1096-1098](../../internal/orchestrator/reconcile.go#L1096-L1098)） |
+| **段1（`working` か）を段2（枠待ちか）より前に置く** | 枠待ちの2条件は「枠を待っている」と「長い1つの仕事をしている」を区別できない。**後ろに置くと、正常に走っている run が枠待ちと名乗り、打ち切りの時計が止まったまま戻らない**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段1（`agent_status` が `working` か）） |
 
 #### 上の決まりは、同時発火を防いでいない。防いでいるのは `beginTerminal` である
 
 **3行目の「手放しを撃ったあとは守らない」は、撃った run を打ち切りの本体まで落とす。**
 その run は `WaitingQuota`（90〜99%の帯では偽）・
-`releasing`（**下の `handling` と同じ `map` である。**[internal/orchestrator/reconcile.go:542](../../internal/orchestrator/reconcile.go#L542) で `handling` として作り、
-[internal/orchestrator/reconcile.go:968](../../internal/orchestrator/reconcile.go#L968) が `releasing` として受ける。撃った run は入っていない）・
+`releasing`（**下の `handling` と同じ `map` である。**[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `reconcileWorktrees` が `handling` を作る場所 で `handling` として作り、
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` が `releasing` として受ける場所 が `releasing` として受ける。撃った run は入っていない）・
 無音の閾値（既に超えている）・`agent_status`（`idle`/`done`。撃つ条件そのもの）・
 `isQuotaWaitingWith`（100%未満なので偽）**を全部通り、`abandonRunAsync` に到達する。**
 
@@ -1052,7 +1071,7 @@ state_change_seq が2回続けて同じ             かつ
 | [internal/orchestrator/lifecycle.go:702](../../internal/orchestrator/lifecycle.go#L702) | **巡回の側の**打ち切り |
 | [internal/orchestrator/runstate.go:2514](../../internal/orchestrator/runstate.go#L2514) | `claimTerminal`。**書き戻しを待って取り直す唯一の経路である。****呼び出しは6箇所**（検索パターン `claimTerminal\(ctx\)`、対象パス `internal/orchestrator/`。`_test.go` を除く）——`internal/orchestrator/lifecycle.go:558`（`finishRun`）/ `internal/orchestrator/lifecycle.go:648`（`failRun`）/ `internal/orchestrator/lifecycle.go:685`（`abandonRun`）、`internal/orchestrator/handoff.go:1417`、`internal/orchestrator/dispatch.go:876`、`internal/orchestrator/unknownstate.go:587`。**打ち切りの入口は、巡回の側とここの2つある** |
 | [internal/orchestrator/lifecycle.go:588](../../internal/orchestrator/lifecycle.go#L588) | 正常な終了 |
-| [internal/orchestrator/lifecycle.go:885](../../internal/orchestrator/lifecycle.go#L885) | `stopAndReleaseAsync`。**worktree を残したまま worker を止めて印から外す。**Status は動かさない。呼ぶのは巡回の3箇所で、うち1つが引き渡し（[internal/orchestrator/reconcile.go:155](../../internal/orchestrator/reconcile.go#L155)） |
+| [internal/orchestrator/lifecycle.go:885](../../internal/orchestrator/lifecycle.go#L885) | `stopAndReleaseAsync`。**worktree を残したまま worker を止めて印から外す。**Status は動かさない。呼ぶのは巡回の3箇所で、うち1つが引き渡し（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の 引き渡しの `stopAndReleaseAsync`） |
 | [internal/orchestrator/unknownstate.go:552](../../internal/orchestrator/unknownstate.go#L552) | 状態を読めなくなった run の始末 |
 
 **戻り値は3つある。**[internal/orchestrator/runstate.go:2145-2147](../../internal/orchestrator/runstate.go#L2145-L2147) が
@@ -1090,7 +1109,7 @@ state_change_seq が2回続けて同じ             かつ
 | **7** | 枠で turn が終わったことを知る手段が無い | **条件付きで起きる** | **API キー・クラウドプロバイダ・従量課金では確実に `StopFailure` が飛ぶ**（`interactive-mode.md:649` が「待つべきリセットが無い」と明記）。**中間の4条件は公式ドキュメントに書かれておらず、確定できなかった** | **残っている。**6節に「実測していない」として載せた |
 | **8** | 枠の待ちが明けたことを hook から知らない | **起きる** | **`Notification` を matcher 無しで張っているので届いている。**`quota_auto_resume` は continuo のコードに0件 | **残っている。**4-3 が「将来これを読めば推測は要らなくなる」と書いている |
 | **9** | 長いツール呼び出しで打ち切られる | **起きる** | **防ぐ信号が2つ在る。**`agent_status`（**同じ応答に既に入っている**）と `agent.read`（**クライアントは実装済みで本番の呼び出しが0件**） | **直した。**commit `4df2108`。4-1 が `agent_status` を使う |
-| **10** | 打ち切りを切っている機械で健全な run を手放す | **起きる** | **時間の物差しが1つも残らない**（4-6）**。**turn と turn のあいだが伸びる経路が2つあり、**片方は上限が無い**（4-6 に列挙した） | **残っている。**4-6 に書いた |
+| **10** | 打ち切りを切っている機械で健全な run を手放す | **起きうる**（**帯が狭くなった**） | **床を入れた**（2026-09-09）。`WeeklyShortSince` からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない（4-2 の表の8つ目）。**だから「物差しが1つも残らない」ではない。****残っているのは精度である**——床は「枠の余裕が無くなってからの経過」なので、turn の進み具合を見ていない | **床で狭めた。**害が出るのは `claude.turn_timeout_ms` を0以下にして、**かつ** `weekly_wait_limit_minutes` を短くした機械だけである（どちらも既定ではない）。**どうするかは人間の判断で、pull request の本文に3択を書いた** |
 
 **この10件の検証で、4節の条件が決まった。**とくに9番目である。
 **`agent_status` を判定に使えば、長いツール呼び出しを守れる。**その値は既に手元にある。
@@ -1106,11 +1125,11 @@ state_change_seq が2回続けて同じ             かつ
 
 | 何が | どうなるか |
 | --- | --- |
-| **打ち切りの判定** | [internal/orchestrator/reconcile.go:1018-1020](../../internal/orchestrator/reconcile.go#L1018-L1020) の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
-| **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go:672-677](../../internal/orchestrator/reconcile.go#L672-L677) の `silence > 0` と `!stallOff` が両方偽になる（`stallOff` は巡回の先頭で1回だけ作るローカル変数である。`stallDetectionOff()` は呼び出し元が0件になったので消した）。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
-| **残る条件** | **4-2 の5つの門のうち4つは残る**（agent 名を持っている／バックオフ中でない／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**外れるのは5つ目の時間の門だけである。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
+| **打ち切りの判定** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `if silence <= 0 { return }` の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
+| **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の無音の門2本 の `silence > 0` と `!stallOff` が両方偽になる（`stallOff` は巡回の先頭で1回だけ作るローカル変数である。`stallDetectionOff()` は呼び出し元が0件になったので消した）。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
+| **残る条件** | **4-2 の表のうち、外れるのは7つ目（無音の門）だけである。**残りは全部残る（人間が引き取っていない／agent 名を持っている／別の経路が終わらせている最中でない／バックオフ中でない／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**そのうえで、8つ目の床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**だから「時間の物差しが1つも残らない」ではない。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
 
-**時間の物差しが1つも残らない**（4-5 の #10）。**それを承知で、手放しだけは効かせている。**
+**無音の門は外れる**（4-5 の #10）。**代わりに床が効く**——`WeeklyShortSince` からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**それを承知で、手放しだけは効かせている。**
 **効かせないと、`weekly_wait_limit_minutes` がその設定の機械で一度も効かない。**
 
 **turn と turn のあいだが伸びる経路は2つある**（4-5 の #10）。
@@ -1131,7 +1150,7 @@ state_change_seq が2回続けて同じ             かつ
 
 **`blocked` の引き渡しの前に subagent を待つ経路**（[internal/orchestrator/turn.go:350-381](../../internal/orchestrator/turn.go#L350-L381)。3-8）**は、
 この一覧に入れてはならない。**その30秒のあいだ `agent_status` は `blocked` であり、
-**`paneStopped` は `idle` と `done` しか通さない**（[internal/orchestrator/reconcile.go:798-800](../../internal/orchestrator/reconcile.go#L798-L800)）。
+**`paneStopped` は `idle` と `done` しか通さない**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `paneStopped` の「`idle` と `done` しか通さない」判定）。
 **手放しは1回も撃てないので、#10 の症状を起こせない。**
 **ここを短くしても #10 は1ミリも動かず、5-1 の「subagent 2つが走っている最中に `esc` を送った」件（2026-08-27）が塞いだ穴だけが開く。**
 
@@ -1219,7 +1238,7 @@ hook の無音は「ツールが長い」と区別できない。`background_tas
 | **`osc_title_working` が外れたとき、画面の側の規則が受け皿になるか** | **上と同じ理由で作れない。**3-4 の実測は、`osc_title_working` が当たっている瞬間に `visible_working` も `true` だったことしか示していない。**タイトルの規則が外れたときに画面の規則だけで `working` を返すかは、測っていない**（4-1 の限界(二)） |
 | **`herdr agent read` が pane の識別子を受け付けるか** | **測っていない。**3-5 の表の2行目（人間が対話に使っている pane）には continuo が付けた agent 名が無いので、**あの行を再現する手順が書けていない** |
 | **`agent_not_found` が返る条件と頻度** | **4-1 が「読めない＝打ち切る」を採っているので、判定の安全性を直接左右する。**3-4 の限界(二)が存在に触れているだけで、**いつ返るかは測っていない。**5-1 の2026-09-05 の直接の原因である |
-| **subagent が走っている最中も、Claude Code が端末タイトルへスピナーを書き続けるか** | **`working` の決め方そのものは測ってある**（3-4 の `matched_rule` が `osc_title_working`。4-1 の限界(二)）。**残っているのはこの1点だけである。**3-1 の実測は Bash の1コマンド（`go test`）で取ったもので、`Task`（subagent）・`WebFetch`・MCP の呼び出し中は測っていない。**外れると、枠が尽きた run の subagent を書きかけごと閉じる**（[internal/orchestrator/reconcile.go:798-800](../../internal/orchestrator/reconcile.go#L798-L800) が、この前提の上に立っている） |
+| **subagent が走っている最中も、Claude Code が端末タイトルへスピナーを書き続けるか** | **`working` の決め方そのものは測ってある**（3-4 の `matched_rule` が `osc_title_working`。4-1 の限界(二)）。**残っているのはこの1点だけである。**3-1 の実測は Bash の1コマンド（`go test`）で取ったもので、`Task`（subagent）・`WebFetch`・MCP の呼び出し中は測っていない。**外れると、枠が尽きた run の subagent を書きかけごと閉じる**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `paneStopped` の「`idle` と `done` しか通さない」判定 が、この前提の上に立っている） |
 | **引き継いだ run の `confirmTurnEnd` から、`hookSeenThisTurn` が偽のまま枠待ちの印が立つ経路が実際に起きるか** | **再起動で `working` の pane を引き継ぎ、かつ枠が満杯という状態を作れない。**4-3 の末尾に書いた経路である。**起きても打ち切りの時計が止まるだけで、枠が明ければ印は外れる** |
 | **herdr を再起動したあとの `state_change_seq`** | **3-3 が「0 から振り直される。continuo は再起動を検知できない」と書いている。**4-2 の「2回続けて同じ連番」は、2回が同じ番号空間にあることを前提にしている。**その前提が崩れる場面で何が返るかを測っていない** |
 | **`quota_auto_resume_*` が実際に届くか** | **3-6 は「既に届いている」と書いているが、根拠は matcher の設定だけである。**受信した記録は取っていない。**4-3 は、この断定の上に将来の計画を立てている** |
