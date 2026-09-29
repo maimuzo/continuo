@@ -171,16 +171,21 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **待って、もう一度見る。**`turnCtx` が切れれば上の枝で抜ける。
 			// **短い間隔で見る。**下りたことを知らせる仕掛けが無いためである。
 			//
-			// **待ちが数十秒で終わるとは限らない**（実装レビュー5周目の LOW）。
-			// **印が下りる経路は2つある。**手放しを見送った `endTerminal`（数十秒）と、
-			// **終わらせる処理が `markWorkerStopped` / `markFinished` まで進む経路である。**
-			// 後者は `ensureAgentComment` が `agent.prompt` を待つので、
-			// **最長で `claude.turn_timeout_ms`（既定1時間）かかる。**
-			// **そのあいだ、この goroutine は 500ms ごとに目を覚ます**（1時間で約7200回）。
+			// **印が下りる経路は2つある**（実装レビュー5周目の LOW。**7周目に測り直した**）。
+			//
+			// 一、**手放しを見送った `endTerminal`。**数十秒で下りる（担当の確かめに最大30秒）。
+			// 二、**終わらせる処理が `markWorkerStopped` / `markFinished` まで進む経路。**
+			//     **こちらは `workerRetired` が真になるので、上の枝で抜ける。**
+			//
+			// **`ensureAgentComment` の `agent.prompt`（最長 `claude.turn_timeout_ms`）を
+			// 待つことは無い。**`ensureAgentComment` は**段2 で `stopWorker` を呼び**、
+			// `stopWorker` が `markWorkerStopped` を呼ぶ。**`agent.prompt` は段7 で、約200行あとである。**
+			//
+			// **長く待つのは、`ensureAgentComment` が早戻りしたときである。**
+			// そのときは `finishRunClaimed` の `runAfterRun`（`workspace_hooks.timeout_ms`。既定60秒）
+			// のあとまで `markWorkerStopped` が来ない。**それでも1分ほどである。**
+			// **そのあいだ、この goroutine は 500ms ごとに目を覚ます**（1分で約120回）。
 			// **目を覚ましてすることは、印を1回読むことだけである。**
-			// **後者でも、`markWorkerStopped` が呼ばれるのは `ensureAgentComment` を抜けたあとである。**
-			// **だから1時間のあいだ `workerRetired` は偽で、ここで待ち続ける。**
-			// **抜けるのは、その次の目覚めである。**
 			select {
 			case <-ctx.Done():
 				return

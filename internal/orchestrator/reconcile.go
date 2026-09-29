@@ -544,7 +544,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **そのときは `weeklyWaitExceededWith` が全部の run で偽を返すので、1度も読まれない。**
 	//
 	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
-	// **`checkStalls` が `quotaForBid()` を渡す。**理由は `weeklyWaitExceededWith` の doc にある。
+	// **`checkStalls` が `quotaForPoll()` の2つ目の戻り値を渡す**（新しくなければ nil）。
+	// 理由は `weeklyWaitExceededWith` の doc にある。
 	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちと閾値の判定に使える。**
 	// **止めるのは入札だけである。**
 	var shortKinds string
@@ -611,9 +612,17 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **1回目の指示をまだ送り始めていない run は手放さない**（実装レビュー5周目の MEDIUM。
 		// **6周目に説明と位置を直した**）。
 		//
-		// **この門が塞ぐのは、`beginAttempt` から `beginTurn` までの窓だけである。**
+		// **この門が塞ぐのは、`beginTurn` を通るまでの窓である。**
 		// **`SendFirstPrompt` を下ろすのは `beginTurn` で、`sendTurn` はその1行目で呼ぶ。**
 		// **つまり `agent.prompt` を投げる前に下りる。**「送り終えた」ではなく「送り始めた」である。
+		//
+		// **`beginAttempt` から `beginTurn` までとは限らない**（実装レビュー7周目の MEDIUM）。
+		// **`awaitFirst` の周は `sendTurn` を呼ばず `confirmTurnEnd` を呼ぶので、`beginTurn` を通らない。**
+		// **だから、走っている turn が終わるまで印は真のまま残る。**
+		// 作る経路は3つある（`startRun` の `ErrStartupBusy`・
+		// `finishDirectChatSetup` の戻った枝・`turnTransient`）。
+		// **`confirmTurnEnd` の待ちには上限が無い**ので、その turn が枠で固まったままだと、
+		// **この門が手放しを止め続ける。****それでよいかは設計の判断である**（設計 3-27）。
 		// **5周目は「送り終えていない run は手放さない」と書いたが、それは誤りだった。**
 		// `beginTurn` を通した状態を作って測ると、手放しは起きる（2026-09-29 に測った）。
 		//
@@ -692,10 +701,14 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// 根を直したので要らなくなった。**
 		//
 		// **1度も忙しい hook を受けていない run は、ゼロ値のままここを通る。**
-		// **通してよい。**指示を送れば `UserPromptSubmit` が飛び、それは忙しい hook である
-		// （`settings.go` が張る8種類のうちの1つ）。**この門が守りたい「指示を送った直後の run」は、
-		// 必ずゼロ値ではない。**ゼロ値のまま残るのは、指示を1度も送れていない run だけで、
-		// **そちらは下の `paneStopped` が `idle` か `done` を2巡回続けて読むまで手放さない。**
+		// **通してよい**（設計 3-27）。指示を送れば `UserPromptSubmit` が飛び、それは忙しい hook である
+		// （`settings.go` が張る8種類のうちの1つ）。
+		//
+		// **ただし「指示を送った直後の run は必ずゼロ値ではない」とは書かない**
+		// （実装レビュー7周目の LOW）。**`beginTurn` と1回目の hook のあいだは、
+		// この門も下の `runIdleForTurnTimeout` も開く**（あちらは `hookSeenThisTurn` が偽のとき
+		// 無条件に真を返す）。**そこを守るのは `paneStopped` だけである**
+		// （`idle` か `done` を2巡回続けて読むまで手放さない）。**その帯は設計が「通してよい」と決めている。**
 		if silence > 0 && !snap.LastBusyHookAt.IsZero() && now.Sub(snap.LastBusyHookAt) < silence {
 			continue
 		}
@@ -1047,6 +1060,15 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// 次に値が1度読めた瞬間に「上限を超えた」と判定して手放す。**
 	// **手放しへ新しさを求めた意味が無くなる。**
 	//
+	// **残りがある**（実装レビュー7周目の LOW）。**`rate_limit.refresh_interval_ms` を
+	// `rate_limit.poll_interval_ms` より大きく引き延ばした機械では、
+	// `weekly_scoped` の仮の期限が切れて写しから落ちても、写しはまだ「新しい」と判定される。**
+	// **そのとき `noteWeeklyShort(false, …)` が起点を0へ戻すので、経過の時計が振り出しへ戻る。**
+	// **`weekly_scoped` は `resets_at` を `null` で返すので、経過で測る枝しか無い。**
+	// **だから usage API が繰り返し落ちる機械では、上限が効かないまま先延ばしされうる。**
+	// **倒れる向きは安全側である**（手放さずに担当を保つ）。
+	// **既定値（どちらも300000ミリ秒）では、新しさが仮の期限より30秒早く切れるので窓は開かない。**
+	//
 	// **判定は門の中で作る**（issue #173）。**外に出すと、写しが古い巡回でも
 	// 枠の一覧を走査して closure を2つ確保することになる。**捨てる値である。
 	if quotaFresh != nil {
@@ -1065,7 +1087,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **立てる側と外す側で、非対称にしてはならない。**
 	// **立てる側**（下の段2 の `isQuotaWaitingWith`）**にも、古い写しの門は置いていない。**
 	// **どちらも、最後に読めた値をそのまま使う**（6周目に決着させた。設計 3-77i）。
-	// **手放しだけは別で、新しさを問う**（設計 3-27。上の `quotaForBid` の理由）。
+	// **手放しだけは別で、新しさを問う**（設計 3-27。上の `quotaForPoll` の理由）。
 	// **片側だけ止めると、古い写しで立った印を誰も外せなくなる。**
 	// **資格情報が切れた機械は、切れる直前の値を1日中返す。**
 	// **その値が100%だったら、待っている run の打ち切りの時計が永久に止まる。**

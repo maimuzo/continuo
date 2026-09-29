@@ -661,7 +661,8 @@ func TestQuota_人間が引き取っている最中に担当が移ったらpane�
 // 2本目（`runIdleForTurnTimeout`）は、`hookSeenThisTurn` が偽のとき**無条件に真**を返す。
 // **残る守りは `paneStopped` の2巡回（既定60秒）だけになる。**
 //
-// **この門が塞ぐのは、`beginAttempt` から `beginTurn` までの窓だけである。**
+// **この門が塞ぐのは、`beginTurn` を通るまでの窓である**（`beginAttempt` から `beginTurn` まで
+// とは限らない。`awaitFirst` の周は `beginTurn` を通らないので、印は真のまま残る）。
 // **`beginTurn` は `agent.prompt` を投げる前に `SendFirstPrompt` を下ろす**ので、
 // **「指示を投げたのに hook が1件も戻らない run」は門の外である。**
 // **5周目はそちらも塞いだと書いたが、それは誤りだった**——`beginTurn` を通した状態を作って

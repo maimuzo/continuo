@@ -648,7 +648,7 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **この判定は GitHub へ2回書き、pane を閉じる。**
 	//
 	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
-	// **`checkStalls` が `quotaForBid()`（新しくなければ nil）を渡す。**
+	// **`checkStalls` が `quotaForPoll()` の2つ目の戻り値（新しくなければ nil）を渡す。**
 	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
 	// 資格情報が切れて写しが凍っている機械は、1件も手放さない」と決めている。**
 	// **ここで `quotaSnapshot` を渡す形へ戻してはならない。**

@@ -906,7 +906,7 @@ state_change_seq が2回続けて同じ             かつ
 | 2 | **agent 名を持っている** | まだ起動していない run を手放す |
 | 3 | **別の経路が終わらせている最中でない** | `finishRun` の途中で pane が閉じた run へ `agent.get` を投げ、run ごとに1回の info を使い切る |
 | 4 | **バックオフ中でない** | **打ち切られて pane を閉じた run へ `agent.get` を投げ続ける。**毎巡回1行ずつログが積まれる（4-5 の #5 が減らそうとしているものである） |
-| 5 | **1回目の指示をまだ送り始めていない** | **`beginAttempt` から `beginTurn` までの窓で手放す。**その run は agent 名を持っているが、まだ1回も指示を投げていない |
+| 5 | **1回目の指示をまだ送り始めていない** | **`beginTurn` を通るまでの窓で手放す。**その run は agent 名を持っているが、まだ1回も指示を投げていない。**`awaitFirst` の周は `beginTurn` を通らない**ので、走っている turn が終わるまでこの門の内側にいる |
 | 6 | **1週間の枠の余裕が無く、待つ上限を超えている** | **枠と無関係に手放す。**手放しは枠のための仕組みである |
 | 7 | **`LastSeenAt` がゼロでない** | 時計を持たない run で、経過を 1970 年から測る |
 | 8 | **`LastBusyHookAt` からの無音が閾値に達している／`runIdleForTurnTimeout` が真** | **指示を送った直後の run が「進んでいない」と読まれ、`idle` が2回続いた時点で手放される。**turn の開始から2巡回（既定60秒）である。**見るのは `LastSeenAt` ではない**——あれは `clearWaitingQuota` も進めるので、**5時間の枠が明けるたびにこの門が `claude.turn_timeout_ms` ぶん再武装し、`weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく** |
@@ -933,7 +933,9 @@ state_change_seq が2回続けて同じ             かつ
 （2026-09-29 に測った）。**理由は、その窓を検査から作れないことである。**
 `terminating` を外から立てる入り口が無く（`AbortTerminalForHumanForTest` は立てた直後に打ち切りまで走る）、
 **その印が立っているあいだに turn の結末を作るには、`Stop` hook と印の両方を同じ窓へ入れる必要がある。**
-**入り口を足して測る形は、検査専用の API を3つ増やすことになるので採らなかった。**
+**入り口を足せば測れる。**`fakeTracker.HoldUpdate`（「書き込みの途中」を掴む関門。既に9本の検査が使っている）
+と同じ形で、**手放しの読み取りの側で待たせる関門を1本足せばよい。**
+**7周目の時点では足していない。**足すなら、この窓のための検査を1本書くこと。
 **「門を外すと落ちる検査を足した」と書くときは、その門だけを外して測ること**
 （2026-09-29 に、冗長な相手がある門について「1本外しても落ちる」と誤って申告した）。
 
@@ -1158,7 +1160,7 @@ state_change_seq が2回続けて同じ             かつ
 
 | 何が | どうなるか |
 | --- | --- |
-| **打ち切りの判定** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `if silence <= 0 { return }` の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
+| **打ち切りの判定** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
 | **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` の無音の門2本 の `silence > 0` と `!stallOff` が両方偽になる（`stallOff` は巡回の先頭で1回だけ作るローカル変数である。`stallDetectionOff()` は呼び出し元が0件になったので消した）。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
 | **残る条件** | **4-2 の表のうち、外れるのは8つ目（無音の門）だけである。**残りは全部残る（人間が引き取っていない／agent 名を持っている／別の経路が終わらせている最中でない／バックオフ中でない／**1回目の指示を送り始めている**／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**そのうえで、9つ目の床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない。**だから「時間の物差しが1つも残らない」ではない。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
 
