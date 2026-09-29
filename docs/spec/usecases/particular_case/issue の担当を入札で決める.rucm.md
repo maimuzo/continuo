@@ -196,8 +196,8 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 **門も1本に揃えた**（人間の決定。2026-09-06。issue #173）。
 **以前は `rate_limit.pause_above_percent`（既定95）を見る段がもう1つあったが、
 既定（マージン10）では余裕値が90%で先に効くので、そちらは一度も発火していなかった。**
-**いまは余裕値だけが仕事を取るかを決める。**`rate_limit.pause_above_percent` は、
-モデル別の週次の枠について statusline取得を開くかを決めるためだけに残っている。
+**いまは余裕値だけが仕事を取るかを決める。**`rate_limit.pause_above_percent` はキーごと消えた。
+**statusline取得を開くかの判定も同じ余裕値の線を使う。**
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
 

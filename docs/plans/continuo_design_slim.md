@@ -404,9 +404,9 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 ```mermaid
 flowchart TB
     poll["巡回（30秒ごと。値が届いた知らせでも回る）"] --> usage["保管値を読む<br/>usage API とステータスラインから届いた使用率"]
-    usage --> over{"どれかの枠が<br/>pause_above_percent を超えたか"}
-    over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
-    over -->|"超えていない"| normal["ふつうに dispatch する"]
+    usage --> over{"余裕値が0以下の<br/>枠があるか"}
+    over -->|"0以下"| stop["入札の要る issue を取らない<br/>担当が自分の issue は取る<br/>走行中の turn は止めない"]
+    over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
     stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}

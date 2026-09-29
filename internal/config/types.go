@@ -625,20 +625,17 @@ type RateLimitConfig struct {
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
 	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
 	TokenEnv string `yaml:"token_env"`
-	// PauseAbovePercent は、モデル別の週次の枠（`weekly_scoped`）について
-	// statusline取得を開くかを決める閾値（0〜100）である。
+	// **`PauseAbovePercent` は消えた**（人間の決定。2026-09-06。issue #173）。
 	//
-	// **新規の dispatch を止める門ではない**（人間の決定。2026-09-06。issue #173）。
-	// **仕事を取るかどうかを決めるのは入札の余裕値1本だけである**
-	// （`tracker.provider.handoff` の2つのマージン。`internal/handoff/handoff.go` の `Evaluate`）。
-	// **以前はこの閾値でも止めていたが、余裕値と同じことを2つの閾値で言っていて、
-	// 既定（マージン10）では余裕値が90%で先に効くため、95%のこちらは一度も発火していなかった。**
+	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+	// 既定（マージン10）では余裕値が90%で先に効くので、**95%のこちらは一度も発火していなかった。**
+	// **仕事を取るかどうかを決めるのは `tracker.provider.handoff` の2つのマージンだけである**
+	// （`internal/handoff/handoff.go` の `Evaluate`）。
+	// **statusline取得を開くかの判定も同じ線を使う**（`statuslineFetchPointless`）。
 	//
-	// **いまの使い道は1つだけである。**ステータスラインは `weekly_scoped` を運ばないので、
-	// その枠がこの割合を超えているあいだは statusline取得を開いても判定が変わらない
-	// （`internal/orchestrator/statuslinefetch.go` の `statuslineFetchPointless`）。
-	// **開かないと決めることで、haiku の会話を1回ぶん節約する。**
-	PauseAbovePercent int `yaml:"pause_above_percent"`
+	// **`WORKFLOW.md` に残っている人は、起動時の検査が弾く**
+	// （`internal/config/validate.go` の知らないキーの検査。移行の手順は
+	// [docs/upgrading.md](../../docs/upgrading.md) にある）。
 	// PollIntervalMs は usage API を読む間隔（ミリ秒）である（source が oauth_usage_api のとき。
 	// 既定 300000 = 5分）。usage API が誤りのあいだは、次に試してよい時刻までの長さにもなる。
 	PollIntervalMs int `yaml:"poll_interval_ms"`

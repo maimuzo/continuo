@@ -132,9 +132,6 @@ type Limit struct {
 // **「余裕値が0以下」**へ移り、**余裕値はマージンを引いた残りで、マージンは種別ごとに違う。**
 // **この package はマージンを知らない**ので、線そのものを述語として受け取る
 // （`AnySelected` / `SelectedKinds` / `LatestResetForClearing` / `LatestResetForWaitLimit`）。
-//
-// **`MaxPercent` / `AtFullPercent` / `LatestResetOfFullLimits` は残してある**（issue #284）。
-// **`rate_limit.pause_above_percent` と回復待ちの判定が、種別を選ばずに全部の枠を見る**ためである。
 
 // Snapshot は usage API を1回読んだ結果、または保管値の写しである（issue #284）。
 type Snapshot struct {
@@ -153,64 +150,6 @@ type Snapshot struct {
 // **この package が線を1本持っているように読める。**
 // **線を決めるのは呼び出し側である**（`AnySelected` などに述語を渡す）。
 // **残すと、次の実装者がそこへ手を伸ばして、消したはずの2本目の閾値を作り直す。**
-
-// MaxPercent は枠の中でいちばん高い使用率を返す。
-//
-// 戻り値: 使用率の最大値。枠が1件も無ければ 0。
-func (s *Snapshot) MaxPercent() int {
-	if s == nil {
-		return 0
-	}
-	max := 0
-	for _, l := range s.Limits {
-		if l.Percent > max {
-			max = l.Percent
-		}
-	}
-	return max
-}
-
-// AtFullPercent は、使い切っている（`percent` が 100 に達している）枠が1つでもあるかを返す
-// （設計 3-27 の「この run は枠待ちである」の条件その1）。
-//
-// 戻り値: 100 に達している枠があれば true。
-func (s *Snapshot) AtFullPercent() bool {
-	if s == nil {
-		return false
-	}
-	for _, l := range s.Limits {
-		if l.Percent >= 100 {
-			return true
-		}
-	}
-	return false
-}
-
-// LatestResetOfFullLimits は、使い切っている枠のうち `resets_at` がいちばん遅いものを返す
-// （設計 3-27 の「どの枠の時刻を見るか」）。
-//
-// **`resets_at` が null の枠は判定から外す。**`weekly_scoped` も、モデルを判別せず
-// そのまま見る（continuo は Claude Code が使うモデルを知らない）。
-//
-// 戻り値の1つ目: いちばん遅いリセット時刻。
-// 戻り値の2つ目: 該当する枠が1つでもあれば true。
-func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
-	if s == nil {
-		return time.Time{}, false
-	}
-	var latest time.Time
-	found := false
-	for _, l := range s.Limits {
-		if l.Percent < 100 || l.ResetsAt == nil {
-			continue
-		}
-		if !found || l.ResetsAt.After(latest) {
-			latest = *l.ResetsAt
-			found = true
-		}
-	}
-	return latest, found
-}
 
 // AnySelected は、選んだ枠が1つでもあるかを返す（設計 3-27。issue #173 / #197）。
 //

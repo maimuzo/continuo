@@ -486,7 +486,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは使用率が空いていて（`pause_above_percent` に掛からない）、
+// 与える情報: 着手のときは使用率が空いていて（入札の余裕値が残っている）、
 // turn を送った瞬間にステータスラインから 100% の行が届く（issue #284）。
 // `agent.prompt` は herdr の `timeout` を返し、`agent.wait` は応答を書かずに接続を切る。
 // リトライは 0 回。
@@ -501,7 +501,7 @@ func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨て�
 			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
-	// **着手が済むまでは使用率を空けておく。**100% のままだと `pause_above_percent` で
+	// **着手が済むまでは使用率を空けておく。**100% のままだと入札の余裕値で
 	// dispatch が止まり、turn の経路に1度も入れない。値は新しいので statusline取得も開かない。
 	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 0, 0)
 	// **turn を送った瞬間に使い切る**（ステータスラインから 100% の新しい応答の行が届く）。

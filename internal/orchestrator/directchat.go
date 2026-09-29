@@ -105,7 +105,7 @@ func (o *Orchestrator) splitDirectChatCandidates(candidates []tracker.Issue) ([]
 //	門7 用意が直前に落ちてから間隔が空いていない … Debug
 //
 // **この一覧に無い門は1つも通らない**（設計 3-83d の「この一覧に無い門」）。
-// `rate_limit.pause_above_percent`・担当の持ち回り（`handoffGate`）・`skipByFailure`・
+// 入札の余裕値（`newWorkBlockedWith`）・担当の持ち回り（`handoffGate`）・`skipByFailure`・
 // `tracker.required_labels`・`Dispatchable` である。
 //
 // **issue のコメントを1本も読まない。**コメントを読む枠には触らない（設計 3-83b）。

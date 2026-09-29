@@ -205,9 +205,10 @@ const (
 	// （人間の決定。2026-09-06。issue #173）。**余裕値と同じことを2つの閾値で言っていて、
 	// 使い分けができていなかった。**既定（マージン10）では余裕値が90%で先に効くので、
 	// **95%の閾値は一度も発火していなかった。**
-	// **キーそのものは残っている。**`internal/orchestrator/statuslinefetch.go` の
-	// `statuslineFetchPointless` が、**モデル別の週次の枠について statusline取得を開くかを決める**のに使う。
-	// **あれは仕事を取るかどうかの門ではない**ので、2つの閾値が同じことを言う形には戻らない。
+	// **キーごと消えた。**statusline取得を開くかの判定も同じ余裕値の線を使う
+	// （`internal/orchestrator/statuslinefetch.go` の `statuslineFetchPointless`）。
+	// **別の閾値をもう1本置いてはならない。**置くと、入札が黙る使用率と
+	// statusline取得をやめる使用率がずれる。
 	SkipNoHeadroom
 )
 

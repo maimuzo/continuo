@@ -702,27 +702,32 @@ func TestQuotaAPI_止めるときの取り消しでは切り替えずWARNも出�
 	}
 }
 
-// 目的: weekly_scoped の 100% では statusline取得を開く判定を止めず、pause_above_percent を
-// 超えていれば切り替え中でも開かないことを確かめる。
+// 目的: weekly_scoped の使用率が「100 の期間」の判定を止めず、**余裕が無ければ**切り替え中でも
+// 開かないことを確かめる。
+//
+// **線は入札の余裕値と同じ1本である**（人間の決定。2026-09-06。issue #173）。
+// **`pause_above_percent` はキーごと消えた。**
 //
 // 与える情報: usage API が 401 を返し続ける（切り替えている）。値は古い。weekly_scoped が
-// 100%（pause_above_percent: 100）の場合と、96%（pause_above_percent: 95）の場合。
-// 成功条件: 前者は開き（clone の WARN が出る）、後者は開かないこと。
-func TestQuotaAPI_weekly_scopedの100では開く判定を止めずpauseを超えれば開かない(t *testing.T) {
+// 100%（1週間のマージン0 → 余裕値0…ではなく `100 − 100 − 0 = 0` で0以下なので開かない）の場合と、
+// 85%（マージン10 → 余裕値5で余裕あり）の場合と、96%（マージン10 → 余裕値 −6）の場合。
+// 成功条件: 余裕がある場合だけ開くこと（clone の WARN が出る）。
+func TestQuotaAPI_weekly_scopedに余裕があるときだけstatusline取得を開く(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		percent int
-		pause   int
+		margin  int
 		opens   bool
 	}{
-		{"100でpauseが100なら開く", 100, 100, true},
-		{"96でpauseが95なら開かない", 96, 95, false},
+		{"85でマージン10なら開く", 85, 10, true},
+		{"96でマージン10なら開かない", 96, 10, false},
+		{"100でマージン0でも開かない", 100, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			clock := newTestClock()
 			script := &apiScript{respond: apiStatus(http.StatusUnauthorized, nil)}
 			fx := newAPIFixture(t, clock, newScriptedReader(t, script, "test-token"), func(cfg *config.Config) {
-				cfg.RateLimit.PauseAbovePercent = tc.pause
+				cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = tc.margin
 			})
 			fx.Orc.OnAPISnapshot(&ratelimit.Snapshot{Limits: []ratelimit.Limit{
 				{Kind: handoff.LimitKindSession, Percent: 10, ResetsAt: ptr(clock.Now().Add(4 * time.Hour))},

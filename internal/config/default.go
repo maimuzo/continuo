@@ -257,7 +257,6 @@ func DefaultConfig() *Config {
 			// **既定は OS で分かれる。**分かれるのはこのキーだけである（defaultRateLimitTokenSource）。
 			TokenSource:       defaultRateLimitTokenSource(),
 			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
-			PauseAbovePercent: 95,
 			PollIntervalMs:    300000,
 			RefreshIntervalMs: 300000,
 			// **1週間のレートリミットが明けるのを待つ上限。300 分（5時間）**（2026-08-26 の人間の決定）。

@@ -28,6 +28,9 @@ func rateLimitFrontMatter(intervalMs int, rateLimit string) string {
 }
 
 // v0115RateLimit は v0.1.15 の雛形（`continuo init`）が書いた rate_limit の節である（値とキーをそのまま写した）。
+//
+// **`pause_above_percent` を含む。**このキーは v0.1.16 で消えたので、
+// **この節をそのまま渡すと起動が止まる**（issue #173 の破壊的変更）。
 const v0115RateLimit = "rate_limit:\n" +
 	"  source: oauth_usage_api\n" +
 	"  token_source: claude_credentials\n" +
@@ -43,8 +46,10 @@ const v0115RateLimit = "rate_limit:\n" +
 //
 // 与える情報: config.DefaultConfig() の値。
 // 成功条件: Source が "oauth_usage_api"、PollIntervalMs と RefreshIntervalMs が 300000、
-// TokenEnv が "CLAUDE_CODE_OAUTH_TOKEN"、PauseAbovePercent が 95 で、RefreshIntervalMs が
+// TokenEnv が "CLAUDE_CODE_OAUTH_TOKEN" で、RefreshIntervalMs が
 // 既定の polling.interval_ms より長いこと。
+//
+// **`pause_above_percent` は見ない。**キーごと消えた（人間の決定。2026-09-06。issue #173）。
 func TestDefaultConfig_rate_limitの既定はoauth_usage_apiで5分ごと(t *testing.T) {
 	def := config.DefaultConfig()
 	if got := def.RateLimit.Source; got != config.RateLimitSourceOAuthUsageAPI {
@@ -58,9 +63,6 @@ func TestDefaultConfig_rate_limitの既定はoauth_usage_apiで5分ごと(t *tes
 	}
 	if got := def.RateLimit.TokenEnv; got != "CLAUDE_CODE_OAUTH_TOKEN" {
 		t.Errorf("rate_limit.token_env の既定が違う: got %q", got)
-	}
-	if got := def.RateLimit.PauseAbovePercent; got != 95 {
-		t.Errorf("rate_limit.pause_above_percent の既定が違う: got %d, want 95", got)
 	}
 	if def.RateLimit.RefreshIntervalMs <= def.Polling.IntervalMs {
 		t.Errorf("既定の refresh_interval_ms（%d）が既定の polling.interval_ms（%d）以下である",
@@ -113,37 +115,55 @@ func TestLoad_rate_limitのsourceに知らない値を書くと起動が止ま�
 	}
 }
 
-// 目的: v0.1.15 の雛形が書いた WORKFLOW.md の rate_limit の節が、そのまま通ることを確認する（issue #284）。
+// 目的: v0.1.15 の雛形が書いた `pause_above_percent` の行は、消すまで起動しないことを確認する
+// （issue #173。破壊的変更）。
 //
-// **v0.1.16（#291）はこの節で起動を止めていた。**usage API を主に戻したので、書き換えずに起動できる。
-// `refresh_interval_ms` は書いていないので既定（5分）になる。
+// **front matter は知らないキーで起動を止める**（`yaml.Strict()`）。
+// **このキーは `continuo init` の雛形がずっと書いてきたので、手を入れていない `WORKFLOW.md` にも入っている。**
+// **移行の手順は [docs/upgrading.md](../../../docs/upgrading.md) にある。**
 //
-// 与える情報: v0.1.15 の雛形の rate_limit の節（source・token_source・token_env・pause_above_percent・
-// poll_interval_ms）を書いた front matter。
-// 成功条件: config.Load が成功し、書いた値がそのまま読めて、refresh_interval_ms が既定の 300000 であること。
-func TestLoad_v0_1_15の雛形のrate_limitがそのまま通る(t *testing.T) {
-	path := writeWorkflow(t, validFrontMatter+v0115RateLimit, "")
+// **止める側に倒す理由。**黙って捨てると、**利用者は「95%で止まる」と読んだままマージンを触らない。**
+// **実際に止まるのは 90%（マージン既定10）なので、設定と挙動が食い違ったまま動き続ける。**
+//
+// 与える情報: v0.1.15 の雛形の rate_limit の節（`pause_above_percent` を含む）を書いた front matter と、
+// その1行だけを消した front matter。
+// 成功条件: 前者は起動が止まり、誤りの文面にキーの名前が出ること。後者は通り、書いた値がそのまま読めること。
+func TestLoad_v0_1_15の雛形のpause_above_percentは消すまで起動しない(t *testing.T) {
+	t.Run("消していないと止まる", func(t *testing.T) {
+		path := writeWorkflow(t, validFrontMatter+v0115RateLimit, "")
 
-	loaded, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("v0.1.15 の雛形の rate_limit で起動が止まった: %v", err)
-	}
-	rl := loaded.Config.RateLimit
-	if rl.Source != config.RateLimitSourceOAuthUsageAPI {
-		t.Errorf("rate_limit.source が読めていない: got %q", rl.Source)
-	}
-	if rl.TokenSource != config.RateLimitTokenSourceClaudeCredentials {
-		t.Errorf("rate_limit.token_source が読めていない: got %q", rl.TokenSource)
-	}
-	if rl.TokenEnv != "CLAUDE_CODE_OAUTH_TOKEN" {
-		t.Errorf("rate_limit.token_env が読めていない: got %q", rl.TokenEnv)
-	}
-	if rl.PollIntervalMs != 300000 {
-		t.Errorf("rate_limit.poll_interval_ms が読めていない: got %d", rl.PollIntervalMs)
-	}
-	if rl.RefreshIntervalMs != 300000 {
-		t.Errorf("rate_limit.refresh_interval_ms が既定になっていない: got %d", rl.RefreshIntervalMs)
-	}
+		if _, err := config.Load(path); err == nil {
+			t.Fatal("知らないキーがあるのに起動が止まらなかった")
+		} else if !strings.Contains(err.Error(), "pause_above_percent") {
+			t.Errorf("誤りの文面にキーの名前が出ていない: %v", err)
+		}
+	})
+
+	t.Run("消すと通る", func(t *testing.T) {
+		front := strings.ReplaceAll(v0115RateLimit, "  pause_above_percent: 95\n", "")
+		path := writeWorkflow(t, validFrontMatter+front, "")
+
+		loaded, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("1行消したのに起動が止まった: %v", err)
+		}
+		rl := loaded.Config.RateLimit
+		if rl.Source != config.RateLimitSourceOAuthUsageAPI {
+			t.Errorf("rate_limit.source が読めていない: got %q", rl.Source)
+		}
+		if rl.TokenSource != config.RateLimitTokenSourceClaudeCredentials {
+			t.Errorf("rate_limit.token_source が読めていない: got %q", rl.TokenSource)
+		}
+		if rl.TokenEnv != "CLAUDE_CODE_OAUTH_TOKEN" {
+			t.Errorf("rate_limit.token_env が読めていない: got %q", rl.TokenEnv)
+		}
+		if rl.PollIntervalMs != 300000 {
+			t.Errorf("rate_limit.poll_interval_ms が読めていない: got %d", rl.PollIntervalMs)
+		}
+		if rl.RefreshIntervalMs != 300000 {
+			t.Errorf("rate_limit.refresh_interval_ms が既定になっていない: got %d", rl.RefreshIntervalMs)
+		}
+	})
 }
 
 // 目的: `source: oauth_usage_api` なら、refresh_interval_ms が polling.interval_ms 以下でも
