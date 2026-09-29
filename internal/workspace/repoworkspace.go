@@ -14,7 +14,8 @@ import (
 //
 // **実測で分かっていること**（2026-08-25、test/live/herdr_test.go）。
 //
-//	cwd を省く            … worktree_not_found で断られる。**外せない**
+//	cwd を省く（0.8.x）   … worktree_not_found で断られる。**外せない**
+//	cwd を省く（0.9.1）   … linked_worktree_source で断られる（実測: 2026-09-29）。**外せない**
 //	cwd に worktree を渡す … linked_worktree_source で断られる。**リポジトリ本体しか渡せない**
 //	親を閉じる（0.8.x）   … **その下の worktree の workspace と pane も一緒に消える**
 //	親を閉じる（0.9.0 以降）… workspace_group_close_required で断られ、何も閉じない（実測: 2026-09-24）

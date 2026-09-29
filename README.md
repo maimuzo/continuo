@@ -71,7 +71,9 @@ How many issues run at once is a setting (two by default).
 
 **The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default), which is meant to run without asking you. Whether it falls back to a prompt after repeated classifier blocks has not been verified yet (see the `permission_mode: auto` table in [docs/upgrading.md](docs/upgrading.md)). Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
 
-**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. A comment whose first line is an AI marker (an HTML comment starting with `<!-- continuo:`, or a review marker) is read as a note, not an instruction, even from those three ([FAQ](docs/FAQ.md)). **That narrows the hole; it does not close it.** The classifier does not read issue comments, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
+**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. A comment whose first line is an AI marker (an HTML comment starting with `<!-- continuo:`, or a review marker) is read as a note, not an instruction, even from those three ([FAQ](docs/FAQ.md)). **That narrows the hole; it does not close it.** The classifier does not read the issue comments the agent fetches with `gh`, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
+
+**One kind of issue comment does reach the classifier.** Each time continuo closes Claude Code, it posts a "Closed Claude Code" comment whose first line is `<!-- continuo:closed -->`. The next time it starts Claude Code, **it attaches to the first message every comment written after that record by an `OWNER` / `MEMBER` / `COLLABORATOR` without an AI marker** (with the default `auto`). To give the agent a permission such as "you may open an issue", wait until that record appears, then write it **as a new comment**. **If a trusted person quotes an outsider, the quoted part reaches the classifier as a human's permission too.** To turn this off, set `agent.relay_trusted_comments: false` ([SECURITY.md](SECURITY.md)).
 
 **On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
 
@@ -229,7 +231,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 **The second file, `continuo-ci.yaml`, is not config** — continuo never reads it. It is a sample GitHub Actions workflow that fails pull requests whose review results were never posted. Review it, then move it to `.github/workflows/`. continuo works fine if you don't.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent.
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent. (The section that attaches comments people wrote since the last run is built from the issue comments right before sending, so it does not appear there.)
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 
@@ -251,7 +253,7 @@ claude:
 **Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (it ships saying Japanese — change it if you want something else), and so on. Delete any you do not need. **continuo still runs with an empty body.**
 
 ```bash
-continuo prompt --show            # the whole text that gets sent (built-in + your body)
+continuo prompt --show            # the whole text that gets sent (built-in + your body, minus the section that attaches people's comments)
 continuo prompt --show --builtin  # the built-in part only
 ```
 

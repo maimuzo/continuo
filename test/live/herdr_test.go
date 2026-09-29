@@ -294,8 +294,13 @@ func TestLive_WorktreeOpen_cwdを渡すとリポジトリ側のworkspaceも開�
 // 目的: **worktree.open の cwd はリポジトリ本体でなければならない**ことを本物で固定する
 // （issue #19 の「cwd を渡さない」案を落とした根拠。実測: 2026-08-25）。
 // 与える情報: 使い捨てのリポジトリと、そこから切った worktree 1本。
-// 成功条件: cwd を省くと worktree_not_found、cwd に worktree のパスを渡すと
-// linked_worktree_source で断られること。**どちらの場合も workspace は1つも開かないこと。**
+// 成功条件: cwd を省いても、cwd に worktree のパスを渡しても linked_worktree_source で
+// 断られること。**どちらの場合も workspace は1つも開かないこと。**
+//
+// **cwd を省いたときのコードは herdr の版で変わる。**herdr 0.8.x は
+// `worktree_not_found: worktree path not found` を返していた（実測: 2026-08-25）。
+// **herdr 0.9.1 は `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
+// を返す**（実測: 2026-09-29）。**どちらの版でも断られるので、cwd が外せないという結論は変わらない。**
 //
 // **なぜこの検査が要るか。**issue #19 の直し方の候補には「cwd を渡さない」があった。
 // 渡さなければ workspace は1つしか開かず、閉じ残しも起きない。**だが herdr が断る。**
@@ -309,7 +314,7 @@ func TestLive_WorktreeOpen_cwdはリポジトリ本体しか受け付けない(t
 	ctx := context.Background()
 	focus := false
 
-	t.Run("cwd を省くと worktree_not_found で断られる", func(t *testing.T) {
+	t.Run("cwd を省くと linked_worktree_source で断られる", func(t *testing.T) {
 		opened, err := client.WorktreeOpen(ctx, herdr.WorktreeOpenParams{
 			Path:  worktreePath,
 			Focus: &focus,
@@ -320,7 +325,7 @@ func TestLive_WorktreeOpen_cwdはリポジトリ本体しか受け付けない(t
 			janitor.TrackPane(opened.RootPane.PaneID)
 			t.Fatalf("cwd を省いた worktree.open が通ってしまった: %+v", opened)
 		}
-		if !herdr.IsCode(err, "worktree_not_found") {
+		if !herdr.IsCode(err, "linked_worktree_source") {
 			t.Errorf("cwd を省いたときのエラーコードが想定と違う: %v", err)
 		}
 	})

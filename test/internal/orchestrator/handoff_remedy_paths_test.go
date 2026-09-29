@@ -35,8 +35,9 @@ type remedyCase struct {
 // remedyCases は、試す公開・非公開の組み合わせを返す。
 //
 // **文面は3通りとも同じになる。**分けていたのは「公開の場所へ『ここへ許可を書けば通る』と
-// 書くと第三者が同じ文を書ける」ためだったが、**そもそも誰が書いても判定役へ届かない**
-// （公式の permission modes のページ。2026-09-18 に取得）。
+// 書くと第三者が同じ文を書ける」ためだったが、**第三者が書いても判定役へ届かない**
+// （公式の permission modes のページ。2026-09-18 に取得）。relay（設計 3-85）が渡すのも、
+// OWNER / MEMBER / COLLABORATOR のコメントだけである。
 //
 // **それでも3通りを回す。**`RepoIsPrivate` は `tool_gate` の判定が使い続けており
 // （internal/orchestrator/settings.go の `toolGateHookMatchers`）、**値が入っていると
@@ -75,38 +76,61 @@ func handoffBodyOf(fx *fixture, nodeID string) string {
 // `internal/orchestrator/restore.go` の呼び出しが消えたら、この検査が落ちる。
 // **一部だけを `Contains` で見ると、呼び出しが消えても別の行に同じ語があれば通ってしまう。**
 //
+// **relay（`agent.relay_trusted_comments`。設計 3-85）の有無の2通りも回す。**有効なら、閉じた記録のあとに
+// コメントで許可を出す書き方が入り、無効なら1文字も入らない。
+//
 // 与える情報: `In Progress` の issue（非公開 / 公開 / 取れなかった）と、agent_status が blocked の pane。
-// 成功条件: 3通りとも、`permissionRemedyText` の文面をそのまま含むこと。
+// relay の有効・無効。
+// 成功条件: 6通りとも、`permissionRemedyText` の文面をそのまま含み、コメントで許可を出す案内の有無が relay と一致すること。
 func TestHandoff_復元したrunがblockedなら対処を載せる(t *testing.T) {
-	for _, tc := range remedyCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			fx := newFixture(t, fixtureOptions{})
-			// **この WARN はテスト自身が起こしている。**blocked の pane を台本で置いているためである。
-			fx.AllowLog("権限の確認で止まっているので引き継ぎません")
-			issue := sampleIssue(188, "In Progress")
-			issue.RepoIsPrivate = tc.repoIsPrivate
-			fx.Tracker.AddIssue(issue)
-			wt := prepareWorktree(t, fx, issue, identityOverride{})
-			installPanes(fx, livePane{
-				PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
-				AgentStatus: herdr.AgentStatusBlocked, SessionUUID: "sess-188",
-			})
-
-			restore(t, fx)
-
-			waitFor(t, 10*time.Second, "引き渡しの通知が投稿される", func() bool {
-				return handoffBodyOf(fx, "I_node188") != ""
-			})
-			body := handoffBodyOf(fx, "I_node188")
-			want := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto)
-			if !strings.Contains(body, want) {
-				t.Errorf("引き渡しの本文が【対処】をそのまま含んでいない"+
-					"（restore.go が permissionRemedyText を呼んでいない疑い）。\n期待:\n%s\n本文:\n%s", want, body)
+	for _, relay := range []bool{true, false} {
+		for _, tc := range remedyCases() {
+			name := tc.name + "_relay有効"
+			if !relay {
+				name = tc.name + "_relay無効"
 			}
-			if strings.Contains(body, commentGrantGuidance) {
-				t.Errorf("コメントで許可を出す案内が入っている。判定役はそれを読まない:\n%s", body)
-			}
-		})
+			t.Run(name, func(t *testing.T) {
+				testRestoredBlockedRemedy(t, tc, relay)
+			})
+		}
+	}
+}
+
+// testRestoredBlockedRemedy は、経路2 を1通り確かめる。
+//
+// **relay が有効なら、コメントで許可を出す書き方が入る。無効なら1文字も入らない**（設計 3-85。issue #246）。
+//
+// tc: 公開・非公開のどちらとして issue を置くか。
+// relay: `agent.relay_trusted_comments` の値。
+func testRestoredBlockedRemedy(t *testing.T, tc remedyCase, relay bool) {
+	t.Helper()
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Agent.RelayTrustedComments = relay
+	}})
+	// **この WARN はテスト自身が起こしている。**blocked の pane を台本で置いているためである。
+	fx.AllowLog("権限の確認で止まっているので引き継ぎません")
+	issue := sampleIssue(188, "In Progress")
+	issue.RepoIsPrivate = tc.repoIsPrivate
+	fx.Tracker.AddIssue(issue)
+	wt := prepareWorktree(t, fx, issue, identityOverride{})
+	installPanes(fx, livePane{
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
+		AgentStatus: herdr.AgentStatusBlocked, SessionUUID: "sess-188",
+	})
+
+	restore(t, fx)
+
+	waitFor(t, 10*time.Second, "引き渡しの通知が投稿される", func() bool {
+		return handoffBodyOf(fx, "I_node188") != ""
+	})
+	body := handoffBodyOf(fx, "I_node188")
+	want := orchestrator.PermissionRemedyTextForTest(config.ClaudePermissionModeAuto, relay)
+	if !strings.Contains(body, want) {
+		t.Errorf("引き渡しの本文が【対処】をそのまま含んでいない"+
+			"（restore.go が permissionRemedyText を呼んでいない疑い）。\n期待:\n%s\n本文:\n%s", want, body)
+	}
+	if got := strings.Contains(body, commentGrantGuidance); got != relay {
+		t.Errorf("コメントで許可を出す案内の有無が relay（%v）と合わない（入っている: %v）:\n%s", relay, got, body)
 	}
 }
 

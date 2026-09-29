@@ -3,6 +3,7 @@
 ## 根拠資料
 
 - `docs/plans/continuo_design.md#3-9`（後始末の手順0 から手順7b）
+- `docs/plans/continuo_design.md#3-85c`（印に入っていない worktree の pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#3-18`（身元ファイル。片付けを見送った時刻）
 - `docs/plans/continuo_design.md#3-20`（worktree が置き場所の内側にあることを検査する）
 - `docs/plans/continuo_design.md#3-22`（worktree の置き場所は gwq の規則に合わせる）
@@ -73,9 +74,10 @@ RFS BASIC FLOW 5
 2. システムは herdr に workspace の pane の一覧を要求する。
 3. IF Status が active_states に入っていて pane に agent がいる THEN
 4.   システムは herdr の pane を閉じる。
-5. ENDIF
-6. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。
+5.   システムは、閉じる対象の pane を全部閉じられたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
+6. ENDIF
+7. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。pane を全部閉じられた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。
 
 SPECIFIC ALTERNATIVE FLOW 置き場所の外:
 RFS BASIC FLOW 6
@@ -272,7 +274,8 @@ detached でもない」ときに限り、壊れた ref の判定を検算の答
 `cwd` に渡したリポジトリのぶん（**リポジトリの親 workspace**）である。
 **`worktree.remove` は後者を閉じない**ので、閉じるのは continuo の仕事になる。
 
-**`cwd` を外す案は採れない。**herdr が `worktree_not_found` で断る（実測: 2026-08-25、
+**`cwd` を外す案は採れない。**herdr が断る（**返るコードは版で変わる。**0.8.x は
+`worktree_not_found`、0.9.1 は `linked_worktree_source`。実測: 2026-08-25 と 2026-09-29、
 [test/live/herdr_test.go](test/live/herdr_test.go)）。`cwd` に worktree のパスを渡す案も
 `linked_worktree_source` で断られる。**親は herdr の必須の親である。**
 
@@ -358,6 +361,17 @@ branch は1度も作られない。**そこを片付けたとき「branch が残
 | 巡回で worktree の身元ファイルを照合した | システム | 設計 3-9 の手順7 |
 | 起動時の掃除で cleanup.on_states の issue を取った | システム | 設計 3-9 の手順6 |
 
+## pane を閉じたときだけ、閉じた記録を書く
+
+**「片付けの対象外」で pane を閉じたときは、閉じる対象を全部閉じられ、1枚以上閉じたときだけ、「Claude Code を閉じました」のコメントを1件書く**（設計 3-85c）。
+次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
+1枚でも閉じ損ねたら書かない（Claude Code が生きたまま記録が付くのを防ぐ）。次の巡回で閉じたときに書く。
+**巡回の中で書き終えるまで待つ**（設計 3-8 の例外。10秒の期限で1回）。同じ巡回の着手より前に記録を付けるためである。
+書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、取り直した issue が worktree の置き場所と違うリポジトリのときは書かない。
+
+**worktree を消す基本フローでは書かない（書けない）。**`worktree.remove` と後始末の `workspace.close` は pane を `pane.close` で閉じないためである。
+これは設計 3-85h の残る心配に入れてある。
+
 ## フローチャート
 
 ```mermaid
@@ -437,9 +451,9 @@ flowchart TD
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
         F1S1["1. worktree を残す"] --> F1S2["2. workspace の pane の一覧を要求する"] --> F1S3{"3. IF active_states に戻っていて pane に agent がいる"}
-        F1S3 -- 真 --> F1S4["4. pane を閉じる"] --> F1S5["5. ENDIF"]
-        F1S3 -- 偽 --> F1S5
-        F1S5 --> F1S6["6. ABORT"]
+        F1S3 -- 真 --> F1S4["4. pane を閉じる"] --> F1S5["5. 全部閉じられたら閉じた記録をコメントする"] --> F1S6["6. ENDIF"]
+        F1S3 -- 偽 --> F1S6
+        F1S6 --> F1S7["7. ABORT"]
     end
 
     subgraph SAF2 ["SPECIFIC ALTERNATIVE FLOW 置き場所の外 / RFS BASIC FLOW 6"]
@@ -508,6 +522,7 @@ sequenceDiagram
         H-->>S: pane と agent を応答する
         opt Status が active_states に戻っていて pane に agent がいる
             S->>H: pane の close を要求する
+            S->>GH: 全部閉じられたら、Claude Code を閉じた記録のコメントの投稿を要求する
         end
         Note over S: ABORT worktree は残す
     else Status が cleanup.on_states に入っている

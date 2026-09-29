@@ -43,7 +43,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 > （訳）`decision` に `"block"` を入れると Claude が止まるのを妨げ、`"allow"` か項目なしなら止まらせる。
 
 **hook は並行して走り、互いの答えを見られない。**continuo が張る `Stop` hook
-（[docs/plans/continuo_design.md:748](../continuo_design.md#L748)）は、
+（[docs/plans/continuo_design.md の 1-3 の「張る hook と、それぞれの役目」](../continuo_design.md#hooks-and-roles)）は、
 **他の hook が差し戻したかどうかを知る手立てを持たない。**
 
 **差し戻しは transcript には残る。**手元の記録で確認した1行の形（`message.content` は文字列）。
@@ -339,7 +339,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 
 **言いたいこと。**1行を直し、1節を足す。**3-2 と 3-26 は触らない。**
 
-**直す1行。**[docs/plans/continuo_design.md:748](../continuo_design.md#L748) を、いまの実装と合わせる。
+**直す1行。**[docs/plans/continuo_design.md の 1-3 の「張る hook と、それぞれの役目」](../continuo_design.md#hooks-and-roles) を、いまの実装と合わせる。
 
 ```markdown
 | **`Stop`** | **turn の終わりの判定の起点。**`background_tasks` を見る。**`stop_hook_active` は使わない**（3-79） |
@@ -348,7 +348,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **足す1節。**`### 3-79. 空の Stop は「止まってよいか尋ねた」であって「終わった」ではない`。
 中身はこの文書の 1 節・6 節・7 節を縮めたもので、**測定値の細かい内訳は入れずにこの文書を参照させる。**
 
-**[docs/plans/continuo_design.md:3806](../continuo_design.md#L3806) の周辺は残す。**
+**[docs/plans/continuo_design.md の「表明せずに終わったら、次の turn で促す」](../continuo_design.md#prompt-when-no-status) の周辺は残す。**
 あちらは「**continuo 自身は差し戻しを使わない**」を決めているだけで、
 **「他人の hook が差し戻してきたときにどうするか」は決めていない。**3-79 がそこを埋める。
 

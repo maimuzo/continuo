@@ -10,6 +10,7 @@
 - `docs/plans/continuo_design.md#3-18`（身元ファイルと引き継いだ回数）
 - `docs/plans/continuo_design.md#3-19`（落ちている間に届かなかった通知を取り戻す）
 - `docs/plans/continuo_design.md#8-1`（再起動後は引き渡し状態の worker を止めない）
+- `docs/plans/continuo_design.md#3-85c`（引き継がない pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#3-49`（身元を確かめられない worktree の復元と、止まり方）
 - `internal/orchestrator/restore.go` の `Restore`、`scanIdentities`、`refetchByIdentities`、`matchPanes`、`decideOne`、`restoreWithoutPane`、`applyOrphanRunningAction`
 - `internal/orchestrator/turn.go` の `startTurnLoop`
@@ -154,26 +155,29 @@ POSTCONDITION: herdr の pane は閉じていない。worktree は残ってい�
 SPECIFIC ALTERNATIVE FLOW 状態の不明:
 RFS BASIC FLOW 15
 1. システムは herdr の pane を閉じる。
-2. システムは worktree と issue の Status を残す。
-3. システムは issue を印の集合に入れない。
-4. ABORT
-POSTCONDITION: herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。
+2. システムは Claude Code を閉じた記録を issue に1件コメントする。
+3. システムは worktree と issue の Status を残す。
+4. システムは issue を印の集合に入れない。
+5. ABORT
+POSTCONDITION: herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 権限の確認での停止:
 RFS BASIC FLOW 16
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは herdr の pane を閉じる。
-3. システムは worktree を残す。
-4. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。
+3. システムは Claude Code を閉じた記録を issue に1件コメントする。
+4. システムは worktree を残す。
+5. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。保留中の権限の要求は pane ごと消えている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限:
 RFS BASIC FLOW 17
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは herdr の pane を閉じる。
-3. システムは worktree を残す。
-4. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。
+3. システムは Claude Code を閉じた記録を issue に1件コメントする。
+4. システムは worktree を残す。
+5. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 中断:
 BRANCH FROM BASIC FLOW 24
@@ -204,9 +208,17 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | 取り直した Status | どうするか |
 | --- | --- |
 | active_states | 引き継ぐ |
-| cleanup.on_states | pane を閉じてから worktree と branch を片付ける |
+| cleanup.on_states | pane を閉じ、閉じた記録を書いてから worktree と branch を片付ける |
 | 引き渡し（In Review / Blocked） | pane も worktree も残す。印には入れない |
 | 取り直しで見つからない | pane も worktree も残す。ログに出す |
+
+## 引き継がずに pane を閉じたら、閉じた記録を書く
+
+**引き継がずに pane を閉じる道（「状態の不明」「権限の確認での停止」「引き継ぎの上限」と、Status が cleanup.on_states のとき）では、閉じた直後に「Claude Code を閉じました」のコメントを1件書く**（設計 3-85c）。
+次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
+**agent 名は見ない。**再起動のときは Claude Code が動いていたかが分からないので、書き漏らすより書くほうを取る（書いて起きるのは、閉じる前に書いた許可を書き直すことだけである）。
+書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、pane を閉じ損ねたときは書かない。
+**「ボードの取り直しの失敗」では書かない。**書く先の issue を確かめられないためである。
 
 ## 引き継ぐと決めたあとに agent_status で分岐する
 
@@ -215,9 +227,9 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | agent_status | どうするか |
 | --- | --- |
 | idle または done | 引き継いで継続の指示を送る |
-| blocked | 引き継がない。failure_state へ落として pane を閉じる |
+| blocked | 引き継がない。failure_state へ落として pane を閉じ、閉じた記録を書く |
 | working | 引き継ぐ。次の turn を要する印を立てず、Stop hook を待つ |
-| 読み取れない | pane を閉じ、worktree と Status を残す |
+| 読み取れない | pane を閉じ、閉じた記録を書く。worktree と Status を残す |
 
 ## 身元を確かめられない worktree は、復元してから引き継ぎに入る
 
@@ -397,15 +409,15 @@ flowchart TD
     end
 
     subgraph SAF10 ["SPECIFIC ALTERNATIVE FLOW 状態の不明 / RFS BASIC FLOW 15"]
-        F10S1["1. pane を閉じる"] --> F10S2["2. worktree と Status を残す"] --> F10S3["3. 印に入れない"] --> F10S4["4. ABORT"]
+        F10S1["1. pane を閉じる"] --> F10S2["2. 閉じた記録をコメントする"] --> F10S3["3. worktree と Status を残す"] --> F10S4["4. 印に入れない"] --> F10S5["5. ABORT"]
     end
 
     subgraph SAF11 ["SPECIFIC ALTERNATIVE FLOW 権限の確認での停止 / RFS BASIC FLOW 16"]
-        F11S1["1. Status に failure_state を書く"] --> F11S2["2. pane を閉じる"] --> F11S3["3. worktree を残す"] --> F11S4["4. ABORT"]
+        F11S1["1. Status に failure_state を書く"] --> F11S2["2. pane を閉じる"] --> F11S3["3. 閉じた記録をコメントする"] --> F11S4["4. worktree を残す"] --> F11S5["5. ABORT"]
     end
 
     subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限 / RFS BASIC FLOW 17"]
-        F12S1["1. Status に failure_state を書く"] --> F12S2["2. pane を閉じる"] --> F12S3["3. worktree を残す"] --> F12S4["4. ABORT"]
+        F12S1["1. Status に failure_state を書く"] --> F12S2["2. pane を閉じる"] --> F12S3["3. 閉じた記録をコメントする"] --> F12S4["4. worktree を残す"] --> F12S5["5. ABORT"]
     end
 
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 24"]
@@ -472,6 +484,7 @@ sequenceDiagram
                             alt agent_status が blocked である
                                 S->>GH: Status への failure_state の書き込みを要求する
                                 S->>H: pane の close を要求する
+                                S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
                                 Note over S: ABORT 人間の判断が要る
                             else agent_status が idle または done または working である
                                 S->>S: 引き継いだ回数を1つ増やして身元ファイルへ書く

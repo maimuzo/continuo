@@ -515,6 +515,9 @@ func (fg *fakeGitHub) respond(query string, vars map[string]any) (string, map[st
 		}
 	case strings.Contains(query, "updateProjectV2ItemFieldValue"):
 		return "update_status", fg.updateStatus(vars)
+	case strings.Contains(query, "comments(first: $first") && strings.Contains(query, "authorAssociation"):
+		// **relay 専用の問い合わせ**（設計 3-85。issue #246）。共用の問い合わせと別に数える。
+		return "relay_comments", map[string]any{"node": fg.relayCommentsPayload(vars)}
 	case strings.Contains(query, "comments(first: $first"):
 		return "comments", map[string]any{"node": fg.commentsPayload(vars)}
 	case strings.Contains(query, "addComment"):
@@ -668,6 +671,33 @@ func (fg *fakeGitHub) commentsPayload(vars map[string]any) map[string]any {
 			"body":      list[i].Body,
 			"createdAt": list[i].CreatedAt.UTC().Format(time.RFC3339Nano),
 			"author":    map[string]any{"login": "agent", "id": "U_1"},
+		})
+	}
+	return map[string]any{"__typename": "Issue", "comments": map[string]any{"nodes": nodes}}
+}
+
+// relayCommentsPayload は relay 専用のコメントの問い合わせに答える（設計 3-85。issue #246）。
+//
+// **共用の応答に、投稿者の立場（`OWNER`）と、隠されているか（偽）を足したものである。**
+// URL は `#issuecomment-<番号>` の形にする（同じ秒の前後を番号で決めるため）。
+//
+// vars: 受け取った変数。
+// 戻り値: 応答の node。
+func (fg *fakeGitHub) relayCommentsPayload(vars map[string]any) map[string]any {
+	nodeID, _ := vars["issueId"].(string)
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	list := fg.comments[nodeID]
+	nodes := make([]any, 0, len(list))
+	for i := len(list) - 1; i >= 0; i-- {
+		nodes = append(nodes, map[string]any{
+			"id":                fmt.Sprintf("IC_%d", i),
+			"url":               fmt.Sprintf("https://github.com/octocat/hello-world/issues/1#issuecomment-%d", i+1),
+			"body":              list[i].Body,
+			"createdAt":         list[i].CreatedAt.UTC().Format(time.RFC3339Nano),
+			"author":            map[string]any{"login": "agent", "id": "U_1"},
+			"authorAssociation": "OWNER",
+			"isMinimized":       false,
 		})
 	}
 	return map[string]any{"__typename": "Issue", "comments": map[string]any{"nodes": nodes}}

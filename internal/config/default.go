@@ -80,6 +80,19 @@ const ProgressMarker = "<!-- continuo:progress -->"
 // エージェントへ書かせる文字列と、1文字も違ってはならない。**
 const PlanMarker = "<!-- continuo:plan -->"
 
+// ClosedMarker は、continuo が Claude Code を起動した pane を閉じたときに issue へ書く
+// 「閉じた記録」の1行目である（設計 3-85。issue #246）。
+//
+// **この記録より後に、信頼できる立場の人間が書いたコメントだけを、次の起動の最初のメッセージに
+// 付けて渡す。**記録を書いた時点で、その issue の Claude Code はもう動いていないので、
+// 記録より後のコメントは人間が書いたものだけになる（AI が目印を付け忘れた場合を除く）。
+//
+// **`self_marker` は付けない。**本文の先頭がこの印そのものでなければ、別の機械が境目として読めない
+// （入札の印と同じ理由）。**設定キーにしない。**機械ごとに違うと、別の機械の記録を境目にできない。
+//
+// **エージェントへ渡す入力から外す印（`IsMarked`）には入れない。**
+const ClosedMarker = "<!-- continuo:closed -->"
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは
@@ -169,6 +182,9 @@ func DefaultConfig() *Config {
 			MaxTakeover:                5,
 			MaxRetryBackoffMs:          300000,
 			MaxRetries:                 3,
+			// **既定で渡す**（設計 3-85。issue #246）。人間が issue のコメントで出した許可を、
+			// 次に Claude Code を起動したときの最初のメッセージに付けて判定役へ届ける。
+			RelayTrustedComments: true,
 		},
 		Claude: ClaudeConfig{
 			Kind:           "claude",
@@ -210,7 +226,8 @@ func DefaultConfig() *Config {
 			},
 			// **既定では判定を掛けない。**
 			// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
-			// （`auto` の判定役も、issue のコメントは読まない。設計 3-11）。
+			// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-85）、
+			// この判定はそれも見ない。設計 3-11）。
 			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 			// 掛けたい人は public_only か on を書く。
 			//

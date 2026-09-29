@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "33fe453c5d236ce82a0ba1ffd08222a6315dc1005f0177e62105f632c319218b", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4b38a9791ef09fdddfd89a5ff014dcf0d970a16a6375f34b95bbde6083fd670c", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。

@@ -537,7 +537,7 @@ done
 `SessionStart` / `PreToolUse`（matcher `*`）/ `PostToolUse`（matcher `*`）。
 
 **hook の無音では、原理的に判定できない。**2026-08-18 の実測。
-**出典は [docs/plans/continuo_design.md:279-285](../plans/continuo_design.md#L279-L285) の 1-3 である**
+**出典は [docs/plans/continuo_design.md の「なぜ静止の長さでも判定できないか」](../plans/continuo_design.md#why-silence-cannot-decide) の 1-3 である**
 （この文書の他の箇所が「`SPEC.md` 10.6」と書き分けているので、「設計」とだけ書いてはならない）。
 
 - **道具の実行中は hook が1つも飛ばない。**45秒の道具で 45.107〜45.116 秒、90秒の道具で 90.115 秒
@@ -547,7 +547,7 @@ done
 **これが 4-0 の「hook の無音は単独では使えない」の根拠である。**
 
 **どう測ったか。****叩いたコマンドは記録されていない。**
-[docs/plans/continuo_design.md:279-285](../plans/continuo_design.md#L279-L285) にも結果しか無い。
+[docs/plans/continuo_design.md の「なぜ静止の長さでも判定できないか」](../plans/continuo_design.md#why-silence-cannot-decide) にも結果しか無い。
 **この文書で、手法を再現できない唯一の実測である。**
 
 **測り直すときの形。**hook は continuo の socket へ届くので、**受け側で時刻を取る。**

@@ -981,7 +981,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	cleanupCtx, cancel := context.WithTimeout(
 		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
-	o.stopWorker(cleanupCtx, rs)
+	// **閉じた記録は書かない**（設計 3-85c の表の「担当が別の機械へ移ったとき」の行。
+	// この引数は `origin/main` の PR #297 を取り込んで生まれた）。
+	// **段2 で `removeOwnAssignee` が済んでいる**ので、この機械はもう担当ではない。
+	// **担当を外された機械は issue へ書かない**（3-77c・3-83h）。
+	// **保留の印も捨てる。**次に担当する機械が、自分が閉じたときに自分の記録を書く。
+	o.stopWorker(cleanupCtx, rs, closedRecordSkip)
 	// **段4。run の登録から外す。**落とすとスロットを永久に埋める。
 	o.release(rs)
 	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました"+
@@ -1518,6 +1523,7 @@ func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState,
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
-	o.stopWorker(cleanupCtx, rs)
+	// **閉じた記録も書かない**（設計 3-85）。この機械はもうこの issue の担当ではない。
+	o.stopWorker(cleanupCtx, rs, closedRecordSkip)
 	o.release(rs)
 }

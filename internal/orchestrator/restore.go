@@ -772,7 +772,14 @@ func (o *Orchestrator) decideOne(
 			o.addToCloseSet(c.Identity.ProjectItemID, c.Path)
 			return
 		}
-		o.closePaneInto(ctx, pane.PaneID, result)
+		// **その issue の worktree の pane を閉じたら、閉じた記録を書く**（設計 3-85。issue #246）。
+		// **agent 名は見ない。**起動済みの Claude Code を見つけたとき（`ErrStartupBusy`）や人間が手で起こしたときは、
+		// Claude Code が動いていても agent 名が無い。再起動のときは動いていたかが分からないので、
+		// 書き漏らすより書くほうを取る（書いて起きるのは、閉じる前に書いた許可を書き直すことだけである）。
+		// **担当者が他人のときは書かない**（`recordWorkerClosed`）。issue と置き場所の照合は上で済んでいる。
+		if o.closePaneInto(ctx, pane.PaneID, result) {
+			o.recordWorkerClosed(ctx, issue)
+		}
 	}
 
 	switch {
@@ -875,7 +882,7 @@ func (o *Orchestrator) decideOne(
 				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
 				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				"\n【よくある原因】フォルダの信頼が切れた。何が確認の画面を出したかは continuo の側に残りません。"+
-				permissionRemedyText(o.cfg.Claude.PermissionMode),
+				permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg)),
 			handoffContext{WorktreePath: c.Path})
 		closePane("確認の画面で止まっている")
 		return adoption{}, false
@@ -1107,10 +1114,22 @@ func (o *Orchestrator) closePane(ctx context.Context, paneID string) bool {
 // ctx: 呼び出しに適用するコンテキスト。
 // paneID: 閉じる pane の ID。
 // result: 復元の記録。
-func (o *Orchestrator) closePaneInto(ctx context.Context, paneID string, result *RestoreResult) {
-	if o.closePane(ctx, paneID) {
-		result.ClosedPanes = append(result.ClosedPanes, paneID)
+// 戻り値: 閉じられたら true。**その pane が既に無かったときも true を返す**（閉じた記録を書くため。
+// 設計 3-85）。ただし `result.ClosedPanes` へは積まない（continuo が閉じたのではない）。
+func (o *Orchestrator) closePaneInto(ctx context.Context, paneID string, result *RestoreResult) bool {
+	if paneID == "" {
+		return false
 	}
+	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
+		if paneAlreadyGone(err) {
+			o.logger.Info("閉じようとした pane はもうありませんでした", "pane_id", paneID)
+			return true
+		}
+		o.logger.Warn("pane を閉じられませんでした", "pane_id", paneID, "error", err)
+		return false
+	}
+	result.ClosedPanes = append(result.ClosedPanes, paneID)
+	return true
 }
 
 // resolvePath はパスのシンボリックリンクを解決する（設計 3-4 の段4）。

@@ -38,7 +38,8 @@ var ErrCloneBusy = i18n.Sentinel(i18n.KeyWorkspaceErrCloneBusy)
 //
 // repoPath: リポジトリ本体の作業ディレクトリ。
 // 戻り値: 押さえの key。repoPath が空なら空（押さえを見ない。cwd の無い `worktree.open` は
-// herdr が `worktree_not_found` で断るので、親は作られない）。
+// herdr が断るので、親は作られない。**返るコードは herdr の版で変わる。**
+// `internal/workspace/repoworkspace.go` の実測の表を見ること）。
 func cloneKey(repoPath string) string {
 	if repoPath == "" {
 		return ""

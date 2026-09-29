@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "4290ae31ed02ff5a3c875715ba2df9e2da7be750760a9b283c3197364167fff7"
+    "rucm_block_sha256": "dfa15daf7f49bb142cbd9aebfa2313a28f8ccb7a7d76abc407eae8151f55975c"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -17,7 +17,7 @@
           2
         ]
       },
-      "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
     },
     "応答のあるrun": {
       "rfs": {
@@ -35,7 +35,7 @@
           4
         ]
       },
-      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。"
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じていて、issue に Claude Code を閉じた記録のコメントが1件増えている。issue の Status は running_state の選択肢のままである。"
     },
     "自動継続": {
       "rfs": {
@@ -92,7 +92,7 @@
           ]
         }
       ],
-      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。"
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。"
     }
   },
   "nodes": [
@@ -234,20 +234,27 @@
       "type": "action",
       "flow": "枠を読めない",
       "step": 4,
-      "statement": "システムはリトライの回数を1つ増やす。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "枠を読めない-5",
       "type": "action",
       "flow": "枠を読めない",
       "step": 5,
-      "statement": "システムはバックオフの期限を印に書く。"
+      "statement": "システムはリトライの回数を1つ増やす。"
     },
     {
       "id": "枠を読めない-6",
-      "type": "abort",
+      "type": "action",
       "flow": "枠を読めない",
       "step": 6,
+      "statement": "システムはバックオフの期限を印に書く。"
+    },
+    {
+      "id": "枠を読めない-7",
+      "type": "abort",
+      "flow": "枠を読めない",
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -304,20 +311,27 @@
       "type": "action",
       "flow": "枠の残り",
       "step": 6,
-      "statement": "システムはリトライの回数を1つ増やす。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "枠の残り-7",
       "type": "action",
       "flow": "枠の残り",
       "step": 7,
+      "statement": "システムはリトライの回数を1つ増やす。"
+    },
+    {
+      "id": "枠の残り-8",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 8,
       "statement": "システムはバックオフの期限を印に書く。"
     },
     {
-      "id": "枠の残り-9",
+      "id": "枠の残り-10",
       "type": "abort",
       "flow": "枠の残り",
-      "step": 9,
+      "step": 10,
       "statement": "ABORT"
     },
     {
@@ -444,20 +458,27 @@
       "type": "action",
       "flow": "応答の途絶",
       "step": 2,
-      "statement": "システムは worktree を残す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
       "id": "応答の途絶-3",
       "type": "action",
       "flow": "応答の途絶",
       "step": 3,
-      "statement": "システムは issue を再 dispatch の対象にする。"
+      "statement": "システムは worktree を残す。"
     },
     {
       "id": "応答の途絶-4",
-      "type": "abort",
+      "type": "action",
       "flow": "応答の途絶",
       "step": 4,
+      "statement": "システムは issue を再 dispatch の対象にする。"
+    },
+    {
+      "id": "応答の途絶-5",
+      "type": "abort",
+      "flow": "応答の途絶",
+      "step": 5,
       "statement": "ABORT"
     }
   ],
@@ -622,6 +643,11 @@
       "kind": "seq"
     },
     {
+      "from": "枠を読めない-6",
+      "to": "枠を読めない-7",
+      "kind": "seq"
+    },
+    {
       "from": "応答のあるrun-1",
       "to": "応答のあるrun-2",
       "kind": "seq"
@@ -650,7 +676,7 @@
     },
     {
       "from": "枠の残り-3",
-      "to": "枠の残り-9",
+      "to": "枠の残り-10",
       "kind": "seq"
     },
     {
@@ -665,7 +691,12 @@
     },
     {
       "from": "枠の残り-7",
-      "to": "枠の残り-9",
+      "to": "枠の残り-8",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-8",
+      "to": "枠の残り-10",
       "kind": "seq"
     },
     {
@@ -752,6 +783,11 @@
       "from": "応答の途絶-3",
       "to": "応答の途絶-4",
       "kind": "seq"
+    },
+    {
+      "from": "応答の途絶-4",
+      "to": "応答の途絶-5",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -801,7 +837,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "応答の途絶",
-      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。",
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -820,7 +856,8 @@
         "応答の途絶-1",
         "応答の途絶-2",
         "応答の途絶-3",
-        "応答の途絶-4"
+        "応答の途絶-4",
+        "応答の途絶-5"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -839,6 +876,7 @@
         "システムは Claude Code に継続の指示を送る。",
         "CONDITION: 継続の指示を送っても turn_timeout_ms のあいだ agent_status も working にならず hook も動かない場合",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムは worktree を残す。",
         "システムは issue を再 dispatch の対象にする。",
         "ABORT"
@@ -922,7 +960,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "枠の残り",
-      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じていて、issue に Claude Code を閉じた記録のコメントが1件増えている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -931,7 +969,7 @@
         "枠の残り-1",
         "枠の残り-2",
         "枠の残り-3",
-        "枠の残り-9"
+        "枠の残り-10"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -949,7 +987,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "枠の残り",
-      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じていて、issue に Claude Code を閉じた記録のコメントが1件増えている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -960,7 +998,8 @@
         "枠の残り-5",
         "枠の残り-6",
         "枠の残り-7",
-        "枠の残り-9"
+        "枠の残り-8",
+        "枠の残り-10"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -972,6 +1011,7 @@
         "IF agent_status が working である THEN",
         "CONDITION: NOT agent_status が working である",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムはリトライの回数を1つ増やす。",
         "システムはバックオフの期限を印に書く。",
         "ABORT"
@@ -1085,7 +1125,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "枠を読めない",
-      "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
+      "postcondition": "herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1094,7 +1134,8 @@
         "枠を読めない-3",
         "枠を読めない-4",
         "枠を読めない-5",
-        "枠を読めない-6"
+        "枠を読めない-6",
+        "枠を読めない-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1103,6 +1144,7 @@
         "システムは枠待ちと無音を区別しない。",
         "システムは turn_timeout_ms のあいだ待つ。",
         "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムはリトライの回数を1つ増やす。",
         "システムはバックオフの期限を印に書く。",
         "ABORT"
@@ -1110,9 +1152,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 52,
-    "nodes_covered": 52,
-    "edges_total": 55,
-    "edges_covered": 55
+    "nodes_total": 55,
+    "nodes_covered": 55,
+    "edges_total": 58,
+    "edges_covered": 58
   }
 }
