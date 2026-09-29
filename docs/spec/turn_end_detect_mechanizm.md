@@ -1102,7 +1102,7 @@ state_change_seq が2回続けて同じ             かつ
 | 何が | どうなるか |
 | --- | --- |
 | **打ち切りの判定** | [internal/orchestrator/reconcile.go:990-993](../../internal/orchestrator/reconcile.go#L990-L993) の `if silence <= 0 { return }` で、巡回ごと飛ぶ |
-| **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go:644-648](../../internal/orchestrator/reconcile.go#L644-L648) の `silence > 0` と `!stallDetectionOff()` が両方偽になる。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
+| **手放しの判定 の時間の門** | [internal/orchestrator/reconcile.go:644-648](../../internal/orchestrator/reconcile.go#L644-L648) の `silence > 0` と `!stallOff` が両方偽になる（`stallOff` は巡回の先頭で1回だけ作るローカル変数である。`stallDetectionOff()` は呼び出し元が0件になったので消した）。**`if` は2本だが、4-2 の表では2本で1つの門として数えている。****外れる門は1つである** |
 | **残る条件** | **4-2 の5つの門のうち4つは残る**（agent 名を持っている／バックオフ中でない／**1週間の枠の余裕が無い**／`LastSeenAt` がゼロでない）。**外れるのは5つ目の時間の門だけである。**そのうえで、`agent_status` が `idle`/`done`・連番が2回続けて同じ |
 
 **時間の物差しが1つも残らない**（4-5 の #10）。**それを承知で、手放しだけは効かせている。**

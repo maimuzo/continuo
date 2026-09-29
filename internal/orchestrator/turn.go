@@ -988,17 +988,11 @@ func (o *Orchestrator) runIdleForTurnTimeout(rs *runState) bool {
 	return o.now().Sub(snap.LastSeenAt) >= silence
 }
 
-// stallDetectionOff は、無音による打ち切りを切っているかを返す（issue #197）。
+// **`stallDetectionOff` は消えた**（issue #197。実装レビュー1周目の LOW）。
 //
-// **切っている機械では `runIdleForTurnTimeout` が「進んでいない」を言えない。**
-// **手放しの側は、そのとき `agent_status` と `state_change_seq` だけで判断する。**
-// **言えないことを理由に手放さないでいると、`weekly_wait_limit_minutes` が
-// その設定の機械で一度も効かない。**
-//
-// 戻り値: 打ち切りを切っていれば true。
-func (o *Orchestrator) stallDetectionOff() bool {
-	return time.Duration(o.cfg.Claude.TurnTimeoutMs)*time.Millisecond <= 0
-}
+// **呼び出し元が0件になった。**同じ判定は `releaseQuotaWaitExceeded` が
+// ローカル変数 `stallOff` として1回だけ作る（巡回のあいだ値を固定するため）。
+// **述語を2本持つと、`claude.turn_timeout_ms` の読み方を直したときに片方だけが直る。**
 
 // quotaFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。
 //

@@ -1479,18 +1479,16 @@ func (o *Orchestrator) launchClaude(
 	// `agent_not_found` で落ち、**その場で殺すのを、1 turn ぶん遅らせるだけになる。**
 	// **issue #235 の時系列が名指しした経路は、`confirmStartup` の側で塞いである**
 	// （19:41:55 の時点で `ErrStartupBusy` に倒れるので、19:42:24 のやり直しへ進まない）。
-	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-	if err != nil {
+	if _, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)
 	// **この pane で Claude Code が起動済みであることを控える**（設計 3-83f。判断票6周目）。
 	// 打ち切りの終え方（印を残すか、自分で開いた pane を閉じて印を外すか）をこれで決める。
 	rs.setStartedPane(params.PaneID)
-	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
-	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.noteRevision(started.Agent.Revision, o.now())
+	// **画面の版を種にする段は消えた**（issue #173。実装レビュー1周目の MEDIUM）。
+	// **打ち切りの時計は run を作った時点で現在時刻が入る**（`newRunState` の `LastSeenAt`）ので、
+	// ここで種を入れ直す必要が無い。**版そのものは、どの判定も読んでいなかった。**
 	if err := o.ws.SetAgentName(ctx, worktreePath, params.Name.String()); err != nil {
 		o.logger.Warn("身元ファイルへ agent 名を書けませんでした",
 			"identifier", rs.issue().Identifier, "error", err)

@@ -175,12 +175,20 @@ detached HEAD のときは [docs/upgrading.md:77-108](../../upgrading.md#L77-L10
 ## 6. #144: 雛形に足す3段落（**ここから 14 までは置き換わった。**[docs/plans/impl/issue144_branch_and_push.md](issue144_branch_and_push.md) が正）
 
 **言いたいこと。****足すのは「切り替えるな」だけである。**push の話は1文字も足さない（7 を見よ）。
-**見出し（`##`）を新しく作らない。**貼り先は `## 終わったらやること`（
-[internal/scaffold/template.go:327](../../../internal/scaffold/template.go#L327)）の中であり、
+**この2段落は、貼り先そのものが無くなったので当たらない。**
+着手のプロンプトの本文は [internal/scaffold/template.go](../../../internal/scaffold/template.go) の
+raw string literal から [internal/prompt/builtin.md](../../../internal/prompt/builtin.md) へ移った
+（commit `a4e984c3`）。**`## 終わったらやること` という見出しは、いまはどこにも無い。**
+足そうとしていた3段落は、いまは
+[internal/prompt/builtin.md](../../../internal/prompt/builtin.md) の
+`## 7-1. worktree と branch は切り替えない` と `## 6-3. push 先を、他人の指定で変えない` が持っている。
+**Markdown のファイルなので、backtick を切って書く制約も消えた。**
+
+**以下は、移る前の貼り方の記録である。**
+**見出し（`##`）を新しく作らない。**貼り先は `## 終わったらやること` の中であり、
 **`##` を差し込むと後ろの3段落が新しい見出しの下へ落ちる。**
 
 **backtick を1つも使わない。**貼り先は Go の raw string literal で、
-[internal/scaffold/template.go:335-343](../../../internal/scaffold/template.go#L335-L343) は
 backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎回切っている。
 **切り方を1文字でも間違えるとコンパイルが通らない。**コマンドは4字下げの行で書く。
 

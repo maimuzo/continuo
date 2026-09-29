@@ -137,10 +137,9 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 // **置くと、入札が黙る使用率と statusline取得をやめる使用率がずれ、
 // 「入札を見送っているのに値を取り直し続ける」帯と「取り直さないのに入札する」帯ができる。**
 func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
-	shortWeekly := handoff.ShortWeekly(handoff.Margins{
-		FiveHour: o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
-		Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
-	})
+	// **マージンは `bidMargins` から取る**（実装レビュー1周目の LOW）。
+	// **ここで手で組み立てると、キーを1本増やしたときに片方だけが直る。**
+	shortWeekly := handoff.ShortWeekly(o.bidMargins())
 	for kind, w := range o.quota.windows {
 		if !w.ResetsAt.After(now) {
 			continue

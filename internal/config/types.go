@@ -148,7 +148,9 @@ type TrackerProviderHandoffConfig struct {
 	//
 	//	5時間余裕値 = 100 − 5時間の使用率 − FiveHourMarginPercent
 	//
-	// **余裕値がマイナスになったら入札しない**（処理する余裕が無いという意味である）。
+	// **余裕値が 0 以下になったら入札しない**（処理する余裕が無いという意味である）。
+	// **0 も含めるのは人間の決定である**（2026-09-06。issue #173）。マージンをちょうど食い潰した
+	// 状態から着手すると、人間のための取り置きへ食い込む。
 	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
 	// WeeklyMarginPercent は1週間の枠のうち continuo のために残しておきたい割合（%）である。
 	//

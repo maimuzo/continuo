@@ -102,6 +102,25 @@ func weeklyWaitFixture(
 	t *testing.T, limits []map[string]any, limitMinutes int, tokenEnv string,
 ) (*stubFixture, tracker.Issue, *testClock) {
 	t.Helper()
+	return weeklyWaitFixtureWith(t, limits, limitMinutes, tokenEnv, nil)
+}
+
+// weeklyWaitFixtureWith は weeklyWaitFixture に、設定を足す手立てを付けたものである（issue #197）。
+//
+// **`weeklyWaitFixture` との違いは `extra` の1点だけである。**direct chat の門の検査は
+// `tracker.direct_chat_state` を設定しないと作れないが、**それ以外の条件は1つも変えたくない。**
+//
+// t: 呼び出し元のテスト。
+// limits: usage API が返す枠の一覧。
+// limitMinutes: `rate_limit.weekly_wait_limit_minutes` に入れる値。
+// tokenEnv: トークンを入れる環境変数の名前（テストごとに変える）。
+// extra: 既定の設定を書いたあとに呼ぶ手立て。nil なら何もしない。
+// 戻り値: 組み立てた一式・印へ入れた issue・進められる時計。
+func weeklyWaitFixtureWith(
+	t *testing.T, limits []map[string]any, limitMinutes int, tokenEnv string,
+	extra func(*config.Config),
+) (*stubFixture, tracker.Issue, *testClock) {
+	t.Helper()
 	endpoint, _ := newUsageServer(t, limits)
 	reader := newUsageReader(t, endpoint, tokenEnv)
 	clock := newTestClock()
@@ -120,6 +139,9 @@ func weeklyWaitFixture(
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
 			cfg.RateLimit.WeeklyWaitLimitMinutes = limitMinutes
+			if extra != nil {
+				extra(cfg)
+			}
 		},
 	})
 
@@ -298,6 +320,53 @@ func TestQuota_1週間の枠のリセットが上限より先なら担当を手�
 	// 「上限を超えたので手放します」は `Debug` である（手放せずに戻る経路が毎巡回で通るため）。
 	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
 		t.Fatalf("手放したことを出していない:\n%s", got)
+	}
+}
+
+// TestQuota_人間が引き取っているrunは上限を超えても手放さない は、手放しの門を確かめる
+// （設計 3-83。issue #197）。
+//
+// 目的: **手放しは打ち切りより重い。**`workspace_hooks.after_run`（利用者が書いた `git push`）を
+// **人間の書きかけの木で走らせ、**issue の担当者からこの機械を外し、`released` のコメントを1件書き、
+// **別の機械の入札を呼ぶ。**打ち切りの側（`checkStalls`）にはこの門が最初から在ったのに、
+// **手放しの側には無かった**（実装レビュー1周目の HIGH）。
+//
+// **人間が pane で黙って読んでいるだけで、この窓に入る。**`claude.turn_timeout_ms` のあいだ
+// 指示を送らなければ hook は1件も来ず、`agent_status` は `idle` を返し、`state_change_seq` も動かない。
+// **そこへ1週間の枠が100%だと、門が全部開く。**
+//
+// 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分（5時間）。
+// **Status は `tracker.direct_chat_state` の値にする。**
+// 成功条件: 印に残り、担当者が変わらず、pane が1つも閉じられず、手放しの1行が出ないこと。
+func TestQuota_人間が引き取っているrunは上限を超えても手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixtureWith(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_DC1", func(cfg *config.Config) {
+		cfg.Tracker.DirectChatState = humanState
+	})
+	// **カンバンの選択肢に入れてから Status を動かす**（入れないと候補の一覧へ足されない）。
+	fx.Tracker.SetStatusOptions(directChatBoardOptions...)
+	fx.Tracker.SetState(issue.ID, humanState)
+
+	// **`waitForRelease` と同じ回数・同じ刻みで回す。**手放す側の検査はこの窓で手放している。
+	for range 60 {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatalf("人間が引き取っている run を印から外した:\n%s", fx.Logs.String())
+		}
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("人間が引き取っている run の担当者を書き換えた: %v", got)
+	}
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+		t.Fatalf("人間が話している pane を閉じた: %v", ids)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("人間が引き取っている run を手放した:\n%s", got)
 	}
 }
 

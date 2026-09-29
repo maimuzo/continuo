@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9b49be315ae9891ada5990ac1a422fa1f5dab7423d7eb76df26f90b07a43f84a", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "28c7411d34dd0445e061bcaebcc7256bc7b7b1a7643cdff5ddbe6dcafe24fa44", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 //

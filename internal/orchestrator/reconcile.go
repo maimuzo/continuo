@@ -431,7 +431,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // **枠の写しは呼び出し側が1回のロックで取ったものを受け取る。**
 // **ここで取り直すと、同じ巡回の中で run ごとに違う写しの答えが混ざる。**
 //
-// snap: この巡回で読んだ枠の写し。**nil なら1件も外さずに戻る。**
+// snap: この巡回で読んだ枠の写し。**nil でも、時刻で外す枝は通す**（下の理由）。
 // now: いまの時刻。
 func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
 	// **1度も読めていないなら、何もしない**（issue #173）。
@@ -442,11 +442,22 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) の
 	// 「読めないことを理由に走行中の run を捨てない」に、真っ向から反する。
 	//
-	// **いまは `o.quota` を一度読めたあと nil へ戻す経路が無いので、ここへは来ない。**
-	// **それでも置く。**戻す経路が1本できた日に、静かに開く落とし穴だからである。
-	if snap == nil {
-		return
-	}
+	// **nil へ戻る経路は在る**（実装レビュー1周目の MEDIUM。`origin/main` を取り込んで生まれた）。
+	// **`snapshotOf` は、期限内の期間が1つも無いと nil を返す**
+	// （[internal/orchestrator/quota.go](quota.go) の `snapshotOf`）。
+	// **保管している期間の `resets_at` を全部過ぎた瞬間に、写しは nil になる。**
+	//
+	// **だから早戻りは置かない。**置くと、下の2つの枝のうち
+	// **時刻で外す枝まで一緒に止まる。**あちらは写しを1バイトも見ない。
+	// **止まると、turn のループが畳んだあとに印を外す者が1人もいなくなり、
+	// その run はスロットと pane を continuo の再起動まで握り続ける。**
+	// **この関数は、まさにそれを防ぐために足したものである。**
+	//
+	// **代わりに、写しを見る枝だけを nil で止める**（下の `snap != nil`）。
+	// **`AnySelected` は nil のレシーバに偽を返す**ので、そのまま進むと
+	// 「使い切っている枠は無い」と読み、**待っている run の印を全部外す。**
+	// **枠は尽きたままなので、外された run は打ち切られてリトライを積む。**
+	//
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
 	// **`stale` で止めてはならない。**
 	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) が
@@ -473,7 +484,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 			o.logger.Info("枠のリセット時刻を過ぎたので、枠待ちの印を外します"+
 				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
 				"identifier", st.Identifier, "resets_at", st.QuotaResetAt)
-		case !full:
+		case snap != nil && !full:
 			o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します"+
 				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
 				"identifier", st.Identifier)
@@ -505,7 +516,6 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // quotaSnap: この巡回で1回だけ読んだ枠の写し。
-// quotaStale: その写しが古いか。
 // now: この巡回の時刻。
 func (o *Orchestrator) releaseQuotaWaitExceeded(
 	ctx context.Context, quotaSnap *ratelimit.Snapshot, now time.Time,
@@ -544,8 +554,9 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	}
 	// **`claude.turn_timeout_ms` は、この巡回のあいだ1つの値に固定する**（issue #173）。
 	// **ループの中で3回読んでいた**（`silence` の計算と `stallDetectionOff()` を2回）。
-	// **`o.cfg` は `reloadConfig` が差し替えるので、3回が同じ値である保証が無い。**
-	// **run ごとに違う門で判定されることになる。**
+	// **巡回のあいだ1つの値に固定するのは、run ごとに違う門で判定しないためである。**
+	// **`reloadConfig` は `o.cfg` を差し替えない**（書くのは `o.reloadable` である）。
+	// **それでも1回だけ読む。**同じ値を3回読む意味が無く、読み方を直すときに3箇所を直すことになる。
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	stallOff := silence <= 0
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
@@ -555,6 +566,23 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
+		// **人間が引き取っている run は手放さない**（設計 3-83。実装レビュー1周目の HIGH）。
+		//
+		// **打ち切りの側には同じ門が在るのに、こちらには無かった**（`checkStalls` の本体）。
+		// **手放しは打ち切りより重い。**`workspace_hooks.after_run`（利用者が書いた `git push`）を
+		// **人間の書きかけの木で走らせ、**issue の担当者からこの機械を外し、
+		// `released` のコメントを1件書いて、**別の機械の入札を呼ぶ。**
+		//
+		// **人間が pane で黙って読んでいるだけで、この窓に入る。**
+		// `claude.turn_timeout_ms`（既定1時間）のあいだ指示を送らなければ
+		// `LastBusyHookAt` と `LastSeenAt` が古くなり、`agent_status` は `idle` を返し、
+		// `state_change_seq` も動かない。**そこへ1週間の余裕値が0以下だと、門が全部開く。**
+		//
+		// **`stopWorker` の側の門では防げない。**あちらは pane を閉じないだけで、
+		// **担当者を外すところと、`after_run` を走らせるところは、この関数の中にある。**
+		if snap.DirectChatMode {
+			continue
+		}
 		// **画面を持っていない run は、この経路で扱えない**（issue #197）。
 		//
 		// **`paneStopped` は herdr へ問い合わせる。**pane が既に閉じている run では

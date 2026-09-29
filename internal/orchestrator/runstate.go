@@ -114,17 +114,14 @@ type runState struct {
 	// **人間へ見せる打ち切りの文面も、この時計との差を「動かなかった長さ」として出す。**
 	// run を作った時点で現在時刻を入れる（ゼロ値のままだと 1970 年からの経過を表示してしまう）。
 	LastSeenAt time.Time
-	// LastRevision は最後に見た画面の版である（herdr の pane の revision）。
+	// **`LastRevision` と `RevisionAt` は消えた**（issue #173。実装レビュー1周目の MEDIUM）。
 	//
-	// **agent.start / 引き継いだ pane の値を種にし、以後は checkStalls が見るたびに更新する。**
-	// 種を入れないと、最初の判定が必ず「版が変わった」になり、打ち切りまでに閾値を2回
-	// またぐことになる。
-	LastRevision uint64
-	// RevisionAt は画面の版が最後に増えたのを確かめた時刻である。
-	//
-	// **人間へ見せる文面に「画面が最後に変わってからどれだけ経ったか」を書くために持つ。**
-	// run を作った時点で現在時刻を入れる（ゼロ値のままだと 1970 年からの経過を表示してしまう）。
-	RevisionAt time.Time
+	// **書かれるが、決定に使う箇所が1つも無い形で残っていた。**
+	// 打ち切りの時計をリセットするのに画面の版を使う形は 2026-09-08 にやめた
+	// （実測で、働いている3つの pane が2分間ずっと `revision: 1` だった。
+	// [docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 3-1）。
+	// **写しへ詰める処理も落ちていたので、読み手にはゼロ値だけが見えていた。**
+	// **1970 年起点の経過を出す落とし穴になるので、宣言ごと消した。**
 	// LastHookAt は最後に hook を実際に受けた時刻である。
 	//
 	// **進めるのは noteHook だけである。**1件も受けていなければゼロ値のままである。
@@ -566,7 +563,6 @@ func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 		IssueID:               issueID,
 		Issue:                 issue,
 		LastSeenAt:            now,
-		RevisionAt:            now,
 		hookCh:                make(chan hookserver.HookEvent, hookChanSize),
 		workerStopCtx:         stopCtx,
 		workerStopCancel:      stopCancel,
@@ -629,8 +625,6 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	LastRevision     uint64
-	RevisionAt       time.Time
 	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
@@ -1433,30 +1427,6 @@ func (rs *runState) noteWorking(now time.Time) {
 	rs.LastSeenAt = now
 }
 
-// noteRevision は画面の版を見た結果を記録する（設計 3-21）。
-//
-// **版が変わっていれば時計を起こし直す。**`LastSeenAt` を現在時刻にして、
-// もう一度 `claude.turn_timeout_ms` だけ待つ。**画面が変わり続けている限り、
-// 1つの turn に何時間かかっても打ち切らない。**
-//
-// **減る向きの変化も「変わった」として扱う。**版が減るのは pane を作り直したときだけで、
-// そのときも画面が別物になっているので待ち直すのが正しい。
-//
-// rev: agent.get が返した pane の版。
-// now: いまの時刻。
-// 戻り値: 版が変わっていたら true（＝画面が動いている）。同じなら false。
-func (rs *runState) noteRevision(rev uint64, now time.Time) bool {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	if rs.LastRevision == rev {
-		return false
-	}
-	rs.LastRevision = rev
-	rs.RevisionAt = now
-	rs.LastSeenAt = now
-	return true
-}
-
 // markFinished は run が終わったことを記録する。turn ループはこれを見て止まる。
 func (rs *runState) markFinished() {
 	rs.mu.Lock()
@@ -1993,16 +1963,11 @@ func (rs *runState) stoppedByContinuo() bool {
 // 「画面が止まっている」と読まれ、戻した巡回で pane が閉じ `failure_state` が書かれる。**
 // **指示を1回も送る前に、である**（`checkStalls` は `reconcileRunning` の直後に走る）。
 //
-// **画面の版も忘れる。**版が direct chat の前と同じままだと、
-// `noteRevision` が「変わっていない」と答えて、時計を直しても打ち切られる。
-//
 // now: いまの時刻。
 func (rs *runState) resetStallClock(now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.LastSeenAt = now
-	rs.RevisionAt = now
-	rs.LastRevision = 0
 }
 
 // clearSendFirstPrompt は「次の turn は1回目の本文（5-3）である」印を下ろす（設計 3-83）。

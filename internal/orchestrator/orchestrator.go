@@ -1497,11 +1497,8 @@ type AdoptedRun struct {
 	SettingsPath string
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	HerdrWorkspaceID string
-	// Revision は引き継いだ pane の画面の版である（`pane.list` が返す `revision`）。
-	//
-	// **stall の判定の種になる**（設計 3-21）。0 のままでも判定は動くが、
-	// 最初の判定が必ず「版が変わった」になるぶん、打ち切りが1周期ぶん遅れる。
-	Revision uint64
+	// **`Revision` は消えた**（issue #173。実装レビュー1周目の MEDIUM）。
+	// **引き継いだ pane の画面の版を種にしていたが、どの判定も読んでいなかった。**
 	// AwaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
 	//
 	// **`agent_status` が `working` の run を引き継ぐときに真にする**（設計 3-4 の段5a2）。

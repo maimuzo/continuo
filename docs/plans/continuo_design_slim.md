@@ -408,8 +408,12 @@ flowchart TB
     over -->|"0以下"| stop["入札の要る issue を取らない<br/>担当が自分の issue は取る<br/>走行中の turn は止めない"]
     over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
-    stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
-    waiting --> reset{"resets_at を過ぎたか"}
+    usage --> full{"使用率が100の<br/>枠があるか"}
+    full -->|"無い"| normal
+    full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
+    waiting --> limit{"1週間の枠で<br/>待つ上限を超えたか"}
+    limit -->|"超えた"| letgo["担当を手放す<br/>after_run を走らせ pane を閉じる<br/>worktree と Status はそのまま"]
+    limit -->|"超えていない"| reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]
 
@@ -421,6 +425,33 @@ flowchart TB
     resume --> normal
     redispatch --> normal
 ```
+
+**線は2本ある。混ぜてはならない。**
+
+| 何を決めるか | 線 | 何が起きるか |
+| --- | --- | --- |
+| **新しい issue を取るか** | **余裕値が0以下**（`100 − 使用率 − マージン`。マージンは既定10なので使用率90%から） | 入札の要る issue を取らない。担当が既に自分にある issue は取る。走行中の turn は止めない |
+| **この run は枠待ちか** | **使用率が100** | 打ち切りの時計を止める。**余裕値へ広げた時期があったが取り下げた**（使用率90%では Claude Code は普通に応答するので、本当に固まった run が最大6時間殺されない） |
+
+### 9-1. 1週間の枠を待つ上限
+
+**1週間ぶんのレートリミットは、最長で7日先までリセットされない。**
+**待つ上限が無いと、その issue を抱えたまま何日も止まる。**
+
+```yaml
+rate_limit:
+  weekly_wait_limit_minutes: 300   # 既定。300 分 = 5時間。0 なら上限を設けない
+```
+
+**「何分待つか」ではない。「あと何分以内にリセットされるなら待つか」である。**
+**5時間ぶんのレートリミットには効かない。**
+
+**超えたら担当を手放す。**`workspace_hooks.after_run` を走らせ、issue の担当者から自分を外し、
+`released` のコメントを1件書き、pane を閉じる。**worktree と Status はそのままである。**
+
+**手放す前に4つを確かめる。**人間が pane で作業している（direct chat）run は手放さない。
+`agent_status` が `working` の run も手放さない。`state_change_seq` が2回続けて同じでなければ手放さない。
+画面の状態を読めないうちは手放さない。**確かめられないのに pane を閉じて担当を外す道は無い。**
 
 **2段構えにする。**
 

@@ -919,7 +919,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 				"identifier", issue.Identifier,
 				"after_run が成功したか", afterRunOK,
 				"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-				"余裕の無い枠", shortKinds)
+				"余裕の無い1週間の枠", shortKinds)
 		}
 		rs.endTerminal()
 		return false
@@ -937,7 +937,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		"identifier", issue.Identifier, "外した担当者", login,
 		"after_run が成功したか", afterRunOK,
 		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-		"余裕の無い枠", shortKinds)
+		"余裕の無い1週間の枠", shortKinds)
 	return true
 }
 

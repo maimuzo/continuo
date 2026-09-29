@@ -3,7 +3,7 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "5b507bd4880765eb3902ae65b2e83d48714cd97daa482d32fc8f44707574b924"
+    "rucm_block_sha256": "eca7ca025548478bd979a6cffdc5f1528ab8f4af387f493a146c34b627035dc9"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -79,7 +79,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            15
+            14
           ]
         }
       ],
@@ -559,15 +559,15 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-15",
-      "to": "BASIC FLOW-16",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-15",
+      "from": "BASIC FLOW-14",
       "to": "締め切り待ちの中断-1",
       "kind": "global",
       "condition": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-16",
@@ -858,7 +858,6 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15",
         "締め切り待ちの中断-1",
         "締め切り待ちの中断-2",
         "締め切り待ちの中断-3",
@@ -879,7 +878,6 @@
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
         "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
         "システムは締め切りを待つのをやめる。",
         "システムはこの機械の投稿者を担当者に加えない。",
@@ -1143,7 +1141,6 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15",
         "締め切り待ちの中断-1",
         "締め切り待ちの中断-2",
         "締め切り待ちの中断-3",
@@ -1171,7 +1168,6 @@
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
         "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
         "システムは締め切りを待つのをやめる。",
         "システムはこの機械の投稿者を担当者に加えない。",
