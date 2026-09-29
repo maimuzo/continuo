@@ -2303,20 +2303,20 @@ sequenceDiagram
     ORC->>FS: 設定ファイルを消す
 ```
 
-**利用者の `~/.claude/settings.json` は読み書きしない。**`--settings` で指した1本だけを使う。
+**利用者の `~/.claude/settings.json` は書かない。**`--settings` で指した1本だけを使う。**読むのは、3-84 で `statusLine` の転送先を決めるときだけである。**
 **利用者の設定が `auto` になっていても、起動フラグが優先されるので影響を受けない。**
 
 **issue ごとの設定ファイルには、hook のほかに `statusLine` も書く**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。`oauth_usage_api` でも書く。issue #284・3-27）。
 **`oauth_usage_api` でも書くのは、上限に当たった run の 100 を usage API の次の読み取りを待たずに受け、回復待ちの判定に効かせるためである。**pane の値は費用がかからない。
 コマンドの行は hook と同じ引用で `'<continuo のパス>' statusline --socket '<実行時ディレクトリ>/sl.sock'` を組み立てる。
 **hook のコマンド行と、張る hook の種類は変えない。**`source: none` なら `statusLine` を書かず、利用者のステータスラインがそのまま出る。
-**書くと、continuo が起動した pane では利用者のステータスラインが出なくなる**（受け入れる。出力は固定の `continuo` の1行）。
+**書くと、Claude Code は利用者の `statusLine` を呼ばなくなる。**そのため `continuo statusline` が利用者の `statusLine` を中から呼ぶ（3-84）。利用者が設定していなければ、出力は固定の `continuo` の1行である。
 
 **statusline取得用の設定ファイルは別に書く**（`<実行時ディレクトリ>/statusline-fetch/settings.json`。0600。一時ファイルへ書いてから差し替える）。
 **持つのは `statusLine` と `env` だけである。**hook も `permissions.allow` も持たない。
 `env` は `claude.env` から `CLAUDE_CODE_RETRY_WATCHDOG` を除き、`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足したものである。
 **statusline取得は `--restricted` で起動するので、利用者・プロジェクト・ローカルの設定ファイルは読まれない**（公式文書: `--restricted` は managed settings と `--settings` だけを読む）。
-**利用者の設定の外へ効くキー（`cleanupPeriodDays` など）を写さない。**写すと、この節の「読み書きしない」を崩し、止まるはずの年齢による掃除をかえって動かす（3-27）。
+**利用者の設定の外へ効くキー（`cleanupPeriodDays` など）を写さない。**写すと、この節の「書かない」と、statusline取得が利用者の設定を読まない仕組みを崩し、止まるはずの年齢による掃除をかえって動かす（3-27）。
 
 **hook に issue を教える必要は無い。**どの run のものかは hook の JSON に入っている `session_id` で判別する（3-2）。
 **continuo が起動時にセッション UUID を決め、それが hook にそのまま届くことは実測で確認済み**（3-3）。
@@ -4223,15 +4223,15 @@ sequenceDiagram
     participant D as continuo 本体
     CC->>SL: 描き直すたびに標準入力へ JSON
     SL->>D: sl.sock へ1行 {"session_id":"…","api_ms":10728,"five_hour":{…},"seven_day":{…}}
-    SL-->>CC: 標準出力へ固定の continuo、終了コード 0
+    SL-->>CC: 標準出力へ利用者の statusLine の出力（転送先が無ければ固定の continuo）、終了コード 0（3-84）
     D->>D: 保管値の規則（下記）で受ける。quota.json へも書く
 ```
 
 | 何を | どうするか | 理由 |
 | --- | --- | --- |
 | 送る欄 | `session_id`・`cost.total_api_duration_ms`（`api_ms`）・`rate_limits.five_hour`・`rate_limits.seven_day` | 値がいつの応答のものかを見分けるのに `api_ms` が要る。**`rate_limits` が `null` の行も、`session_id` と `api_ms` だけで送る**（「応答はあったが値が無い」を見分けるため） |
-| 標準出力 | **固定の `continuo` の1行。`refreshInterval` も付けない** | 変わる値を出すと画面の版（`revision`）が動き、固まった run を stall として止められなくなる（3-21）。**ステータスラインが走るたびには版は動かなかった**（2026-09-25 に実測） |
-| 送れなかったとき | socket が無い・断られた・期限切れ・入力が 1 MiB を超えた・JSON として読めない、のどれでも、**何も書かずに固定の1行を出して終了コード 0** | 描き直しのたびに走るので、エラーの表示で画面を汚さない。**逃がし先は持たない**（値は次の描き直しで届く） |
+| 標準出力 | **転送先が無ければ固定の `continuo` の1行。あれば利用者の `statusLine` の出力（3-84）。`refreshInterval` は付けない** | 固定の出力なら、**ステータスラインが走るたびには版は動かなかった**（2026-09-25 に実測）。転送した出力が版を動かすのは描き直しの契機の数だけで、stall の判定の遅れは有限である（3-84c）。`refreshInterval` を付けると版が動き続け、固まった run を stall として止められなくなる（3-21） |
+| 送れなかったとき | socket が無い・断られた・期限切れ・JSON として読めない、のどれでも、**何も書かずに転送へ進み、終了コード 0**（3-84b）。入力が 1 MiB を超えたときと転送に失敗したときは固定の1行 | 描き直しのたびに走るので、エラーの表示で画面を汚さない。**逃がし先は持たない**（値は次の描き直しで届く） |
 | 期限 | 接続 200ms・書き込み 500ms | Claude Code は実行中のスクリプトを次の更新で打ち切る（3-15） |
 | 受け手 | 1接続1行（上限 64 KiB）。**応答は返さない。知らない欄は無視する。**止めるときは配送中の行を待たずに捨てる | 欄を足しても新旧が混ざって落ちない |
 | run の状態 | **受け口は run の状態（hook の時刻・stall の時計）へ何も書かない** | 別の socket にした理由そのもの |
@@ -4387,7 +4387,7 @@ usage API を叩かず、資格情報を読まない。issue ごとの設定フ�
 | `Retry-After` を立て直しのあとへ持ち越さない | 立て直すと、次に試してよい時刻が失われ、起動した直後にもう一度叩く |
 | 期間の区切りの直後 | `resets_at` を過ぎた期間は、次に値を入れるときにしか消えないので、usage API の次の読み取り（最長 `poll_interval_ms`）か pane の行まで入札を見送る |
 | User-Agent | 固定の `claude-code/2.0.0` で、本物の Claude Code の値とは違う。429 が返れば statusline へ切り替わる |
-| pane のステータスライン | `oauth_usage_api` でも、continuo が起動した pane では利用者のステータスラインが固定の `continuo` に替わる |
+| pane のステータスライン | continuo が起動した pane では、利用者の `statusLine` を `continuo statusline` が中から呼ぶ（3-84）。`refreshInterval` などは効かず、転送先は着手のときに決まる |
 | Keychain の確認のダイアログ | 答えないあいだ、`poll_interval_ms` ごとにダイアログが出うる。`continuo allow-keychain-access` で「常に許可」を選べば止まる |
 | 契約を上げた・サーバーが期間の途中で使用率を戻した | 立て直しても、その `resets_at` まで高い値が残る。次の5時間の区切りを過ぎてから `quota.json` を消して立て直せば戻る |
 | アカウントを替えた | 替える前の値が `quota.json` から戻る。替える前のアカウントの 100 が残っていると、その `resets_at`（最長7日）まで着手を止め、statusline取得も開かない。走っている run も、回復待ち（`quotaAtFull` は新しさを問わない）と判定され続けて stall にならず、枠を占める。閾値を上げても、入札は値を読めずに見送る。替える前から開いている pane が、期間が切れる時刻かプロンプトキャッシュの期限に、替える前の7日の値を送りうる。どちらも、止めて `quota.json` を消して立て直せば直る |
@@ -4398,6 +4398,7 @@ usage API を叩かず、資格情報を読まない。issue ごとの設定フ�
 | 起動した直後に上限に当たっている Pro / Max の機械 | 起動した直後から usage API が誤りで、しかも statusline取得の最初の応答が上限で断られると、1度も読めていないので取得止めになる（API キーの機械と見分けられない）。usage API が読めるか、pane の run から使用率を持つ行が届くまで解けない（run も無ければ立て直すまで） |
 | 年齢による掃除 | 止まることは公式文書の読みで、実測していない。止まらなかった場合は、`cleanupPeriodDays` を延ばした利用者の古い記録を既定の30日で消しうる |
 | 利用者の設定の `env` に頼る接続 | statusline取得は利用者の設定ファイルを読まないので、プロキシなどを利用者の設定の `env` に書いている人の取得は失敗する。`claude.env` に書けば直る |
+| `CLAUDE_CONFIG_DIR` を herdr の側にだけ置いている | 3-84 の転送先を、continuo のプロセスの環境で決めるので、pane とは別の `settings.json` を読み、利用者のステータスラインを転送しないことがある。continuo を起動するシェルにも同じ値を置けば直る |
 | 組織の managed settings の `statusLine` | `--settings` は同じ managed のキーを上書きしない（公式文書）ので、値が1行も届かない。`rate_limit.source: none` にする |
 | 偽の値 | `sl.sock` のパスは issue ごとの設定ファイルに書かれ、エージェントが読める。同じ利用者として動くエージェントは偽の値を送れる（hook の socket と同じ扱い）。`resets_at` が本物と同じ偽の値は、`quota.json` を消して立て直すまで残る |
 | `continuo statusline` を持たない版をビルドした | 新しい本体が走ったまま古い実行ファイルに差し替えると、値が1行も届かなくなり、自動の着手が止まる。main からビルドし直す |
@@ -4704,7 +4705,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 continuo hook          # Claude Code の hook から呼ばれる。標準入力を socket へ1行で送って即終了する。
                        # 応答は待たない（3-2）。socket へ繋がらなければ --pending-dir へ逃がす（3-19）
 continuo statusline    # Claude Code のステータスラインから呼ばれる。人間が直接叩くものではない（3-27）
-                       # 標準入力から使用率を取り出し、--socket（sl.sock）へ1行で送って、固定の1行を出す
+                       # 標準入力から使用率を取り出し、--socket（sl.sock）へ1行で送って、利用者の statusLine の出力を返す（無ければ固定の1行。3-84）
                        # 送れなくても何も書かずに終了コード 0 で終わる。逃がし先は持たない
 ```
 
@@ -8072,7 +8073,7 @@ user の設定より後に当たる。だからそのどれかに、この変数
 | 組織の managed settings | 読まない | OS ごとに場所が違う |
 | 対象リポジトリの `.claude/settings.json` | 読まない | doctor が見るのは clone で、Claude Code が走るのは worktree。別の branch のことがある |
 | 対象リポジトリの `.claude/settings.local.json` | 読まない | gitignore されるので worktree に出てこない |
-| 利用者の `~/.claude/settings.json` | 読まない | **3-12 が「利用者の `~/.claude/settings.json` は読み書きしない」と決めている** |
+| 利用者の `~/.claude/settings.json` | 読まない | **3-12 が「利用者の `~/.claude/settings.json` は書かない。読むのは 3-84 の転送先を決めるときだけ」と決めている** |
 | herdr の pane の環境 | 読まない | continuo は `claude` を直接起動しない |
 
 **判定は、両方の出どころへ同じものさしを当てる。**公式が意味を決めているのは `0` と `1` だけである。
@@ -10851,6 +10852,145 @@ continuo はその名前を見つけられないので、人間が置いたカ�
 **「未記入の項目」の見出し語は、WORKFLOW.md にこのキーが無いことを別に知らせる**（3-75）。
 **そちらは残す。**あれは「新しい設定項目が増えたことを知る手立てが1つも無い」を塞ぐためのもので、
 direct chat に固有の話ではない。
+
+### 3-84. continuo が起動した pane でも、利用者のステータスラインを出す
+
+**言いたいこと。**`continuo statusline` は、使用率を `sl.sock` へ送ったあと、**continuo が上書きしなければ Claude Code が使ったはずの `statusLine` のコマンド**を、受け取ったのと同じ標準入力で起動し、その出力を返す。
+転送先は**着手のときに continuo が設定ファイルから決め**、issue ごとの設定ファイルの `env` の `CONTINUO_STATUSLINE_COMMAND` に書く。見つからなければ空で書き、いまと同じ固定の `continuo` を出す。
+
+**なぜ要るか。**Claude Code は1つのセッションに `statusLine` を1つしか持たず、`--settings` が `~/.claude/settings.json` より優先される（公式文書の設定の優先順位）。
+3-12 で issue ごとの設定ファイルに `statusLine` を書いた結果、continuo が起動した pane では、利用者が入れたステータスラインが1度も呼ばれなくなっていた。
+
+```mermaid
+sequenceDiagram
+    participant ORC as continuo（本体）
+    participant FS as 設定ファイル
+    participant CC as Claude Code（issue の run）
+    participant SL as continuo statusline
+    participant U as 利用者の statusLine のコマンド
+    Note over ORC: 着手の段（writeSettingsFile）
+    ORC->>FS: worktree のローカル・プロジェクト、利用者の設定ファイルを読む
+    ORC->>FS: issue ごとの設定の env に CONTINUO_STATUSLINE_COMMAND を書く
+    Note over CC: 描き直すたび
+    CC->>SL: /bin/sh -c で起動し、JSON を標準入力へ渡す
+    SL->>ORC: sl.sock へ使用率の1行を送る（いまと同じ）
+    SL->>U: /bin/sh -c で起動し、同じ JSON を渡す（env から CONTINUO_STATUSLINE_COMMAND を外す）
+    U-->>SL: 標準出力
+    SL-->>CC: その出力をそのまま返す（失敗したら continuo）
+```
+
+**実測（2026-09-29。macOS・Claude Code 2.1.284・herdr 0.9.1）。**`--settings` の `env` に書いた変数は statusLine のコマンドへ届く。
+コマンドの cwd は worktree で、標準入力の JSON は `workspace.project_dir` を持つ。コマンドは `/bin/sh -c` で実行される（`$0` が `/bin/sh`、親が `claude`）。API 応答が無くても、起動した時点で1回実行される。
+
+**この変更は、`continuo statusline` が Claude Code へ返すもの（固定の1行 `continuo`）を変える。**[CLAUDE.md](../../CLAUDE.md) の「hook の挙動が変化する変更を実装する前に…人間に確認する（`continuo statusline` も同じ）」の表の4行目に当たるので、人間の確認を通してから実装する（3-84d）。
+
+#### 3-84a. 転送先の決め方
+
+**言いたいこと。**Claude Code と同じ優先順位で、continuo 自身の `--settings` を除いた3つを読む。**最初に `statusLine` のキーを持つファイルだけで決める。**
+
+| 順 | ファイル |
+| --- | --- |
+| 1 | `<worktree>/.claude/settings.local.json` |
+| 2 | `<worktree>/.claude/settings.json` |
+| 3 | `<利用者の設定ディレクトリ>/settings.json`。ディレクトリは continuo のプロセスの環境変数 `CLAUDE_CONFIG_DIR`、無ければ `~/.claude` |
+
+- **採るのは `type` が `"command"` で、`command` が空でないものだけである。**最初に `statusLine` のキーを持つファイルの値がこれに合わなければ、**下位のファイルへは進まず、転送しない。**上位のファイルがキーを持てば、Claude Code は下位のファイルの値を使わないためである（公式文書の優先順位）。
+- ファイルが無い・読めない・JSON として読めないものは飛ばす。**着手は止めない。**読めなかったときは DEBUG に1行出す。
+- **managed settings は読まない。**managed に `statusLine` があると continuo の `statusLine` 自体が効かない（3-27 の限界の表）。
+- **`disableAllHooks` は見ない。**利用者の設定で `true` なら、Claude Code は continuo の `statusLine` も走らせないので、`continuo statusline` まで届かない（公式文書: 管理外の `disableAllHooks` はステータスラインを止める）。
+- 書く値の例。
+
+```json
+"env": {
+  "CLAUDE_CODE_RETRY_WATCHDOG": "1",
+  "CONTINUO_STATUSLINE_COMMAND": "~/.claude/my-statusline.sh"
+}
+```
+
+**env は `claude.env` を写した新しい map に書く。**`claude.env` の map をそのまま書き換えない（着手は並行に走るので、ある issue の転送先が別の issue の設定ファイルへ漏れる）。
+**見つからなくても空文字で書く。**書かないと、pane が受け継いだ同じ名前の変数を拾いうる。`claude.env` に同じ名前があっても continuo の値で上書きする。
+**statusline取得用の設定ファイル（3-12）には、いつも空文字で書く。**`claude.env` に同じ名前があっても空文字で上書きする。statusline取得は `--restricted` で利用者の設定を読まない仕組みなので、転送すると 3-12 を崩す。空文字で書くのは、pane が受け継いだ同じ名前の変数を拾わないためである。
+**CLAUDE_CONFIG_DIR を `claude.env` から採らないのは、`--settings` の `env` が効くのは設定ファイルを読んだあとだからである。**どの利用者の設定を読むかは pane の環境で決まるが、continuo からは pane の環境を読めない。**continuo のプロセスの環境を近似として使う。**herdr を起動したシェルにだけ `CLAUDE_CONFIG_DIR` を置いている利用者では、別の `settings.json` を読んで転送しないことがある（3-27 の限界の表に載せる）。
+
+#### 3-84b. 受け取る側（`continuo statusline`）
+
+**言いたいこと。**使用率の送り方はいまと変えない。**送れても送れなくても**そのあとで転送し、**転送のどの失敗でも固定の `continuo` を出して終了コード 0 で終える。**引数は `--socket` だけのままにする。
+
+| 段 | 何をするか |
+| --- | --- |
+| 0 | `runStatusline`（internal/cli）が環境変数 `CONTINUO_STATUSLINE_COMMAND` を読み、`statuslineclient.Run` へ引数で渡す |
+| 1 | 標準入力を読み（上限 1MiB）、いまと同じく `sl.sock` へ送る。**socket が無い・断られた・JSON として読めない、のどれでも段2 へ進む** |
+| 2 | 転送先が空か、標準入力が上限を超えたら、`continuo` を出して終える |
+| 3 | `/bin/sh -c <コマンド>` を新しいプロセスグループで起動する。標準入力は段1 で読んだバイト列、cwd は受け継ぎ、環境変数は `CONTINUO_STATUSLINE_COMMAND` だけを外して受け継ぐ。標準エラーは捨てる |
+| 4 | **5秒で打ち切る。**打ち切るときと、`continuo statusline` が SIGTERM・SIGINT・SIGHUP を受けたときは、子のプロセスグループごと止める |
+| 5 | 終了コード 0 で、標準出力が空でなければ、先頭 64KiB をそのまま出す。それ以外は `continuo` |
+
+**段0 で環境変数を `Run` の外で読むのは、テストが実行した環境に左右されないためである。**この env はエージェントの Bash にも届くので、continuo が continuo 自身の issue を走らせると、`go test` の中でも値が入っている。
+**段5 で非 0 を `continuo` にするのは、Claude Code 2.1.284 が非 0 で終わったコマンドの出力を表示しないためである**（2026-09-29 に実測。`echo …; exit 1` で行が空になった）。空にせず `continuo` を出すのは、転送先が無いときと同じ見た目にするためである。
+
+**段3 で `CONTINUO_STATUSLINE_COMMAND` を外すのは、自分を呼び合わないためである。**利用者の `statusLine` が `continuo statusline` だった場合でも、呼ばれた側は転送先を持たないので1段で止まる。
+**`/bin/sh -c` にするのは、Claude Code と同じ解釈にするためである**（上の実測）。`~` の展開もこれで効く。
+**段4 でシグナルを受けるのは、Claude Code が実行中のスクリプトを次の更新で打ち切る（3-15）ためである。**別のグループに置いた子は、`continuo statusline` へ送られたシグナルでは止まらない。
+**SIGKILL で止められたときは子が残りうる。**標準出力の読み手が居なくなるので、子は次に書いたところで SIGPIPE を受けて終わる（書かずに回り続けるコマンドは残る。受け入れる）。
+**フラグを足さないのは、古い実行ファイルが知らないフラグで引数を読めず、使用率を1行も送らなくなるためである**（`runStatusline` は引数が読めないと何も送らない）。env なら古い実行ファイルは無視するだけである。
+
+#### 3-84c. 代償と、退けた案
+
+**言いたいこと。**出力が固定でなくなるので、stall の判定（3-21）が遅れうる。**遅れは有限なので受け入れる。**利用者の `refreshInterval` などは写さない。
+
+**stall の判定への影響。**stall の判定は、pane の画面の版（`revision`）が `claude.turn_timeout_ms` のあいだ増えない run を打ち切る。これまでは出力が固定だったので、描き直しても版は動かなかった（3-27。2026-09-25 に実測）。転送すると出力が変わりうる。
+画面がほかに動いていないときに描き直しが起きる契機は、公式文書の一覧のうち**5時間と7日の期間の `resets_at`、プロンプトキャッシュの `expires_at` の3つだけ**である（どれも前回の入力に対して1回ずつ）。
+**それぞれが別の判定の窓に落ちると1窓ずつ延ばすので、判定は最長で `claude.turn_timeout_ms` 3回ぶん（既定の 3600000ms で約3時間）遅れる。版を動かし続ける契機は無い。**
+
+**写さないもの。**`refreshInterval`・`padding`・`hideVimModeIndicator`。continuo が書く `statusLine` は `type` と `command` だけのままにする。**`refreshInterval` を写すと、N 秒ごとに版が動き、止まった run を永久に打ち切れなくなる。**
+
+| 退けた案 | 採らない理由 |
+| --- | --- |
+| claude-pace を名指しで呼ぶ | 使っていない人と、別のステータスラインを使う人に効かない |
+| 描き直すたびに設定ファイルを読む | 描き直すたびにファイルを3つ読む。**run の途中で転送先が変わり、何が走っているかを着手のときの記録から追えなくなる** |
+| 転送先を `continuo statusline` のフラグで渡す | 上の 3-84b の最後の段落 |
+| 利用者の `statusLine` を issue ごとの設定へ写し、使用率は hook で受ける | `rate_limits` はステータスラインの入力にしか載らない（3-27） |
+
+**転送するコマンドの出どころ。**worktree の `.claude/settings*.json` は、リポジトリか、前の run のエージェントが書いたものでありうる。**それを実行するのは、continuo が居なければ Claude Code 自身が同じファイルから実行するのと同じである。**新しく増える実行の経路ではない。エージェントがそのファイルを書き換える呼び出しは、3-64 の判定（hook の設定や settings.json の書き換えを断る条件）を通る。
+**着手のあとに利用者が設定を変えても、その run には効かない。**次の着手で読み直す。
+
+#### 3-84d. 新旧の実行ファイルが混ざったときと、人間に確かめること
+
+**言いたいこと。**どの組み合わせでも使用率の送信は変わらない。転送が始まるのは、新しい実行ファイルで立て直した continuo が書いた設定ファイルからである。
+
+| 本体（設定ファイルを書く側） | 実行ファイル（描き直しで exec される側） | 出力 |
+| --- | --- | --- |
+| 古い（env を書かない） | 新しい | env が無いので固定の `continuo`。使用率は送る |
+| 新しい（env を書く） | 古い | 古い実行ファイルは env を見ないので固定の `continuo`。使用率は送る |
+| 新しい | 新しい | 転送した出力。使用率は送る |
+
+**壊れたときに人間が見る症状。**転送先を持つ pane のステータスラインが、利用者のものではなく `continuo` のままになる（転送が5秒で打ち切られた・子が非 0 で終わった・env が空）。
+**使用率の送信は段1 で済んでいるので、statusline取得の WARN は増えない。**
+**止まったまま何もしないと、issue #295 が進まないだけである。**動いている continuo は壊れない。
+**戻し方は [CLAUDE.md](../../CLAUDE.md) の同じ節の4段である。**古い実行ファイルは env を無視するので、実行ファイルを戻すだけで固定の `continuo` に戻る。設定ファイルは書き直さなくてよい。
+
+**触る場所。**
+
+| ファイル | 関数・値 | 何を変えるか |
+| --- | --- | --- |
+| internal/cli/cli.go | `runStatusline` | 環境変数を読んで `Run` へ渡す。フラグとサブコマンド名は変えない |
+| internal/statuslineclient/client.go | `Run` | 送信のあとに転送を足す。固定の1行 `continuo` は失敗のときに残す |
+| internal/orchestrator/settings.go | `writeSettingsFile` と、転送先を決める新しい関数 | `claude.env` を写した map に `CONTINUO_STATUSLINE_COMMAND` を書く。hook のコマンド行と種類は変えない |
+| internal/orchestrator/statuslinefetch.go | `writeStatuslineFetchSettings` | 同じ名前を空文字で書く |
+| internal/orchestrator/dispatch.go | `writeSettingsFile` の呼び出し | worktree のパスを渡す |
+
+#### 3-84e. この変更で直す文書
+
+**言いたいこと。**「出力は固定の `continuo`」と書いている箇所を、全部この節に合わせる。
+
+| ファイル | 直すところ |
+| --- | --- |
+| [CLAUDE.md](../../CLAUDE.md) | statusline の「挙動が変わる」表の4行目と、「触った場所」表の `internal/statuslineclient/` の行の「固定の1行 `continuo`」を、「転送先が無ければ固定の1行 `continuo`、あれば転送した出力（3-84）」へ |
+| [docs/FAQ.md](../FAQ.md) | サブコマンドの一覧の `continuo statusline` の行と、「continuo の pane で、自分のステータスラインが出なくなった」の節 |
+| [docs/upgrading.md](../upgrading.md) | 次の版の節に、自分のステータスラインが出るようになること、出ないときの確かめ方（設定ファイルの `env` の `CONTINUO_STATUSLINE_COMMAND`、転送先は着手のときに決まる）を足す。前の版の節の「固定の `continuo` の1語」の2行には、次の版で戻ったことを添える |
+| [docs/spec/event_process_system.md](../spec/event_process_system.md) | `continuo statusline` の行 |
+| この文書 | 3-12 の statusLine の段落と「読み書きしない」の引用、3-27 の「送る欄」の表の標準出力と送れなかったときの行と図、3-27 の限界の表の「pane のステータスライン」の行と `CLAUDE_CONFIG_DIR` の行、3-32 の CLI の一覧の `continuo statusline` の説明、3-70 の「読み書きしない」の引用 |
+| internal/doctor/agentteams.go | 3-12 の「読み書きしない」を引いたコメント |
 
 
 ## 4. 人間が決めたこと
