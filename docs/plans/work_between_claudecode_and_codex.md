@@ -142,7 +142,7 @@ Claude向け本文はそのまま残す。コードや資料の相対参照はsk
 既存のClaude形式をCodexが読める経路を先に使う。
 Claudeのインストールキャッシュを直接リンクする方式は、標準運用にはしない。
 
-対象はユーザー指定の [maimuzo-claude-plugins](https://github.com/maimuzo/maimuzo-claude-plugins)。手元の同リポジトリのcleanなcheckout、commit `01f58ad6fa19bdbe2a6c2687c788c2737f05e873` を確認した。marketplaceは14プラグイン、SKILL.mdは54件。最新版の全件実行結果ではなく、構成を判断するための確認値である。
+対象はユーザー指定の [maimuzo-claude-plugins](https://github.com/maimuzo/maimuzo-claude-plugins)。手元の同リポジトリのcleanなcheckout、commit `01f58ad6fa19bdbe2a6c2687c788c2737f05e873` を確認した。marketplaceは14プラグイン、SKILL.mdは54件。最新版の全件実行結果ではなく、構成を判断するための確認値である。2026-09-29 に手元のcheckout（commit `dcacfb06`）を数えると、marketplaceは16プラグイン、SKILL.mdは57件である。
 
 Codex CLI 0.154.0のヘルプで確認できた導入構文は次のとおり。初期セットアップで実行し、Codexの新規セッションから確認する。
 
@@ -151,7 +151,7 @@ codex plugin marketplace add maimuzo/maimuzo-claude-plugins
 codex plugin add maimuzo-go@maimuzo-marketplace
 ```
 
-これは指定された配布元を再利用する具体例であり、全14件を無条件に導入する指示ではない。Codexの `/plugins` から必要なものを選ぶ運用でもよい。
+これは指定された配布元を再利用する具体例であり、全件を無条件に導入する指示ではない。Codexの `/plugins` から必要なものを選ぶ運用でもよい。
 
 このリポジトリのCLAUDE.mdは、作業の規則の置き場として `maimuzo-dev-core` の `general-claude-md`・`issue-management`・`docs-standard` と、`maimuzo-chat-response` の `chat-response` を指す。Codexでこのリポジトリを扱うなら、この2つのpluginを同じ手順で導入する。4つのskillはいずれも `user-invocable: false` を持つ。Codexで発見・本文読取できるかは確認していない（16節で確認した代表3件には含まれない）。
 
@@ -421,7 +421,7 @@ Claudeのhooksはcommand・HTTP・MCP・prompt・agentと終了コード2によ�
 | 自作の全面変換器 | 全拡張を個別変換 | 最大 | Claude仕様を変換都合に合わせる危険 | 不採用 |
 | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | Claude内のCodex review・rescue・transfer | 小 | 既存Claude資産を変更しない | **採用済み** |
 
-OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.json`から`.codex/hooks.json`を機械生成できる。生成物はClaude側の正本ではなくCodex側の派生設定なので、Claude設定を変更したときだけ再実行・再検証する。command文字列は原文のまま写すため、`$CLAUDE_PROJECT_DIR`のようなClaude専用環境変数は、両製品で使えるgit root基準のcommandへ先に直す。agent・skill・MCPの全面変換には使わない。Vercel CLIは単体skillのsymlinkには適するがagentを扱わず、Rulesyncも共通の正本を別に持つ運用になるため採用しない。
+OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.json`から`.codex/hooks.json`を機械生成できる。このリポジトリの`.claude/settings.json`はhookを持たないため、生成するものは無い。返答を検査するhook 2本はplugin（`maimuzo-chat-response-hook-clarity`・`maimuzo-chat-response-hook-verified-commands`）のhookであり、pluginのCodex導入の側で扱う。生成物はClaude側の正本ではなくCodex側の派生設定なので、Claude設定を変更したときだけ再実行・再検証する。command文字列は原文のまま写すため、`$CLAUDE_PROJECT_DIR`のようなClaude専用環境変数は、両製品で使えるgit root基準のcommandへ先に直す。agent・skill・MCPの全面変換には使わない。Vercel CLIは単体skillのsymlinkには適するがagentを扱わず、Rulesyncも共通の正本を別に持つ運用になるため採用しない。
 
 ## 19. 未対応項目への選定結果
 
@@ -433,7 +433,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 2. Claude拡張frontmatterを含むskillも本文は同じsymlinkを読む。`user-invocable`、`argument-hint`、`context: fork`、`agent`、`background`、動的注入、Claude専用tool名はCodexで同じ意味になると扱わず、変換もしない。
 3. Claude agentはClaude専用として残す。Codexで同じ役割が必要なときは、標準の`worker`/`explorer`へ依頼文で正本Markdownのパスを指定して読ませる。`.codex/agents/*.toml`のsidecarや変換ファイルは作らない。
 4. 同じmarketplaceをCodexへ登録し、必要pluginだけをnative導入する。ローカルskillはsymlinkし、plugin本文は同じ配布元から各CLIへ導入する。Claude cacheのバージョン付きパスをCodexへ直結しない。
-5. rulesはCLAUDE.mdのCodex向け読取指示から正本を参照する。hooksはClaude設定のcommandを両製品共通のpath表現へ直してから、公式migrate-to-codexで`.codex/hooks.json`を生成する。agents・Workflow・agent teamは標準worker/explorerへ正本Markdownを明示して近似する。
+5. rulesはCLAUDE.mdのCodex向け読取指示から正本を参照する。hooksは、プロジェクト設定にあるものはcommandを両製品共通のpath表現へ直してから公式migrate-to-codexで`.codex/hooks.json`を生成し、pluginにあるもの（このリポジトリでは返答を検査する2本）はpluginのCodex導入で扱う。agents・Workflow・agent teamは標準worker/explorerへ正本Markdownを明示して近似する。
 6. ClaudeのpermissionsはCodexのapproval/sandboxへ機械変換しない。危険操作の同じ拒否が必要なものだけ、正本設定を読み取るCodex PreToolUse/PermissionRequest hookとして追加検証する。
 
 この方法なら、Claudeの既存frontmatter・plugin・hook script本文を共通実装として維持し、Codex側には公式変換で生成した宣言だけを置ける。Codexのcustom agent機能をClaude agentと同一視せず、Codex用の大きな実装ファイルを保守しない。設定変更時は変換を再実行する。
@@ -448,7 +448,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 | 条件付きrulesの自動適用 | 部分的 | CLAUDE.mdのCodex読取手順。厳密化はRulesyncを再評価 |
 | Claude agentの同一実行 | 低い | Codex側へ変換・sidecar化しない。必要時は標準agentに正本Markdownを明示的に読ませる |
 | frontmatterの実行意味 | 部分的 | standardはそのまま、Claude拡張はCodexで保証しない。呼出制御はCodex native設定で必要時だけ補う |
-| Claude hooksの同一挙動 | 中（event別） | command設定は公式migrate-to-codexで生成する。`block-merge` と `check-reply-clarity` は同じscriptを接続候補。`check-verified-commands` はClaude側もtranscriptをやめ、両製品のPre/PostToolUseで共通journalを作る再実装を検証 |
+| Claude hooksの同一挙動 | 中（event別） | プロジェクト設定のhookは公式migrate-to-codexで生成する（このリポジトリには無い）。plugin hookの `check-reply-clarity` は同じscriptを接続候補。plugin hookの `check-verified-commands` はClaude側もtranscriptをやめ、両製品のPre/PostToolUseで共通journalを作る再実装を検証 |
 | permissions・MCP | 部分的 | Claude設定を変換せず、Codex native approval/sandbox/plugin MCPを使う。denyの同一強制はhookでfixture検証後に採用 |
 | Workflow・agent team | 部分的 | Codexのsubagent/worker/explorerへ同じ正本Markdownを渡す。lifecycle・自動spawnの同一性は保証しない |
 | Claude内からのCodex委任・会話移送 | 高い | 公式pluginを採用済み |
@@ -467,7 +467,7 @@ OpenAIのmigrate-to-codexは、hooksだけに限定すれば`.claude/settings.js
 | Claude agentのCodex共有 | 不採用 | Codex custom agentは`name`・`description`・`developer_instructions`必須のTOMLで、Claude Markdownをsymlinkできない。変換すると更新のたびに再生成・再検証が必要になるため、Claude専用として残す |
 | Codexでのagent役割利用 | 限定対応 | Codexの標準`worker`/`explorer`へ、作業時だけ正本Markdownのパスを明示して読ませる。自動spawn・frontmatter・Claude専用toolsの同等性は保証しない |
 | 条件付きrules | 保留（追加調査済み） | このリポジトリの`.claude/rules/`の2本は`paths`指定を持たないため、いまは該当しない。Codexの指示探索には`.claude/rules/`の`paths`条件と同じ自動適用機構がない。現行のCodex向け読取指示を正本へ残し、実タスクで漏れが観測されても本文変換は行わず、Codex側の入口だけを再検討する |
-| hooksの段階接続 | 追加採用候補を選定 | 公式migrate-to-codexでcommand hook設定を生成できる。既存 `block-merge-without-review.py` と `check-reply-clarity.py` は同じscriptを接続できる見込み。`check-verified-commands.py` はClaude側もtranscript依存をやめ、両製品の共通Pre/PostToolUse journal方式へ再実装するか、採用を見送る |
+| hooksの段階接続 | 追加採用候補を選定 | プロジェクト設定のhookは公式migrate-to-codexでcommand hook設定を生成できる（このリポジトリの設定にhookは無い）。plugin `maimuzo-chat-response-hook-clarity` の `check-reply-clarity.py` は同じscriptを接続できる見込み。`check-verified-commands.py` はClaude側もtranscript依存をやめ、両製品の共通Pre/PostToolUse journal方式へ再実装するか、採用を見送る |
 | permissions | 追加検証 | Claude `permissions.allow/deny` とCodex `approval_policy`/`sandbox_mode` は別契約。危険操作のdenyだけをCodex native hookへ移し、通常の承認は既存のCodex設定を正本とする |
 | commands・MCP | 部分採用 | command本文は標準skillへsymlinkできるものだけ選ぶ。MCPはClaude `.mcp.json`を変換せず、plugin native MCPまたはCodex側の既存接続を使う |
 | Workflow・agent team | 限定採用 | Codexのworker/explorer/subagentへ正本Markdownを読ませる。Claudeの自動spawn・fork・権限lifecycleは同一化しない |
@@ -497,13 +497,14 @@ Claude専用payloadを前提にしたscriptは、そのまま共有せず、差�
 
 | 優先 | 追加するもの | 方法 | 採用条件 |
 | --- | --- | --- | --- |
-| 1 | `block-merge-without-review.py` | Codex `PreToolUse` matcher `Bash` から同じscriptを呼ぶ薄い宣言 | `hookSpecificOutput.permissionDecision=deny`、`tool_input.command`、`gh` timeout、fail-openをfixtureで確認 |
-| 2 | `check-reply-clarity.py` | Codex `Stop` から同じscriptを呼ぶ | `last_assistant_message`・`stop_hook_active`と`decision:block`が一致。`gh`題名取得失敗時もClaudeと同じfail-openを確認 |
-| 3 | pluginの通知・session hooks | Codex pluginの`hooks/hooks.json`と`.codex-plugin/plugin.json`を薄く追加し、`CLAUDE_PLUGIN_ROOT`互換を利用 | plugin sourceの同じscriptがClaudeで変わらず、Codex trust・timeout・環境変数をfixtureで確認 |
-| 4 | Claude `permissions.deny`の危険操作 | Codex `PreToolUse`/`PermissionRequest`へ正本設定を読み取るhookを追加 | `rm`等のdenyをworkspace-write下でも止め、allow/approvalの誤ブロックがないことを測定 |
-| 5 | `check-verified-commands.py` | Claude/Codex双方の`PreToolUse`/`PostToolUse`から同じjournal writerを呼び、`Stop`で同じ判定coreを呼ぶ | transcriptをどちらの製品の内部JSONLとしても読まない。`session_id`・`tool_use_id`・`tool_input.command`を共通recordへ正規化し、拒否・失敗・並列実行・cleanupを両製品fixtureで確認。共通化できなければCodexでは採用しない |
-| 6 | Claude agent / Workflow / commands | 変換せず、Codex標準worker/explorerへ正本Markdownを依頼文で渡す。commandは標準SKILL.mdへリンク可能なものだけ選ぶ | 手動引き継ぎで目的・制約・検証が再現し、Claude側の自動spawn/forkを壊さない |
+| 1 | `check-reply-clarity.py`（plugin `maimuzo-chat-response-hook-clarity`） | Codex `Stop` から同じscriptを呼ぶ。pluginは `.codex-plugin/plugin.json` を持たないため、Codex側のhook宣言が要る | `last_assistant_message`・`stop_hook_active`と`decision:block`が一致。`gh`題名取得失敗時もClaudeと同じfail-openを確認 |
+| 2 | pluginの通知・session hooks | Codex pluginの`hooks/hooks.json`と`.codex-plugin/plugin.json`を薄く追加し、`CLAUDE_PLUGIN_ROOT`互換を利用 | plugin sourceの同じscriptがClaudeで変わらず、Codex trust・timeout・環境変数をfixtureで確認 |
+| 3 | Claude `permissions.deny`の危険操作 | Codex `PreToolUse`/`PermissionRequest`へ正本設定を読み取るhookを追加 | `rm`等のdenyをworkspace-write下でも止め、allow/approvalの誤ブロックがないことを測定 |
+| 4 | `check-verified-commands.py`（plugin `maimuzo-chat-response-hook-verified-commands`） | Claude/Codex双方の`PreToolUse`/`PostToolUse`から同じjournal writerを呼び、`Stop`で同じ判定coreを呼ぶ | transcriptをどちらの製品の内部JSONLとしても読まない。`session_id`・`tool_use_id`・`tool_input.command`を共通recordへ正規化し、拒否・失敗・並列実行・cleanupを両製品fixtureで確認。共通化できなければCodexでは採用しない |
+| 5 | Claude agent / Workflow / commands | 変換せず、Codex標準worker/explorerへ正本Markdownを依頼文で渡す。commandは標準SKILL.mdへリンク可能なものだけ選ぶ | 手動引き継ぎで目的・制約・検証が再現し、Claude側の自動spawn/forkを壊さない |
 
-従って、先に実施した内容へ直ちに足すのは、公式migrate-to-codexで生成したhook宣言と、共通payloadで動く既存scriptの範囲である。`check-verified-commands.py`はClaude側も含めた共通journalへの再実装を先に検証し、共通化できなければCodexでは採用しない。agent・Workflow・commands・MCPは、正本本文のsymlinkと実行時参照までを追加採用し、Codex固有の大きな変換ファイルは作らない。
+マージを止めるhookは共有対象にしない。このリポジトリはそのhookを持たず、`gh pr merge` は branch の保護設定（管理者にも効かせる `enforce_admins` を含む）の必須検査と、CI の `code-review-result` 検査で止まる。
 
-追加調査のローカル測定では、3本の既存Python hook scriptを`py_compile`で検査し、Codex形式の`Stop` payloadを`check-reply-clarity.py`へ渡すとClaudeと同じ`decision:block` JSONが返り、`PreToolUse`の非対象Bashは無出力・終了0だった。一方、実機Codexのsession JSONLは`event_msg`・`response_item`等を持ち、`check-verified-commands.py`が読むClaude形式の`user`・`tool_use`列とは一致しない。従って問題はhook stdin/stdout全体ではなく、scriptが製品固有の内部transcriptを直接読んでいる部分である。共通journalへ再実装できるかを先に検証し、できない場合はこのhookだけCodex採用を諦める。
+従って、先に実施した内容へ直ちに足すのは、pluginのhookをCodexから呼ぶ薄い宣言と、共通payloadで動く既存scriptの範囲である。`check-verified-commands.py`はClaude側も含めた共通journalへの再実装を先に検証し、共通化できなければCodexでは採用しない。agent・Workflow・commands・MCPは、正本本文のsymlinkと実行時参照までを追加採用し、Codex固有の大きな変換ファイルは作らない。
+
+追加調査のローカル測定は、3本のPython hook script（返答を検査する2本とマージを止める1本）がリポジトリの `.claude/hooks/` にあった時点の版に対するものである。いまのpluginの版では測り直していない。この測定では3本を`py_compile`で検査し、Codex形式の`Stop` payloadを`check-reply-clarity.py`へ渡すとClaudeと同じ`decision:block` JSONが返り、`PreToolUse`の非対象Bashは無出力・終了0だった。一方、実機Codexのsession JSONLは`event_msg`・`response_item`等を持ち、`check-verified-commands.py`が読むClaude形式の`user`・`tool_use`列とは一致しない。従って問題はhook stdin/stdout全体ではなく、scriptが製品固有の内部transcriptを直接読んでいる部分である。共通journalへ再実装できるかを先に検証し、できない場合はこのhookだけCodex採用を諦める。

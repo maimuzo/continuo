@@ -182,7 +182,9 @@ Claude側では `/skills` と `/codex:setup` を確認し、代表skillを明示
 
 ## 12. hooks・permissionsを追加する場合
 
-Claudeの設定JSONをCodexへsymlinkせず、OpenAI公式の`migrate-to-codex`でcommand hookの宣言だけを生成する。これはscript本文を変換せず、`.codex/hooks.json`を作る一回の機械変換である。Claude設定を変更した場合は再生成・再検証する。
+このリポジトリの `.claude/settings.json` はhookを持たない（`permissions` だけを持つ）。返答を検査するhook 2本は、同じmarketplaceのplugin `maimuzo-chat-response-hook-clarity`（`check-reply-clarity.py`）と `maimuzo-chat-response-hook-verified-commands`（`check-verified-commands.py`）にあり、どちらも各pluginの `hooks/hooks.json` が `Stop` で `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>"` を呼ぶ。マージを止めるhookは無い（`gh pr merge` は branch の保護設定の必須検査と CI の `code-review-result` 検査で止まる）。従ってこのリポジトリで共有候補になるのはplugin hookであり、下のproject hookの変換は要らない。plugin hookの扱いはこの節の最後の段落による。
+
+プロジェクトの設定にhookを持つプロジェクトでは、Claudeの設定JSONをCodexへsymlinkせず、OpenAI公式の`migrate-to-codex`でcommand hookの宣言だけを生成する。これはscript本文を変換せず、`.codex/hooks.json`を作る一回の機械変換である。Claude設定を変更した場合は再生成・再検証する。
 
 ```sh
 # 公式 migrate-to-codex skillを用意した環境で、まず計画と警告を確認する
@@ -193,12 +195,12 @@ $MIGRATE_TO_CODEX --source ./.claude/ --target ./.codex/
 $MIGRATE_TO_CODEX --validate-target ./.codex/
 ```
 
-公式変換器はcommand・timeout・statusMessageを写すが、未対応event、matcher、async、prompt/agent handlerを完全再現しない。生成レポートのmanual-reviewを確認する。現在のClaude設定は`$CLAUDE_PROJECT_DIR`を使うため、変換前にClaude側のcommandを`python3 "$(git rev-parse --show-toplevel)/.claude/hooks/..."`のような両製品共通表現へ変更する。これによりClaude側も同じscript実体を使い続けられる。
+公式変換器はcommand・timeout・statusMessageを写すが、未対応event、matcher、async、prompt/agent handlerを完全再現しない。生成レポートのmanual-reviewを確認する。Claude設定のcommandが`$CLAUDE_PROJECT_DIR`を使う場合は、変換前にClaude側のcommandを`python3 "$(git rev-parse --show-toplevel)/<hookのパス>"`のような両製品共通表現へ変更する。これによりClaude側も同じscript実体を使い続けられる。
 
 生成後は、`~/.codex/config.toml`と`.codex/hooks.json`へ同じhookを二重登録しない。Codexのcanonical設定は`[features].hooks = true`とし、hooksのtrustを確認する。`PreToolUse`のdeny、`Stop`の`decision:block`、timeout/fail-openをread-only fixtureで確認してから有効化する。Codexはplugin hookへ`CLAUDE_PLUGIN_ROOT`を設定するが、project hookでは`CLAUDE_PROJECT_DIR`を前提にしない。
 
-`check-verified-commands.py`のようにtranscript内部形状を読むhookは、そのまま移行しない。Claude側もtranscriptを読まない共通実装へ変更する場合だけ、両製品の`PreToolUse`/`PostToolUse`で同じjournal writerを呼び、`Stop`で同じ判定coreを使う。共通化できない場合は、そのhookだけCodexで有効化しない。
+`check-verified-commands.py`（plugin `maimuzo-chat-response-hook-verified-commands`）のように、`transcript_path` が指すtranscriptの内部形状を読むhookは、そのまま移行しない。Claude側もtranscriptを読まない共通実装へ変更する場合だけ、両製品の`PreToolUse`/`PostToolUse`で同じjournal writerを呼び、`Stop`で同じ判定coreを使う。共通化できない場合は、そのhookだけCodexで有効化しない。
 
 Claudeの`permissions.allow/deny`はCodexの`approval_policy`・`sandbox_mode`へ変換しない。通常の確認はCodex native設定を使い、危険操作を追加で止める必要がある場合だけ`PreToolUse`または`PermissionRequest`でdenyする。allowが広すぎる・workspace-writeで実行できる操作をdenyできない場合は、Claude側の性能を守るためCodex hookを有効化しない。
 
-Codex pluginへhookを同梱する場合は、共有scriptと`hooks/hooks.json`をplugin sourceに置き、`.codex-plugin/plugin.json`の`hooks`エントリから参照する。Claude側の`.claude-plugin/plugin.json`は変更せず、Codex manifestは薄い宣言に限定する。plugin hookはインストール後もtrustが必要である。
+Codex pluginへhookを同梱する場合は、共有scriptと`hooks/hooks.json`をplugin sourceに置き、`.codex-plugin/plugin.json`の`hooks`エントリから参照する。Claude側の`.claude-plugin/plugin.json`は変更せず、Codex manifestは薄い宣言に限定する。plugin hookはインストール後もtrustが必要である。上の2つのpluginは `.claude-plugin/plugin.json` と `hooks/hooks.json` を持ち、`.codex-plugin/plugin.json` を持たない（2026-09-29 に手元のmarketplaceのcheckoutを `ls` で確認）。Codexへ導入したときにこれらのhookが動くかは確認していない。
