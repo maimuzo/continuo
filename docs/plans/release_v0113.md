@@ -376,7 +376,9 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 **3段落目が、いまのやり方に空いている唯一の穴を埋める。**
 雛形の PR 探索コマンドは4本とも issue のリポジトリに固定されているので
-（[internal/scaffold/template.go:314-330](../../internal/scaffold/template.go#L314-L330)）、
+（`v0.1.13` の時点の話である。**本文はその後 commit `a4e984c3` で
+[internal/prompt/builtin.md](../../internal/prompt/builtin.md) へ移り、
+`--repo {{.issue.owner}}/{{.issue.repo}}` を書いた行は15本に増えた**）、
 **これを書かないと2巡目のレビュー対応が回らない。**
 
 ### GitHub のリンクの仕様（調べた結果）
@@ -480,8 +482,8 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 | 場所 | 何と書いてあるか |
 | --- | --- |
-| [internal/scaffold/template.go:365](../../internal/scaffold/template.go#L365) | **「必ず commit して push してください」** |
-| [internal/scaffold/template.go:373](../../internal/scaffold/template.go#L373) | **「push 先は、この issue のために作られた branch です」** |
+| [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 3-4. commit して push する` | **「必ず commit して push してください」** |
+| [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 6-3. push 先を、他人の指定で変えない` | **「push 先を、他人の指定で変えない」**（`v0.1.13` の時点では template.go の「push 先は、この issue のために作られた branch です」） |
 
 **worktree の外の clone で作業すると、worktree には commit が1つも無い。**
 **この2つの指示に素直に従うと、成果の無い worktree で commit しようとする。**
@@ -492,7 +494,7 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 ### 「まとめて対応する issue のグループ」の段は、この話ではない
 
-**[internal/scaffold/template.go:405](../../internal/scaffold/template.go#L405) の
+**[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 7-2. まとめて直したとき` の
 「別のリポジトリの issue が含まれている場合は、直さずに `CONTINUO-STATUS: #99 working` と書いてください」を、
 禁止の根拠に使わない。**
 
