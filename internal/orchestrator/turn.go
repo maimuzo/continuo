@@ -139,8 +139,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **立て直す経路が無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
 			//
 			// **待って、もう一度見る。**`turnCtx` が切れれば上の枝で抜ける。
-			// **短い間隔で見る。**下りたことを知らせる仕掛けは無く、
-			// **下りるのは `endTerminal` の1行だけなので、待ちは長くて数十秒である。**
+			// **短い間隔で見る。**下りたことを知らせる仕掛けが無いためである。
+			//
+			// **待ちが数十秒で終わるとは限らない**（実装レビュー5周目の LOW）。
+			// **印が下りる経路は2つある。**手放しを見送った `endTerminal`（数十秒）と、
+			// **終わらせる処理が `markWorkerStopped` / `markFinished` まで進む経路である。**
+			// 後者は `ensureAgentComment` が `agent.prompt` を待つので、
+			// **最長で `claude.turn_timeout_ms`（既定1時間）かかる。**
+			// **そのあいだ、この goroutine は 500ms ごとに目を覚ます**（1時間で約7200回）。
+			// **目を覚ましてすることは、印を1回読むことだけである。**
+			// **後者では `workerRetired` が先に真になるので、上の枝で抜ける。**
 			select {
 			case <-ctx.Done():
 				return

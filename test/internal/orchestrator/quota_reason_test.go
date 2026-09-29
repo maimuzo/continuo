@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -230,3 +231,64 @@ func TestQuota_マージンが先に効いて止まり使用率と閾値が出�
 // limitMinutes: `rate_limit.weekly_wait_limit_minutes` に入れる値。
 // tokenEnv: トークンを入れる環境変数の名前（テストごとに変える）。
 // 戻り値: 組み立てた一式・印へ入れた issue・進められる時計。
+
+// TestQuota_枠を使い切っているときはquotaJSONを消す手順まで出す は、100% の機械への案内を確かめる
+// （issue #173。実装レビュー5周目の MEDIUM）。
+//
+// 目的: **使用率100 では、マージンをどう書いても動き出さない。**
+// マージンは 0〜99 に制限されているので（`internal/config/validate.go` の `validateHandoff`）、
+// **余裕値は `100 − 100 − マージン` で必ず0以下になる。**
+// **それなのに「2つのマージンを見てください」とだけ案内すると、
+// 利用者はマージンを触って、効かないまま原因を探し続ける。**
+//
+// **この案内は一度実際に失われている。**消した `rate_limit.pause_above_percent` の判定が
+// 持っていたものを、`logNewWorkBlocked` へ移し忘れていた（2026-09-29 に戻した）。
+// **検査が無いと、同じことがもう一度起きても誰も気づかない。**
+//
+// 与える情報: 5時間の枠が 100% で、リセットは2時間後。担当者のいない `Ready` の issue が1件。
+// 成功条件: 着手しないこと。**「マージンを下げても動き出しません」と
+// 「quota.json を消し」の両方が、同じ1行に出ること。**
+func TestQuota_枠を使い切っているときはquotaJSONを消す手順まで出す(t *testing.T) {
+	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+		{"kind": "weekly_all", "percent": 10, "resets_at": resetsAt, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_FULL_RETAKE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Tracker.Provider.Handoff.FiveHourMarginPercent = 10
+			cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = 10
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(194, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#194" {
+			t.Fatalf("枠を使い切っているのに着手している: %+v", v)
+		}
+	}
+	got := fx.Logs.String()
+	for _, want := range []string{
+		"枠を使い切っているので",
+		"マージンを下げても動き出しません",
+		"quota.json を消し",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("案内に %q が出ていない:\n%s", want, got)
+		}
+	}
+	// **`**` のような markdown の強調を混ぜない**（実装レビュー5周目の LOW）。
+	// **ログは平文で出るので、そのまま画面に出る。**
+	if strings.Contains(got, "**マージンを下げても") {
+		t.Fatalf("ログの本文に markdown の強調が混ざっている:\n%s", got)
+	}
+}

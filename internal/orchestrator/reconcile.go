@@ -643,6 +643,24 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if snap.LastSeenAt.IsZero() {
 			continue
 		}
+		// **1回目の指示をまだ送り終えていない run は手放さない**（実装レビュー5周目の MEDIUM）。
+		//
+		// **下の無音の門は、この窓では2本とも開く。**
+		// 1本目（`LastBusyHookAt`）は、やり直した attempt では**前の attempt の時刻**が残っており、
+		// それは必ず閾値より古い。**新しく着手した run ではゼロ値で、こちらも門を通す。**
+		// 2本目（`runIdleForTurnTimeout`）は、`hookSeenThisTurn` が偽のとき**無条件に真**を返す。
+		//
+		// **残る守りは `paneStopped` の2巡回（既定60秒）だけになる。**
+		// **1回目の指示が届かずに agent が `idle` のまま座っていると、
+		// 60秒で `after_run`（利用者が書いた `git push`）が走り、担当者が外れ、pane が閉じる。**
+		// **その run は、まだ1バイトも仕事をしていない。**
+		//
+		// **`SendFirstPrompt` は `beginAttempt` が真に戻す**ので、やり直した attempt も守られる。
+		// **走っている最中に引き継いだ run（`AwaitTurnEnd`）では偽なので、そちらは守らない。**
+		// あちらは既に turn を走らせている。
+		if snap.SendFirstPrompt {
+			continue
+		}
 		// **この門は「指示を送った直後の run を手放さない」ために在る**（issue #197）。
 		//
 		// **見るのは `LastBusyHookAt` である。`LastSeenAt` ではない**（issue #173）。
@@ -989,6 +1007,13 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// `herdr.read_timeout_ms`（既定5000ミリ秒）まで待つので、
 	// **run が12件あれば60秒経っていることがある。**
 	// **そのまま使うと、下で書く時計が全部その秒数だけ古くなる。**
+	//
+	// **写しのほうは取り直さない**（実装レビュー5周目の LOW）。
+	// **残りがある。**その60秒のあいだに期限が切れた期間は、この巡回の写しにはまだ入っている
+	// （`snapshotOf` は読んだ時点の時計で除くため）。**だから枠待ちの印が1巡回ぶん遅れて外れる。**
+	// **それでも取り直さない。**2回読むと、こちらが「余裕が無い」と控えた時刻を、
+	// **並行して走る `pollQuota` が差し替えた写しで「余裕がある」と消しうる。**
+	// **遅れは次の巡回（既定30秒）で解ける。消えた時刻は戻らない。**
 	now = o.now()
 
 	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。

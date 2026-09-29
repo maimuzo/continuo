@@ -64,6 +64,28 @@ func (o *Orchestrator) AbortTerminalForHumanForTest(ctx context.Context, issueID
 	return o.abortTerminalForHuman(ctx, rs, "テストが終わらせようとしました"), true
 }
 
+// BeginAttemptForTest は、印を持つ run について beginAttempt を1回通す
+// （issue #197。実装レビュー5周目の MEDIUM）。
+//
+// **着手とやり直しの入口を、検査から作るための入り口である。**
+// **`Adopt` は `SendFirstPrompt` を立てない**（走っている worker を引き継ぐので、
+// 送るのは継続の指示である）。**だから、1回目の指示をまだ送っていない run を
+// `Adopt` だけでは作れない。**
+//
+// **手放しの門の1つが、その状態を見ている**（`releaseQuotaWaitExceeded` の `SendFirstPrompt`）。
+// **門を外しても落ちない検査しか無い状態にしないために、ここから作る。**
+//
+// issueID: 印を持つ run の project item の ID。
+// 戻り値: 通したなら true。印を持つ run が無ければ false。
+func (o *Orchestrator) BeginAttemptForTest(issueID string) bool {
+	rs, ok := o.lookupRunByID(issueID)
+	if !ok {
+		return false
+	}
+	rs.beginAttempt(false)
+	return true
+}
+
 // 以下は使用率の保管値と statusline取得（issue #284）を test/internal/orchestrator から
 // 確かめるための入り口である。**本体の振る舞いは変えない。**読むか、既存の関数を呼ぶだけである。
 
