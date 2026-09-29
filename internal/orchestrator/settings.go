@@ -367,11 +367,15 @@ func toolGateApplies(mode string, repoIsPrivate *bool) bool {
 // Claude Code の中の判定モデルに断らせる `type: "prompt"` の hook である。
 // 載るかどうかは `claude.tool_gate.mode` と、この issue のリポジトリが公開かどうかで決まる。
 //
+// **statusLine を書くときは、`env` に利用者のステータスラインの転送先
+// （`CONTINUO_STATUSLINE_COMMAND`）も書く**（設計 3-84a）。`claude.env` を写した新しい map に書く。
+//
 // issue: 着手する issue。**識別子（置き場所のスラグを作る）とリポジトリの公開・非公開
 // （判定を掛けるかどうかを決める）の両方に使う。**
+// worktree: issue の worktree の絶対パス（転送先を探す設定ファイルの置き場所。設計 3-84a）。
 // 戻り値の1つ目: 書いた設定ファイルの絶対パス。
 // 戻り値の2つ目: ディレクトリを作れない・JSON 化できない・書けない場合のエラー。
-func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
+func (o *Orchestrator) writeSettingsFile(issue tracker.Issue, worktree string) (string, error) {
 	identifier := issue.Identifier
 	dir := o.issueDir(identifier)
 	if err := os.MkdirAll(dir, settingsDirPerm); err != nil {
@@ -414,14 +418,15 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
 			"deny", o.cfg.Claude.Permissions.Deny)
 	}
 
+	statusLine := o.statusLineSetting()
 	settings := claudeSettings{
 		Hooks: hooks,
 		Permissions: claudeSettingsPermissions{
 			Allow: o.cfg.Claude.Permissions.Allow,
 			Deny:  o.cfg.Claude.Permissions.Deny,
 		},
-		Env:        o.cfg.Claude.Env,
-		StatusLine: o.statusLineSetting(),
+		Env:        o.issueSettingsEnv(statusLine, worktree),
+		StatusLine: statusLine,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

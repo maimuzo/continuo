@@ -2314,7 +2314,7 @@ sequenceDiagram
 
 **statusline取得用の設定ファイルは別に書く**（`<実行時ディレクトリ>/statusline-fetch/settings.json`。0600。一時ファイルへ書いてから差し替える）。
 **持つのは `statusLine` と `env` だけである。**hook も `permissions.allow` も持たない。
-`env` は `claude.env` から `CLAUDE_CODE_RETRY_WATCHDOG` を除き、`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足したものである。
+`env` は `claude.env` から `CLAUDE_CODE_RETRY_WATCHDOG` を除き、`CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` と、空文字の `CONTINUO_STATUSLINE_COMMAND` を足したものである（statusline取得では転送しない。3-84a）。
 **statusline取得は `--restricted` で起動するので、利用者・プロジェクト・ローカルの設定ファイルは読まれない**（公式文書: `--restricted` は managed settings と `--settings` だけを読む）。
 **利用者の設定の外へ効くキー（`cleanupPeriodDays` など）を写さない。**写すと、この節の「書かない」と、statusline取得が利用者の設定を読まない仕組みを崩し、止まるはずの年齢による掃除をかえって動かす（3-27）。
 
@@ -4335,7 +4335,7 @@ sequenceDiagram
 | 開く条件（巡回の最後に見る） | statusline を使え（`sl.sock` を開けている）、**`source: statusline` か、`oauth_usage_api` で切り替えていて取得止めでない**。そのうえで、**値が新しくなく**、statusline取得が走っておらず（閉じる仕事が返り goroutine が終わるまで「走っている」）、前回の試行の開始から `refresh_interval_ms` を過ぎていて（起動して最初の巡回は問わない）、**期限内の保管値に 100 の期間（`weekly_scoped` を除く）が無く**、`weekly_scoped` が `pause_above_percent` を超えていない。issue の pane から値が届いていれば開かない |
 | clone の選び方 | 起動時に読んだ `trust.repositories` を上から見て、`ghq` で clone があり、`~/.claude.json` で信頼されている（issue の run と同じ判定。3-6）最初の1つ。**走行中は読み直さない**（3-24）。`~/.claude.json` は読むだけ（3-33） |
 | 起動 | `--settings <実行時ディレクトリ>/statusline-fetch/settings.json --model haiku --permission-mode dontAsk --restricted --strict-mcp-config --system-prompt "Reply with one word." --tools "" --disable-slash-commands --session-id <UUID>`。agent の名前は `sl-` と UUID の先頭12桁の16進 |
-| 設定ファイル | `statusLine` と `env` だけ（3-12）。`env` に `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足し（**会話の記録を残さない**）、`CLAUDE_CODE_RETRY_WATCHDOG` は渡さない（上限の最中に無期限に再試行し、pane が戻らなくなる） |
+| 設定ファイル | `statusLine` と `env` だけ（3-12）。`env` に `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` を足し（**会話の記録を残さない**）、`CONTINUO_STATUSLINE_COMMAND` を空文字で書き（転送しない。3-84a）、`CLAUDE_CODE_RETRY_WATCHDOG` は渡さない（上限の最中に無期限に再試行し、pane が戻らなくなる） |
 | 起動の待ち | `agent.get` を1秒ごと。`blocked` なら送らずに閉じる。`agent_not_found` が `herdr.startup_timeout_ms` の半分続いたら、**workspace ごと閉じ、新しい workspace と新しい UUID で1回だけやり直す**。起動の期限は起動ごとに `herdr.startup_timeout_ms` |
 | 成功 | 送ってから3分以内に、このセッションの `rate_limits` を持つ新しい応答の行が届く。**知らせは閉じるより先に送る**（閉じる呼び出しのぶん入札を遅らせない） |
 | 全体の上限 | `herdr.startup_timeout_ms` の2倍と3分の和 |

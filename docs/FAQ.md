@@ -344,7 +344,7 @@ language: ja
 | `continuo hook` | Claude Code が呼ぶもので、人間が直接叩くものではありません |
 | `continuo version` | 版を1行出すだけです |
 | `continuo allow-keychain-access` | macOS で1回だけ叩くものです |
-| `continuo statusline` | Claude Code のステータスラインが呼ぶもので、人間が直接叩くものではありません。画面に出すのは固定の `continuo` の1語だけです |
+| `continuo statusline` | Claude Code のステータスラインが呼ぶもので、人間が直接叩くものではありません。画面に出すのは、あなたの `statusLine` のコマンドの出力です（無ければ固定の `continuo` の1語） |
 
 **この5つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
 
@@ -1281,11 +1281,27 @@ pane には「Transcript saving is off」と出ます。
 
 #### continuo の pane で、自分のステータスラインが出なくなった
 
-**continuo が、その pane の Claude Code の `statusLine` を自分のものに差し替えているからです。**
-ステータスラインには固定の `continuo` の1語が出ます。**使用率を受け取るための仕掛けなので、`rate_limit.source` が `oauth_usage_api`（既定）か `statusline` なら外せません。**
+**continuo は、その pane の Claude Code の `statusLine` を `continuo statusline` に差し替えています**（使用率を受け取るための仕掛けです。`rate_limit.source` が `oauth_usage_api`（既定）か `statusline` なら外せません）。
+**`continuo statusline` は、使用率を受け取ったあとで、あなたの `statusLine` のコマンドを同じ入力で呼び、その出力を出します。**
+それでも固定の `continuo` の1語が出ているなら、次のどれかです。
 
+| 何が起きているか | 確かめ方・直し方 |
+| --- | --- |
+| **転送先が見つからなかった** | continuo は着手のときに、worktree の `.claude/settings.local.json` → worktree の `.claude/settings.json` → `CLAUDE_CONFIG_DIR`（無ければ `~/.claude`）の `settings.json` の順に読み、**最初に `statusLine` を持つファイルだけで決めます。**そこが `"type": "command"` で `command` が空でないときだけ転送します |
+| **設定を変えたのが着手のあと** | **転送先は着手のときに決まります。**その issue が次に着手されるまで効きません |
+| **コマンドが5秒で終わらない・終了コードが 0 でない・何も出さない** | どれも `continuo` になります。あなたのコマンドを手で叩いて確かめてください |
+| **`CLAUDE_CONFIG_DIR` を herdr の側にだけ置いている** | continuo は自分のプロセスの `CLAUDE_CONFIG_DIR` で探します。continuo を起動するシェルにも同じ値を置いてください |
+
+**決まった転送先は、issue ごとの設定ファイルの `env` の `CONTINUO_STATUSLINE_COMMAND` に書いてあります**（見つからなければ空です）。
+置き場所は実行時ディレクトリ（`CONTINUO_RUNTIME_DIR`、Linux なら `$XDG_RUNTIME_DIR/continuo`、macOS なら `$TMPDIR/continuo`）の `issues/<スラグ>/settings.json` です。macOS なら次で見られます。
+
+```bash
+grep -H CONTINUO_STATUSLINE_COMMAND "$TMPDIR"/continuo/issues/*/settings.json
+```
+
+**`refreshInterval`・`padding` などは写しません。**continuo の pane では、描き直すのは Claude Code が描き直すときだけです。
 **あなたが自分で起動した Claude Code は変わりません。**差し替えるのは continuo が起動した Claude Code だけです。
-**`rate_limit.source: none` にすると、continuo の pane でもあなたのステータスラインが出ます。**
+**`rate_limit.source: none` にすると、continuo は `statusLine` を書かないので、あなたのステータスラインがそのまま出ます。**
 
 #### statusline取得が開いている間、issue の着手が待たされる
 

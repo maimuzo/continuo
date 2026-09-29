@@ -45,7 +45,7 @@ const (
 // 対象リポジトリの `.claude/settings.json` と `.claude/settings.local.json`
 // （doctor が見るのは clone で、Claude Code が走るのは worktree。別の branch のことがある。
 // 後者はそもそも gitignore される）、利用者の `~/.claude/settings.json`
-// （**設計 3-12 が「利用者の `~/.claude/settings.json` は読み書きしない」と決めている**）、
+// （**設計 3-12 が「利用者の `~/.claude/settings.json` は書かない。読むのは 3-84 の転送先を決めるときだけ」と決めている**）、
 // herdr の pane の環境（continuo は `claude` を直接起動しない）。
 //
 // **読んでいない出どころは、`✓` のときも必ず内訳に出す。**

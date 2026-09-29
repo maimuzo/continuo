@@ -148,3 +148,21 @@ func (o *Orchestrator) QuotaRefreshIntervalForTest() time.Duration {
 func (o *Orchestrator) PollAPIForTest(ctx context.Context) {
 	o.pollAPI(ctx)
 }
+
+// ResolveStatuslineForwardForTest は、利用者のステータスラインの転送先を決める処理
+// （resolveStatuslineForward）を test/internal/orchestrator から呼ぶための入り口である（設計 3-84a）。
+//
+// **優先順位と「キーはあるが条件に合わない」の扱いは、着手を通すと組み合わせが多すぎる**ので、
+// ここで直に確かめる。
+//
+// worktree: issue の worktree の絶対パス。
+// configDir: 利用者の設定ディレクトリ。
+// 戻り値の1つ目: 転送先のコマンド。見つからなければ空。
+// 戻り値の2つ目: 読めずに飛ばしたファイルのパス。
+func ResolveStatuslineForwardForTest(worktree, configDir string) (string, []string) {
+	var skipped []string
+	cmd := resolveStatuslineForward(statuslineForwardSources(worktree, configDir), func(path string, _ error) {
+		skipped = append(skipped, path)
+	})
+	return cmd, skipped
+}
