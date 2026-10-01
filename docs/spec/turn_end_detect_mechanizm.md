@@ -159,31 +159,36 @@ sequenceDiagram
     actor T as 巡回タイマー（既定30秒）
     participant C as continuo
     participant H as herdr
-    participant CC as Claude Code
 
     T->>C: 巡回の開始
-    Note over C: 走行中の run を1件ずつ見る
 
+    Note over C: 1. 手放しの判定（打ち切りのループより前に、全部の run について走り切る）
+    C->>C: 1週間のレートリミットの余裕が無く、待っても明けない run か
+    alt 当たらない
+        Note over C: 手放しの判定では何もしない
+    else 当たる
+        C->>H: agent.get（agent_status と state_change_seq）
+        H-->>C: agent_status と連番を応答する
+        alt idle か done で、連番が2回続けて同じ
+            Note over C: after_run を走らせ、担当者から自分を外し、pane を閉じる。worktree は残す
+        else idle か done で、1回目の観測
+            Note over C: まだ手放さない。この巡回だけ、打ち切りの判定から外す
+        else それ以外（working / blocked / unknown / 読めなかった）
+            Note over C: 手放さない。下の打ち切りの判定へ回る
+        end
+    end
+
+    Note over C: 2. 打ち切りの判定（run を1件ずつ見る）
     C->>C: hook の無音が claude.turn_timeout_ms を超えたか
     alt 超えていない
         Note over C: 何もしない。次の run へ
     else 超えた
-        C->>H: agent.get（agent_status と state_change_seq）
+        C->>H: agent.get
         H-->>C: agent_status を応答する
-
-        alt 打ち切りの判定: agent_status が working
+        alt agent_status が working
             Note over C: 進んでいる。時計を起こし直して次の run へ
-        else レートリミット待ちの判定: 使用率100の枠があり hook も来ていない
-            C->>C: 枠待ちの印を立てて打ち切りの時計を止める
-            Note over C: リセット時刻を過ぎたら印を外し、CC へ継続の指示を1回送る
-        else 手放しの判定: idle か done で、連番が2回続けて同じ
-            C->>C: 1週間のレートリミットを待つ上限を超えているか
-            alt 超えている
-                C->>H: pane の close
-                Note over C: 担当者から自分を外し、worktree は残す
-            else 超えていない
-                Note over C: 待ち続ける
-            end
+        else レートリミット待ちの判定: 使用率100のレートリミットがあり hook も来ていない
+            Note over C: 枠待ちの印を立てて打ち切りの時計を止める
         else どれにも当たらない
             C->>H: pane の close
             Note over C: リトライを1つ積み、バックオフの期限を書く
@@ -191,8 +196,9 @@ sequenceDiagram
     end
 ```
 
-**3つの順番は入れ替えられない。**
-**打ち切りの判定を先に置く理由は 4-1 にある**（レートリミット待ちの判定を先に置くと、
+**この順番は入れ替えられない。**
+**手放しの判定を先に走り切らせる理由は 4-4 にある**（後ろに置くと、使用率90〜99%で止まった run を、打ち切りが毎回先に終わらせる）。
+**打ち切りの中で `working` を先に見る理由は 4-1 にある**（レートリミット待ちの判定を先に置くと、
 1時間を超える1回の道具の呼び出しの最中に、正常な run が枠待ちと名乗る）。
 
 ### 2-1. `agent_status` を読んで進退を決める場所は、この3つだけではない
@@ -844,7 +850,7 @@ agent.get が誤りを返した                        →  進んでいない�
 **そして段1 のあとに段2 がある**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の段2（`isQuotaWaitingWith`））。
 **枠待ちなら印を立てて次の run へ進み、打ち切らない。**
 **実際に打ち切るのは、段2 を通り抜けた先の
-[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `abandonRunAsync` の `abandonRunAsync` である。**
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の `abandonRunAsync` である。**
 
 **2つ目の門を落とすと、この issue が直そうとしている症状そのものが戻る。**
 
@@ -1245,7 +1251,7 @@ state_change_seq が2回続けて同じ             かつ
 
 **3行目の「手放しを撃ったあとは守らない」は、撃った run を打ち切りの本体まで落とす。**
 その run は `WaitingQuota`（90〜99%の帯では偽）・
-`releasing`（**下の `handling` と同じ `map` である。**[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `reconcileWorktrees` が `handling` を作る場所 で `handling` として作り、
+`releasing`（**下の `handling` と同じ `map` である。**[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `releaseQuotaWaitExceeded` が `handling` として作り、
 [internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` が `releasing` として受ける場所 が `releasing` として受ける。撃った run は入っていない）・
 無音の閾値（既に超えている）・`agent_status`（`idle`/`done`。撃つ条件そのもの）・
 `isQuotaWaitingWith`（100%未満なので偽）**を全部通り、`abandonRunAsync` に到達する。**
@@ -1254,14 +1260,14 @@ state_change_seq が2回続けて同じ             かつ
 [internal/orchestrator/runstate.go](../../internal/orchestrator/runstate.go) が
 `terminating || Finished` を見て `terminalTaken` を返し、**2人目は何もせずに戻る。**
 
-**呼び出しは6箇所ある**（検索パターン `beginTerminal\(\)`、対象パス `internal/`。`_test.go` を除く。
-定義を除いて6行）。
+**呼び出しは7箇所ある**（検索パターン `\.beginTerminal\(`、対象パス `internal/orchestrator/`。`_test.go` と `export_test_helpers.go` を除く。2026-10-02 に数え直した）。
+**下の表に無い1箇所は `internal/orchestrator/directchat.go` の `letGoOfDirectChatAsync` である**（人間が引き取った run を手放す経路）。
 
 | どこ | 何のために取るか |
 | --- | --- |
 | [internal/orchestrator/handoff.go](../../internal/orchestrator/handoff.go) | 枠が尽きた run の手放し |
 | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) | **巡回の側の**打ち切り |
-| [internal/orchestrator/runstate.go](../../internal/orchestrator/runstate.go) | `claimTerminal`。**書き戻しを待って取り直す唯一の経路である。****呼び出しは6箇所**（検索パターン `claimTerminal\(ctx\)`、対象パス `internal/orchestrator/`。`_test.go` を除く）——`internal/orchestrator/lifecycle.go:558`（`finishRun`）/ `internal/orchestrator/lifecycle.go:648`（`failRun`）/ `internal/orchestrator/lifecycle.go:685`（`abandonRun`）、`internal/orchestrator/handoff.go:1417`、`internal/orchestrator/dispatch.go:876`、`internal/orchestrator/unknownstate.go:587`。**打ち切りの入口は、巡回の側とここの2つある** |
+| [internal/orchestrator/runstate.go](../../internal/orchestrator/runstate.go) | `claimTerminal`。**書き戻しを待って取り直す唯一の経路である。****呼び出しは7箇所**（検索パターン `claimTerminal\(ctx\)`、対象パス `internal/orchestrator/`。`_test.go` を除く。2026-10-02 に数え直した）——`lifecycle.go` の `finishRun`・`failRun`・`abandonRun`、`handoff.go` の `stopBecauseHandoffLost`、`dispatch.go` の `runStartOrFail`、`unknownstate.go` の `finishRunUnknownState`、`directchat.go` の `abandonDirectChatSetup`。**打ち切りの入口は、巡回の側とここの2つある** |
 | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) | 正常な終了 |
 | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) | `stopAndReleaseAsync`。**worktree を残したまま worker を止めて印から外す。**Status は動かさない。呼ぶのは巡回の3箇所で、うち1つが引き渡し（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の 引き渡しの `stopAndReleaseAsync`） |
 | [internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) | 状態を読めなくなった run の始末 |
@@ -1272,7 +1278,7 @@ state_change_seq が2回続けて同じ             かつ
 
 | 呼び出し側 | `terminalRewriting` を受けたら |
 | --- | --- |
-| **巡回の5箇所**（`internal/orchestrator/handoff.go:710` / `internal/orchestrator/lifecycle.go:578`・`internal/orchestrator/lifecycle.go:702`・`internal/orchestrator/lifecycle.go:766` / `internal/orchestrator/unknownstate.go:552`） | **`!= terminalClaimed` で黙って戻る。**その巡回では走らない |
+| **巡回の6箇所**（`handoff.go` の `releaseBecauseQuotaWaitAsync` / `lifecycle.go` の `finishRunAsync`・`abandonRunAsync`・`stopAndReleaseAsync` / `unknownstate.go` の `stopForUnknownStateAsync` / `directchat.go` の `letGoOfDirectChatAsync`） | **`!= terminalClaimed` で黙って戻る。**その巡回では走らない |
 | **`claimTerminal`**（[internal/orchestrator/runstate.go](../../internal/orchestrator/runstate.go)） | **書き戻しの終わりを待ってから取り直す。**`switch` に `terminalRewriting` の枝が無いので、下の `select` へ落ちる |
 
 **つまり「書き戻しの間はどの経路も止まる」ではない。**
@@ -1293,7 +1299,7 @@ state_change_seq が2回続けて同じ             かつ
 | # | 何を疑ったか | 判定 | 中身 | いまどうなっているか |
 | --- | --- | --- | --- | --- |
 | **1** | turn ループが戻ったまま起き直せない | **条件付きで起きる** | turn ループは死ぬ。既定では打ち切りが1時間後に拾う。**`claude.turn_timeout_ms` が0以下の機械では誰も拾わない** | **残っている。**4-6 に書いた |
-| **2** | 枠が短いと、信頼していないリポジトリの案内が出ない | **起きない** | **未信頼は `Dispatchable == false` になり、枠の門より前の枝で `preflight` を通る**（`internal/orchestrator/dispatch.go:522-533`）。**隙間は信頼のキャッシュの30秒だけ** | **直すものが無い** |
+| **2** | 枠が短いと、信頼していないリポジトリの案内が出ない | **起きない** | **未信頼は `Dispatchable == false` になり、枠の門より前の枝で `preflight` を通る**（`internal/orchestrator/dispatch.go` の `dispatchCandidates` の、`Dispatchable` が偽の枝）。**隙間は信頼のキャッシュの30秒だけ** | **直すものが無い** |
 | **3** | `released` を書けなくても成功を返す | **起きる**（人間が情報を失う） | **`Reason` は機械が読まない**（読み手は `From` だけ）。**失うのは「push 済みか」を人間が grep する1行である** | **直した。**commit `232150a`。その場の1行に帰結を書いた |
 | **4** | カンバンから消えた issue で毎巡回 WARN | **その原因では起きない** | `reconcileRunning` が先に印を取り、終わらせる印を同期で押さえる。**毎巡回の WARN は「GitHub が読めない」ときに出る** | **直すものが無い** |
 | **5** | 同じ run に `agent.get` を2回叩く | **起きる** | **90〜99%の帯で2回。**しかも同じ run について `Info` と `Warn` が並び、2つの障害に見える | **残っている。**`handling` に入るのは「止まっていない、かつ初回」の run だけなので、`working`/`blocked`/`unknown`/読み取り失敗の run と、手放しを撃った run は、いまも2回叩かれる |
@@ -1301,7 +1307,7 @@ state_change_seq が2回続けて同じ             かつ
 | **7** | 枠で turn が終わったことを知る手段が無い | **条件付きで起きる** | **API キー・クラウドプロバイダ・従量課金では確実に `StopFailure` が飛ぶ**（`interactive-mode.md:649` が「待つべきリセットが無い」と明記）。**中間の4条件は公式ドキュメントに書かれておらず、確定できなかった** | **残っている。**6節に「実測していない」として載せた |
 | **8** | 枠の待ちが明けたことを hook から知らない | **起きる** | **`Notification` を matcher 無しで張っているので届いている。**`quota_auto_resume` は continuo のコードに0件 | **残っている。**4-3 が「将来これを読めば推測は要らなくなる」と書いている |
 | **9** | 長いツール呼び出しで打ち切られる | **起きる** | **防ぐ信号が2つ在る。**`agent_status`（**同じ応答に既に入っている**）と `agent.read`（**クライアントは実装済みで本番の呼び出しが0件**） | **直した。**commit `4df2108`。4-1 が `agent_status` を使う |
-| **10** | 打ち切りを切っている機械で健全な run を手放す | **起きうる**（**帯が狭くなった**） | **床を入れた**（2026-09-09）。`WeeklyShortSince` からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない（4-2 の表の8つ目）。**だから「物差しが1つも残らない」ではない。****残っているのは精度である**——床は「枠の余裕が無くなってからの経過」なので、turn の進み具合を見ていない | **床で狭めた。**害が出るのは `claude.turn_timeout_ms` を0以下にして、**かつ** `weekly_wait_limit_minutes` を短くした機械だけである（どちらも既定ではない）。**どうするかは人間の判断で、pull request の本文に3択を書いた** |
+| **10** | 打ち切りを切っている機械で健全な run を手放す | **起きうる**（**帯が狭くなった**） | **床を入れた**（2026-09-09）。`WeeklyShortSince` からの経過が `weekly_wait_limit_minutes` を超えるまで手放さない（4-2 の表の9つ目）。**だから「物差しが1つも残らない」ではない。****残っているのは精度である**——床は「枠の余裕が無くなってからの経過」なので、turn の進み具合を見ていない | **床で狭めた。**害が出るのは `claude.turn_timeout_ms` を0以下にして、**かつ** `weekly_wait_limit_minutes` を短くした機械だけである（どちらも既定ではない）。**コードでは直さない**（この節の下の表） |
 
 **この10件の検証で、4節の条件が決まった。**とくに9番目である。
 **`agent_status` を判定に使えば、長いツール呼び出しを守れる。**その値は既に手元にある。
