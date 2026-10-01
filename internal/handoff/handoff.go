@@ -152,7 +152,7 @@ type Released struct {
 	// **`ReleaseReasonWeeklyWaitLimit` なら「1週間の枠を待つ上限を超えて自分で手放した」である**
 	// （設計 3-27）。**この2つで本文が変わる。**
 	// 外された側は「この branch へ push しないでください」だが、
-	// **自分から手放した側は、その直前に `workspace_hooks.after_run` で push している。**
+	// **自分から手放した側は、その直前に `workspace_hooks.after_run` を走らせている**（設定していれば。雛形の既定は `null` で、そのときは「確かめられなかった」と書く）。
 	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**
 	//
 	// **`omitempty` を付ける。**外された側の `released` に空の欄を増やさないためである。

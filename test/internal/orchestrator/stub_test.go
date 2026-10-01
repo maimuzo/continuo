@@ -36,7 +36,7 @@ type stubHerdr struct {
 	// status は AgentGet / AgentWait が返す agent の状態である。
 	status herdr.AgentStatus
 	// revision は AgentGet が返す画面の版である（herdr の pane の revision）。
-	// **stall の判定はこの値が増えるかどうかで決まる**（設計 3-21）。
+	// **stall の判定は、この値を見ない**（設計 3-21。以前は見ていた。`agent.get` の応答の形として残してある）。
 	revision uint64
 	// stateSeq は AgentGet が返す state_change_seq である
 	// （agent の状態が変わるたびに増える連番。issue #173）。

@@ -1256,6 +1256,13 @@ state_change_seq が2回続けて同じ             かつ
 無音の閾値（既に超えている）・`agent_status`（`idle`/`done`。撃つ条件そのもの）・
 `isQuotaWaitingWith`（100%未満なので偽）**を全部通り、`abandonRunAsync` に到達する。**
 
+**ただし、撃った goroutine が終わらせる印を握っているあいだは、その手前の `terminalBusy` の門で飛ばされる**
+（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `checkStalls` の本体）。
+**手放しは毎巡回、打ち切りのループより先に撃たれる。**だから、撃って見送る・失敗することが続く run は、
+**goroutine が戻るまでのあいだ、打ち切りからも外れ続ける。**
+**続くのは GitHub へ読み書きできないあいだである。**1週間の余裕が戻れば、手放しの条件が外れて打ち切りが効く。
+goroutine がすぐ戻った巡回では、同じ巡回の打ち切りが拾う。**どちらになるかは、goroutine の速さで決まる**（測っていない）。
+
 **二重に走らないのは、手放しも打ち切りも `beginTerminal()` を同期で取るからである。**
 [internal/orchestrator/runstate.go](../../internal/orchestrator/runstate.go) が
 `terminating || Finished` を見て `terminalTaken` を返し、**2人目は何もせずに戻る。**
@@ -1364,7 +1371,15 @@ state_change_seq が2回続けて同じ             かつ
 **手放しは1回も撃てないので、#10 の症状を起こせない。**
 **ここを短くしても #10 は1ミリも動かず、5-1 の「subagent 2つが走っている最中に `esc` を送った」件（2026-08-27）が塞いだ穴だけが開く。**
 
-**塞げていない組み合わせが1つある。**
+**塞げていない組み合わせが2つある。**
+
+**1つ目。**relay（人間が issue へ書いたコメントを、次の指示に付けて渡す仕組み）のコメントを読んだあとの再確認だけは、
+終わらせる印が立っていると turn ループを抜ける（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `turnLoop`。
+同じ関数のほかの箇所は「抜けてはならない」と決めて待つ）。**その窓で手放しが印を取って見送ると、その run へ指示を送る者がいなくなる。**
+既定の設定では、直前に `Stop` を受けているので無音の門が手放しを止める。**届くのは、この設定の機械だけである。**
+打ち切りも来ないので、その run は再起動まで残る。**直さない**（起きるのが打ち切りを切った機械だけのため）。
+
+**2つ目。**
 **`state_change_seq` を返さない herdr の版**（連番が 0）**と、この設定が重なると、
 `paneStopped` は「判定できない。打ち切りに任せる」と答えるが、任せる先が存在しない。**
 **その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**

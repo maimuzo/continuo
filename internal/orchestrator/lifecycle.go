@@ -1236,7 +1236,7 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, s
 		return true, afterRunSkipNone
 	}
 	// **`ran` が偽になるのは「既に走らせてあった」ときだけである。**
-	// 上の `rs.afterRunDone()` が先に受けるので、ここへは復元をまたいだ run しか来ない。
+	// 上の `rs.afterRunDone()` が先に受けるので、ここへ来るのは、前の回の `after_run` が失敗して印だけが残った run である（印は `workspace.Manager` のメモリにあり、再起動で消える）。
 	return false, afterRunSkipAlreadyRan
 }
 

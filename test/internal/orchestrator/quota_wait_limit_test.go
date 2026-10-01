@@ -15,6 +15,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -175,7 +177,7 @@ func weeklyWaitFixtureAdopted(
 // tickOnce は巡回を1回だけ回す（issue #197）。
 //
 // **1回では手放さない。**連番を初めて見た巡回では「そこからどれだけ止まっていたか」が
-// 分からないので、**次の巡回まで待つ**（設計 3-27 の「段0 へ入る前に外すもの」の7行目。
+// 分からないので、**次の巡回まで待つ**（設計 3-27 の「段0 へ入る前に外すもの」の、1回目の観測の扱い。
 // **段0b ではない。**あちらは「外す相手が決まるか」である）。
 // **窓を満たすまで回すのは `waitForRelease` である。**
 //
@@ -188,7 +190,7 @@ func tickOnce(fx *stubFixture) {
 //
 // **1回の巡回では手放さない。**連番を初めて見た巡回では
 // 「そこからどれだけ止まっていたか」が分からないので、**次の巡回まで待つ**
-// （設計 3-27 の「段0 へ入る前に外すもの」の7行目）。**手放しは別の goroutine で走る**ので、
+// （設計 3-27 の「段0 へ入る前に外すもの」の、1回目の観測の扱い）。**手放しは別の goroutine で走る**ので、
 // **巡回を止めて待つのではなく、時計を進めながら巡回を回し続ける。**
 //
 // t: 呼び出し元のテスト。
@@ -208,6 +210,64 @@ func waitForRelease(t *testing.T, fx *stubFixture, clock *testClock, identifier 
 	t.Fatalf("担当を手放して印から外れませんでした:\n%s", fx.Logs.String())
 }
 
+// keepTicking は、時計を進めながら巡回を rounds 回まわす（issue #197）。
+//
+// **「手放さない」を確かめる検査のためにある。**手放しは goroutine として撃たれるので、
+// **巡回が戻った直後に印を見ても、撃たれたかどうかは分からない。**
+// `waitForRelease` と同じ刻みで回し、撃たれていれば終わるだけの時間を置く。
+//
+// fx: 対象の一式。
+// clock: 進められる時計。
+// rounds: 回す回数。
+func keepTicking(fx *stubFixture, clock *testClock, rounds int) {
+	for i := 0; i < rounds; i++ {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// afterRunMarker は `workspace_hooks.after_run` が走ったら出来るファイルの名前である（issue #197）。
+const afterRunMarker = "after_run_ran"
+
+// adoptedWithWorktree は、worktree のパスを持つ run の中身を返す（issue #197）。
+//
+// **`after_run` は worktree のパスが無い run では走らない。**走ったかどうかを確かめる検査は、
+// パスを持たせる必要がある。
+//
+// dir: worktree として使うディレクトリ。
+// 戻り値: 印へ入れる内容。
+func adoptedWithWorktree(dir string) *orchestrator.AdoptedRun {
+	return &orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		WorktreePath:     dir,
+		HerdrWorkspaceID: "w1",
+	}
+}
+
+// withAfterRunMarker は `workspace_hooks.after_run` に、目印のファイルを作るコマンドを入れる（issue #197）。
+//
+// cfg: 書き換える設定。
+func withAfterRunMarker(cfg *config.Config) {
+	script := "touch " + afterRunMarker
+	cfg.WorkspaceHooks.AfterRun = &script
+}
+
+// releasedBodyOf は、その issue に書かれた `released` のコメントの本文を返す（issue #197）。
+//
+// fx: 対象の一式。
+// issue: 対象の issue。
+// 戻り値: 本文（複数あれば改行でつなぐ。無ければ空文字）。
+func releasedBodyOf(fx *stubFixture, issue tracker.Issue) string {
+	var out []string
+	for _, c := range fx.Tracker.MarkedHandoffCommentsOf(nodeIDOfIssue(issue), config.HandoffReleasedMarker) {
+		out = append(out, c.Body)
+	}
+	return strings.Join(out, "\n")
+}
+
 // assigneeLoginsOf は、いまボードに載っている担当者のログイン名を返す。
 //
 // fx: 対象の一式。
@@ -225,7 +285,7 @@ func assigneeLoginsOf(fx *stubFixture, id string) []string {
 	return out
 }
 
-// TestQuota_画面が動いていれば枠待ちと判定しない は、stall の評価順を確かめる
+// TestQuota_workingなら枠待ちと判定しない は、stall の評価順を確かめる
 // （設計 3-27。issue #197）。
 //
 // 目的: **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
@@ -283,12 +343,15 @@ func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
 // **確かめずに `after_run` を走らせると、利用者が書いた `git push` が別の機械の branch へ飛ぶ。**
 //
 // 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分。**担当者は別の人である。**
+// **`workspace_hooks.after_run` は、走ると目印のファイルを作るコマンドにしてある。**
 // 成功条件: 印から外れること。**別の人の担当者が残っていること**（こちらは触らない）。
+// **目印のファイルが出来ていないこと**（`after_run` を走らせていない）。
 func TestQuota_担当が移っていたらafter_runを走らせずに止める(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+	worktree := t.TempDir()
+	fx, issue, clock := weeklyWaitFixtureAdopted(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
-	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7", withAfterRunMarker, adoptedWithWorktree(worktree))
 
 	// **待っているあいだに、別の機械が担当を取っていった。**
 	// **`testGHLogin` とは違うアカウントにする。**同じにすると「担当は自分のまま」になる。
@@ -304,6 +367,10 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 	}
 	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
 		t.Fatalf("担当が移っているのに手放しの経路を通っている:\n%s", got)
+	}
+	// **`after_run` を走らせていないこと**（設計 3-77c。担当を外された機械は push してはならない）。
+	if _, err := os.Stat(filepath.Join(worktree, afterRunMarker)); err == nil {
+		t.Fatalf("担当が移っているのに workspace_hooks.after_run を走らせている:\n%s", fx.Logs.String())
 	}
 	// **この経路の段に「pane を閉じる」がある**（RUCM の `担当が移っていた` の段3。
 	// 実装レビュー3周目の MEDIUM）。
@@ -343,6 +410,45 @@ func TestQuota_1週間の枠のリセットが上限より先なら担当を手�
 	// 「上限を超えたので手放します」は `Debug` である（手放せずに戻る経路が毎巡回で通るため）。
 	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
 		t.Fatalf("手放したことを出していない:\n%s", got)
+	}
+	// **`after_run` を設定していないので、push できたことを確かめられなかった、と書くこと**
+	// （理由は `weekly_wait_limit_no_push`）。**「実行済みです」と書くと、次に拾う機械が
+	// remote の続きから始められると読んでしまう。**
+	body := releasedBodyOf(fx, issue)
+	if !strings.Contains(body, "push できたことを確かめられませんでした") || strings.Contains(body, "実行済みです") {
+		t.Fatalf("after_run を走らせていないのに、released の本文がそう言っていない:\n%s", body)
+	}
+}
+
+// TestQuota_after_runを設定していれば走らせてから担当を手放す は、#197 の引き継ぎの本体を確かめる
+// （設計 3-27 / 3-77c）。
+//
+// 目的: **手放す前に、利用者が設定した後始末（たとえば `git push`）を走らせること。**
+// 走らせずに担当を外すと、次に拾う機械は remote から作り直すので、push していない commit が渡らない。
+// **走ったなら、`released` の本文は「実行済みです」と書くこと**（理由は `weekly_wait_limit`）。
+//
+// 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分。
+// `workspace_hooks.after_run` は、走ると目印のファイルを作るコマンド。run は worktree のパスを持つ。
+// 成功条件: 目印のファイルが出来ていて、担当者が空になり、`released` の本文が「実行済みです」と書くこと。
+func TestQuota_after_runを設定していれば走らせてから担当を手放す(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	worktree := t.TempDir()
+	fx, issue, clock := weeklyWaitFixtureAdopted(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W11", withAfterRunMarker, adoptedWithWorktree(worktree))
+
+	tickOnce(fx)
+	waitForRelease(t, fx, clock, issue.Identifier)
+
+	if _, err := os.Stat(filepath.Join(worktree, afterRunMarker)); err != nil {
+		t.Fatalf("workspace_hooks.after_run を走らせていない: %v\n%s", err, fx.Logs.String())
+	}
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("担当者が残っている: %v", got)
+	}
+	body := releasedBodyOf(fx, issue)
+	if !strings.Contains(body, "実行済みです") || strings.Contains(body, "push できたことを確かめられませんでした") {
+		t.Fatalf("after_run を走らせたのに、released の本文がそう言っていない:\n%s", body)
 	}
 }
 
@@ -393,7 +499,7 @@ func TestQuota_人間が引き取っているrunは上限を超えても手放�
 	}
 }
 
-// TestQuota_100の枠が1つも無ければ上限は効かず打ち切りが受け持つ は、#197 の境界を確かめる。
+// TestQuota_リセット時刻が読めず経過も溜まっていなければ手放さない は、#197 の境界を確かめる。
 //
 // 目的: **リセット時刻を読めない枠では、経過で測る枝しか無い**（設計 3-27。issue #197）。
 // **その枝の起点は `WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）で、
@@ -471,7 +577,7 @@ func TestQuota_担当を確かめられないうちは手放さない(t *testing
 	}
 }
 
-// TestQuota_画面を持っていないrunは手放さない は、設計 3-27 の門の2つ目を確かめる（issue #197）。
+// TestQuota_画面を持っていないrunは手放さない は、設計 3-27 の門のうち「画面を持っていない run」を確かめる（issue #197）。
 //
 // 目的: **`agent.get` が届かない run では、止まったかどうかを確かめられない。**
 // **確かめられない pane を閉じて担当を外す道は無い。**
@@ -507,7 +613,7 @@ func TestQuota_画面を持っていないrunは手放さない(t *testing.T) {
 	}
 }
 
-// TestQuota_忙しいhookを受けた直後のrunは手放さない は、設計 3-27 の門の7つ目を確かめる
+// TestQuota_忙しいhookを受けた直後のrunは手放さない は、設計 3-27 の門のうち「無音」を確かめる
 // （issue #197）。
 //
 // 目的: **この門を落とすと、指示を送った直後の run が「進んでいない」と読まれ、
@@ -540,7 +646,7 @@ func TestQuota_忙しいhookを受けた直後のrunは手放さない(t *testin
 }
 
 // TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない は、
-// 設計 3-27 の門の8つ目（床）を確かめる（issue #197）。
+// 設計 3-27 の門のうち「床」（余裕が無くなってからの経過）を確かめる（issue #197）。
 //
 // 目的: **`claude.turn_timeout_ms` が0以下の機械では、無音の門が2本とも外れる。**
 // **代わりに床が効く**——`WeeklyShortSince`（この run が1週間の余裕の無さを最初に見た時刻）からの
@@ -652,7 +758,7 @@ func TestQuota_人間が引き取っている最中に担当が移ったらpane�
 	}
 }
 
-// TestQuota_1回目の指示をまだ送り始めていないrunは手放さない は、設計 3-27 の門の5つ目を
+// TestQuota_1回目の指示をまだ送り始めていないrunは手放さない は、設計 3-27 の門のうち「1回目の指示を送り始めていない run」を
 // 確かめる（実装レビュー5周目の MEDIUM。**6周目に名前と説明を直した**）。
 //
 // 目的: **無音の門は、この窓では2本とも開く。**
@@ -867,9 +973,14 @@ func TestQuota_5時間の枠だけなら上限を超えても待ち続ける(t *
 	fx.Orc.Tick(context.Background())
 	clock.Advance(10 * time.Hour)
 	fx.Orc.Tick(context.Background())
+	// **手放しは goroutine として撃たれる。**撃たれていれば終わるだけの回数を回してから見る。
+	keepTicking(fx, clock, 6)
 
 	if _, ok := viewOf(fx, issue.Identifier); !ok {
 		t.Fatalf("5時間の枠だけなのに担当を手放している:\n%s", fx.Logs.String())
+	}
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("5時間の枠だけなのに担当者へ触っている: %v", got)
 	}
 }
 
@@ -957,7 +1068,7 @@ func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testi
 	fx.Orc.Tick(context.Background())
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-	// **連番を初めて見た巡回では手放さない**（設計 3-27 の「段0 へ入る前に外すもの」の7行目）。
+	// **連番を初めて見た巡回では手放さない**（設計 3-27 の「段0 へ入る前に外すもの」の、1回目の観測の扱い）。
 	waitForRelease(t, fx, clock, issue.Identifier)
 
 	// **打ち切りで消えたのではないことを確かめる**（issue #197）。
@@ -985,9 +1096,14 @@ func TestQuota_上限が0なら1週間の枠でも待ち続ける(t *testing.T) 
 	fx.Orc.Tick(context.Background())
 	clock.Advance(10 * time.Hour)
 	fx.Orc.Tick(context.Background())
+	// **手放しは goroutine として撃たれる。**撃たれていれば終わるだけの回数を回してから見る。
+	keepTicking(fx, clock, 6)
 
 	if _, ok := viewOf(fx, issue.Identifier); !ok {
 		t.Fatalf("上限が0なのに担当を手放している:\n%s", fx.Logs.String())
+	}
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("上限が0なのに担当者へ触っている: %v", got)
 	}
 }
 

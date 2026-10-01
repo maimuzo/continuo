@@ -166,7 +166,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **残るのは `terminating` だけである**（issue #173）。
 			// **終わらせる処理が走っている最中なので、指示を送ってはならない。**
 			// **だが抜けてもならない。**見送って印が下りたとき、指示を送る者がいなくなる。
-			// **立て直す経路が無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
+			// **立て直す経路が無い**（`startTurnLoop` を呼ぶのは、着手と、`NeedsPrompt` か `AwaitTurnEnd` が立った run を起こす巡回の `wakeRuns` だけである。turn ループが自分で抜けた run は、どちらにも当たらない）。
 			//
 			// **待って、もう一度見る。**`turnCtx` が切れれば上の枝で抜ける。
 			// **短い間隔で見る。**下りたことを知らせる仕掛けが無いためである。
@@ -1066,7 +1066,7 @@ func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 // isQuotaWaitingWith は、渡された写しで枠待ちかどうかを判定する（設計 3-27。issue #197）。
 //
 // **巡回はこちらを使う。**`isQuotaWaiting` は run ごとに写しを取り直すので、
-// **同じ巡回の中で run ごとに違う答えが返る**（`pollAPI` は turn の goroutine から
+// **同じ巡回の中で run ごとに違う答えが返る**（`OnStatusline` は statusline の受け口の goroutine から
 // 並行に走り、途中で `o.quota` を差し替える）。
 //
 // quotaSnap: この巡回で1回だけ読んだ枠の写し。
@@ -1136,7 +1136,7 @@ func (o *Orchestrator) quotaFull() bool {
 //
 // **条件その1（使い切っている枠）を満たしたもののうち、`resets_at` がいちばん遅いものである。**
 // **`resets_at` が null の枠は黙って飛ばす。**印を外す契機はもう1つあり
-// （余裕の無い枠が1つも無くなること）、**そちらが受け持つ。**
+// （使い切っている枠が1つも無くなること）、**そちらが受け持つ。**
 //
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。

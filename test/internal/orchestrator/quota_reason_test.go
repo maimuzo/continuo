@@ -221,17 +221,6 @@ func TestQuota_マージンが先に効いて止まり使用率と閾値が出�
 	}
 }
 
-// weeklyWaitFixture は「1週間の枠を待つ上限」の検査で使う一式を組み立てる（issue #197）。
-//
-// **担当者はこの機械（gh の持ち主）である。**手放す相手が自分でないと、外す対象が見つからない。
-// **枠待ちの条件その2（turn_timeout_ms のあいだ hook が来ていない）は、時計を進めて作る。**
-//
-// t: 呼び出し元のテスト。
-// limits: usage API が返す枠の一覧。
-// limitMinutes: `rate_limit.weekly_wait_limit_minutes` に入れる値。
-// tokenEnv: トークンを入れる環境変数の名前（テストごとに変える）。
-// 戻り値: 組み立てた一式・印へ入れた issue・進められる時計。
-
 // TestQuota_枠を使い切っているときはquotaJSONを消す手順まで出す は、100% の機械への案内を確かめる
 // （issue #173。実装レビュー5周目の MEDIUM）。
 //

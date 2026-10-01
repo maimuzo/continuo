@@ -692,7 +692,7 @@ type RateLimitConfig struct {
 	// 1つでも `resets_at` を持たないときである。**
 	// （`LatestResetForWaitLimit` は、1つでも読めなければ「読めない」と答える。
 	// **1つも読めないときだけ、ではない。**）
-	// （`weekly_scoped` の `resets_at` は `null` で返る。issue #199）。
+	// （使っていない `weekly_scoped` の `resets_at` は `null` で返る。使い切ったときにどうなるかは測っていない。issue #199）。
 	// **そのときは、余裕が無くなってからの経過がこの値を超えたら手放す。**
 	//
 	// **5時間の枠には効かない。**余裕の無い枠が `session` だけなら、いつまでも待つ

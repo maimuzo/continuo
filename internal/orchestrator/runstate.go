@@ -163,8 +163,8 @@ type runState struct {
 	// **run ごとに持つ。**機械に1つだけ持つと、**枠の余裕が無くなったあとに着手した run を、
 	// 1分も待たずに手放すことになる。**この run が余裕の無さを見てからの経過を測る。
 	//
-	// **写し（runSnapshot）に載せる**（issue #173）。**読むのは巡回と手放しの2箇所で、
-	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
+	// **写し（runSnapshot）に載せる**（issue #173）。**読むのは巡回と手放しの2箇所で、どちらも写しを通して読む。**
+	// **欄を直に読む経路を別に作らないこと。**写しを通さない古い値を正だと思って読む人が出る。
 	WeeklyShortSince time.Time
 	// QuotaProbeStateSeq は、手放してよいかを見るときに読んだ
 	// herdr の `state_change_seq`（agent の状態が変わるたびに増える連番）である
@@ -2520,7 +2520,7 @@ func (rs *runState) terminalBusy() bool {
 // **`terminating` は一時的な印である。**終わらせる処理が走っている最中だけ立ち、
 // **見送って `endTerminal` を呼べば下りる。**
 // **turn ループがそれで抜けてしまうと、見送ったあとに指示を送る者がいなくなる。**
-// **立て直す経路も無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
+// **立て直す経路も無い**（`startTurnLoop` を呼ぶのは、着手と、`NeedsPrompt` か `AwaitTurnEnd` が立った run を起こす巡回の `wakeRuns` だけである。turn ループが自分で抜けた run は、どちらにも当たらない）。
 //
 // **`Finished` / `workerStopped` / 世代の食い違いは、そうではない。**
 // **どれも「この goroutine の役目は終わった」という取り返しのつかない印である。**

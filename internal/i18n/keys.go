@@ -305,12 +305,12 @@ const (
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
 	// KeyHandoffReleasedWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したときの
-	// released のコメントの2行目に出る（機械の名前を差し込む。issue #197）。
+	// released のコメントの2行目に出る（gh のアカウント名を差し込む。issue #197）。
 	//
 	// **こちらは push 済みである。**手放す直前に `workspace_hooks.after_run` が走っている。
 	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
 	// KeyHandoffReleasedWeeklyWaitLimitNoPush は、同じ理由で手放したが
-	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（機械の名前を差し込む）。
+	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（gh のアカウント名を差し込む）。
 	//
 	// **remote に続きが入っていない可能性がある。**次に拾う機械へそれを伝える。
 	KeyHandoffReleasedWeeklyWaitLimitNoPush Key = "handoff.released.weekly_wait_limit_no_push"

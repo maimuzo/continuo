@@ -281,7 +281,7 @@ func (o *Orchestrator) handoffGate(
 //
 // **写しは呼び出し側が1回だけ読む。**ここで写しを取り直してはならない。
 // **同じ巡回の中で `dispatchCandidates` が既に同じ判定をしている**（担当者のいない issue を落とす門）。
-// **2回読むと、`pollAPI` が並行に差し替えた写しで答えが割れ、
+// **2回読むと、`OnStatusline` が並行に差し替えた写しで答えが割れ、
 // 「なぜ着手しないか」を出した1行と、実際に落ちた理由が別の読み取りから作られる。**
 // **出すログを1行にするという、この変更そのものの目的に反する**
 // （**ここでいう「1行」はログの本数であって、枠の判定の線の本数ではない。**
@@ -624,7 +624,7 @@ func (o *Orchestrator) removeOwnAssignee(
 // **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
 //
 // **写しを取り直す版は置かない。**run ごとに取り直すと、
-// **同じ巡回の中で run ごとに違う答えが返る**（`pollAPI` は turn の goroutine から
+// **同じ巡回の中で run ごとに違う答えが返る**（`OnStatusline` は statusline の受け口の goroutine から
 // 並行に走り、途中で写しを差し替える）。**片方の run の起点が消え、もう片方が進み続ける。**
 //
 // snap: この巡回で1回だけ読んだ枠の写し。
@@ -798,7 +798,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **`shortKinds`（どの枠に余裕が無いか）は、呼び出し側が受け取って渡す。**
 	// **ここで `quotaForPoll` を呼び直してはならない**（issue #173）。
 	// **手放すと決めたのは巡回が1回のロックで取った写しであり、
-	// この goroutine が走るころには `pollAPI` が差し替えているか、古い印が付いている。**
+	// この goroutine が走るころには 次の巡回の `pollAPI` か、並行に走る `OnStatusline` が差し替えているか、古い印が付いている。**
 	// **読み直すと、判定した写しとログに出す数字が別々の読み取りから作られる。**
 	// **利用者が claude.ai の画面と突き合わせたときに、どちらが根拠か決められなくなる。**
 	//
