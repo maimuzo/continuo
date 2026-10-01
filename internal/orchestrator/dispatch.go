@@ -194,28 +194,64 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 // 戻り値の1つ目: `active_states` にあれば true。**取り直しに失敗したときも false**
 // （分からないなら書かない）。
 // 戻り値の2つ目: 取り直した Status（設計 3-83c。取り直せなかったときは空文字）。
-func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) (bool, string) {
+// 戻り値の3つ目: 取り直した issue の担当者のログイン名（設計 3-27。issue #197）。
+// **同じ取り直しから取る。**問い合わせを増やさない。取り直せなかったときは nil。
+func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) (bool, string, []string) {
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは `State` が
 	// `active_states` に入っているかだけである。
 	current, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{itemID})
 	if err != nil {
 		o.logger.Warn("着手の直前に Status を取り直せないので着手しません（次の巡回でやり直します）",
 			"identifier", identifier, "error", err)
-		return false, ""
+		return false, "", nil
 	}
 	if len(current) == 0 {
 		o.logger.Warn("着手の直前に取り直したら item が見えないので着手しません",
 			"identifier", identifier)
-		return false, ""
+		return false, "", nil
 	}
 	state := current[0].State
+	logins := assigneeLogins(current[0])
 	if containsFold(o.cfg.Tracker.ActiveStates, state) {
-		return true, state
+		return true, state, logins
 	}
 	o.logger.Info("着手の直前に取り直した Status が active_states に無いので着手しません（人間が動かした可能性があります）",
 		"identifier", identifier, "取り直した Status", state,
 		"active_states", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
-	return false, state
+	return false, state, logins
+}
+
+// ownAssigneeLostSinceSnapshot は「候補の写しでは自分が担当だったのに、
+// 着手の直前に取り直したら自分が担当者にいない」かを返す（設計 3-27。issue #197）。
+//
+// **なぜ要るか。**候補の写しは巡回の最初に1回だけ取る。**そのあとで `checkStalls` が
+// 手放しを撃ち、その goroutine が担当者を外して run の登録まで外すと、
+// 同じ巡回の着手の判定は、古い写し（担当は自分）のまま `handoffGate` を通る。**
+// **手放したばかりの issue に、同じ機械がもう1度 Claude Code を起こす。**
+// GitHub の上では担当者がいないので別の機械が入札して拾い、**同じ branch で2台が動く。**
+//
+// **見るのは「写しでは自分が担当だった」ときだけである。**
+// この巡回で入札に勝って担当者を書いた着手は、写しの担当者が0人なので、ここでは見ない
+// （書いた担当者は、取り直した issue に入っている）。
+//
+// **持ち主を引けないときは、止めない。**分からないことを理由に着手をやめると、
+// `gh` が一時的に答えないだけで、自分が担当の issue が進まなくなる。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// snapshot: 巡回の最初に取った候補の写し。
+// fresh: 着手の直前に取り直した issue の担当者のログイン名。
+// 戻り値: 写しでは自分が担当で、取り直したら自分がいなければ true。
+func (o *Orchestrator) ownAssigneeLostSinceSnapshot(
+	ctx context.Context, snapshot tracker.Issue, fresh []string,
+) bool {
+	viewer, ok := o.viewerIdentity(ctx)
+	if !ok {
+		return false
+	}
+	if !containsFold(assigneeLogins(snapshot), viewer.Login) {
+		return false
+	}
+	return !containsFold(fresh, viewer.Login)
 }
 
 // newWorkBlockedWith は「この巡回で入札の要る issue を取らないか」と、その理由を、
@@ -1172,7 +1208,19 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 人間へ引き渡し済みの issue を上書きしてしまう。
 	// **取り直した Status はエラーへ添えて返す**（設計 3-83c）。呼び出し元が
 	// 書いた担当者を消し戻すかをこれで決める。
-	if allowed, state := o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier); !allowed {
+	allowed, state, freshLogins := o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier)
+	if !allowed {
+		return &statusNotWrittenError{state: state}
+	}
+	// **候補の写しでは自分が担当だったのに、取り直したら担当者にいないなら、着手しない**
+	// （設計 3-27。issue #197）。理由は `ownAssigneeLostSinceSnapshot` の doc にある。
+	//
+	// **バックオフを挟んだやり直し（`reuse`）には当てない。**そちらが持つ issue は
+	// 巡回の候補の写しではなく、担当者のいない run（復元した run など）もありうる。
+	if !reuse && o.ownAssigneeLostSinceSnapshot(ctx, issue, freshLogins) {
+		o.logger.Info("着手の直前に取り直したら、この機械が担当者にいないので着手しません"+
+			"（候補を取ったあとで担当が外れました。次の巡回で、いまの担当者で判定し直します）",
+			"identifier", issue.Identifier, "取り直した担当者", strings.Join(freshLogins, ", "))
 		return &statusNotWrittenError{state: state}
 	}
 	// **拒否リストも渡し続ける。**UpdateStatus はこのあともう一度 ID 指定で取り直すので、
