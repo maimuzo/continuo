@@ -556,8 +556,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
 	// **`checkStalls` が `quotaForPoll()` の2つ目の戻り値を渡す**（新しくなければ nil）。
 	// 理由は `weeklyWaitExceededWith` の doc にある。
-	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちと閾値の判定に使える。**
-	// **止めるのは入札だけである。**
+	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちの判定には使える。**
+	// **手放しの判定には使わない。**新しい写しだけを渡す（上のとおり）。
 	var shortKinds string
 	if quotaSnap != nil {
 		shortKinds = strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")

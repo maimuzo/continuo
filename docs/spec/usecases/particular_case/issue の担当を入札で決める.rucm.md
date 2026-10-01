@@ -177,7 +177,7 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 ```
 
 **1週間の使用率は、1週間全体の枠とモデル別の枠（`weekly_scoped`）のうち、いちばん大きいものを採る**（ステップ8。`internal/handoff/handoff.go` の `WeeklyPercent`）。
-**モデル別の枠は最初から `limits` に現れる。**「一定量を使うまで現れる」ではない（issue #199）。
+**モデル別の枠は最初から `limits` に現れる。**「一定量を使うまで現れない」ではない（issue #199）。
 **使っていなければ `percent: 0` で返り、`resets_at` は `null` である**（2026-08-29 の実測。設計 3-15 のサンプル）。
 **だから最大を採れば、使っていない枠は自動的に判定へ効かない。**
 **モデル別の枠は usage API しか運ばない**（設計 3-77）。`rate_limit.source: statusline` では保管値に入らず、
