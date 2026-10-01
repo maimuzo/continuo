@@ -16600,7 +16600,7 @@ timeout で返っても turn は打ち切らず、`agent.prompt` を再送せず
 
 **なぜ。continuo には Codex のような app-server のストリームが無い。**代わりに、
 **「app-server の出力」に相当するものを herdr の `agent_status` が `working` かで測る**（3-21）。
-版が増えていれば時計を起こし直すので、1つの指示に何時間かかっても打ち切らない。
+`working` を読めていれば時計を起こし直すので、1つの指示に何時間かかっても打ち切らない。
 
 #### `tracker` に仕様外のキーを足す
 

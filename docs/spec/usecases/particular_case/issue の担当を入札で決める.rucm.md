@@ -200,6 +200,8 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 **statusline取得を開くかの判定も同じ余裕値の線を使う。**
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
+**キーは `tracker.provider.handoff.five_hour_margin_percent` と `tracker.provider.handoff.weekly_margin_percent` である**（既定はどちらも 10）。
+**`rate_limit` の下ではない。**
 
 ## 値が古ければ、usage API か statusline取得で値が入ってから入札する
 
