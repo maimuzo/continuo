@@ -3250,6 +3250,7 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 **`turn_timeout_ms` は turn の総実行時間の上限ではありません。**
 agent の状態が `working` である限り、1つの指示に何時間かかっても打ち切りません。
+**0 以下にすると、打ち切りを行いません。**その場合、止まった run は continuo を再起動するまで、pane と同時に走らせる数（`agent.max_concurrent_agents`）の1つぶんを握ったまま残ります。
 **長いツール呼び出しの最中も `working` のままです**（実測。2秒おきに60回読んで60回とも `working`）。
 
 #### 人間は何も触っていないのに Status が変わり、issue が止まった
