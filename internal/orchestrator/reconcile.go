@@ -802,8 +802,9 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // **`working` の決め方そのものは測ってある**
 // （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 3-4。
 // herdr が当てた規則は `osc_title_working` で、端末タイトルのスピナー1文字を見ている）。
-// **測っていないのは「subagent が走っている最中も、Claude Code がその1文字を書き続けるか」だけである**（同じ文書の6節）。
-// **測れていないので、`unknown` を「止まっている」に入れない形で安全側へ倒してある。**
+// **subagent が2つ走っている2分間は測ってある**（2026-09-29。同じ文書の 4-1 の限界(二)。60回とも `working` だった）。
+// **測っていないのは「メインが完全に黙り、subagent だけが走っている瞬間」である**（同じ文書の6節）。
+// **そこを測れていないので、`unknown` を「止まっている」に入れない形で安全側へ倒してある。**
 //
 // **herdr へ届かなければ「止まっていない」を返す。**確かめられないときは手放さない側へ倒す。
 // この判定の先には GitHub への2回の書き込みと pane を閉じる操作がある。
