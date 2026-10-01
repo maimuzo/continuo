@@ -731,7 +731,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// 残るのは `paneStopped` だけで、**turn と turn のあいだで `idle` に見えるだけの
 		// 健全な run が、2巡回（既定60秒）で手放される。**
 		// **`workspace_hooks.after_run` を書いていない機械では、そのとき push が走らない。**
-		// **次に拾う機械は remote から作り直すので、push していない commit が失われる。**
+		// **次に拾う機械は remote から作り直すので、push していない commit はその機械に見えない**
+		// （この機械の worktree には残る）。
 		//
 		// **床には `weekly_wait_limit_minutes` を使う。**利用者が「1週間の枠をどれだけ待つか」
 		// として書いた値であり、**新しい設定を増やさずに済む。**
@@ -1278,11 +1279,13 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 // now: いまの時刻。
 // 戻り値: issue のコメントとログに載せる理由の文字列。
 func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
-	status := string(agent.AgentStatus)
-	if status == "" {
-		// **`agent.get` が誤りを返したときは、状態を1つも読めていない。**
-		// **`unknown` と書くと、herdr が `unknown` と答えたように読める**（実装レビュー2周目の LOW）。
-		status = "読めませんでした。herdr が答えなかったか、agent が居ませんでした"
+	// **`agent.get` が誤りを返したときは、状態を1つも読めていない。**
+	// **「`working` ではありませんでした」とも「`unknown` でした」とも書かない**
+	// （実装レビュー2周目と3周目の LOW）。読めていない観測を言い切ることになる。
+	observed := "herdr へ状態を聞いたところ `working` ではありませんでした（そのとき見た状態: " +
+		string(agent.AgentStatus) + "）。"
+	if agent.AgentStatus == "" {
+		observed = "herdr へ状態を聞きましたが、読めませんでした（herdr が答えなかったか、agent が居ませんでした）。"
 	}
 	// **「一度も working になりませんでした」と書いてはならない**
 	// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
@@ -1322,8 +1325,7 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now ti
 			// **枠待ちが明けた61分後に固まった run は「61分のあいだ hook が届かなかった」と
 			// 名乗るが、明ける直前までは届いていたかもしれない。**
 			// **読んだ人を hook の socket の調査へ走らせることになる。**
-			"%s のあいだ、この run が進んだ形跡がありませんでした。herdr へ状態を聞いたところ "+
-			"`working` ではありませんでした（そのとき見た状態: %s）。"+
+			"%s のあいだ、この run が進んだ形跡がありませんでした。%s"+
 			"**止まったものと判断して打ち切りました。**"+
 			"\n【確かめ方】%s"+
 			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / "+
@@ -1332,7 +1334,7 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now ti
 			"何も動かないまま待つ時間は WORKFLOW.md の `claude.turn_timeout_ms` で変えられます"+
 			"（いまは %d ミリ秒）。**この値は turn の総実行時間の上限ではありません。**"+
 			"`agent_status` が `working` である限り、1つの指示に何時間かかっても打ち切りません。",
-		formatDuration(now.Sub(snap.LastSeenAt)), status,
+		formatDuration(now.Sub(snap.LastSeenAt)), observed,
 		check, o.cfg.Claude.TurnTimeoutMs)
 }
 

@@ -585,7 +585,7 @@ func (o *Orchestrator) removeOwnAssignee(
 		// **ただし、書けなかったことは黙って流さない。**この1件が
 		// **次にこの issue を拾う機械へ「remote に続きが入っているか」を伝える唯一の手段である。**
 		// **無いと、その機械は remote から worktree を作り直す。**
-		// **`after_run` が push していなければ、手元の commit がそこで失われる。**
+		// **`after_run` が push していなければ、手元の commit はその機械に見えない**（この機械の worktree には残る）。
 		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした"+
 			"（次に拾う機械は remote から作り直します。push していない commit は、この機械の worktree にだけ残ります）",
 			"identifier", issue.Identifier, "error", err)
@@ -767,7 +767,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 // **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
 // 先に確かめれば、**その2つで after_run の印を無駄に消費しない。**
 //
-// **`viewerIdentity` を取れないときは段0 で戻る**ので、
+// **`viewerIdentity` を取れないときは段0 で戻る。**
 // **段2 の書き込みが失敗したときは、pane を閉じずに戻る。**
 // **そのときは次の巡回でやり直す**（`after_run` は印で二度と走らない）。
 //
@@ -780,9 +780,10 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 // **こちらは自分から手放す側で、まだ担当者である。**衝突する相手がいない。
 // **人間の決定「push して引き渡す」は、この経路で果たす。**
 //
-// **段2 が失敗したときの後始末は無い。**`after_run` は既に走っており、
-// `RunAfterRunOnce` は印を戻さない。**push は済んでいるので、失われるのはそのあとに
-// 積んだ commit だけである。**そのことを `Warn` で1行出す。
+// **段2 が失敗したときの後始末は無い。**`after_run` を設定している機械では、既に走っており、
+// `RunAfterRunOnce` は印を戻さない。**`after_run` が push していれば、remote に無いのは
+// そのあとに積んだ commit だけである**（設定していない機械では、push は1度も走っていない）。
+// そのことを `Warn` で1行出す。
 // **残るのは `RemoveAssignees` が一時的に落ちる場合だけである**（段0 で残り2つを潰した）。
 //
 // **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
@@ -944,10 +945,11 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// **pane を閉じない。**閉じると `paneStopped` が二度と真を返さず、やり直しが来ない。
 		// **印も外さない。**次の巡回でやり直す。
 		//
-		// **`after_run` は既に走っている。**`RunAfterRunOnce` は実行の前に印を立てるので、
-		// **この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
-		// **push そのものは、いまの段1 で済んでいる。**そのあとに積んだ commit だけが
-		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
+		// **`after_run` を設定している機械では、既に走っている。**`RunAfterRunOnce` は実行の前に
+		// 印を立てるので、**この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
+		// **`after_run` が push していれば、push そのものは段1 で済んでいる。**そのあとに積んだ commit だけが
+		// push されないまま残る（既定の設定は `after_run` を持たないので、そこでは push は走っていない）。
+		// **黙って進めない。**次に何を見ればよいかを1行で出す。
 		// **attempt ごとに1回だけ出す**（issue #173）。
 		// **`RemoveAssignees` が落ち続ける run は、毎巡回ここへ来る。**
 		// **既定の30秒間隔で1時間に120行になる。**

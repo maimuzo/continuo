@@ -768,7 +768,7 @@ rate_limit:
 | **カンバンの Status** | **動きません。**`In Progress` のままです |
 | **herdr の pane** | **閉じます** |
 | **`workspace_hooks.after_run`** | **設定してあれば走ります。**ここに `git push` を書いている人は、手放す前に push されます。**`continuo init` の雛形は `after_run: null` なので、書き足していない人では走りません**（issue のコメントに「push できたことを確かめられませんでした」と出ます）。ほかに走らない場合が3つあり、[docs/FAQ.md](FAQ.md) の表にあります |
-| **push していない変更** | **別の機械が先に拾うと失われます。**その機械は worktree を新しく作ります |
+| **push していない変更** | **別の機械が先に拾うと、その機械には見えません。**その機械は worktree を新しく作るので、branch が分かれます。**この機械の worktree には残っています** |
 
 **`after_run` に push を書いていない場合、危ないのはエージェントの最後の push 以降ぶんです。**
 **エージェントは `progress_interval_ms`（既定1時間）ごとに push するよう指示されています。**
@@ -928,7 +928,7 @@ grep -nE 'five_hour_margin_percent|weekly_margin_percent' WORKFLOW.md
 
 ### 担当を手放すのは、Claude Code が止まってからです
 
-**`rate_limit.weekly_wait_limit_minutes`（既定300分）を超えたときの動きが変わりました。**
+**`rate_limit.weekly_wait_limit_minutes`（既定300分）を超えたときの動きが、この版で入りました。**
 
 **手放す前に、pane が完全に止まっているかを確かめます。**hook が `claude.turn_timeout_ms`（既定1時間）のあいだ1件も来ておらず、そのうえで次の2つが揃ったときだけ手放します。
 
