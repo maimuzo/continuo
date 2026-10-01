@@ -648,7 +648,7 @@ type RateLimitConfig struct {
 	// **`PauseAbovePercent` は消えた**（人間の決定。2026-09-06。issue #173）。
 	//
 	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
-	// 既定（マージン10）では余裕値が90%で先に効くので、**95%のこちらは一度も発火していなかった。**
+	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
 	// **仕事を取るかどうかを決めるのは `tracker.provider.handoff` の2つのマージンだけである**
 	// （`internal/handoff/handoff.go` の `Evaluate`）。
 	// **statusline取得を開くかの判定も同じ線を使う**（`statuslineFetchPointless`）。
@@ -699,7 +699,7 @@ type RateLimitConfig struct {
 	// （**「使い切っている」ではない。**線は「余裕値が0以下」である。設計 3-27）
 	// （2026-08-26 の人間の決定「5時間枠 → 待つ。担当は変えない」）。
 	//
-	// **0 以下なら上限を設けない。**`claude.turn_timeout_ms` と
+	// **0 なら上限を設けない**（負の値は起動時の検査が弾く）。`claude.turn_timeout_ms` と
 	// `tracker.provider.handoff.recheck_interval_ms` と同じ向きである
 	// （`idle_timeout_ms` の「0 なら既定へ倒す」とは逆なので、雛形のコメントで断っている）。
 	//

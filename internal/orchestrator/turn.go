@@ -839,7 +839,7 @@ func (o *Orchestrator) selfStoppedTurn(rs *runState, err error) (turnOutcome, bo
 // **枠待ちなら agent.wait で待ち直す。**`agent.prompt` は再送しない（二重に投入される）。
 // **枠待ちでなければ `turnWaitAgain` を返す。**呼び出し側が待ち直す。
 // **ここで turn を打ち切ってはならない。**`claude.turn_timeout_ms` は turn の総実行時間の
-// 上限ではなく「画面が変わらないまま待てる時間」であり、その判定は巡回の checkStalls が持つ。
+// 上限ではなく「進んだ形跡が無いまま待てる時間」であり、その判定は巡回の checkStalls が持つ。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。

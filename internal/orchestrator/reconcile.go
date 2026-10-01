@@ -265,7 +265,7 @@ func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, i
 	// 送る印は、作業中へ戻したときだけ段4 が書き込みのあとで立て直す。
 	rs.takeNeedsPrompt()
 	// 段3: 捨てるもの3つは `leaveDirectChatMode` が同じ区間で捨てた。**stall の時計を引き直す**（設計 3-83i）。
-	// **direct chat の間は `checkStalls` を飛ばしているので、最後に見た時刻も画面の版も止まったままである。**
+	// **direct chat の間は `checkStalls` を飛ばしているので、最後に見た時刻は止まったままである。**
 	// 引き直さないと、人間が黙って3時間考えていただけで、戻した巡回の `checkStalls` が
 	// 「止まっている」と読み、指示を1回も送る前に pane を閉じて `failure_state` を書く。
 	rs.resetStallClock(now)
@@ -465,7 +465,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
 	// **`stale` で止めてはならない。**
 	// 設計 3-77i が
-	// 「**止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
+	// 「**止めるのは入札だけである。**枠待ちの判定は、
 	// 最後に読めた値を使い続ける（**読めないことを理由に走行中の run を捨てない**）」と決めている。
 	//
 	// **3周ぶん、ここを行ったり来たりした**（4周目に外す側を止め、5周目に立てる側も止め、
