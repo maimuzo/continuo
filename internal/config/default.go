@@ -219,7 +219,7 @@ func DefaultConfig() *Config {
 			PollWaitMs: 30000,
 			SettleMs:   2000,
 			WaitUntil:  []string{"idle", "done", "blocked"},
-			// `agent_status` が `working` にならないまま待てる上限。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
+			// hook が来ないまま待てる上限（超えた時点で `agent_status` が `working` なら待ち続ける）。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
 			TurnTimeoutMs: 3600000,
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,

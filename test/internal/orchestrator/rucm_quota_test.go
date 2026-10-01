@@ -70,7 +70,7 @@ func TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない(t *t
 func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			// **画面の版が止まったら短い時間で打ち切る。**
+			// **hook が来なくなったら短い時間で打ち切る。**
 			cfg.Claude.TurnTimeoutMs = 1200
 		},
 	})
@@ -82,7 +82,7 @@ func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// **hook を1件も送らないまま巡回を回す。**画面の版も動かない。
+	// **hook を1件も送らないまま巡回を回す。**
 	waitFor(t, 30*time.Second, "pane が閉じられる", func() bool {
 		fx.Orc.Tick(context.Background())
 		return fx.Herdr.CountMethod(herdr.MethodPaneClose) > 0

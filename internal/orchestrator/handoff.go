@@ -281,7 +281,7 @@ func (o *Orchestrator) handoffGate(
 //
 // **写しは呼び出し側が1回だけ読む。**ここで写しを取り直してはならない。
 // **同じ巡回の中で `dispatchCandidates` が既に同じ判定をしている**（担当者のいない issue を落とす門）。
-// **2回読むと、`pollQuota` が並行に差し替えた写しで答えが割れ、
+// **2回読むと、`pollAPI` が並行に差し替えた写しで答えが割れ、
 // 「なぜ着手しないか」を出した1行と、実際に落ちた理由が別の読み取りから作られる。**
 // **出すログを1行にするという、この変更そのものの目的に反する**
 // （**ここでいう「1行」はログの本数であって、枠の判定の線の本数ではない。**
@@ -366,7 +366,7 @@ func (o *Orchestrator) releaseExpiredAssignee(
 // issue: 対象の issue。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // viewer: この機械が使っている gh の持ち主。
-// bid: この機械が書く入札（evaluateBid が組み立てたもの）。
+// bid: この機械が書く入札（evaluateBidWith が組み立てたもの）。
 // comments: issue に付いているコメントの全件。
 // 戻り値: 着手してよいか。**hold を書けなかったときは、勝っていても着手しない**
 // （書いた担当者を消し戻すので acquired も立てない。設計 3-77g）。
@@ -382,7 +382,7 @@ func (o *Orchestrator) bidForIssue(
 	// **前の回の入札は issue に残り続ける**（1回ごとに新しいコメントを書くので消えない）。
 	// 数に入れると、締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
 	// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
-	// **書く側の識別子は、ここで埋める**（設計 3-77-0）。`evaluateBid` は
+	// **書く側の識別子は、ここで埋める**（設計 3-77-0）。`evaluateBidWith` は
 	// `viewerIdentity` より先に呼ばれるので、入札を組み立てた時点では持ち主が分かっていない。
 	//
 	// **埋め忘れてはならない。**下で `posted` をそのまま勝敗の判定へ混ぜるので、
@@ -624,7 +624,7 @@ func (o *Orchestrator) removeOwnAssignee(
 // **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
 //
 // **写しを取り直す版は置かない。**run ごとに取り直すと、
-// **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
+// **同じ巡回の中で run ごとに違う答えが返る**（`pollAPI` は turn の goroutine から
 // 並行に走り、途中で写しを差し替える）。**片方の run の起点が消え、もう片方が進み続ける。**
 //
 // snap: この巡回で1回だけ読んだ枠の写し。
@@ -796,9 +796,9 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState, shortKinds string) bool {
 	issue := rs.issue()
 	// **`shortKinds`（どの枠に余裕が無いか）は、呼び出し側が受け取って渡す。**
-	// **ここで `quotaSnapshotWithStale` を呼び直してはならない**（issue #173）。
+	// **ここで `quotaForPoll` を呼び直してはならない**（issue #173）。
 	// **手放すと決めたのは巡回が1回のロックで取った写しであり、
-	// この goroutine が走るころには `pollQuota` が差し替えているか、古い印が付いている。**
+	// この goroutine が走るころには `pollAPI` が差し替えているか、古い印が付いている。**
 	// **読み直すと、判定した写しとログに出す数字が別々の読み取りから作られる。**
 	// **利用者が claude.ai の画面と突き合わせたときに、どちらが根拠か決められなくなる。**
 	//

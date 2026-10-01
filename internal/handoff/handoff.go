@@ -459,7 +459,7 @@ func matchesKind(kind string, kinds []string) bool {
 // at: 入札に書く時刻。**その機械のタイムゾーンのまま渡すこと。**
 // 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。**`Author` は空である。**
 // **書く直前に `bidForIssue` が gh の持ち主で埋める**（設計 3-77-0）。ここで埋めないのは、
-// **枠の判定が gh の持ち主を引くより先に走るからである**（`evaluateBid` は `viewerIdentity` より前）。
+// **枠の判定が gh の持ち主を引くより先に走るからである**（`evaluateBidWith` は `viewerIdentity` より前）。
 // 戻り値の2つ目: 入札しないと決めた理由。SkipNone なら入札してよい。
 func Evaluate(
 	snap *ratelimit.Snapshot,

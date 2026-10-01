@@ -1059,14 +1059,14 @@ const turnStopUnreadable turnOutcome = 103
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
-	// **`orchestrator.go` の `pollQuota` が「止めるのは入札だけである」と決めている。**
+	// **`orchestrator.go` の `pollAPI` が「止めるのは入札だけである」と決めている。**
 	return o.isQuotaWaitingWith(o.quotaSnapshot(), rs)
 }
 
 // isQuotaWaitingWith は、渡された写しで枠待ちかどうかを判定する（設計 3-27。issue #197）。
 //
 // **巡回はこちらを使う。**`isQuotaWaiting` は run ごとに写しを取り直すので、
-// **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
+// **同じ巡回の中で run ごとに違う答えが返る**（`pollAPI` は turn の goroutine から
 // 並行に走り、途中で `o.quota` を差し替える）。
 //
 // quotaSnap: この巡回で1回だけ読んだ枠の写し。

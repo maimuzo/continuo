@@ -16,7 +16,7 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// stallTimeout はこのファイルのテストで使う「画面が変わらないまま待てる時間」である
+// stallTimeout はこのファイルのテストで使う「hook が来ないまま待てる時間」である
 // （`claude.turn_timeout_ms`。fake の時計で進める）。
 const stallTimeout = 60 * time.Second
 

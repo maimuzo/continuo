@@ -2998,7 +2998,7 @@ turn の終わりの検知を hook だけに依存させない。
 ### 3-21. 打ち切りは `agent_status` で測る
 
 **言いたいこと。**打ち切りの物差しは **turn の総実行時間ではない。**
-**Claude Code が `working` にならないまま経った時間**である。設定キーは `claude.turn_timeout_ms`（既定1時間）。
+**Claude Code から hook が届かないまま経った時間**である（閾値を超えた時点で `agent_status` を1回読み、`working` なら時計を起こし直す）。設定キーは `claude.turn_timeout_ms`（既定1時間）。
 **`working` である限り、1つの指示に何時間かかっても打ち切らない。**
 
 **仕様の定義。**`SPEC.md` 10.6 は `turn_timeout_ms` をこう定めている。
@@ -12398,9 +12398,11 @@ rate_limit:
   poll_interval_ms: 300000                  # 使用量 API を読み直す間隔
   refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
   weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
-                                            # これを超えて待つことになる issue は、待たずに担当を手放し、
-                                            # 入札からやり直させる。worktree は残し、Status も動かさない。
-                                            # 5時間の枠には効かない（5時間の枠だけならいつまでも待つ）。
+                                            # 「あと何分以内にリセットされるなら待つか」であって「何分待つか」ではない。
+                                            # 超える issue は、Claude Code が止まってから担当を手放し、入札からやり直させる
+                                            # （worktree は残し、Status も動かさない）。5時間の枠には効かない。
+                                            # 止まったと見なすのは、hook が claude.turn_timeout_ms のあいだ来ていないときである。
+                                            # workspace_hooks.after_run が null のままだと、push せずに手放す。
                                             # 0 なら上限を設けず、いつまでも待つ（idle_timeout_ms とは 0 の意味が逆）。
                                             # 複数の機械で見張るなら idle_timeout_ms より短くすること
 

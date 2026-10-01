@@ -571,7 +571,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	stallOff := silence <= 0
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
 	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
-	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
+	// `pollAPI` は turn の goroutine から並行に走って写しを差し替えるので、
 	// **2回読むと、こちらが「余裕が無い」と控えた時刻を、あちらが「余裕がある」で消しうる。**
 	// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
 	for _, rs := range o.snapshotRuns() {
@@ -1049,7 +1049,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	//
 	// **枠の写しは、この巡回で1回だけ読む**（設計 3-27。issue #197）。
 	// **手放しの側と、下の `noteWeeklyShort` の側で別々に読んではならない。**
-	// `pollQuota` は turn の goroutine から、`OnStatusline` は statusline の受け口の
+	// `pollAPI` は turn の goroutine から、`OnStatusline` は statusline の受け口の
 	// goroutine から、それぞれ同じ mutex を取って保管値を差し替える。
 	// **2回のあいだに差し替わると、片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	//
@@ -1083,7 +1083,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **残りがある。**その60秒のあいだに期限が切れた期間は、この巡回の写しにはまだ入っている
 	// （`snapshotOf` は読んだ時点の時計で除くため）。**だから枠待ちの印が1巡回ぶん遅れて外れる。**
 	// **それでも取り直さない。**2回読むと、こちらが「余裕が無い」と控えた時刻を、
-	// **並行して走る `pollQuota` が差し替えた写しで「余裕がある」と消しうる。**
+	// **並行して走る `pollAPI` が差し替えた写しで「余裕がある」と消しうる。**
 	// **遅れは次の巡回（既定30秒）で解ける。消えた時刻は戻らない。**
 	now = o.now()
 

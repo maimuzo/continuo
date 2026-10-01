@@ -227,8 +227,10 @@ rate_limit:
   refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
   weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
                                             # 「あと何分以内にリセットされるなら待つか」であって「何分待つか」ではない。
-                                            # 超える issue は待たずに担当を手放し、入札からやり直させる
+                                            # 超える issue は、Claude Code が止まってから担当を手放し、入札からやり直させる
                                             # （worktree は残し、Status も動かさない）。5時間の枠には効かない。
+                                            # 止まったと見なすのは、hook が claude.turn_timeout_ms のあいだ来ていないときである。
+                                            # workspace_hooks.after_run が null のままだと、push せずに手放す。
                                             # 0 なら上限を設けず、いつまでも待つ（idle_timeout_ms とは 0 の意味が逆）。
                                             # 複数の機械で見張るなら idle_timeout_ms より短くすること
 

@@ -77,12 +77,12 @@ func adoptOwnRun(fx *stubFixture, number int) tracker.Issue {
 // TestDirectChatMode_direct chat のあいだは画面が止まっていても打ち切らない は、
 // この機能がいちばん守りたいものを確かめる。
 //
-// 目的: **人間は画面の前で考えるので、画面の版は何時間も変わらない。**
+// 目的: **人間は画面の前で考えるので、hook は何時間も来ない。**
 // stall 検知（設計 3-21）はそれを「止まった」と読んで pane を閉じ、
 // **人間が話していた画面ごと消す。**direct chat ではその判定を飛ばす。
 //
 // 与える情報: `tracker.direct_chat_state` を設定し、Status をその値にした run。
-// **画面の版は一度も増やさない。**閾値を50回またぐ（50分ぶん）。
+// **hook は1件も送らない。**閾値を50回またぐ（50分ぶん）。
 // 成功条件: pane が1つも閉じられず、印にも残り、turn も1つも送られていないこと。
 //
 // **実時間はゼロである。**`testing/synctest` の bubble の中で時計を進める。
