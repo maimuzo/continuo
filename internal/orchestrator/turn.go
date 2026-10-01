@@ -860,7 +860,8 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	// **動いている run を、動いていることを確かめないまま止めることになる。**
 	//
 	// **待ちが遅れることはない。**ここでは枠待ちの印を立てるだけで、
-	// **巡回は既定30秒ごとに回り、印の立った run を `releaseQuotaWaitExceeded` が拾う。**
+	// **巡回は既定30秒ごとに回り、`releaseQuotaWaitExceeded` が全部の run を見て拾う**
+	// （そちらは枠待ちの印を見ない。余裕値と pane の状態で決める）。
 	// **`claude.turn_timeout_ms` を0以下にしている機械でも取り残されない。**
 	// `checkStalls` は無音の閾値による早い戻りより**前**に `releaseQuotaWaitExceeded` を呼ぶ。
 

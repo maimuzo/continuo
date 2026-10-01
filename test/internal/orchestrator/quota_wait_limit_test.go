@@ -313,8 +313,8 @@ func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
 	fx.Herdr.SetStatus(herdr.AgentStatusWorking)
 
 	fx.Orc.Tick(context.Background())
-	// **手放しの対象になった run は、打ち切りの本体まで落ちない**（issue #173）。
-	// **そのため「agent が working なので待ち続けます」は出ない。**
+	// **`working` の run は、手放しの対象にならない**（`paneStopped` が偽を返す。issue #173）。
+	// **打ち切りの本体まで落ち、そこで `working` を読んで待ち続ける。**
 	// **確かめるのは、打ち切られていないことそのものである。**
 	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
 		t.Fatalf("working なのに打ち切っている:\n%s", got)
@@ -514,6 +514,14 @@ func TestQuota_人間が引き取っているrunは上限を超えても手放�
 // **`resets_at` は `null` なので、時刻で測る枝は「分からない」と答える。**上限は10分。
 // **巡回のあいだ時計を進めない**（`clock.Advance` はループの外で1回だけ）。
 // 成功条件: **担当を手放さないこと。**「担当を手放しました」が1行も出ず、担当者が変わらないこと。
+//
+// **この検査が確かめている範囲**（実装レビュー2周目の MEDIUM）。
+// **この一式は打ち切りを切っていない**（`claude.turn_timeout_ms` は60秒）。
+// 1回目の巡回で、手放しは「起点をまだ控えていない」ので見送り、**同じ巡回の打ち切りが先に run を片付ける。**
+// 使用率 90〜99% で止まった run は、打ち切りが有効な機械では打ち切りが受け持つ（設計 3-27）。
+// **だから、ここで固定しているのは「起点を控える前の巡回では手放さない」までである。**
+// **経過の比較そのもの**（`経過 > 上限`）**は、打ち切りを切った一式を使う
+// `TestQuota_打ち切りを切っている機械では経過が上限を超えるまで手放さない` が確かめる。**
 func TestQuota_リセット時刻が読めず経過も溜まっていなければ手放さない(t *testing.T) {
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_scoped", "percent": 95, "resets_at": nil, "severity": "normal"},
@@ -826,7 +834,7 @@ func TestQuota_毎回状態が変わっていたら手放さない(t *testing.T)
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
-	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7B")
 
 	// **手放しのテストと同じだけ巡回を回す。**違いは、巡回のたびに状態が変わることだけである。
 	for i := 0; i < 60; i++ {
@@ -1053,20 +1061,26 @@ func TestQuota_走っている印が残っていても止まっていれば手�
 // TestQuota_5時間の枠の時刻で1週間の枠を判定しない は、待つ先の取り方を確かめる。
 //
 // 目的: **`LatestResetForClearing` は種別を選ばない。**1週間の枠が `resets_at` を持たず、
-// 5時間の枠が2時間後に明けるとき、**あれを使うと「2時間後」で判定してしまい、
-// 上限（10分）を超えないので手放さない。**
+// 5時間の枠が上限より手前で明けるとき、**あれを使うと「明けるまでの残りが上限より短い」と判定してしまい、
+// 手放さない。**
 //
-// 与える情報: 1週間の枠が 100% で `resets_at` が null。5時間の枠も 100% で2時間後。上限は10分。
+// **5時間の枠のリセットは、上限より手前に置く**（実装レビュー2周目の MEDIUM）。
+// **上限より先に置くと、誤った実装でも「残りが上限を超えた」と答えて手放すので、区別できない。**
+// 数字はこう選んである。上限は300分。時計を310分進めるので、経過（310分）は上限を超える。
+// 5時間の枠のリセットは460分後で、進めた時点の残りは150分。**`waitForRelease` が最後まで回っても
+// （2分 × 60回 = 120分）、残りは30分あり、上限の300分を1度も超えない。**
+//
+// 与える情報: 1週間の枠が 95% で `resets_at` が null。5時間の枠は 100% で460分後。上限は300分。
 // 成功条件: 経過で測って手放すこと（5時間の枠の時刻に引きずられない）。
 func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testing.T) {
-	soon := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	soon := time.Now().Add(460 * time.Minute).UTC().Format(time.RFC3339)
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "session", "percent": 100, "resets_at": soon, "severity": "normal"},
 		{"kind": "weekly_scoped", "percent": 95, "resets_at": nil, "severity": "normal"},
-	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W4")
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W4")
 
 	fx.Orc.Tick(context.Background())
-	clock.Advance(20 * time.Minute)
+	clock.Advance(310 * time.Minute)
 	fx.Orc.Tick(context.Background())
 	// **連番を初めて見た巡回では手放さない**（設計 3-27 の「段0 へ入る前に外すもの」の、1回目の観測の扱い）。
 	waitForRelease(t, fx, clock, issue.Identifier)
@@ -1122,7 +1136,7 @@ func TestQuota_打ち切りを切っていても巡回は落ちない(t *testing
 	endpoint, _ := newUsageServer(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	})
-	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_W6")
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_W6B")
 	clock := newTestClock()
 
 	fx := newStubFixture(t, stubFixtureOptions{

@@ -587,7 +587,7 @@ func (o *Orchestrator) removeOwnAssignee(
 		// **無いと、その機械は remote から worktree を作り直す。**
 		// **`after_run` が push していなければ、手元の commit がそこで失われる。**
 		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした"+
-			"（次に拾う機械は remote から作り直します。push していない commit があれば失われます）",
+			"（次に拾う機械は remote から作り直します。push していない commit は、この機械の worktree にだけ残ります）",
 			"identifier", issue.Identifier, "error", err)
 	}
 	return viewer.Login, true
@@ -768,7 +768,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 // 先に確かめれば、**その2つで after_run の印を無駄に消費しない。**
 //
 // **`viewerIdentity` を取れないときは段0 で戻る**ので、
-// **「pane だけ閉じて担当が残る」は、段3 の書き込みが失敗したときだけ起きる。**
+// **段2 の書き込みが失敗したときは、pane を閉じずに戻る。**
 // **そのときは次の巡回でやり直す**（`after_run` は印で二度と走らない）。
 //
 // **段1 を段2 より先に置く。**逆にすると、`released` を読んだ次の機械が、
@@ -890,7 +890,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **それを止めるのは `turn.go` の「印が下りるまで待ってから処理する」段である。**
 	// **worker を先に止める形にしてはならない。**止めると `paneStopped` が
 	// **二度と真を返さなくなり**（`agent.get` が「居ない」で誤りを返す）、
-	// **段3 の書き込みに失敗したときのやり直しが永久に来ない。**
+	// **段2 の書き込みに失敗したときのやり直しが永久に来ない。**
 	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
 	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
 	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
@@ -956,7 +956,8 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// 枠の話のために触ると、`removeOwnAssignee` を呼ぶ他の経路のログの出方まで変わる。**
 		if rs.noteQuotaReleaseFailed() {
 			o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します。この行は1回だけ出します）。"+
-				"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
+				"workspace_hooks.after_run を設定している機械では、この attempt ではもう走りません"+
+				"（走らせたかどうかと結果は、この行の属性にあります）",
 				"identifier", issue.Identifier,
 				"after_run が成功したか", afterRunOK,
 				"after_run を走らせなかった理由", afterRunSkip,
@@ -1515,7 +1516,7 @@ func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState,
 	// **空のときの差し替えは置かない。**`verifyHandoff` は issue に付いている担当者から
 	// **`logins[0]` をそのまま返す**ので、真のときに空になる経路が1つも無い。
 	// **到達できない差し替えを置くと、読む人が「空になることがある」と読む。**
-	o.logger.Warn("担当が移ったので、この turn の終わりで止めます（push しません。カンバンへは書きません。after_run も走らせません）",
+	o.logger.Warn("担当が移ったので、この run を止めます（push しません。カンバンへは書きません。after_run も走らせません）",
 		"identifier", rs.issue().Identifier, "いまの担当", newAccount,
 		"理由", i18n.T(i18n.KeyHandoffLostReason, newAccount, o.handoffIdleTimeout()))
 

@@ -1987,6 +1987,9 @@ func (rs *runState) stoppedByContinuo() bool {
 
 // resetStallClock は stall 検知の時計を、いまから数え直させる（設計 3-83）。
 //
+// **呼ぶ場面は2つある。**direct chat を抜けた瞬間と、バックオフが明けた run を拾い直す瞬間（`redispatch`）である。
+// **どちらも、前の時計のまま同じ巡回の `checkStalls` に読まれると、指示を送る前に打ち切られる。**
+//
 // **direct chat を抜けた瞬間に呼ぶ。**呼ばないと、**人間が3時間黙って話していただけで
 // 「画面が止まっている」と読まれ、戻した巡回で pane が閉じ `failure_state` が書かれる。**
 // **指示を1回も送る前に、である**（`checkStalls` は `reconcileRunning` の直後に走る）。

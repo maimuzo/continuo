@@ -307,7 +307,8 @@ const (
 	// KeyHandoffReleasedWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したときの
 	// released のコメントの2行目に出る（gh のアカウント名を差し込む。issue #197）。
 	//
-	// **こちらは push 済みである。**手放す直前に `workspace_hooks.after_run` が走っている。
+	// **こちらは `after_run` が成功したときに出す。**文面は「`after_run` が `git push` を含むなら」と
+	// 条件を付ける（continuo は `after_run` の中身を知らない）。
 	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
 	// KeyHandoffReleasedWeeklyWaitLimitNoPush は、同じ理由で手放したが
 	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（gh のアカウント名を差し込む）。

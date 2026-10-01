@@ -533,7 +533,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	//
 	// **飛ばさないと、90〜99%の帯で手放しが1回も成立しない。**
 	// 枠待ちの印は使用率100でしか立たないので、92%の run は打ち切りの本体まで落ちる。
-	// **そこで `revision` は動かず、無音の閾値も超えているので、打ち切りが先に殺す。**
+	// **そこで `agent_status` は `working` でなく、無音の閾値も超えているので、打ち切りが先に殺す。**
 	// **手放しは2回続けて同じ連番を見る必要があるため、1回目の観測では必ず「まだ」と答える。**
 	// **つまり、打ち切りが毎回勝つ。**
 	// **入札と手放しの線を余裕値へ移した意味が、既定の設定で丸ごと消える。**
@@ -689,8 +689,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **この門は「指示を送った直後の run を手放さない」ために在る**（issue #197）。
 		//
 		// **見るのは `LastBusyHookAt` である。`LastSeenAt` ではない**（issue #173）。
-		// **`LastSeenAt` は5箇所が進める**（`beginTurn` / `noteHook` / `noteWorking` /
-		// `resetStallClock` / `clearWaitingQuota`）**が、
+		// **`LastSeenAt` は、run を作った時点のほかに5箇所が進める**（`beginTurn` / `noteHook` /
+		// `noteWorking` / `resetStallClock` / `clearWaitingQuota`）**が、
 		// 最後の `clearWaitingQuota` は「枠が明けた」だけで、
 		// この run が生きている証拠を1つも含まない。**
 		// **`resetStallClock` は direct chat から作業中へ戻すときに進める**
@@ -1246,7 +1246,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
 			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
-			// **印を立てるだけにしておけば、次の巡回の先頭でそちらが拾う。**
+			// **ここで何もしなくても、次の巡回でそちらが拾う**（そちらは枠待ちの印を見ない）。
 			// **遅れるのは巡回1回ぶん（既定30秒）である。**
 			//
 			// **2箇所に置いてはならない。**片方だけが直る形になり、
@@ -1280,7 +1280,9 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
 	status := string(agent.AgentStatus)
 	if status == "" {
-		status = string(herdr.AgentStatusUnknown)
+		// **`agent.get` が誤りを返したときは、状態を1つも読めていない。**
+		// **`unknown` と書くと、herdr が `unknown` と答えたように読める**（実装レビュー2周目の LOW）。
+		status = "読めませんでした。herdr が答えなかったか、agent が居ませんでした"
 	}
 	// **「一度も working になりませんでした」と書いてはならない**
 	// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。

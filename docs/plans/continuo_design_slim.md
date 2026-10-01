@@ -412,7 +412,7 @@ flowchart TB
     over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
     usage --> full{"使用率が100の<br/>枠があるか"}
-    full -->|"無い"| normal
+    full -->|"無い"| nowait["枠待ちにしない<br/>打ち切りの判定は続ける"]
     full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting

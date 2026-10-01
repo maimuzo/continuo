@@ -77,10 +77,17 @@ var ErrStartupBusy = i18n.Sentinel(i18n.KeyOrchestratorErrStartupBusy)
 
 // ErrStatusNotWritten は、着手の段2 でカンバンの Status を書かなかったことを表す。
 //
-// **これは失敗ではない。**item がもう見えないか、取り直した結果 `terminal_states` か
-// `failure_state` に入っていたということであり、いずれも「いま着手してはいけない」を
-// 意味する。**人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
+// **これは失敗ではない。**次のどれかであり、いずれも「いま着手してはいけない」を意味する。
+//
+//   - item がもう見えない
+//   - 取り直した Status が `terminal_states` か `failure_state` に入っていた
+//   - 候補の写しでは自分が担当だったのに、取り直したら担当者にいなかった
+//     （`ownAssigneeLostSinceSnapshot`。設計 3-27。このときも Status は書いていない）
+//
+// **人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
 // 人間が `Blocked` に置いた issue に continuo が上書きしたことになる）。
+// **3つ目の理由は、この誤りの文には出ない。**直前の Info の1行
+// 「着手の直前に取り直したら、この機械が担当者にいないので着手しません」に出る。
 //
 // **errors.Is の比較対象なので、この値の identity を変えてはならない。**
 // **i18n.Sentinel に替えても identity は変わらない**（比較するのはこの変数そのものである）。
@@ -1030,6 +1037,20 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	}
 	// **印は同期で更新する。**次の巡回が同じ run をもう一度拾わないようにする。
 	rs.clearBackoff()
+	// **打ち切りの時計を、いまから数え直させる**（設計 3-21。2026-10-02 に実測して足した）。
+	//
+	// **バックオフが明けた run は、前の attempt の `LastSeenAt` を持ったままである。**
+	// 打ち切りで積んだバックオフなら、その時刻は既に `claude.turn_timeout_ms` より古い。
+	// **巡回は、この拾い直しのあと、同じ巡回の中で `checkStalls` を回す**（`Tick`）。
+	// 数え直さないと、**拾い直したばかりの run を「閾値を超えて止まっている」と読み、
+	// 閉じた pane の agent へ `agent.get` を投げて誤りを受け、もう1度打ち切る。**
+	// **1回の停止でリトライが2つ減り、起こし直している最中の run を畳む**
+	// （実測: `TestResumeBackoff_バックオフが明けた巡回で同じrunをもう1度打ち切らない`。
+	// この行が無いと、拾い直した巡回のログに `retry_count=2` の打ち切りが出る）。
+	//
+	// **`clearBackoff` と同じく、同期で行う。**着手の本体は goroutine で走るので、
+	// そちらに任せると `checkStalls` が先に読む。
+	rs.resetStallClock(o.now())
 	// **段2以降は別の goroutine で回す**（設計 3-8。巡回のループをブロックしない）。
 	o.wg.Add(1)
 	go func() {
@@ -1215,8 +1236,12 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **候補の写しでは自分が担当だったのに、取り直したら担当者にいないなら、着手しない**
 	// （設計 3-27。issue #197）。理由は `ownAssigneeLostSinceSnapshot` の doc にある。
 	//
-	// **バックオフを挟んだやり直し（`reuse`）には当てない。**そちらが持つ issue は
-	// 巡回の候補の写しではなく、担当者のいない run（復元した run など）もありうる。
+	// **バックオフを挟んだやり直し（`reuse`）には当てない。**止めたあとの後始末が違うためである。
+	// やり直しでここから戻ると、呼び出し元は `undoHandoffAcquire` を通り、
+	// **入札で取った担当だったときは `released` のコメントを issue へ書く。**
+	// 担当が既に別の機械へ移っている issue へ、こちらが「手放した」と書くことになる。
+	// **だから、人間が担当を外した run のやり直しは、この1段では止まらない。**
+	// そちらは走り出したあとの `reconcileRunning` が、担当が自分に無いことを見て止める。
 	if !reuse && o.ownAssigneeLostSinceSnapshot(ctx, issue, freshLogins) {
 		o.logger.Info("着手の直前に取り直したら、この機械が担当者にいないので着手しません"+
 			"（候補を取ったあとで担当が外れました。次の巡回で、いまの担当者で判定し直します）",

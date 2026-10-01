@@ -249,7 +249,7 @@ func (r SkipReason) String() string {
 //
 // **知らない種別は数えない。**`Evaluate` は `SessionPercent` と `WeeklyPercent` から
 // 余裕値を作るので、**その2つが見ない種別をここで数えると、線がまた2本に割れる。**
-// usage API が種別を増やしたとき、**この関数だけが真を返して枠待ちの印が立ち、
+// usage API が種別を増やしたとき、**この関数だけが真を返して理由のログと手放しが動き、
 // 入札の側は素通しで新しい issue を取り続ける**という食い違いが起きる。
 // **種別を増やすときは、`SessionPercent` か `WeeklyPercent` のどちらかへ足すこと。**
 //

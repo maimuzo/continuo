@@ -61,11 +61,17 @@ func TestQuota_枠を読めなければ入札の要るissueには着手しない
 	}
 	// **止まったことが人間に見えなければ、直したことにならない。**
 	got := fx.Logs.String()
-	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "枠を読めないので") {
-		t.Fatalf("止めたことを INFO で出していない:\n%s", got)
+	// **同じ1行に INFO と文面の両方があることを見る**（実装レビュー2周目の LOW）。
+	// 別々に探すと、ほかの行の `level=INFO` で通ってしまう。
+	infoLine := false
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "level=INFO") && strings.Contains(line, "枠を読めないので") {
+			infoLine = true
+			break
+		}
 	}
-	if !strings.Contains(got, "枠を読めない") {
-		t.Fatalf("止めた理由を出していない:\n%s", got)
+	if !infoLine {
+		t.Fatalf("止めた理由を INFO で出していない:\n%s", got)
 	}
 	// **直し方を取り違えさせない。**枠を読めないのは資格情報の話であって、
 	// **マージンをいくら下げても動き出さない。**

@@ -1151,7 +1151,8 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // afterRunSkip は `workspace_hooks.after_run` を走らせなかった理由である（issue #197）。
 //
 // **`released` のコメントは「`after_run` で push できたことを確かめられませんでした
-// （設定していないか、走らせたが失敗しました。どちらかはログに出ています）」と書く。**
+// （理由はログに出ています。設定していない・走らせて失敗した・この worktree で既に走っていた、
+// のどれかです）」と書く。**
 // **黙って偽を返すと、その約束が果たされない**（実装レビュー2周目の MEDIUM）。
 // **既定の `WORKFLOW.md` は `after_run` を持たないので、未設定のほうが普通の状態である。**
 // 利用者は存在しないログを探すことになる。

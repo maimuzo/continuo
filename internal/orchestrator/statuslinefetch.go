@@ -89,8 +89,8 @@ const (
 // **`weekly_scoped` には余裕値**（`handoff.ShortWeekly`）、
 // **`session` と `weekly_all` には「使用率が100の期間が期限内にあるか」**である。
 // **後者は「開いても値が変わらない」の判定で、着手するかどうかの線ではない。**
-// 「100 の期間」からは外す（外さないと、weekly_scoped が 100 のあいだ 5時間と1週間全体を
-// 取り直せない）。
+// 「100 の期間」の判定からは外し、余裕値の線だけで見る（100 なら余裕値は必ず0以下なので、
+// どちらで見ても開かない）。
 //
 // ctx: 巡回のコンテキスト。
 func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {

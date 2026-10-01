@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -43,6 +44,18 @@ func TestDispatch_候補の写しでは自分が担当でも取り直して担�
 	}
 	if got := fx.Tracker.CountCall("AddAssignees"); got != 0 {
 		t.Fatalf("この巡回で担当者を書いた: AddAssignees = %d 回, want 0（次の巡回で、いまの担当者で判定し直す）", got)
+	}
+	// **issue へも何も書かない**（実装レビュー2周目の LOW）。**担当は既に自分に無いので、
+	// 後始末で担当者を外したり、`released` のコメントを出したりしてはならない。**
+	// 別の機械が拾ったあとの issue へ「手放した」と書くことになる。
+	if got := fx.Tracker.CountCall("RemoveAssignees"); got != 0 {
+		t.Fatalf("担当が自分に無い issue の担当者を外しに行った: RemoveAssignees = %d 回, want 0", got)
+	}
+	if got := fx.Tracker.CommentsOf(stale.ID); len(got) != 0 {
+		t.Fatalf("担当が自分に無い issue へコメントを書いた: %v", got)
+	}
+	if got := fx.Tracker.MarkedHandoffCommentsOf(stale.ID, config.HandoffReleasedMarker); len(got) != 0 {
+		t.Fatalf("担当が自分に無い issue へ released を書いた: %v", got)
 	}
 }
 
