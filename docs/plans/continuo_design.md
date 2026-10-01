@@ -15511,7 +15511,7 @@ pane / workspace には手を出さない。
 | 実測したこと | 応答 |
 | --- | --- |
 | `worktree.open` に `cwd` を渡すと workspace が2つ開く | worktree のぶんと、`cwd` のリポジトリのぶん（**リポジトリの親 workspace**） |
-| `cwd` を省く | **herdr 0.8.x は `worktree_not_found: worktree path not found`。herdr 0.9.1 は `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`**（実測: 2026-09-29）。**どちらの版でも断られる** |
+| `cwd` を省く | **herdr 0.8.x は `worktree_not_found: worktree path not found`。herdr 0.9.1 は `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`**（実測: 2026-09-29）。**0.9.1 では、herdr の画面で前面にある workspace が git の作業ツリーの外だと `not_git_worktree` が返る**（実測: 2026-10-02）。**どの場合も断られる** |
 | `cwd` に worktree のパスを渡す | `linked_worktree_source: New and open worktree actions start from the repo parent workspace.` |
 | `worktree.remove` | 親は閉じない（**放置すると issue 1件につき1つ溜まる**） |
 | 親を `workspace.close` する | **herdr 0.8.x では、配下の worktree の workspace と pane も一緒に消える。**herdr 0.9.0 以降は `workspace_group_close_required` で断られ、何も閉じない（実測: 2026-09-24、herdr 0.9.1） |

@@ -294,8 +294,8 @@ func TestLive_WorktreeOpen_cwdを渡すとリポジトリ側のworkspaceも開�
 // 目的: **worktree.open の cwd はリポジトリ本体でなければならない**ことを本物で固定する
 // （issue #19 の「cwd を渡さない」案を落とした根拠。実測: 2026-08-25）。
 // 与える情報: 使い捨てのリポジトリと、そこから切った worktree 1本。
-// 成功条件: cwd を省いても、cwd に worktree のパスを渡しても linked_worktree_source で
-// 断られること。**どちらの場合も workspace は1つも開かないこと。**
+// 成功条件: cwd を省いても、cwd に worktree のパスを渡しても断られること
+// （cwd を省いたときのコードは、下のとおり前面の workspace で変わる）。**どちらの場合も workspace は1つも開かないこと。**
 //
 // **cwd を省いたときのコードは herdr の版で変わる。**herdr 0.8.x は
 // `worktree_not_found: worktree path not found` を返していた（実測: 2026-08-25）。
