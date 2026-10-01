@@ -483,7 +483,7 @@ continuo doctor --missing-keys-patch ~/continuo-work
 
 **何が困っていたか。**何度やり直しても収束しない issue で、人間が herdr の pane に入って直接話しかけると、
 **continuo がその pane を閉じて会話が切れていました。**
-エージェントの返事に `CONTINUO-STATUS: blocked` の1行が入る、人間が考えている間に画面が変わらず打ち切られる、
+エージェントの返事に `CONTINUO-STATUS: blocked` の1行が入る、人間が考えている間に Claude Code が何もせず打ち切られる、
 といった経路が4つあり、**どれも「continuo が手を離す」＝「pane を閉じる」だったためです。**
 
 **どう変わったか。**カードを `Direct Chat` へ動かしているあいだ、

@@ -243,10 +243,10 @@ tracker:
 agent:
   max_concurrent_agents: 2        # issues running at once
 claude:
-  turn_timeout_ms: 3600000        # give up after this long with no change on screen
+  turn_timeout_ms: 3600000        # give up after this long with no sign of progress
 ```
 
-`turn_timeout_ms` is **not** a cap on how long a turn may take. As long as the pane keeps changing, a single instruction can run for hours.
+`turn_timeout_ms` is **not** a cap on how long a turn may take. As long as herdr reports the agent as `working`, a single instruction can run for hours. continuo gives up only when no hook has arrived from Claude Code for this long and the agent is not `working`.
 
 **Do not write things like "write `CONTINUO-STATUS: review` when you are done" or "commit and push before that" in the body.** They already live in the brief built into the continuo binary.
 

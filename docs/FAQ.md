@@ -700,7 +700,7 @@ cleanup:
 | --- | --- |
 | **あなたの発言への返事に `CONTINUO-STATUS: blocked` の1行が入っていた** | continuo がそれを読んで Status を `Blocked` へ動かし、**人間へ渡したものとして pane を閉じます** |
 | **先にカンバンで `Blocked` などへ動かした** | 巡回が「作業中でも完了でもない」と判断して pane を閉じます |
-| **あなたが考えている間、画面が変わらなかった** | `claude.turn_timeout_ms`（既定1時間）を超えると、止まったものとして打ち切ります |
+| **あなたが考えている間、Claude Code が何もしていなかった** | hook が1件も届かず、agent の状態も `working` でない時間が `claude.turn_timeout_ms`（既定1時間）を超えると、止まったものとして打ち切ります |
 | **話している間も continuo が指示を送り続けた** | `agent.max_dispatch_turns`（既定20回）に達すると打ち切ります |
 
 **閉じられても会話そのものは残ります**（次に着手するとき同じセッションへ復帰します）が、**画面は消えます。**
@@ -3239,7 +3239,7 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-fil
 
 **原因。**エージェントが判断を仰いだか、打ち切られました。
 **計画を書いた直後に `Blocked` になるのは、毎回の正常な動きです**（上の「計画を書いたところで、どの issue も `Blocked` になる」）。
-打ち切りは、**herdr が見ている画面の版が変わらないまま** `claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
+打ち切りは、**Claude Code から hook が1件も届かず、herdr が返す agent の状態も `working` でないまま** `claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
 
 **直し方。****issue のコメントを開いてください。**何が起きたか・どう確かめるか・どう直すかが書いてあります。
 対応方法をコメントに書いて `Ready` へ戻せば続きが動きます。

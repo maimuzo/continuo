@@ -262,7 +262,7 @@ func TestLoad_comments_fetchを書いたままだと落ちる(t *testing.T) {
 }
 
 // 目的: 待ちの大小関係が逆転した設定で起動が止まることを確認する。
-// 1回の待ち（poll_wait_ms）が「画面が止まったとみなす時間」（turn_timeout_ms）より長いと
+// 1回の待ち（poll_wait_ms）が「止まったとみなす時間」（turn_timeout_ms）より長いと
 // 打ち切りの判定より待ちのほうが粗くなり、turn の終わりを確かめる猶予（settle_ms）が
 // 1回の待ちより長いと猶予が待ちに収まらない。
 // 与える情報: poll_wait_ms > turn_timeout_ms、settle_ms > poll_wait_ms の2つの front matter。

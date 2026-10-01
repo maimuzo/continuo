@@ -287,7 +287,7 @@ func validate(cfg *Config) error {
 		return invalidValueError(
 			"claude.poll_wait_ms", cfg.Claude.PollWaitMs,
 			"claude.turn_timeout_ms 以下にすること"+
-				"（1回の待ちが「画面が止まったとみなす時間」より長いと、打ち切りの判定より待ちのほうが粗くなる）",
+				"（1回の待ちが「止まったとみなす時間」より長いと、打ち切りの判定より待ちのほうが粗くなる）",
 		)
 	}
 	if cfg.Claude.SettleMs > cfg.Claude.PollWaitMs {

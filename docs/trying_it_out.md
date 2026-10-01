@@ -1303,7 +1303,7 @@ level=INFO msg=continuo を終了しました
 | **別のフィールドを書き換えている** | `status_field` が段2 で確かめた名前になっているか。continuo は `status_field` に書いた名前のフィールドしか読み書きしない |
 | **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**そのリポジトリにつき1回、**issue にコメントが投稿される**（直し方もそこに書いてある） |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |
-| **issue が急に `Blocked` になった** | **issue のコメントを開く。**そこに何が起きたか・どう確かめるか・どう直すかが書いてある。**画面が変わらないまま `claude.turn_timeout_ms` が過ぎると打ち切る**（既定1時間）。**これは turn の総実行時間の上限ではない。**画面が変わり続けている限り、1つの指示に何時間かかっても打ち切らない |
+| **issue が急に `Blocked` になった** | **issue のコメントを開く。**そこに何が起きたか・どう確かめるか・どう直すかが書いてある。**Claude Code から hook が届かず、agent の状態も `working` でないまま `claude.turn_timeout_ms` が過ぎると打ち切る**（既定1時間）。**これは turn の総実行時間の上限ではない。**agent の状態が `working` である限り、1つの指示に何時間かかっても打ち切らない |
 | **着手する issue を間違えた** | **段8b の `continuo abandon` で着手する前へ戻す。**カンバンで `Ready` へ戻しても止まらず、`Done` へ動かすと Claude Code が起動し直される |
 | **片付かない** | **未コミットの変更が残っている**か、**push していない commit がある**と消さない（成果を失わないため）。ログに理由が出る |
 | 枠を使い切った | continuo は待って再開する。Claude Code 2.1.234 以降は Claude Code 自身も継続するので、continuo は `agent_status` を見て二重投入を避ける |

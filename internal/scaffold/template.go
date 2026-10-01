@@ -174,8 +174,8 @@ claude:
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
   wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。書けるのは idle / working / blocked / done / unknown。
                                             # blocked を外すと、確認で止まった turn を時間切れまで拾えない
-  turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
-                                            # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
+  turn_timeout_ms: 3600000                  # hook が届かず、agent の状態も working でない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
+                                            # turn の総実行時間の上限ではない。agent の状態が working である限り何時間でも待つ
   hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る。
                                             # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。

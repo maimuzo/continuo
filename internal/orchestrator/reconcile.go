@@ -1012,7 +1012,7 @@ func (o *Orchestrator) closeOrphanPane(
 
 // checkStalls は stall を判定する（設計 3-21 / 3-27 の評価順）。
 //
-// **測るのは「画面が変わらない時間」であって、turn の総実行時間ではない。**
+// **測るのは「hook が届かず、`agent_status` も `working` でない時間」であって、turn の総実行時間ではない。**
 // `SPEC.md` 10.6 は `turn_timeout_ms` を *"maximum silence interval while a turn stream is
 // active; each app-server output resets it, so it is not a total turn runtime cap"*
 // （turn の流れが動いている間の最大の沈黙の間隔。app-server の出力ごとにリセットされる。
