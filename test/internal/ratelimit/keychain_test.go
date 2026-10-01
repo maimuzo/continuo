@@ -109,7 +109,7 @@ func TestFetch_keychainからトークンを読んで枠を取得する(t *testi
 		t.Fatalf("枠を読めていない（snapshot が nil）")
 	}
 	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 42 }) {
-		t.Errorf("読み取った使用率が違う: got %d, want %d", len(snap.Limits), 42)
+		t.Errorf("使用率が 42 の枠が無い: got %+v", snap.Limits)
 	}
 	if want := "Bearer " + keychainTestToken; gotAuth != want {
 		t.Errorf("Keychain から読んだトークンが Authorization ヘッダに載っていない: got %q, want %q", gotAuth, want)
@@ -224,7 +224,7 @@ func TestFetch_keychainが1回返ってこなくても諦めない(t *testing.T)
 		t.Fatal("2回目も枠を読めていない（一時的な失敗から戻れていない）")
 	}
 	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 42 }) {
-		t.Errorf("読み取った使用率が違う: got %d, want %d", len(snap.Limits), 42)
+		t.Errorf("使用率が 42 の枠が無い: got %+v", snap.Limits)
 	}
 }
 

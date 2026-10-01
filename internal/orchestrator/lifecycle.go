@@ -1151,8 +1151,8 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // afterRunSkip は `workspace_hooks.after_run` を走らせなかった理由である（issue #197）。
 //
 // **`released` のコメントは「`after_run` で push できたことを確かめられませんでした
-// （理由はログに出ています。設定していない・走らせて失敗した・この worktree で既に走っていた、
-// のどれかです）」と書く。**
+// （理由はログに出ています）」と書く。****本文では理由を並べない**（理由は下の4つあり、
+// 並べると、当たらない理由で来た利用者が存在しないものを探す）。
 // **黙って偽を返すと、その約束が果たされない**（実装レビュー2周目の MEDIUM）。
 // **既定の `WORKFLOW.md` は `after_run` を持たないので、未設定のほうが普通の状態である。**
 // 利用者は存在しないログを探すことになる。
@@ -1197,7 +1197,8 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, s
 	// **既定の `WORKFLOW.md` は `after_run` を持たない。**
 	// **そのまま真として扱うと、1バイトも push していないのに
 	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
-	// **次に拾う機械は remote から worktree を作り直し、push していない commit を全部失う。**
+	// **次に拾う機械は remote から worktree を作り直すので、push していない commit がその機械に見えない**
+	// （この機械の worktree には残る）。
 	// **判定は `internal/workspace` に持たせる**（issue #173）。
 	// **ここへ写すと、あちらが「設定されている」の規則を変えたときに、
 	// この1行だけが古い規則で答え続ける。**

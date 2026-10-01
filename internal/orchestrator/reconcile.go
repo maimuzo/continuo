@@ -525,6 +525,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // ctx: 呼び出しに適用するコンテキスト。
 // quotaSnap: この巡回で1回だけ読んだ枠の写し。
 // now: この巡回の時刻。
+// 戻り値: 手放しの対象だと判定した run の集合（打ち切りの側が、この巡回では飛ばす）。
 func (o *Orchestrator) releaseQuotaWaitExceeded(
 	ctx context.Context, quotaSnap *ratelimit.Snapshot, now time.Time,
 ) map[*runState]bool {
@@ -1263,7 +1264,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// **「版が止まったまま」ではない**（issue #173）。**画面の版を見る形は消した。**
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
-		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, now))
+		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, err, now))
 	}
 }
 
@@ -1275,16 +1276,23 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 // 直後に `pane.close` を呼ぶので、人間が読むときには agent が消えている。
 //
 // snap: 対象の run の写し。
-// agent: agent.get が返した情報（読めなかった場合はゼロ値に近い）。
+// agent: agent.get が返した情報。**読めなかったときも `AgentStatus` は `unknown` で届く**
+// （`agentInfo` が誤りのときにそう埋めて返す）。読めたかどうかは getErr で見分ける。
+// getErr: agent.get の誤り。読めたときは nil。
 // now: いまの時刻。
 // 戻り値: issue のコメントとログに載せる理由の文字列。
-func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
+func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, getErr error, now time.Time) string {
 	// **`agent.get` が誤りを返したときは、状態を1つも読めていない。**
 	// **「`working` ではありませんでした」とも「`unknown` でした」とも書かない**
 	// （実装レビュー2周目と3周目の LOW）。読めていない観測を言い切ることになる。
+	//
+	// **状態が空かどうかで見分けてはならない**（実装レビュー4周目の LOW）。
+	// **`agentInfo` は誤りのとき、状態を空ではなく `unknown` にして返す。**
+	// 空で見分けると、誤りの経路がこの枝を通らず、「そのとき見た状態: unknown」と書くことになる。
+	// **誤りそのものを見る。**
 	observed := "herdr へ状態を聞いたところ `working` ではありませんでした（そのとき見た状態: " +
 		string(agent.AgentStatus) + "）。"
-	if agent.AgentStatus == "" {
+	if getErr != nil || agent.AgentStatus == "" {
 		observed = "herdr へ状態を聞きましたが、読めませんでした（herdr が答えなかったか、agent が居ませんでした）。"
 	}
 	// **「一度も working になりませんでした」と書いてはならない**

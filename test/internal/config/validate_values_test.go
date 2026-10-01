@@ -417,8 +417,8 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		{"使用率の古さの上限が0", "refresh_interval_ms", "  refresh_interval_ms: 0", "rate_limit.refresh_interval_ms"},
 		{"指示の上限が0", "max_dispatch_turns", "  max_dispatch_turns: 0", "max_dispatch_turns"},
 		// **1週間の枠を待つ上限が負**（issue #197）。
-		// **負だと「リセット時刻 − いま」が必ず上回るので、枠待ちに入った瞬間に担当を手放す。**
-		// **1週間の枠を1%でも使えば、走っている run が全部止まる。**
+		// **判定の本体は 0 以下を「上限を設けない」と扱うので、負を通すと、短くしたつもりで上限なしになる。**
+		// **黙って逆の意味になるので、起動を止める。**
 		{"1週間の枠を待つ上限が負", "weekly_wait_limit_minutes",
 			"  weekly_wait_limit_minutes: -1", "weekly_wait_limit_minutes"},
 		// **大きすぎる値も弾く**（issue #197）。

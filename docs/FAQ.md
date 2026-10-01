@@ -1273,7 +1273,13 @@ workspace_hooks.after_run を設定している機械では、この attempt で
 **octocat が1週間の枠を待つ上限を超えたので、自分で担当を手放しました。**workspace_hooks.after_run は実行済みです。**その中身が `git push` を含むなら、この branch を次に取る機械は remote の続きから始められます。**含まないなら、この worktree にだけ commit が残っています（worktree は残してあります）。
 ```
 
-**`"reason":"weekly_wait_limit"` が目印です。**
+**`"reason":"weekly_wait_limit` で始まる値が目印です。**値は2通りあります。
+
+| `reason` の値 | いつ出るか | 本文の2行目 |
+| --- | --- | --- |
+| `weekly_wait_limit` | `workspace_hooks.after_run` が走って成功した | 上の例のとおり（「workspace_hooks.after_run は実行済みです」） |
+| `weekly_wait_limit_no_push` | `after_run` を設定していない・走らせて失敗した、など。**`continuo init` の雛形のまま**（`after_run: null`）**なら、こちらが出ます** | 「workspace_hooks.after_run で push できたことを確かめられませんでした（理由はログに出ています）。この branch の remote には、続きが入っていないことがあります。worktree は残してあります」 |
+
 **他の機械に担当を外されたときは、この欄がありません**（本文も「この branch へ push しないでください」に変わります）。
 
 **なぜそうするか。**1週間の枠は最長で7日先までリセットされません。

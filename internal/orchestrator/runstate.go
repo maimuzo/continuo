@@ -2439,7 +2439,7 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	// **ところが `runAfterRunOK` は、この欄が立っていると `RunAfterRunOnce` を呼ばずに真を返す。**
 	// **成果を出したのは、やり直したほうの attempt である。**
 	// 利用者が書いた `git push` が走らないまま「実行済みです。remote の続きから」と issue へ書き、
-	// **次に拾う機械が、push されていない commit を全部失う。**
+	// **次に拾う機械には、push されていない commit が見えない**（この機械の worktree には残る）。
 	rs.AfterRunDone = false
 	// **手放しの観測も忘れる**（issue #173）。
 	//

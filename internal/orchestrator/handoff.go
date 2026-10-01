@@ -557,6 +557,7 @@ func (o *Orchestrator) releaseTargetFor(
 // nodeID: issue のノード ID。
 // viewer: 外す担当者（この機械）。
 // failurePrefix: 外せなかったときの警告の頭に付ける語。
+// reason: `released` のコメントへ書く理由（`handoff.ReleaseReason…` の値）。
 // 戻り値の1つ目: 外した担当者のログイン名。
 // 戻り値の2つ目: 外せたら true。
 func (o *Orchestrator) removeOwnAssignee(
@@ -719,6 +720,7 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
+// shortKinds: 余裕が無かった枠の種別を並べた文字列（ログへ出す）。
 func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *runState, shortKinds string) {
 	if rs.beginTerminal() != terminalClaimed {
 		return
@@ -794,6 +796,8 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 //
 // ctx: 呼び出しに適用するコンテキスト。**この中で作り直すので、期限切れでもよい。**
 // rs: 対象の run。
+// shortKinds: 余裕が無かった枠の種別を並べた文字列（ログへ出す）。
+// 戻り値: run を印から外したら true。見送って run を残したら false。
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState, shortKinds string) bool {
 	issue := rs.issue()
 	// **`shortKinds`（どの枠に余裕が無いか）は、呼び出し側が受け取って渡す。**
