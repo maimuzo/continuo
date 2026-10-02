@@ -36,6 +36,47 @@ func wantWorkflowPath(t *testing.T, dir string) string {
 	return filepath.Join(real, "WORKFLOW.md")
 }
 
+// 目的: 位置引数で渡したディレクトリの直下に WORKFLOW.md が1つだけ置かれることを確認する。
+// 与える情報: 空の一時ディレクトリ。force は偽。
+// 成功条件: エラーにならず、Result.Path が <ディレクトリ>/WORKFLOW.md の絶対パスであり、
+// Overwritten が偽で、そのディレクトリの中身が WORKFLOW.md の1件だけであること。
+// 書き出した中身が設計 5-2 / 5-3 に照らして雛形として成立していること
+// （scaffold.Template() と突き合わせると、雛形を壊しても通ってしまうので照合先にしない）。
+func TestWriteTemplate_指定したディレクトリの直下にWORKFLOW_mdだけを置く(t *testing.T) {
+	dir := t.TempDir()
+
+	result, err := scaffold.WriteTemplate(dir, false)
+	if err != nil {
+		t.Fatalf("雛形を書き出せなかった: %v", err)
+	}
+
+	want := wantWorkflowPath(t, dir)
+	if result.Path != want {
+		t.Errorf("Result.Path が想定と違う: got %q, want %q", result.Path, want)
+	}
+	if result.Overwritten {
+		t.Error("新規に作成したのに Overwritten が真になっている")
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("書き出した先を読めない: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "WORKFLOW.md" {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("置くのは WORKFLOW.md の1ファイルだけであるべきなのに %v が置かれている", names)
+	}
+
+	got, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("書き出したファイルを読めない: %v", err)
+	}
+	assertTemplateFollowsDesign(t, "書き出した WORKFLOW.md", string(got))
+}
+
 // 目的: 位置引数を省いたら、いまいるディレクトリに書くことを確認する。
 // 与える情報: 一時ディレクトリへ移動した状態で、dir に空文字を渡す。
 // 成功条件: そのディレクトリの直下に WORKFLOW.md ができ、Result.Path がその絶対パスであること。

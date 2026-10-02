@@ -146,6 +146,37 @@ func TestWriteTemplate_既にあればforceなしで拒む(t *testing.T) {
 	}
 }
 
+// TestWriteTemplate_forceなら上書きして上書きしたと返す は、`--force` の経路を確かめる。
+//
+// 目的: `force` が真なら上書きし、Result.Overwritten を真にすること。
+// 与える情報: 既にファイルがあるディレクトリ。
+// 成功条件: 雛形の中身になり、Overwritten が真であること。
+func TestWriteTemplate_forceなら上書きして上書きしたと返す(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "WORKFLOW.md")
+	if err := os.WriteFile(path, []byte("# 古いもの\n"), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+
+	got, err := scaffold.WriteTemplate(dir, true)
+	if err != nil {
+		t.Fatalf("WriteTemplate が失敗した: %v", err)
+	}
+	if !got.Overwritten {
+		t.Error("上書きしたのに Overwritten が偽になっている")
+	}
+	after, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", readErr)
+	}
+	if strings.Contains(string(after), "古いもの") {
+		t.Error("上書きできていない")
+	}
+	if !strings.Contains(string(after), "tracker:") {
+		t.Error("雛形の中身になっていない")
+	}
+}
+
 // TestUpdateStatuses_コメントが無い行でも書き換える は、雛形を人間が整理した場合を確かめる。
 //
 // **人間は行の右側のコメントを消すことがある。**コメントの有無で書き換えが失敗すると、

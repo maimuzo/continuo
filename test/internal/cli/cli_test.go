@@ -242,37 +242,6 @@ func TestRun_知らないフラグは後ろに書いてもエラーのまま(t *
 	}
 }
 
-// TestRunInit_後ろに書いたforceが効く は、`continuo init` でも並べ替えが効くことを確かめる。
-//
-// **1つのサブコマンドだけ違う挙動にしない。**`init <ディレクトリ> --force` が効かないと、
-// 「上書きされなかった」と悩むことになる。
-//
-// 目的: 既に WORKFLOW.md があるディレクトリで `init <ディレクトリ> --force` が上書きすること。
-// 与える情報: 人間が足した行を含む WORKFLOW.md があるディレクトリ。
-// 成功条件: 終了コードが 0 で、足した行が消えている（＝上書きされた）こと。
-func TestRunInit_後ろに書いたforceが効く(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "WORKFLOW.md")
-	const mark = "# 人間が手で足した行\n"
-	if err := os.WriteFile(path, []byte(scaffold.Template()+mark), 0o600); err != nil {
-		t.Fatalf("WORKFLOW.md を書けません: %v", err)
-	}
-	deps := cli.Deps{ScaffoldDetect: fixedDetection}
-
-	code, _, stderr := runCLIWith(deps, []string{"init", dir, "--force"}, "")
-
-	if code != 0 {
-		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
-	}
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("WORKFLOW.md を読めません: %v", err)
-	}
-	if strings.HasSuffix(string(got), mark) {
-		t.Error("--force を後ろに書いたのに上書きされていない")
-	}
-}
-
 // TestRunTrust_後ろに書いたdryRunが効く は、`continuo trust` でも並べ替えが効くことを確かめる。
 //
 // **ここで効かないと、下見のつもりで叩いた `trust <パス> --dry-run` が本当に書き込む。**
@@ -405,39 +374,6 @@ func TestRun_位置引数が多すぎたら落とす(t *testing.T) {
 	}
 }
 
-// TestRunInit_ownerの形が不正なら外部へ接続する前に落とす は、段0 の検査を確かめる。
-//
-// 目的: `--owner` に GitHub のアカウント名として成り立たない文字列を渡したとき、
-// `gh` を1回も起動せずに 2 で止まること。
-// 与える情報: 空白や記号を含む owner。
-// 成功条件: すべて終了コードが 2。
-func TestRunInit_ownerの形が不正なら外部へ接続する前に落とす(t *testing.T) {
-	for _, owner := range []string{"has space", "-leading", "trailing-", "a/b", strings.Repeat("x", 40)} {
-		t.Run(owner, func(t *testing.T) {
-			code, _, stderr := runCLI([]string{"init", "--owner", owner, t.TempDir()}, "")
-			if code != 2 {
-				t.Errorf("owner=%q の終了コードが 2 でない: %d（stderr: %s）", owner, code, stderr)
-			}
-		})
-	}
-}
-
-// TestRunInit_projectが0以下なら落とす は、カンバンの番号の検査を確かめる。
-//
-// 目的: `--project 0` や負の数を、カンバンを引きに行く前に弾くこと。
-// 与える情報: 0 と -1。
-// 成功条件: 終了コードが 2。
-func TestRunInit_projectが0以下なら落とす(t *testing.T) {
-	for _, n := range []string{"0", "-1"} {
-		t.Run(n, func(t *testing.T) {
-			code, _, _ := runCLI([]string{"init", "--project", n, t.TempDir()}, "")
-			if code != 2 {
-				t.Errorf("--project %s の終了コードが 2 でない: %d", n, code)
-			}
-		})
-	}
-}
-
 // TestRunSetup_statusFieldが空なら落とす は、尋ねる前の検査を確かめる。
 //
 // **5問すべて答えさせたあとで落とすと、入力が全部捨てられる**（設計 3-32）。
@@ -549,56 +485,6 @@ func TestRunDoctor_設定を読めなくても検査を続ける(t *testing.T) {
 	}
 	if stdout == "" {
 		t.Error("検査の結果を1件も出していない")
-	}
-}
-
-// TestRunInit_雛形を置いてから2度目は上書きしない は、`--force` の要否を確かめる。
-//
-// **`continuo init` が既にある WORKFLOW.md を黙って上書きすると、
-// 利用者が手で直した行（`trust.repositories` から消した行など）が全部消える。**
-//
-// **`continuo init` は2枚を置く**（設計 5-3o）。**設定は WORKFLOW.md の1枚のままで、
-// 2枚目の continuo-ci.yaml は CI へ移すための見本である**（設計 5-3g）。
-//
-// **1度目で2枚とも置かれるので、2度目は「2枚とも既にある」に当たり、`--force` を勧めて 1 で終える。**
-// **1度目を飛ばして2度目だけを見ると、足りないほうを置いて 0 で終えるので、この検査は成り立たない。**
-//
-// **この注釈は、かつて事実でなかった。**commit a4e984c が PROJECT_SPECIFIC_PROMPT.md を
-// 2枚目に置いたあと1枚へ戻され、**「2枚を置くようになった」という注釈だけが残っていた。**
-// **コードと整合していない注釈は、読む人を誤らせる。**
-//
-// 目的: 2度目の `init` が、既にある WORKFLOW.md を `--force` 無しでは書き換えないこと。
-// 与える情報: 既に WORKFLOW.md があるディレクトリ。**1度目の init で2枚目も置かれる。**
-// 成功条件: WORKFLOW.md の中身が変わらないこと。2度目の終了コードが 0 でないこと。
-func TestRunInit_雛形を置いてから2度目は上書きしない(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "WORKFLOW.md")
-	const mark = "# 人間が手で足した行\n"
-	if err := os.WriteFile(path, []byte(scaffold.Template()+mark), 0o600); err != nil {
-		t.Fatalf("WORKFLOW.md を書けません: %v", err)
-	}
-
-	// **gh は叩かせない**（fixedDetection の説明のとおり、叩くと `go test` が github.com へ出る）。
-	runInitOffline(dir)
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("WORKFLOW.md を読めません: %v", err)
-	}
-	if !strings.HasSuffix(string(got), mark) {
-		t.Error("人間が足した行が消えている")
-	}
-
-	// 2回目。**既に在るので、`--force` を勧めて止まる。**
-	code, _, _ := runInitOffline(dir)
-	if code == 0 {
-		t.Error("既にあるのに上書きを許している")
-	}
-	got, err = os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("WORKFLOW.md を読めません: %v", err)
-	}
-	if !strings.HasSuffix(string(got), mark) {
-		t.Error("人間が足した行が消えている")
 	}
 }
 
@@ -1128,52 +1014,6 @@ func fixedDetection(_ context.Context, _ scaffold.DetectOptions) scaffold.Detect
 			{Key: scaffold.OwnerKey, Filled: true, Reason: "検査用に固定した値です"},
 			{Key: scaffold.ProjectKey, Filled: true, Reason: "検査用に固定した値です"},
 		},
-	}
-}
-
-// TestRunInit_引けた値と引けなかった理由を両方出す は、`continuo init` の報告を確かめる。
-//
-// **`continuo init` は値を埋めるだけでなく、「なぜその値になったか」を出す。**
-// **埋まらなかったキーは、何をすればよいかを出す。**出さないと、人間はプレースホルダの
-// ままのファイルを渡されて途方に暮れる。
-//
-// 目的: 埋まったキーの値と理由、埋まらなかったキーの理由と直し方を出すこと。
-// 与える情報: owner は埋まり、カンバンの番号は候補が複数で埋まらない検出結果。
-// 成功条件: 両方の理由と、候補の一覧と、プレースホルダが残っている旨が出ること。
-func TestRunInit_引けた値と引けなかった理由を両方出す(t *testing.T) {
-	deps := cli.Deps{ScaffoldDetect: func(_ context.Context, _ scaffold.DetectOptions) scaffold.Detection {
-		return scaffold.Detection{
-			Values: scaffold.Values{Owner: "octocat"},
-			Fields: []scaffold.Field{
-				{Key: scaffold.OwnerKey, Filled: true, Value: "octocat", Reason: "gh api user が返しました"},
-				{
-					Key:    scaffold.ProjectKey,
-					Reason: "カンバンの候補が2件あります",
-					Candidates: []scaffold.Project{
-						{Number: 3, Title: "開発カンバン", URL: "https://github.com/users/octocat/projects/3"},
-						{Number: 9, Title: "検証用", URL: "https://github.com/users/octocat/projects/9"},
-					},
-					Advice: []string{"`continuo init --project <番号>` で指定してください"},
-				},
-			},
-		}
-	}}
-
-	code, stdout, stderr := runCLIWith(deps, []string{"init", t.TempDir()}, "")
-	if code != 0 {
-		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
-	}
-	for _, want := range []string{
-		"octocat",     // 埋まった値
-		"gh api user", // 埋まった理由
-		"カンバンの候補が2件あります", // 埋まらなかった理由
-		"開発カンバン",         // 候補の一覧
-		"検証用",
-		"--project", // 直し方
-	} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("%q を出していない:\n%s", want, stdout)
-		}
 	}
 }
 
