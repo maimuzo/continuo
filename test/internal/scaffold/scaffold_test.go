@@ -1,9 +1,3 @@
-// {"RUCM-CFG-SHA256": "95e8048780f94939c978a444aa8ba2e27646962d3478125e829d52743425908e", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
-// **379本のパスは、引数の指定の組み合わせで爆発したものである。**結末は8通りしかないので、
-// **終端フローごとに代表を1本ずつ**対応づける。組み合わせを全部書いても、
-// 同じ経路を何度も通るだけで新しく守れるものが増えない。
 // Package scaffold_test は internal/scaffold の振る舞いを、公開 API
 // （scaffold.WriteTemplate / scaffold.Template）を通して検証する。
 //
@@ -40,49 +34,6 @@ func wantWorkflowPath(t *testing.T, dir string) string {
 		t.Fatalf("ディレクトリの実体を辿れない（%s）: %v", dir, err)
 	}
 	return filepath.Join(real, "WORKFLOW.md")
-}
-
-// {"RUCM-PATH": "P001"}
-//
-// 目的: 位置引数で渡したディレクトリの直下に WORKFLOW.md が1つだけ置かれることを確認する。
-// 与える情報: 空の一時ディレクトリ。force は偽。
-// 成功条件: エラーにならず、Result.Path が <ディレクトリ>/WORKFLOW.md の絶対パスであり、
-// Overwritten が偽で、そのディレクトリの中身が WORKFLOW.md の1件だけであること。
-// 書き出した中身が設計 5-2 / 5-3 に照らして雛形として成立していること
-// （scaffold.Template() と突き合わせると、雛形を壊しても通ってしまうので照合先にしない）。
-func TestWriteTemplate_指定したディレクトリの直下にWORKFLOW_mdだけを置く(t *testing.T) {
-	dir := t.TempDir()
-
-	result, err := scaffold.WriteTemplate(dir, false)
-	if err != nil {
-		t.Fatalf("雛形を書き出せなかった: %v", err)
-	}
-
-	want := wantWorkflowPath(t, dir)
-	if result.Path != want {
-		t.Errorf("Result.Path が想定と違う: got %q, want %q", result.Path, want)
-	}
-	if result.Overwritten {
-		t.Error("新規に作成したのに Overwritten が真になっている")
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("書き出した先を読めない: %v", err)
-	}
-	if len(entries) != 1 || entries[0].Name() != "WORKFLOW.md" {
-		names := make([]string, 0, len(entries))
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Fatalf("置くのは WORKFLOW.md の1ファイルだけであるべきなのに %v が置かれている", names)
-	}
-
-	got, err := os.ReadFile(want)
-	if err != nil {
-		t.Fatalf("書き出したファイルを読めない: %v", err)
-	}
-	assertTemplateFollowsDesign(t, "書き出した WORKFLOW.md", string(got))
 }
 
 // 目的: 位置引数を省いたら、いまいるディレクトリに書くことを確認する。

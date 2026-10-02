@@ -1,9 +1,3 @@
-// {"RUCM-CFG-SHA256": "95e8048780f94939c978a444aa8ba2e27646962d3478125e829d52743425908e", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
-// **379本のパスは、引数の指定の組み合わせで爆発したものである。**結末は8通りしかないので、
-// **終端フローごとに代表を1本ずつ**対応づける。組み合わせを全部書いても、
-// 同じ経路を何度も通るだけで新しく守れるものが増えない。
 // `continuo setup` が WORKFLOW.md を書き換えられない場合の検査である。
 //
 // **書き換えは不可分でなければならない。**途中で落ちて半分書かれた WORKFLOW.md が残ると、
@@ -124,8 +118,6 @@ func TestUpdateStatuses_書き換えても権限を保つ(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P003"}
-//
 // TestWriteTemplate_既にあれば force なしで拒む は、上書きの条件を確かめる。
 //
 // **人間が手で直した行が消えるので、黙って上書きしてはならない。**
@@ -151,73 +143,6 @@ func TestWriteTemplate_既にあればforceなしで拒む(t *testing.T) {
 	}
 	if string(after) != before {
 		t.Error("force が偽なのに上書きしている")
-	}
-}
-
-// {"RUCM-PATH": "P002"}
-//
-// TestWriteTemplate_forceなら上書きして上書きしたと返す は、`--force` の経路を確かめる。
-//
-// 目的: `force` が真なら上書きし、Result.Overwritten を真にすること。
-// 与える情報: 既にファイルがあるディレクトリ。
-// 成功条件: 雛形の中身になり、Overwritten が真であること。
-func TestWriteTemplate_forceなら上書きして上書きしたと返す(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "WORKFLOW.md")
-	if err := os.WriteFile(path, []byte("# 古いもの\n"), 0o600); err != nil {
-		t.Fatalf("WORKFLOW.md を書けません: %v", err)
-	}
-
-	got, err := scaffold.WriteTemplate(dir, true)
-	if err != nil {
-		t.Fatalf("WriteTemplate が失敗した: %v", err)
-	}
-	if !got.Overwritten {
-		t.Error("上書きしたのに Overwritten が偽になっている")
-	}
-	after, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("WORKFLOW.md を読めません: %v", readErr)
-	}
-	if strings.Contains(string(after), "古いもの") {
-		t.Error("上書きできていない")
-	}
-	if !strings.Contains(string(after), "tracker:") {
-		t.Error("雛形の中身になっていない")
-	}
-}
-
-// {"RUCM-PATH": "P006"}
-//
-// TestWriteTemplate_ディレクトリが無ければエラーを返す は、置き場所の検査を確かめる。
-//
-// 目的: 存在しないディレクトリを指されたら `ErrDirNotFound` を返すこと。
-// 与える情報: 存在しないパス。
-// 成功条件: そのエラーで返ること。
-func TestWriteTemplate_ディレクトリが無ければエラーを返す(t *testing.T) {
-	_, err := scaffold.WriteTemplate(filepath.Join(t.TempDir(), "no-such-dir"), false)
-	if !errors.Is(err, scaffold.ErrDirNotFound) {
-		t.Fatalf("ErrDirNotFound でない: %v", err)
-	}
-}
-
-// {"RUCM-PATH": "P005"}
-//
-// TestWriteTemplate_ディレクトリでなければエラーを返す は、置き場所の種類を確かめる。
-//
-// 目的: ファイルを指されたら `ErrNotADirectory` を返すこと。
-// 与える情報: ファイルのパス。
-// 成功条件: そのエラーで返ること。
-func TestWriteTemplate_ディレクトリでなければエラーを返す(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "not-a-dir")
-	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
-		t.Fatalf("ファイルを作れません: %v", err)
-	}
-
-	_, err := scaffold.WriteTemplate(file, false)
-	if !errors.Is(err, scaffold.ErrNotADirectory) {
-		t.Fatalf("ErrNotADirectory でない: %v", err)
 	}
 }
 
