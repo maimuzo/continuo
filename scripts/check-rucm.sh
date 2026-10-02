@@ -3,7 +3,7 @@
 #
 # **手元で回すためのものである。**検査のスクリプトは maimuzo-rucm プラグインに
 # 同梱されており、**このリポジトリは公開なので、外部の貢献者はそれを持っていない。**
-# CI でも呼ぶが、見つからなければ飛ばす（落とさない）。
+# CI からは呼ばない。プラグインを持たない人が叩いたときは、飛ばす（落とさない）。
 #
 # 何を見るか:
 #   check_update_cfg.py     … CFG が、いまの RUCM から再生成した内容と一致するか
@@ -11,8 +11,8 @@
 #   check_reference_format.py … rucm.md と judge_log.md のコード参照に行番号が無いか
 #
 # 使い方:
-#   sh scripts/check-rucm.sh          … 見つからなければ飛ばす（CI 向け）
-#   sh scripts/check-rucm.sh --strict … 見つからなければ落とす（手元向け）
+#   sh scripts/check-rucm.sh          … 見つからなければ飛ばす（プラグインを持たない人向け）
+#   sh scripts/check-rucm.sh --strict … 見つからなければ落とす（リリース前と、記述を直した人向け）
 
 set -eu
 
