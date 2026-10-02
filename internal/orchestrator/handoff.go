@@ -253,7 +253,7 @@ func (o *Orchestrator) handoffGate(
 			return handoffDecision{}
 		}
 		// **担当を外したので、担当者が1人もいない状態から入札をやり直す**
-		// （RUCM「他人の担当」のステップ6 → 基本フローのステップ6）。
+		// （RUCM「issue の担当を入札で決める」の代替フロー「他人の担当」が、担当を外したあと基本フローの入札の段へ戻る）。
 		//
 		// **いま書いた released を、読んだコメントの写しへ足す**（設計 3-77e）。
 		// 足さないと、入札の回の区切りが**古い hold の時刻のまま**になり、
@@ -1435,7 +1435,7 @@ func (o *Orchestrator) mayReleaseOwnWork(ctx context.Context, rs *runState) (boo
 }
 
 // logReleasedRecord は、この continuo の担当が外された記録が issue にあればログへ残す
-// （RUCM「担当が移った」のステップ1）。
+// （RUCM「issue を1件処理する」の代替フロー「担当が移った」の、released のコメントの中身を記録に残す段）。
 //
 // **これが無いと「担当が移った」としか残らず、いつ・どのアカウントが外されたのかを辿れない。**
 //

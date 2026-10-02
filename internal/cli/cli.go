@@ -687,7 +687,7 @@ func countLines(s string) int {
 // **WORKFLOW.md が無ければ止める。**雛形を置くのは `continuo init` の仕事であり、
 // 2つのコマンドが同じファイルを作れると、どちらが正かが決まらない。
 //
-// **`--force` は無い。**書き換えるのが8行だけになったので、上書きから守るものが無くなった。
+// **`--force` は無い。**書き換えるのが9つのキーの行だけになったので、上書きから守るものが無くなった。
 // 何も守らないフラグを残すと、まだ何かを守っているように読める。
 //
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
@@ -751,7 +751,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		dir = positional[0]
 	}
 
-	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM の基本フロー2）。
+	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM「既存のボードの Status を割り当てる」の基本フローの、指定されたパスと WORKFLOW.md を検査する段）。
 	// ここで止まる実行では、役割の割り当てを1つも尋ねない。
 	check, err := scaffold.CheckUpdatable(dir)
 	if err != nil {
@@ -839,7 +839,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	// **書き換えるのは Status の8行だけである。**owner / project_number / trust.repositories は
+	// **書き換えるのは Status の9つのキーの行だけである。**owner / project_number / trust.repositories は
 	// `continuo init` が書いた値のまま残す。**Detect が引き直した値で上書きしない。**
 	result, err := scaffold.UpdateStatuses(dir, assignment.Statuses())
 	if err != nil {

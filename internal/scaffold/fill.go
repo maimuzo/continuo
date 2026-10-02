@@ -478,7 +478,7 @@ func (s Statuses) Complete() bool {
 	return s.Dispatch != "" && s.Running != "" && s.Review != "" && s.Blocked != "" && s.Done != ""
 }
 
-// applyStatuses は front matter の Status に関する8行を、割り当てた選択肢名で置き換える。
+// applyStatuses は front matter の Status に関する9つのキーの行を、割り当てた選択肢名で置き換える。
 //
 // **値の部分だけを組み立て直す。**行の右側のコメントは原文のまま残し、他の行・空行・
 // 並び順・インデントは1文字も変えない。**`continuo setup` は既にある WORKFLOW.md へ

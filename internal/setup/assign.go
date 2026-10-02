@@ -121,7 +121,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 		fieldName = DefaultStatusFieldName
 	}
 
-	// **尋ねる前に選択肢の数を確かめる**（RUCM の基本フロー5）。足りないまま尋ねると、
+	// **尋ねる前に選択肢の数を確かめる**（RUCM「既存のボードの Status を割り当てる」の基本フローの「読み取った選択肢が5個以上ある」の検査）。足りないまま尋ねると、
 	// 何回か答えさせたあとで必ず行き止まる。利用者に無駄な入力をさせない。
 	// **数えるのは `RequiredRoleCount` である**（設計 3-83）。`RoleCount` で数えると、
 	// **選択肢がちょうど5つのカンバンで1問も尋ねずに終わる。**飛ばせる役割の選択肢が
@@ -179,7 +179,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 				fmt.Fprintln(out, i18n.T(i18n.KeySetupErrNotANumber, strings.TrimSpace(line), len(opts.Options)))
 				continue
 			}
-			// **範囲の検査を先に、0 の検査をあとにする**（RUCM の基本フロー10 と 11）。
+			// **範囲の検査を先に、0 の検査をあとにする**（RUCM「既存のボードの Status を割り当てる」の基本フローで、範囲の検査が「番号が 0 でない」の検査より先に在る）。
 			// 0 は「使える選択肢が無い」という意味を持つ入力なので、範囲外として弾かない。
 			if n < noOptionInput || n > len(opts.Options) {
 				fmt.Fprintln(out, i18n.T(i18n.KeySetupErrOutOfRange, len(opts.Options)))
