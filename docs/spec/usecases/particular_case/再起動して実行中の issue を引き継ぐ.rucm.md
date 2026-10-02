@@ -81,8 +81,8 @@ BASIC FLOW:
 36. ENDIF
 37. システムは VALIDATES THAT hook を受ける socket の listen を始められる。
 38. システムは逃がし先に溜まった hook を読み戻す。
-39. システムは引き継ぐ run を印の集合と実行中の一覧に入れる。
-40. システムは run の turn 数を 1 から数え直す。
+39. システムは引き継ぐと決めた run を印の集合と実行中の一覧に入れる。
+40. システムは印の集合に入れた run の turn 数を 1 から数え直す。
 41. システムは溜めた hook の配送を始める。
 42. システムは復元を終えたことを記録に残す。
 43. INCLUDE USE CASE 起動時に終わった worktree と孤児 branch を掃除する
@@ -130,10 +130,8 @@ RFS BASIC FLOW 12
 1. システムは利用者に何が起きているかと次に何をすべきかを応答する。
 2. システムは VALIDATES THAT 設定の workspace.on_broken_worktree が skip である。
 3. システムは壊れた worktree を引き継ぎの候補から外す。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: 壊れた worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: 壊れた worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 壊れたworktreeでの停止:
 RFS 復元できない壊れたworktree 2
@@ -146,86 +144,77 @@ SPECIFIC ALTERNATIVE FLOW 項目IDの不在:
 RFS BASIC FLOW 15
 1. システムは身元ファイルに project item の ID が無いことを記録に残す。
 2. システムは worktree を引き継ぎの候補から外す。
-3. システムは hook を受ける socket の listen を始める。
-4. システムは逃がし先に溜まった hook を読み戻す。
-5. RESUME STEP 41
-POSTCONDITION: worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。continuo は常駐している。
+3. RESUME STEP 37
+POSTCONDITION: worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 名乗りの食い違い:
 RFS BASIC FLOW 16
 1. システムは置き場所の階層と身元ファイルの名乗りが食い違ったことを記録に残す。
 2. システムは worktree を引き継ぎの候補から外す。
-3. システムは hook を受ける socket の listen を始める。
-4. システムは逃がし先に溜まった hook を読み戻す。
-5. RESUME STEP 41
-POSTCONDITION: worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。continuo は常駐している。
+3. RESUME STEP 37
+POSTCONDITION: worktree は残っている。システムはボードへ1バイトも書いていない。herdr の pane は閉じていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 重複した古いworktree:
 RFS BASIC FLOW 17
 1. システムは同じ issue の worktree が2つあることを記録に残す。
 2. システムは作成時刻が古いほうの worktree を引き継ぎの候補から外す。
 3. システムは古いほうの worktree を cwd に持つ herdr の pane を閉じる。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: 古いほうの worktree は残っている。古いほうの worktree の herdr の pane は閉じている。システムは Claude Code を閉じた記録のコメントを書いていない。issue の Status は変わっていない。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: 古いほうの worktree は残っている。古いほうの worktree の herdr の pane は閉じている。システムは Claude Code を閉じた記録のコメントを書いていない。issue の Status は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW ボードの取り直しの失敗:
 RFS BASIC FLOW 20
 1. システムは取り直しに失敗したので引き継がないことを記録に残す。
 2. システムは herdr の pane を閉じずに残す。
 3. システムは worktree を閉じる集合に入れる。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。システムは Claude Code を閉じた記録のコメントを書いていない。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。システムは Claude Code を閉じた記録のコメントを書いていない。
 
 SPECIFIC ALTERNATIVE FLOW 一覧の取得の失敗:
 RFS BASIC FLOW 18
 1. システムは pane が生きているかどうかの判断を保留する。
 2. システムは herdr の pane を1つも閉じない。
 3. システムは worktree を閉じる集合に入れる。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。
 
 SPECIFIC ALTERNATIVE FLOW paneの不在:
 RFS BASIC FLOW 19
-1. システムは hook を受ける socket の listen を始める。
+1. システムは VALIDATES THAT hook を受ける socket の listen を始められる。
 2. システムは逃がし先に溜まった hook を読み戻す。
 3. システムは溜めた hook の配送を始める。
 4. INCLUDE USE CASE 再起動で pane が残っていない run を扱う
 5. RESUME STEP 42
 POSTCONDITION: issue は印の集合に入っていない。herdr の pane は1つも閉じていない。continuo は常駐している。
 
+SPECIFIC ALTERNATIVE FLOW pane無しでhookの受け口を開けない:
+RFS paneの不在 1
+1. システムは利用者に hook を受ける socket の listen を始められない理由を応答する。
+2. システムは herdr の pane を1つも閉じずに終了する。
+3. ABORT
+POSTCONDITION: continuo は常駐していない。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。理由は標準エラーに出ている。終了コード 1 が返っている。
+
 SPECIFIC ALTERNATIVE FLOW 取り直しでの不在:
 RFS BASIC FLOW 21
 1. システムは取り直しで project item が見つからないことを記録に残す。
 2. システムは herdr の pane と worktree を残す。
-3. システムは hook を受ける socket の listen を始める。
-4. システムは逃がし先に溜まった hook を読み戻す。
-5. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。システムはボードへ1バイトも書いていない。issue は印の集合に入っていない。continuo は常駐している。
+3. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。システムはボードへ1バイトも書いていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW issueの取り違え:
 RFS BASIC FLOW 22
 1. システムは取り直した issue と置き場所の階層が食い違ったことを記録に残す。
 2. システムは herdr の pane と worktree を残す。
-3. システムは hook を受ける socket の listen を始める。
-4. システムは逃がし先に溜まった hook を読み戻す。
-5. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。取り直した issue の Status は変わっていない。issue は印の集合に入っていない。continuo は常駐している。
+3. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。取り直した issue の Status は変わっていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 片付け対象のStatus:
 RFS BASIC FLOW 23
 1. システムは herdr の pane を閉じる。
 2. システムは Claude Code を閉じた記録を issue に1件コメントする。
 3. システムは worktree と branch を片付ける。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。片付けの条件を満たした worktree は消えている。issue の Status は変わっていない。issue は印の集合に入っていない。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。片付けの条件を満たした worktree は消えている。issue の Status は変わっていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 作業中でないStatus:
 RFS BASIC FLOW 24
@@ -233,40 +222,31 @@ RFS BASIC FLOW 24
 2. システムは VALIDATES THAT direct chat のカードの pane を引き継ぐ条件がすべて揃っている。
 3. システムは身元ファイルの引き継いだ回数を1つ増やす。
 4. システムは run の実行時状態に direct chat の印を入れる。
-5. システムは hook を受ける socket の listen を始める。
-6. システムは逃がし先に溜まった hook を読み戻す。
-7. システムは引き継ぐ run を印の集合と実行中の一覧に入れる。
-8. RESUME STEP 41
-POSTCONDITION: issue は印の集合に入っている。run は direct chat の印を持っている。herdr の pane は閉じていない。システムは run に指示を1回も送らない。issue の Status は direct_chat_state の選択肢のままである。continuo は常駐している。
+5. RESUME STEP 37
+POSTCONDITION: システムは run を引き継ぐと決めている。run の実行時状態は direct chat の印を持っている。herdr の pane は閉じていない。システムは run に指示を1回も送らない。issue の Status は direct_chat_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 引き渡し状態:
 RFS 作業中でないStatus 1
 1. システムは herdr の pane を閉じずに残す。
 2. システムは worktree を残す。
-3. システムは hook を受ける socket の listen を始める。
-4. システムは逃がし先に溜まった hook を読み戻す。
-5. RESUME STEP 8
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。利用者は pane の中身を読める。continuo は常駐している。
+3. RESUME STEP 5
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。利用者は pane の中身を読める。
 
 SPECIFIC ALTERNATIVE FLOW directChatの見送り:
 RFS 作業中でないStatus 2
 1. システムは引き継げない理由を記録に残す。
 2. システムは herdr の pane を閉じずに残す。
 3. システムは worktree を閉じる集合に入れる。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 8
-POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は direct_chat_state の選択肢のままである。システムは issue にコメントを書いていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。continuo は常駐している。
+4. RESUME STEP 5
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は direct_chat_state の選択肢のままである。システムは issue にコメントを書いていない。issue は印の集合に入っていない。worktree は閉じる集合に入っている。
 
 BOUNDED ALTERNATIVE FLOW 引き継げないpane:
 RFS BASIC FLOW 25,26,27,28
 1. システムは引き継げない理由を記録に残す。
 2. システムは herdr の pane を閉じる。
 3. システムは Claude Code を閉じた記録を issue に1件コメントする。
-4. システムは hook を受ける socket の listen を始める。
-5. システムは逃がし先に溜まった hook を読み戻す。
-6. RESUME STEP 41
-POSTCONDITION: herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。continuo は常駐している。
+4. RESUME STEP 37
+POSTCONDITION: herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。issue の Status は変わっていない。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 権限の確認での停止:
 RFS BASIC FLOW 29
@@ -274,10 +254,8 @@ RFS BASIC FLOW 29
 2. システムは引き渡しの通知を issue に1件コメントする。
 3. システムは herdr の pane を閉じる。
 4. システムは Claude Code を閉じた記録を issue に1件コメントする。
-5. システムは hook を受ける socket の listen を始める。
-6. システムは逃がし先に溜まった hook を読み戻す。
-7. RESUME STEP 41
-POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に引き渡しの通知のコメントが1件増えている。issue に Claude Code を閉じた記録のコメントが1件増えている。保留中の権限の要求は pane ごと消えている。worktree は残っている。issue は印の集合に入っていない。continuo は常駐している。
+5. RESUME STEP 37
+POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に引き渡しの通知のコメントが1件増えている。issue に Claude Code を閉じた記録のコメントが1件増えている。保留中の権限の要求は pane ごと消えている。worktree は残っている。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限:
 RFS BASIC FLOW 30
@@ -285,20 +263,18 @@ RFS BASIC FLOW 30
 2. システムは引き渡しの通知を issue に1件コメントする。
 3. システムは herdr の pane を閉じる。
 4. システムは Claude Code を閉じた記録を issue に1件コメントする。
-5. システムは hook を受ける socket の listen を始める。
-6. システムは逃がし先に溜まった hook を読み戻す。
-7. RESUME STEP 41
-POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に引き渡しの通知のコメントが1件増えている。issue に Claude Code を閉じた記録のコメントが1件増えている。continuo は turn を1回も送っていない。worktree は残っている。issue は印の集合に入っていない。continuo は常駐している。
+5. RESUME STEP 37
+POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。issue に引き渡しの通知のコメントが1件増えている。issue に Claude Code を閉じた記録のコメントが1件増えている。continuo は turn を1回も送っていない。worktree は残っている。issue は印の集合に入っていない。
 
 SPECIFIC ALTERNATIVE FLOW hookの受け口を開けない:
 RFS BASIC FLOW 37
 1. システムは利用者に hook を受ける socket の listen を始められない理由を応答する。
 2. システムは herdr の pane を1つも閉じずに終了する。
 3. ABORT
-POSTCONDITION: continuo は常駐していない。herdr の pane は閉じていない。worktree は残っている。身元ファイルの引き継いだ回数は1つ増えている。理由は標準エラーに出ている。終了コード 1 が返っている。
+POSTCONDITION: continuo は常駐していない。システムが引き継ぐと決めた run の herdr の pane は閉じていない。worktree は残っている。システムが引き継ぐと決めた run の身元ファイルは、引き継いだ回数が1つ増えたままである。システムが引き継がないと決めた run に行った扱いは、行ったままである。理由は標準エラーに出ている。終了コード 1 が返っている。
 
 GLOBAL ALTERNATIVE FLOW 中断:
-BRANCH FROM BASIC FLOW 39
+BRANCH FROM BASIC FLOW 31
 WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
 1. システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。
 2. システムはボードの巡回を止める。
@@ -326,13 +302,18 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 
 | 引き継がないと決めたあと、実装が次に行う段 | 戻り先 |
 | --- | --- |
-| hook を受ける socket の listen と逃がし先の読み戻し（代替フローの中に書いた）。そのあと配送の開始 | ステップ41 |
+| hook を受ける socket の listen（どの worktree の結末のあとでも、`Restore` が1回だけ行う） | ステップ37 |
 | pane が無い worktree の扱い（配送の開始のあとに行う。`再起動で pane が残っていない run を扱う` を引く）。そのあと復元の終わりの記録 | ステップ42 |
 
-**ステップ39 と40（印の集合に入れる・turn 数を数え直す）は、引き継ぐ run にしか当てはまらない。**
-引き継がない経路がステップ37 へ戻ると、この2段を通ることになる。だから listen と読み戻しは代替フローの中に書き、ステップ41 へ戻している。
+**listen の検査は基本フローのステップ37 の1か所である。**引き継がないと決めた経路もここへ戻るので、
+「引き継ぐ run が1件も無い再起動で listen に失敗して起動を止める」経路も `hookの受け口を開けない` に届く。
+`paneの不在` だけは、listen・読み戻し・配送の開始のあとに pane の無い worktree の扱いが来るので、基本フローへ戻れない。
+同じ listen を代替フローの中で検査し、偽の側を `pane無しでhookの受け口を開けない` に出した。
 
-**基本フローの事後条件は、ステップ41 以降へ戻ったどの経路でも成り立つ形で書いた。**
+**ステップ39 と40 は、システムが引き継ぐと決めた run の集まりに対する段である**（`Restore` は引き継ぐと決めた run を順に `Adopt` へ渡す）。
+引き継がないと決めた経路では、追っている worktree の run はその集まりに入っていない。
+
+**基本フローの事後条件は、ステップ37 以降へ戻ったどの経路でも成り立つ形で書いた。**
 引き継いだ run についての条件は「システムが引き継ぐと決めた run は」で始めてある。引き継がない経路の結果は、それぞれの代替フローの事後条件に書いた。
 
 ## 起動を止める失敗
@@ -347,10 +328,10 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | 前提の不足 | `Run` の段3（起動時の検査） |
 | 使用率の受け口を開けない | `Run` の段3b。`rate_limit.source` が `statusline` で `sl.sock` を開けないときだけ |
 | 壊れたworktreeでの停止 | `handleBrokenWorktrees`。`workspace.on_broken_worktree` が `stop`（既定） |
-| hookの受け口を開けない | `Restore` の段5d |
+| hookの受け口を開けない、pane無しでhookの受け口を開けない | `Restore` の段5d |
 
 **hook を受ける socket の listen は、引き継がない経路でも同じ1回の呼び出しである。**
-始められなければ、どの経路でも起動を止める。経路としては基本フローのステップ37 の分岐だけに出した。
+始められなければ、どの worktree の結末のあとでも起動を止める。引き継がないと決めたときに済ませた扱い（pane の close・Status の書き込み・コメント）は、そのまま残る。
 
 ## 取り直しの失敗を見るのは、pane の有無を見たあとである
 
@@ -544,8 +525,8 @@ flowchart TD
     BS35["35 システムは run の実行時状態に次の turn を要する印を入れる"]
     BS37{"37 hook を受ける socket の listen を始められる"}
     BS38["38 システムは逃がし先に溜まった hook を読み戻す"]
-    BS39["39 システムは引き継ぐ run を印の集合と実行中の一覧に入れる"]
-    BS40["40 システムは run の turn 数を 1 から数え直す"]
+    BS39["39 システムは引き継ぐと決めた run を印の集合と実行中の一覧に入れる"]
+    BS40["40 システムは印の集合に入れた run の turn 数を 1 から数え直す"]
     BS41["41 システムは溜めた hook の配送を始める"]
     BS42["42 システムは復元を終えたことを記録に残す"]
     BS43[["43 INCLUDE USE CASE 起動時に終わった worktree と孤児 branch を掃除する"]]
@@ -569,114 +550,86 @@ flowchart TD
     A6S1["復元できない壊れたworktree 1 システムは利用者に何が起きているかと次に何をすべきかを応答する"]
     A6S2{"復元できない壊れたworktree 2 設定の workspace.on_broken_worktree が skip である"}
     A6S3["復元できない壊れたworktree 3 システムは壊れた worktree を引き継ぎの候補から外す"]
-    A6S4["復元できない壊れたworktree 4 システムは hook を受ける socket の listen を始める"]
-    A6S5["復元できない壊れたworktree 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A6S6["復元できない壊れたworktree 6 RESUME STEP 41"]
+    A6S4["復元できない壊れたworktree 4 RESUME STEP 37"]
     A7S1["壊れたworktreeでの停止 1 システムは利用者に壊れた worktree の件数とパスを応答する"]
     A7S2["壊れたworktreeでの停止 2 システムは herdr の pane を1つも閉じずに終了する"]
     A7S3(["壊れたworktreeでの停止 3 ABORT"])
     A8S1["項目IDの不在 1 システムは身元ファイルに project item の ID が無いことを記録に残す"]
     A8S2["項目IDの不在 2 システムは worktree を引き継ぎの候補から外す"]
-    A8S3["項目IDの不在 3 システムは hook を受ける socket の listen を始める"]
-    A8S4["項目IDの不在 4 システムは逃がし先に溜まった hook を読み戻す"]
-    A8S5["項目IDの不在 5 RESUME STEP 41"]
+    A8S3["項目IDの不在 3 RESUME STEP 37"]
     A9S1["名乗りの食い違い 1 システムは置き場所の階層と身元ファイルの名乗りが食い違ったことを記録に残す"]
     A9S2["名乗りの食い違い 2 システムは worktree を引き継ぎの候補から外す"]
-    A9S3["名乗りの食い違い 3 システムは hook を受ける socket の listen を始める"]
-    A9S4["名乗りの食い違い 4 システムは逃がし先に溜まった hook を読み戻す"]
-    A9S5["名乗りの食い違い 5 RESUME STEP 41"]
+    A9S3["名乗りの食い違い 3 RESUME STEP 37"]
     A10S1["重複した古いworktree 1 システムは同じ issue の worktree が2つあることを記録に残す"]
     A10S2["重複した古いworktree 2 システムは作成時刻が古いほうの worktree を引き継ぎの候補から外す"]
     A10S3["重複した古いworktree 3 システムは古いほうの worktree を cwd に持つ herdr の pane を閉じる"]
-    A10S4["重複した古いworktree 4 システムは hook を受ける socket の listen を始める"]
-    A10S5["重複した古いworktree 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A10S6["重複した古いworktree 6 RESUME STEP 41"]
+    A10S4["重複した古いworktree 4 RESUME STEP 37"]
     A11S1["ボードの取り直しの失敗 1 システムは取り直しに失敗したので引き継がないことを記録に残す"]
     A11S2["ボードの取り直しの失敗 2 システムは herdr の pane を閉じずに残す"]
     A11S3["ボードの取り直しの失敗 3 システムは worktree を閉じる集合に入れる"]
-    A11S4["ボードの取り直しの失敗 4 システムは hook を受ける socket の listen を始める"]
-    A11S5["ボードの取り直しの失敗 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A11S6["ボードの取り直しの失敗 6 RESUME STEP 41"]
+    A11S4["ボードの取り直しの失敗 4 RESUME STEP 37"]
     A12S1["一覧の取得の失敗 1 システムは pane が生きているかどうかの判断を保留する"]
     A12S2["一覧の取得の失敗 2 システムは herdr の pane を1つも閉じない"]
     A12S3["一覧の取得の失敗 3 システムは worktree を閉じる集合に入れる"]
-    A12S4["一覧の取得の失敗 4 システムは hook を受ける socket の listen を始める"]
-    A12S5["一覧の取得の失敗 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A12S6["一覧の取得の失敗 6 RESUME STEP 41"]
-    A13S1["paneの不在 1 システムは hook を受ける socket の listen を始める"]
+    A12S4["一覧の取得の失敗 4 RESUME STEP 37"]
+    A13S1{"paneの不在 1 hook を受ける socket の listen を始められる"}
     A13S2["paneの不在 2 システムは逃がし先に溜まった hook を読み戻す"]
     A13S3["paneの不在 3 システムは溜めた hook の配送を始める"]
     A13S4[["paneの不在 4 INCLUDE USE CASE 再起動で pane が残っていない run を扱う"]]
     A13S5["paneの不在 5 RESUME STEP 42"]
-    A14S1["取り直しでの不在 1 システムは取り直しで project item が見つからないことを記録に残す"]
-    A14S2["取り直しでの不在 2 システムは herdr の pane と worktree を残す"]
-    A14S3["取り直しでの不在 3 システムは hook を受ける socket の listen を始める"]
-    A14S4["取り直しでの不在 4 システムは逃がし先に溜まった hook を読み戻す"]
-    A14S5["取り直しでの不在 5 RESUME STEP 41"]
-    A15S1["issueの取り違え 1 システムは取り直した issue と置き場所の階層が食い違ったことを記録に残す"]
-    A15S2["issueの取り違え 2 システムは herdr の pane と worktree を残す"]
-    A15S3["issueの取り違え 3 システムは hook を受ける socket の listen を始める"]
-    A15S4["issueの取り違え 4 システムは逃がし先に溜まった hook を読み戻す"]
-    A15S5["issueの取り違え 5 RESUME STEP 41"]
-    A16S1["片付け対象のStatus 1 システムは herdr の pane を閉じる"]
-    A16S2["片付け対象のStatus 2 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A16S3["片付け対象のStatus 3 システムは worktree と branch を片付ける"]
-    A16S4["片付け対象のStatus 4 システムは hook を受ける socket の listen を始める"]
-    A16S5["片付け対象のStatus 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A16S6["片付け対象のStatus 6 RESUME STEP 41"]
-    A17S1{"作業中でないStatus 1 取り直した Status が direct_chat_state である"}
-    A17S2{"作業中でないStatus 2 direct chat のカードの pane を引き継ぐ条件がすべて揃っている"}
-    A17S3["作業中でないStatus 3 システムは身元ファイルの引き継いだ回数を1つ増やす"]
-    A17S4["作業中でないStatus 4 システムは run の実行時状態に direct chat の印を入れる"]
-    A17S5["作業中でないStatus 5 システムは hook を受ける socket の listen を始める"]
-    A17S6["作業中でないStatus 6 システムは逃がし先に溜まった hook を読み戻す"]
-    A17S7["作業中でないStatus 7 システムは引き継ぐ run を印の集合と実行中の一覧に入れる"]
-    A17S8["作業中でないStatus 8 RESUME STEP 41"]
-    A18S1["引き渡し状態 1 システムは herdr の pane を閉じずに残す"]
-    A18S2["引き渡し状態 2 システムは worktree を残す"]
-    A18S3["引き渡し状態 3 システムは hook を受ける socket の listen を始める"]
-    A18S4["引き渡し状態 4 システムは逃がし先に溜まった hook を読み戻す"]
-    A18S5["引き渡し状態 5 RESUME STEP 8"]
-    A19S1["directChatの見送り 1 システムは引き継げない理由を記録に残す"]
-    A19S2["directChatの見送り 2 システムは herdr の pane を閉じずに残す"]
-    A19S3["directChatの見送り 3 システムは worktree を閉じる集合に入れる"]
-    A19S4["directChatの見送り 4 システムは hook を受ける socket の listen を始める"]
-    A19S5["directChatの見送り 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A19S6["directChatの見送り 6 RESUME STEP 8"]
-    A20S1["引き継げないpane 1 システムは引き継げない理由を記録に残す"]
-    A20S2["引き継げないpane 2 システムは herdr の pane を閉じる"]
-    A20S3["引き継げないpane 3 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A20S4["引き継げないpane 4 システムは hook を受ける socket の listen を始める"]
-    A20S5["引き継げないpane 5 システムは逃がし先に溜まった hook を読み戻す"]
-    A20S6["引き継げないpane 6 RESUME STEP 41"]
-    A21S1["権限の確認での停止 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A21S2["権限の確認での停止 2 システムは引き渡しの通知を issue に1件コメントする"]
-    A21S3["権限の確認での停止 3 システムは herdr の pane を閉じる"]
-    A21S4["権限の確認での停止 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A21S5["権限の確認での停止 5 システムは hook を受ける socket の listen を始める"]
-    A21S6["権限の確認での停止 6 システムは逃がし先に溜まった hook を読み戻す"]
-    A21S7["権限の確認での停止 7 RESUME STEP 41"]
-    A22S1["引き継ぎの上限 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A22S2["引き継ぎの上限 2 システムは引き渡しの通知を issue に1件コメントする"]
-    A22S3["引き継ぎの上限 3 システムは herdr の pane を閉じる"]
-    A22S4["引き継ぎの上限 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A22S5["引き継ぎの上限 5 システムは hook を受ける socket の listen を始める"]
-    A22S6["引き継ぎの上限 6 システムは逃がし先に溜まった hook を読み戻す"]
-    A22S7["引き継ぎの上限 7 RESUME STEP 41"]
-    A23S1["hookの受け口を開けない 1 システムは利用者に hook を受ける socket の listen を始められない理由を応答する"]
-    A23S2["hookの受け口を開けない 2 システムは herdr の pane を1つも閉じずに終了する"]
-    A23S3(["hookの受け口を開けない 3 ABORT"])
-    A24S1["中断 1 システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する"]
-    A24S2["中断 2 システムはボードの巡回を止める"]
-    A24S3["中断 3 システムはダッシュボードを閉じる"]
-    A24S4["中断 4 システムは使用率を受ける sl.sock を閉じる"]
-    A24S5["中断 5 システムは hook を受ける socket を閉じる"]
-    A24S6["中断 6 システムは走行中の turn ループの終了を待つ"]
-    A24S7["中断 7 システムは herdr の pane を閉じずに終了する"]
-    A24S8(["中断 8 ABORT"])
-    A25S1["中断の連打 1 システムは利用者に後始末を待たずに終わることを応答する"]
-    A25S2["中断の連打 2 システムは herdr の pane を閉じずに終了する"]
-    A25S3(["中断の連打 3 ABORT"])
+    A14S1["pane無しでhookの受け口を開けない 1 システムは利用者に hook を受ける socket の listen を始められない理由を応答する"]
+    A14S2["pane無しでhookの受け口を開けない 2 システムは herdr の pane を1つも閉じずに終了する"]
+    A14S3(["pane無しでhookの受け口を開けない 3 ABORT"])
+    A15S1["取り直しでの不在 1 システムは取り直しで project item が見つからないことを記録に残す"]
+    A15S2["取り直しでの不在 2 システムは herdr の pane と worktree を残す"]
+    A15S3["取り直しでの不在 3 RESUME STEP 37"]
+    A16S1["issueの取り違え 1 システムは取り直した issue と置き場所の階層が食い違ったことを記録に残す"]
+    A16S2["issueの取り違え 2 システムは herdr の pane と worktree を残す"]
+    A16S3["issueの取り違え 3 RESUME STEP 37"]
+    A17S1["片付け対象のStatus 1 システムは herdr の pane を閉じる"]
+    A17S2["片付け対象のStatus 2 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A17S3["片付け対象のStatus 3 システムは worktree と branch を片付ける"]
+    A17S4["片付け対象のStatus 4 RESUME STEP 37"]
+    A18S1{"作業中でないStatus 1 取り直した Status が direct_chat_state である"}
+    A18S2{"作業中でないStatus 2 direct chat のカードの pane を引き継ぐ条件がすべて揃っている"}
+    A18S3["作業中でないStatus 3 システムは身元ファイルの引き継いだ回数を1つ増やす"]
+    A18S4["作業中でないStatus 4 システムは run の実行時状態に direct chat の印を入れる"]
+    A18S5["作業中でないStatus 5 RESUME STEP 37"]
+    A19S1["引き渡し状態 1 システムは herdr の pane を閉じずに残す"]
+    A19S2["引き渡し状態 2 システムは worktree を残す"]
+    A19S3["引き渡し状態 3 RESUME STEP 5"]
+    A20S1["directChatの見送り 1 システムは引き継げない理由を記録に残す"]
+    A20S2["directChatの見送り 2 システムは herdr の pane を閉じずに残す"]
+    A20S3["directChatの見送り 3 システムは worktree を閉じる集合に入れる"]
+    A20S4["directChatの見送り 4 RESUME STEP 5"]
+    A21S1["引き継げないpane 1 システムは引き継げない理由を記録に残す"]
+    A21S2["引き継げないpane 2 システムは herdr の pane を閉じる"]
+    A21S3["引き継げないpane 3 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A21S4["引き継げないpane 4 RESUME STEP 37"]
+    A22S1["権限の確認での停止 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A22S2["権限の確認での停止 2 システムは引き渡しの通知を issue に1件コメントする"]
+    A22S3["権限の確認での停止 3 システムは herdr の pane を閉じる"]
+    A22S4["権限の確認での停止 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A22S5["権限の確認での停止 5 RESUME STEP 37"]
+    A23S1["引き継ぎの上限 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A23S2["引き継ぎの上限 2 システムは引き渡しの通知を issue に1件コメントする"]
+    A23S3["引き継ぎの上限 3 システムは herdr の pane を閉じる"]
+    A23S4["引き継ぎの上限 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A23S5["引き継ぎの上限 5 RESUME STEP 37"]
+    A24S1["hookの受け口を開けない 1 システムは利用者に hook を受ける socket の listen を始められない理由を応答する"]
+    A24S2["hookの受け口を開けない 2 システムは herdr の pane を1つも閉じずに終了する"]
+    A24S3(["hookの受け口を開けない 3 ABORT"])
+    A25S1["中断 1 システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する"]
+    A25S2["中断 2 システムはボードの巡回を止める"]
+    A25S3["中断 3 システムはダッシュボードを閉じる"]
+    A25S4["中断 4 システムは使用率を受ける sl.sock を閉じる"]
+    A25S5["中断 5 システムは hook を受ける socket を閉じる"]
+    A25S6["中断 6 システムは走行中の turn ループの終了を待つ"]
+    A25S7["中断 7 システムは herdr の pane を閉じずに終了する"]
+    A25S8(["中断 8 ABORT"])
+    A26S1["中断の連打 1 システムは利用者に後始末を待たずに終わることを応答する"]
+    A26S2["中断の連打 2 システムは herdr の pane を閉じずに終了する"]
+    A26S3(["中断の連打 3 ABORT"])
     BS1 --> BS2
     BS2 -- はい --> BS3
     BS2 -- いいえ --> A1S1
@@ -710,35 +663,35 @@ flowchart TD
     BS20 -- はい --> BS21
     BS20 -- いいえ --> A11S1
     BS21 -- はい --> BS22
-    BS21 -- いいえ --> A14S1
+    BS21 -- いいえ --> A15S1
     BS22 -- はい --> BS23
-    BS22 -- いいえ --> A15S1
+    BS22 -- いいえ --> A16S1
     BS23 -- はい --> BS24
-    BS23 -- いいえ --> A16S1
+    BS23 -- いいえ --> A17S1
     BS24 -- はい --> BS25
-    BS24 -- いいえ --> A17S1
+    BS24 -- いいえ --> A18S1
     BS25 -- はい --> BS26
-    BS25 -- いいえ --> A20S1
+    BS25 -- いいえ --> A21S1
     BS26 -- はい --> BS27
-    BS26 -- いいえ --> A20S1
+    BS26 -- いいえ --> A21S1
     BS27 -- はい --> BS28
-    BS27 -- いいえ --> A20S1
+    BS27 -- いいえ --> A21S1
     BS28 -- はい --> BS29
-    BS28 -- いいえ --> A20S1
+    BS28 -- いいえ --> A21S1
     BS29 -- はい --> BS30
-    BS29 -- いいえ --> A21S1
+    BS29 -- いいえ --> A22S1
     BS30 -- はい --> BS31
-    BS30 -- いいえ --> A22S1
+    BS30 -- いいえ --> A23S1
     BS31 --> BS32
+    BS31 -. "WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合" .-> A25S1
     BS32 -- はい --> BS33
     BS32 -- いいえ --> BS35
     BS33 --> BS37
     BS35 --> BS37
     BS37 -- はい --> BS38
-    BS37 -- いいえ --> A23S1
+    BS37 -- いいえ --> A24S1
     BS38 --> BS39
     BS39 --> BS40
-    BS39 -. "WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合" .-> A24S1
     BS40 --> BS41
     BS41 --> BS42
     BS42 --> BS43
@@ -758,113 +711,85 @@ flowchart TD
     A6S2 -- はい --> A6S3
     A6S2 -- いいえ --> A7S1
     A6S3 --> A6S4
-    A6S4 --> A6S5
-    A6S5 --> A6S6
-    A6S6 -. "戻る" .-> BS41
+    A6S4 -. "戻る" .-> BS37
     A7S1 --> A7S2
     A7S2 --> A7S3
     A8S1 --> A8S2
     A8S2 --> A8S3
-    A8S3 --> A8S4
-    A8S4 --> A8S5
-    A8S5 -. "戻る" .-> BS41
+    A8S3 -. "戻る" .-> BS37
     A9S1 --> A9S2
     A9S2 --> A9S3
-    A9S3 --> A9S4
-    A9S4 --> A9S5
-    A9S5 -. "戻る" .-> BS41
+    A9S3 -. "戻る" .-> BS37
     A10S1 --> A10S2
     A10S2 --> A10S3
     A10S3 --> A10S4
-    A10S4 --> A10S5
-    A10S5 --> A10S6
-    A10S6 -. "戻る" .-> BS41
+    A10S4 -. "戻る" .-> BS37
     A11S1 --> A11S2
     A11S2 --> A11S3
     A11S3 --> A11S4
-    A11S4 --> A11S5
-    A11S5 --> A11S6
-    A11S6 -. "戻る" .-> BS41
+    A11S4 -. "戻る" .-> BS37
     A12S1 --> A12S2
     A12S2 --> A12S3
     A12S3 --> A12S4
-    A12S4 --> A12S5
-    A12S5 --> A12S6
-    A12S6 -. "戻る" .-> BS41
-    A13S1 --> A13S2
+    A12S4 -. "戻る" .-> BS37
+    A13S1 -- はい --> A13S2
+    A13S1 -- いいえ --> A14S1
     A13S2 --> A13S3
     A13S3 --> A13S4
     A13S4 --> A13S5
     A13S5 -. "戻る" .-> BS42
     A14S1 --> A14S2
     A14S2 --> A14S3
-    A14S3 --> A14S4
-    A14S4 --> A14S5
-    A14S5 -. "戻る" .-> BS41
     A15S1 --> A15S2
     A15S2 --> A15S3
-    A15S3 --> A15S4
-    A15S4 --> A15S5
-    A15S5 -. "戻る" .-> BS41
+    A15S3 -. "戻る" .-> BS37
     A16S1 --> A16S2
     A16S2 --> A16S3
-    A16S3 --> A16S4
-    A16S4 --> A16S5
-    A16S5 --> A16S6
-    A16S6 -. "戻る" .-> BS41
-    A17S1 -- はい --> A17S2
-    A17S1 -- いいえ --> A18S1
-    A17S2 -- はい --> A17S3
-    A17S2 -- いいえ --> A19S1
+    A16S3 -. "戻る" .-> BS37
+    A17S1 --> A17S2
+    A17S2 --> A17S3
     A17S3 --> A17S4
-    A17S4 --> A17S5
-    A17S5 --> A17S6
-    A17S6 --> A17S7
-    A17S7 --> A17S8
-    A17S8 -. "戻る" .-> BS41
-    A18S1 --> A18S2
-    A18S2 --> A18S3
+    A17S4 -. "戻る" .-> BS37
+    A18S1 -- はい --> A18S2
+    A18S1 -- いいえ --> A19S1
+    A18S2 -- はい --> A18S3
+    A18S2 -- いいえ --> A20S1
     A18S3 --> A18S4
     A18S4 --> A18S5
-    A18S5 -. "戻る" .-> A17S8
+    A18S5 -. "戻る" .-> BS37
     A19S1 --> A19S2
     A19S2 --> A19S3
-    A19S3 --> A19S4
-    A19S4 --> A19S5
-    A19S5 --> A19S6
-    A19S6 -. "戻る" .-> A17S8
+    A19S3 -. "戻る" .-> A18S5
     A20S1 --> A20S2
     A20S2 --> A20S3
     A20S3 --> A20S4
-    A20S4 --> A20S5
-    A20S5 --> A20S6
-    A20S6 -. "戻る" .-> BS41
+    A20S4 -. "戻る" .-> A18S5
     A21S1 --> A21S2
     A21S2 --> A21S3
     A21S3 --> A21S4
-    A21S4 --> A21S5
-    A21S5 --> A21S6
-    A21S6 --> A21S7
-    A21S7 -. "戻る" .-> BS41
+    A21S4 -. "戻る" .-> BS37
     A22S1 --> A22S2
     A22S2 --> A22S3
     A22S3 --> A22S4
     A22S4 --> A22S5
-    A22S5 --> A22S6
-    A22S6 --> A22S7
-    A22S7 -. "戻る" .-> BS41
+    A22S5 -. "戻る" .-> BS37
     A23S1 --> A23S2
     A23S2 --> A23S3
+    A23S3 --> A23S4
+    A23S4 --> A23S5
+    A23S5 -. "戻る" .-> BS37
     A24S1 --> A24S2
     A24S2 --> A24S3
-    A24S3 --> A24S4
-    A24S3 -. "WHEN 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合" .-> A25S1
-    A24S4 --> A24S5
-    A24S5 --> A24S6
-    A24S6 --> A24S7
-    A24S7 --> A24S8
     A25S1 --> A25S2
     A25S2 --> A25S3
+    A25S3 --> A25S4
+    A25S3 -. "WHEN 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合" .-> A26S1
+    A25S4 --> A25S5
+    A25S5 --> A25S6
+    A25S6 --> A25S7
+    A25S7 --> A25S8
+    A26S1 --> A26S2
+    A26S2 --> A26S3
     BS46 --> END(["終了"])
 ```
 
@@ -901,28 +826,24 @@ sequenceDiagram
             H-->>S: pane の cwd と agent 名と agent_status を応答する
             alt 引き継ぐ
                 S->>S: 引き継いだ回数を1つ増やして身元ファイルへ書く
-                S->>S: hook を受ける socket の listen を始める
-                Note over S: listen を始められなければ ABORT
-                S->>S: 逃がし先の hook を読み戻す
-                S->>S: run を印の集合に入れる
-                S->>S: 溜めた hook の配送を始める
             else 取り直しか一覧の取得に失敗、または direct chat のカードを引き継げない
                 S->>S: pane を閉じずに worktree を閉じる集合へ入れる
-                S->>S: listen と読み戻しのあとに配送を始める
             else 引き渡し状態、取り直しでの不在、食い違い
                 S->>S: pane も worktree も残す
-                S->>S: listen と読み戻しのあとに配送を始める
             else 引き継げない pane、権限の確認での停止、引き継ぎの上限、片付け対象の Status
                 opt blocked または上限
                     S->>GH: Status への failure_state の書き込みと引き渡しの通知の投稿を要求する
                 end
                 S->>H: pane の close を要求する
                 S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
-                S->>S: listen と読み戻しのあとに配送を始める
             else pane が無い
-                S->>S: listen と読み戻しのあとに配送を始める
-                S->>S: 再起動で pane が残っていない run を扱う（INCLUDE）
+                Note over S: 配送を始めたあとに、再起動で pane が残っていない run を扱う（INCLUDE）
             end
+            S->>S: hook を受ける socket の listen を始める
+            Note over S: どの結末のあとでも、listen を始められなければ ABORT 終了コード 1
+            S->>S: 逃がし先の hook を読み戻す
+            S->>S: 引き継ぐと決めた run を印の集合に入れる
+            S->>S: 溜めた hook の配送を始める
             S->>S: 復元を終えたことを記録に残す
             S->>S: 起動時に終わった worktree と孤児 branch を掃除する（INCLUDE）
             S->>S: ダッシュボードを開いて巡回のループを始める

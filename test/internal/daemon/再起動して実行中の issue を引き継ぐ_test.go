@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c764c3f301d4ad134fbece35c9db1cb7f5e3e3cf68d7d632dbc57a0137e453bd", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "7069e2ce465a427f8672e7958445b0a0440aa00b07c1494e04e83478209d667c", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **ユースケース記述「再起動して実行中の issue を引き継ぐ」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -21,9 +21,9 @@ import (
 	"time"
 )
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_復元を終えてから巡回が始まり1件のissueが通る は、
+// Test_再起動して実行中のissueを引き継ぐ_P003_復元を終えてから巡回が始まり1件のissueが通る は、
 // **ビルドしたバイナリを実際に起動して**第7段階の受け入れの基準を1本で通す。
 //
 // 目的:
@@ -46,7 +46,7 @@ import (
 //   - #188 の worktree と branch が実際に消える
 //   - **#189（working）へは turn を送らず、その pane を最後まで閉じない**
 //   - `SIGTERM` を送ると 20 秒以内に終了コード 0 で終わる
-func Test_再起動して実行中のissueを引き継ぐ_P005_復元を終えてから巡回が始まり1件のissueが通る(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_復元を終えてから巡回が始まり1件のissueが通る(t *testing.T) {
 	env := newDaemonEnv(t)
 	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Progress"},
@@ -210,9 +210,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_復元を終え�
 	}
 }
 
-// {"RUCM-PATH": "P032"}
+// {"RUCM-PATH": "P049"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P032_flockが取れなければ即座に終了する は、二重起動の防止を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P049_flockが取れなければ即座に終了する は、二重起動の防止を確かめる。
 //
 // 目的: 設計 3-17。**continuo の状態はメモリにしかないので、2つ目のプロセスが立つと
 // 1つ目が処理中の issue を平気で掴む。**
@@ -221,7 +221,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_復元を終え�
 //
 // 成功条件: 2つ目が 20 秒以内に終了コード 1 で終わり、二重起動を検出したと出る。
 // **2つ目は pane を1つも閉じない。**
-func Test_再起動して実行中のissueを引き継ぐ_P032_flockが取れなければ即座に終了する(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P049_flockが取れなければ即座に終了する(t *testing.T) {
 	env := newDaemonEnv(t)
 	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Review"},
@@ -259,9 +259,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P032_flockが取れな
 	}
 }
 
-// {"RUCM-PATH": "P030"}
+// {"RUCM-PATH": "P047"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P030_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める は、
+// Test_再起動して実行中のissueを引き継ぐ_P047_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める は、
 // 設計 3-4 の「起動から復元までの順序」の段3 を確かめる。
 //
 // 目的: **設定の誤りで、動いているエージェントの作業を殺さない。**落ちる原因は
@@ -272,7 +272,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P032_flockが取れな
 //
 // 成功条件: 終了コード 1 で起動を止め、**`pane.close` を1回も呼ばない。**
 // **復元（`pane.list`）にも進まない。**
-func Test_再起動して実行中のissueを引き継ぐ_P030_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P047_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める(t *testing.T) {
 	env := newDaemonEnv(t)
 	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Progress"},
@@ -313,9 +313,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P030_起動時の検�
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P005"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P006_portを付けてSIGINTを受けたら段ごとに名乗って終わる は、
+// Test_再起動して実行中のissueを引き継ぐ_P005_portを付けてSIGINTを受けたら段ごとに名乗って終わる は、
 // 「Ctrl+C を押しても何も反応しない」を潰したことを、バイナリを起動して確かめる。
 //
 // 目的: 終了は3段の直列（ダッシュボード → hook の受け口 → turn ループ）で、
@@ -333,7 +333,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P030_起動時の検�
 //   - 2回目の Ctrl+C で即座に終わることと、`kill -QUIT` の案内が出ること
 //   - **ダッシュボードを叩き切ること**（応答の読み切りの期限 10 秒まで待たない）
 //   - 終了コード 0 で終わること
-func Test_再起動して実行中のissueを引き継ぐ_P006_portを付けてSIGINTを受けたら段ごとに名乗って終わる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P005_portを付けてSIGINTを受けたら段ごとに名乗って終わる(t *testing.T) {
 	env := newDaemonEnv(t)
 	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
@@ -407,9 +407,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P006_portを付けてS
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P006"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P007_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる は、
+// Test_再起動して実行中のissueを引き継ぐ_P006_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる は、
 // **利用者の「連打しても、いつまで経っても止まらなかった」を潰した筋**を確かめる。
 //
 // 目的: 2回目の割り込みを `signal.Stop`（元の動作へ戻す）に頼ると、**起動元が `SIGINT` を
@@ -423,7 +423,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P006_portを付けてS
 //
 // 成功条件: 2回目のあと 10 秒以内に、**割り込みの終了コード（130）**で終わること。
 // 0 で終わったなら、それは後始末が普通に終わっただけで、2回目は効いていない。
-func Test_再起動して実行中のissueを引き継ぐ_P007_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P006_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる(t *testing.T) {
 	env := newDaemonEnv(t)
 	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c764c3f301d4ad134fbece35c9db1cb7f5e3e3cf68d7d632dbc57a0137e453bd", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "7069e2ce465a427f8672e7958445b0a0440aa00b07c1494e04e83478209d667c", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **ユースケース記述「再起動して実行中の issue を引き継ぐ」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -24,9 +24,9 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_生きているpaneを引き継いで印と実行中の一覧へ入れ直す は、
+// Test_再起動して実行中のissueを引き継ぐ_P003_生きているpaneを引き継いで印と実行中の一覧へ入れ直す は、
 // 復元の中心の経路を1本で確かめる。
 //
 // 目的: 「引き継いだ run を印の集合へ入れ直す」（設計 3-4 の段6）ことと、
@@ -43,7 +43,7 @@ import (
 //   - 引き継いだ回数が身元ファイルへ書き戻される（段5b）
 //   - セッション UUID の索引が復元され、hook を受け取れる
 //   - turn 数は 1 から数え直す（引き継いだ直後は 0 回）
-func Test_再起動して実行中のissueを引き継ぐ_P005_生きているpaneを引き継いで印と実行中の一覧へ入れ直す(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_生きているpaneを引き継いで印と実行中の一覧へ入れ直す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -156,9 +156,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P001_agent_statusがwo
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_idleなら継続の指示を送る は、引き継いだ run へ送る本文を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P003_idleなら継続の指示を送る は、引き継いだ run へ送る本文を確かめる。
 //
 // 目的: 設計 3-4 の段5c。**送るのは継続の指示（5-4）であり、1回目の本文（5-3）ではない。**
 // セッションは引き継いでいるので、エージェントは issue の URL も作法も既に知っている。
@@ -167,7 +167,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P001_agent_statusがwo
 //
 // 成功条件: 巡回の turn ループが送った本文が「続けてください」で始まり、
 // 1回目のテンプレートの文言を含まない。
-func Test_再起動して実行中のissueを引き継ぐ_P005_idleなら継続の指示を送る(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_idleなら継続の指示を送る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -201,9 +201,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_idleなら継続�
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P009"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P010_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる は、
+// Test_再起動して実行中のissueを引き継ぐ_P009_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる は、
 // 保留中の権限要求が承認されて実行されるのを防ぐ。
 //
 // 目的: 設計 3-4 の段5a2。**blocked のまま引き継いで turn を送ると、保留中の権限要求が
@@ -213,7 +213,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_idleなら継続�
 //
 // 成功条件: 印に入らず、pane が閉じられ、Status が `failure_state`（Blocked）へ落ちる。
 // worktree は残る。
-func Test_再起動して実行中のissueを引き継ぐ_P010_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P009_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -275,9 +275,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P011_agent_statusが�
 	}
 }
 
-// {"RUCM-PATH": "P013"}
+// {"RUCM-PATH": "P015"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P013_agent名の無いpaneは閉じてworktreeとStatusを残す は、段8b を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P015_agent名の無いpaneは閉じてworktreeとStatusを残す は、段8b を確かめる。
 //
 // 目的: `agent.prompt` / `agent.wait` の宛先は agent 名である。pane ID では送れないので、
 // agent 名が引けない pane は引き継げない（設計 3-4 の段8b）。
@@ -285,7 +285,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P011_agent_statusが�
 // 与える情報: `agent.list` に載っていない pane。
 //
 // 成功条件: 印に入らず、pane が閉じられ、worktree と Status は残る。
-func Test_再起動して実行中のissueを引き継ぐ_P013_agent名の無いpaneは閉じてworktreeとStatusを残す(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P015_agent名の無いpaneは閉じてworktreeとStatusを残す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -311,9 +311,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P013_agent名の無い
 	}
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P017"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P014_socketのパスが前回と違えば引き継がずpaneを閉じる は、設計 3-23 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P017_socketのパスが前回と違えば引き継がずpaneを閉じる は、設計 3-23 を確かめる。
 //
 // 目的: 探索順は環境に依存するので、別の起動方法で立て直すと socket が別のパスに落ちる。
 // run 中の Claude Code は前回のパスを持ったままなので、hook をもう届けられない。
@@ -322,7 +322,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P013_agent名の無い
 //
 // 成功条件: 引き継がず pane を閉じる。worktree と Status は残る。
 // **両方のパスがログに出る**（運用の環境が変わったことに人間が気づけるようにする）。
-func Test_再起動して実行中のissueを引き継ぐ_P014_socketのパスが前回と違えば引き継がずpaneを閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P017_socketのパスが前回と違えば引き継がずpaneを閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -349,9 +349,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P014_socketのパス�
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P007"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P009_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす は、
+// Test_再起動して実行中のissueを引き継ぐ_P007_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす は、
 // 設計 3-4 の段5b を確かめる。
 //
 // 目的: 落ちるたびに turn 数が 1 に戻るので、引き継いだ回数で打ち切らないと
@@ -361,7 +361,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P014_socketのパス�
 //
 // 成功条件: 印に入らず、`agent.prompt` を1回も送らず、pane を閉じ、
 // Status が `failure_state` へ落ちる。worktree は残る。
-func Test_再起動して実行中のissueを引き継ぐ_P009_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P007_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Agent.MaxTakeover = 2
 	}})
@@ -392,9 +392,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P009_引き継いだ�
 	}
 }
 
-// {"RUCM-PATH": "P024"}
+// {"RUCM-PATH": "P037"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P024_同じissueのworktreeが2つあるとき新しいほうを採り古いほうのpaneを段4で閉じる は、
+// Test_再起動して実行中のissueを引き継ぐ_P037_同じissueのworktreeが2つあるとき新しいほうを採り古いほうのpaneを段4で閉じる は、
 // 設計 3-4 の段2 と段4 を確かめる。
 //
 // 目的: 段2 で決めるのは「どちらを採るか」だけであり、pane を閉じるのは段4 である
@@ -405,7 +405,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P009_引き継いだ�
 //
 // 成功条件: 新しいほうを引き継ぎ、古いほうの pane だけを閉じる。
 // **古いほうの worktree は消さない**（どちらに成果があるか判断できない）。
-func Test_再起動して実行中のissueを引き継ぐ_P024_同じissueのworktreeが2つあるとき新しいほうを採り古いほうのpaneを段4で閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P037_同じissueのworktreeが2つあるとき新しいほうを採り古いほうのpaneを段4で閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -445,9 +445,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P024_同じissueのwor
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P023"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewのrunはpaneもworktreeも残して何もしない は、
+// Test_再起動して実行中のissueを引き継ぐ_P023_In_Reviewのrunはpaneもworktreeも残して何もしない は、
 // 設計 3-4 の段5a の「引き渡し」を確かめる。
 //
 // 目的: 再起動の直後は、その pane が「人間のレビュー待ちで正常に止まっているもの」なのか
@@ -456,7 +456,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P024_同じissueのwor
 // 与える情報: Status が `In Review` の run と、その pane。
 //
 // 成功条件: pane を閉じず、worktree を消さず、Status を巻き戻さず、印にも入れない。
-func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewのrunはpaneもworktreeも残して何もしない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P023_In_Reviewのrunはpaneもworktreeも残して何もしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Review")
 	fx.Tracker.AddIssue(issue)
@@ -482,9 +482,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewのrun�
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P023"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P017_Doneでもcleanup_on_statesに入っていなければ片付けない は、
+// Test_再起動して実行中のissueを引き継ぐ_P023_Doneでもcleanup_on_statesに入っていなければ片付けない は、
 // 上のテストの裏返しである。
 //
 // 目的: `terminal_states` を見て片付けてしまう取り違えを検出する。
@@ -492,7 +492,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewのrun�
 // 与える情報: `cleanup.on_states` が `Archived` だけの設定と、Status が `Done` の run。
 //
 // 成功条件: worktree が残る（`Done` は `terminal_states` だが `cleanup.on_states` ではない）。
-func Test_再起動して実行中のissueを引き継ぐ_P017_Doneでもcleanup_on_statesに入っていなければ片付けない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P023_Doneでもcleanup_on_statesに入っていなければ片付けない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Cleanup.OnStates = []string{"Archived"}
 		cfg.Tracker.TerminalStates = []string{"Done"}
@@ -512,9 +512,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_Doneでもcleanup
 	}
 }
 
-// {"RUCM-PATH": "P018"}
+// {"RUCM-PATH": "P025"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P018_cleanup_on_statesならpaneを閉じて片付ける は、
+// Test_再起動して実行中のissueを引き継ぐ_P025_cleanup_on_statesならpaneを閉じて片付ける は、
 // 片付けの条件が `cleanup.on_states` であることを確かめる。
 //
 // 目的: 設計 3-4 の段5a。**`terminal_states` ではない。**既定値はどちらも `["Done"]` だが
@@ -524,7 +524,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_Doneでもcleanup
 // Status が `Archived` の run。**既定値のままだと取り違えを検出できないので別の値にする。**
 //
 // 成功条件: pane を閉じ、worktree が実際に消える。印には入れない。
-func Test_再起動して実行中のissueを引き継ぐ_P018_cleanup_on_statesならpaneを閉じて片付ける(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P025_cleanup_on_statesならpaneを閉じて片付ける(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Cleanup.OnStates = []string{"Archived"}
 		cfg.Tracker.TerminalStates = []string{"Done"}
@@ -554,9 +554,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P018_cleanup_on_states
 	}
 }
 
-// {"RUCM-PATH": "P020"}
+// {"RUCM-PATH": "P029"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P020_取り直しで見つからないrunはpaneもworktreeも残して印から外す は、
+// Test_再起動して実行中のissueを引き継ぐ_P029_取り直しで見つからないrunはpaneもworktreeも残して印から外す は、
 // 設計 3-4 の段5a の「取り直しで見つからなかった」を確かめる。
 //
 // 目的: カンバンから外された・archive された issue を勝手に消さない。
@@ -564,7 +564,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P018_cleanup_on_states
 // 与える情報: 身元ファイルはあるが、カンバンに載っていない issue。
 //
 // 成功条件: pane も worktree も残り、印に入らず、ログに残る。
-func Test_再起動して実行中のissueを引き継ぐ_P020_取り直しで見つからないrunはpaneもworktreeも残して印から外す(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P029_取り直しで見つからないrunはpaneもworktreeも残して印から外す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	// **カンバンには足さない。**
@@ -590,9 +590,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P020_取り直しで�
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P031"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに失敗しても起動を続けpaneは閉じない は、設計 3-4 の段3 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P031_取り直しに失敗しても起動を続けpaneは閉じない は、設計 3-4 の段3 を確かめる。
 //
 // 目的: 認証切れ・ネットワーク断・レートリミットで取り直せなくても起動は続ける。
 // **引き継がないが、pane も閉じない。**
@@ -607,7 +607,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P020_取り直しで�
 // （`SetIDsError` は記録を取る側と取らない側の両方に効く。復元が呼ぶのは取らない側である）。
 //
 // 成功条件: Restore がエラーを返さず、**pane は1つも閉じられず**、worktree は残る。
-func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに失敗しても起動を続けpaneは閉じない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P031_取り直しに失敗しても起動を続けpaneは閉じない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -631,9 +631,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに�
 	}
 }
 
-// {"RUCM-PATH": "P027"}
+// {"RUCM-PATH": "P043"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P027_身元ファイルの無いworktreeのpaneは閉じずにログへ残す は、段9 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P043_身元ファイルの無いworktreeのpaneは閉じずにログへ残す は、段9 を確かめる。
 //
 // 目的: continuo のものと断定できないので、閉じずに人間へ見せる（設計 3-4 の段9）。
 //
@@ -642,7 +642,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに�
 // 書き直してしまい、段9 へ入らない。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: pane を閉じず、ログに残る。
-func Test_再起動して実行中のissueを引き継ぐ_P027_身元ファイルの無いworktreeのpaneは閉じずにログへ残す(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P043_身元ファイルの無いworktreeのpaneは閉じずにログへ残す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
@@ -670,9 +670,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_身元ファイ�
 	}
 }
 
-// {"RUCM-PATH": "P027"}
+// {"RUCM-PATH": "P043"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P027_壊れた身元ファイルは無視してログに出す は、設計 3-4 の段2 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P043_壊れた身元ファイルは無視してログに出す は、設計 3-4 の段2 を確かめる。
 //
 // 目的: 段6 の書き込み途中で落ちた場合に起こる。**消してはならない。**
 //
@@ -681,7 +681,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_身元ファイ�
 // 書き直してしまう。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: Restore が落ちず、worktree が残り、ログに出る。
-func Test_再起動して実行中のissueを引き継ぐ_P027_壊れた身元ファイルは無視してログに出す(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P043_壊れた身元ファイルは無視してログに出す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
@@ -710,9 +710,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_壊れた身元�
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_逃がし先に溜まったhookは索引ができてから配送される は、
+// Test_再起動して実行中のissueを引き継ぐ_P003_逃がし先に溜まったhookは索引ができてから配送される は、
 // 段5d / 5e / 6 / 6b の順番を、**本物の hookserver を通して**確かめる。
 //
 // 目的: 設計 3-4。段6 で索引ができる前に配送を始めると、引き継いだ run の hook まで
@@ -724,7 +724,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_壊れた身元�
 //
 // 成功条件: 知らない session_id のほうだけが「捨てました」とログに出る。
 // **引き継いだ run のほうは捨てられない。**
-func Test_再起動して実行中のissueを引き継ぐ_P005_逃がし先に溜まったhookは索引ができてから配送される(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_逃がし先に溜まったhookは索引ができてから配送される(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -766,9 +766,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_逃がし先に�
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P023"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewで残したpaneを直後の巡回が閉じない は、
+// Test_再起動して実行中のissueを引き継ぐ_P023_In_Reviewで残したpaneを直後の巡回が閉じない は、
 // 復元と巡回の手順7b（設計 3-9）が食い違っていないことを確かめる。
 //
 // 目的: 復元は `In Review` の run を「pane も worktree も残す」と決めて印に入れない
@@ -780,7 +780,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_逃がし先に�
 // 復元のあとに巡回を2回回す。
 //
 // 成功条件: `pane.close` が1回も呼ばれず、worktree も残る。
-func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewで残したpaneを直後の巡回が閉じない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P023_In_Reviewで残したpaneを直後の巡回が閉じない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Review")
 	fx.Tracker.AddIssue(issue)
@@ -804,9 +804,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewで残�
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ残りを閉じる は、
+// Test_再起動して実行中のissueを引き継ぐ_P003_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ残りを閉じる は、
 // 設計 3-4 の段4 の「2つ目を残さない」を確かめる。
 //
 // 目的: 段2 の「同じ issue の worktree が2つ」の対称形である。
@@ -818,7 +818,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P017_In_Reviewで残�
 //
 // 成功条件: 引き継ぐのは pane の ID が小さいほう1つだけで、もう1つは閉じられ、
 // 復元の記録にも載る。
-func Test_再起動して実行中のissueを引き継ぐ_P005_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ残りを閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ残りを閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(500, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -846,9 +846,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_同じworktreeに
 	}
 }
 
-// {"RUCM-PATH": "P023"}
+// {"RUCM-PATH": "P035"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P023_agentの一覧を取れなくてもpaneを1つも閉じない は、
+// Test_再起動して実行中のissueを引き継ぐ_P035_agentの一覧を取れなくてもpaneを1つも閉じない は、
 // `agent.list` の失敗の扱いが `pane.list` の失敗と対称であることを確かめる。
 //
 // 目的: agent 名を引けないまま段8b へ流すと、**引き継げたはずの run の pane が
@@ -858,7 +858,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_同じworktreeに
 // 与える情報: `In Progress` の run と生きた pane。`agent.list` はエラーを返す。
 //
 // 成功条件: pane を1つも閉じず、Status も worktree もそのまま。起動は続く。
-func Test_再起動して実行中のissueを引き継ぐ_P023_agentの一覧を取れなくてもpaneを1つも閉じない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P035_agentの一覧を取れなくてもpaneを1つも閉じない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -888,9 +888,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P023_agentの一覧を
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_身元ファイルが無くても置き場所とカンバンから復元する は、設計 3-49 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P003_身元ファイルが無くても置き場所とカンバンから復元する は、設計 3-49 を確かめる。
 //
 // 目的: 着手は worktree を作ってから身元ファイルを書く（設計 3-16 の段6〜段9）ので、
 // **その間で落ちると身元ファイルの無い worktree ができる。**それは「壊れた」のではなく
@@ -899,7 +899,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P023_agentの一覧を
 // 与える情報: 身元ファイルを持たない worktree と、その pane と、カンバンに載っている issue。
 //
 // 成功条件: 身元ファイルが書き直され、その run が引き継がれること。
-func Test_再起動して実行中のissueを引き継ぐ_P005_身元ファイルが無くても置き場所とカンバンから復元する(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_身元ファイルが無くても置き場所とカンバンから復元する(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -935,9 +935,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_身元ファイ�
 	}
 }
 
-// {"RUCM-PATH": "P028"}
+// {"RUCM-PATH": "P045"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P028_復元できない壊れたworktreeがあれば起動を止める は、設計 3-49 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P045_復元できない壊れたworktreeがあれば起動を止める は、設計 3-49 を確かめる。
 //
 // 目的: 飛ばして走り続けると、その issue はカンバンの上で running_state のまま誰にも
 // 触られず、**人間が気づくのは何時間も後になる。**既定は止める側である。
@@ -946,7 +946,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_身元ファイ�
 //
 // 成功条件: Restore がエラーを返し、**worktree は消えず**、エラーに「何が起きているか」と
 // 「次に何をすべきか」の両方が入っていること。
-func Test_再起動して実行中のissueを引き継ぐ_P028_復元できない壊れたworktreeがあれば起動を止める(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P045_復元できない壊れたworktreeがあれば起動を止める(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.AllowLog(
 		"復元のために引いた issue がカンバンにありません",
@@ -977,9 +977,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P028_復元できな�
 	}
 }
 
-// {"RUCM-PATH": "P027"}
+// {"RUCM-PATH": "P043"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P027_paneのlabelが置き場所と食い違えば復元しない は、設計 3-49 の裏取りを確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P043_paneのlabelが置き場所と食い違えば復元しない は、設計 3-49 の裏取りを確かめる。
 //
 // 目的: pane の label は herdr の CLI から誰でも書き換えられる。**裏を取らずに使うと、
 // label を書き換えるだけで別の issue の worktree として復元させられる。**
@@ -989,7 +989,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P028_復元できな�
 // その pane の label は issue 999 を指し、**カンバンには 999 だけが載っている。**
 //
 // 成功条件: 身元ファイルを書かないこと（別の issue のものとして復元しない）。
-func Test_再起動して実行中のissueを引き継ぐ_P027_paneのlabelが置き場所と食い違えば復元しない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P043_paneのlabelが置き場所と食い違えば復元しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
@@ -1019,9 +1019,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_paneのlabelが�
 	}
 }
 
-// {"RUCM-PATH": "P025"}
+// {"RUCM-PATH": "P039"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P025_置き場所と食い違う身元ファイルを鍵にしない は、
+// Test_再起動して実行中のissueを引き継ぐ_P039_置き場所と食い違う身元ファイルを鍵にしない は、
 // 復元の段2 が `project_item_id` を検算することを確かめる。
 //
 // 目的: `project_item_id` はエージェントが書き換えられる（身元ファイルは worktree の直下にある）。
@@ -1031,7 +1031,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P027_paneのlabelが�
 // 与える情報: `octocat/hello-world` の下にある worktree の身元ファイルが、
 // 別のリポジトリ（`octocat/other-repo`）の issue を名乗っている。
 // 成功条件: その worktree を引き継がず、pane を1つも閉じず、worktree も消さないこと。
-func Test_再起動して実行中のissueを引き継ぐ_P025_置き場所と食い違う身元ファイルを鍵にしない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P039_置き場所と食い違う身元ファイルを鍵にしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -1071,9 +1071,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P025_置き場所と�
 	}
 }
 
-// {"RUCM-PATH": "P023"}
+// {"RUCM-PATH": "P035"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P023_paneの一覧を取れないだけでStatusを人間へ渡さない は、
+// Test_再起動して実行中のissueを引き継ぐ_P035_paneの一覧を取れないだけでStatusを人間へ渡さない は、
 // 復元の段4 の失敗を「pane が無い」と読み替えないことを確かめる。
 //
 // 目的: `pane.list` が1回失敗しただけで突き合わせが空になると、**生きている pane を持つ
@@ -1084,7 +1084,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P025_置き場所と�
 // 与える情報: `In Progress` の run と生きた pane。`pane.list` はエラーを返す。
 // `restart.orphan_running_action` は `to_failure_state`。
 // 成功条件: Status が `In Progress` のままで、issue にコメントが1件も付かないこと。
-func Test_再起動して実行中のissueを引き継ぐ_P023_paneの一覧を取れないだけでStatusを人間へ渡さない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P035_paneの一覧を取れないだけでStatusを人間へ渡さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) { cfg.Restart.OrphanRunningAction = "to_failure_state" },
 	})
@@ -1112,7 +1112,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P023_paneの一覧を�
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P019"}
 //
 // TestDirectChat_再起動でdirect_chatのrunを引き取り指示を送らない は、設計 3-4 の段5a と 3-83j の1行目を確かめる。
 //
@@ -1120,7 +1120,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P023_paneの一覧を�
 // **引き取ったあとも、指示は1文字も送らない。**
 // 与える情報: Status が direct chat で、pane が生きていて agent 名を持つ run。
 // 成功条件: 印に入り、pane を閉じず、そのあとの巡回でも指示を送らないこと。
-func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirectChatのrunを引き取り指示を送らない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P019_再起動でdirectChatのrunを引き取り指示を送らない(t *testing.T) {
 	fx := newDirectChatFixture(t, nil)
 	issue := sampleIssue(330, humanState)
 	fx.Tracker.AddIssue(issue)
@@ -1149,7 +1149,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirec
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P019"}
 //
 // TestDirectChat_再起動でdirect_chatのworktreeの2枚目のpaneを閉じずagent名を持つpaneを引き継ぐ は、
 // 設計 3-83j の「再起動で、direct chat の worktree の2枚目の pane を閉じない」を確かめる。
@@ -1159,7 +1159,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirec
 // （pane ID の小さいほうではない）。
 // 与える情報: Status が direct chat の worktree に pane が2枚。ID の小さいほうは agent 名の無いシェル。
 // 成功条件: どちらも閉じず、agent 名を持つ pane を引き継ぐこと。
-func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirectChatのworktreeの2枚目のpaneを閉じずagent名を持つpaneを引き継ぐ(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P019_再起動でdirectChatのworktreeの2枚目のpaneを閉じずagent名を持つpaneを引き継ぐ(t *testing.T) {
 	fx := newDirectChatFixture(t, nil)
 	fx.AllowLog("同じ worktree に pane が2つあります")
 	issue := sampleIssue(333, humanState)
@@ -1185,9 +1185,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirec
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P021"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P016_再起動で確認の画面ならpaneを閉じず通知も書かず戻したときに閉じる集合が閉じる は、
+// Test_再起動して実行中のissueを引き継ぐ_P021_再起動で確認の画面ならpaneを閉じず通知も書かず戻したときに閉じる集合が閉じる は、
 // 設計 3-4 の段3 の例外(2)・3-83f の表の最後の2行を確かめる。
 //
 // 目的: 確認の画面（`blocked`）で止まっている direct chat の run は、**`failure_state` へ落とさず、pane も閉じず、
@@ -1195,7 +1195,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P015_再起動でdirec
 // 閉じないのに投稿すると嘘になる）。見送った pane は閉じる集合が扱い、**作業中の Status へ戻した巡回で閉じる。**
 // 与える情報: Status が direct chat で、agent_status が blocked の pane を持つ run。
 // 成功条件: 復元で pane を閉じず、コメントも Status の書き込みも無い。作業中へ戻した巡回で、その pane を閉じる。
-func Test_再起動して実行中のissueを引き継ぐ_P016_再起動で確認の画面ならpaneを閉じず通知も書かず戻したときに閉じる集合が閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P021_再起動で確認の画面ならpaneを閉じず通知も書かず戻したときに閉じる集合が閉じる(t *testing.T) {
 	fx := newDirectChatFixture(t, nil)
 	holdPrompt(fx)
 	// **閉じたあとの同じ巡回の着手は、この台本の pane の一覧（workspace を名乗らない）では pane を引けずに落ちる。**
@@ -1230,9 +1230,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P016_再起動で確�
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P031"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに失敗した復元のagent名の無いpaneを戻したときに閉じる は、
+// Test_再起動して実行中のissueを引き継ぐ_P031_取り直しに失敗した復元のagent名の無いpaneを戻したときに閉じる は、
 // 設計 3-4 の段3 の例外(1)・3-9 の手順7b・3-83f の閉じる集合を確かめる。
 //
 // 目的: 取り直しに失敗した run は Status が読めないので、**閉じずに閉じる集合へ入れる。**
@@ -1240,7 +1240,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P016_再起動で確�
 // agent 名の無い pane を飛ばすので、着手がその pane へ `agent.start` を送る。
 // 与える情報: 復元の取り直しが失敗し、agent 名を持たない pane（シェルに戻った pane）が残っている worktree。
 // 成功条件: 復元では閉じず、取り直せた巡回で Status が作業中なら、その pane を閉じること。
-func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに失敗した復元のagent名の無いpaneを戻したときに閉じる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P031_取り直しに失敗した復元のagent名の無いpaneを戻したときに閉じる(t *testing.T) {
 	fx := newDirectChatFixture(t, nil)
 	holdPrompt(fx)
 	fx.AllowLog("取り直しに失敗", "印に入っていない worktree に生きた pane", "実行中の issue を取り直せません", "候補の取得に失敗",
@@ -1266,7 +1266,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに�
 	}
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P017"}
 //
 // 目的: 再起動のときに引き継がずに閉じた pane について、閉じた記録を書くこと、
 // 担当者が他人のアカウントなら書かないことを固定する。
@@ -1277,7 +1277,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P021_取り直しに�
 // 与える情報: socket のパスが前回と違う `In Progress` の run の pane（引き継がずに閉じる）。
 // 担当者なしと、担当者が別のアカウント1人の2通り。
 // 成功条件: 担当者なしでは閉じた記録が1件あり、担当者が他人では1件も無いこと。
-func Test_再起動して実行中のissueを引き継ぐ_P014_再起動で閉じたpaneは担当者が他人なら書かない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P017_再起動で閉じたpaneは担当者が他人なら書かない(t *testing.T) {
 	for _, other := range []bool{false, true} {
 		name := "担当者なし"
 		if other {
@@ -1310,9 +1310,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P014_再起動で閉�
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_旧い形のlabelが付いたpaneでも引き継げる は、label の形を変えても
+// Test_再起動して実行中のissueを引き継ぐ_P003_旧い形のlabelが付いたpaneでも引き継げる は、label の形を変えても
 // 再起動後の引き継ぎが壊れないことを固定する（issue #12 の受け入れ条件）。
 //
 // 目的: **label は人間が herdr の画面で pane を見分けるための表示名であり、
@@ -1325,7 +1325,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P014_再起動で閉�
 //     （label の形を変える前の、continuo が以前書いていた文字列）が入っている**
 //
 // 成功条件: label の形が新しいものと違っていても、印（実行中の一覧）に入ること。
-func Test_再起動して実行中のissueを引き継ぐ_P005_旧い形のlabelが付いたpaneでも引き継げる(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_旧い形のlabelが付いたpaneでも引き継げる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -1354,9 +1354,9 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_旧い形のlabel
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P003"}
 //
-// Test_再起動して実行中のissueを引き継ぐ_P005_復元の取り直しは誰がStatusを書いたかを取らない は、設計 3-61 を確かめる。
+// Test_再起動して実行中のissueを引き継ぐ_P003_復元の取り直しは誰がStatusを書いたかを取らない は、設計 3-61 を確かめる。
 //
 // 目的: 復元の段3（`refetchByIdentities`）が見るのは、取り直した Status と識別子だけである。
 // **記録は1つも読まない。**引き継いだ run の記録は、最初の巡回の実行中の照合が入れ直す。
@@ -1364,7 +1364,7 @@ func Test_再起動して実行中のissueを引き継ぐ_P005_旧い形のlabel
 // 与える情報: `In Progress` の issue の worktree と身元ファイルがディスクにあり、
 // その worktree を cwd に持つ pane が生きている状態（引き継ぎの中心の経路）。
 // 成功条件: 取り直しが1回だけ走り、それが記録を取らない側であること。
-func Test_再起動して実行中のissueを引き継ぐ_P005_復元の取り直しは誰がStatusを書いたかを取らない(t *testing.T) {
+func Test_再起動して実行中のissueを引き継ぐ_P003_復元の取り直しは誰がStatusを書いたかを取らない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
