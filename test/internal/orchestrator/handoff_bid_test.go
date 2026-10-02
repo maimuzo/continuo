@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "27d2025ea571506f5f43b3df70cb19ce8908dba17ea80f0636238815c5b9f3ec", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "28c7411d34dd0445e061bcaebcc7256bc7b7b1a7643cdff5ddbe6dcafe24fa44", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じカンバンを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //
@@ -14,6 +14,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -182,7 +183,7 @@ func TestHandoff_入札に負けたら担当者にならない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P013"}
 //
 // TestHandoff_期限内の他人の担当には入札もしない は、設計 3-77b の表の1行を確かめる。
 //
@@ -210,7 +211,7 @@ func TestHandoff_期限内の他人の担当には入札もしない(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P014"}
 //
 // TestHandoff_holdの無い担当は奪わない は、設計 3-77b の「人間が付けた担当」を確かめる。
 //
@@ -282,7 +283,7 @@ func TestHandoff_人間が付けた担当はWARNで直し方つきで知らせ�
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P015"}
 //
 // TestHandoff_担当者が2人以上なら触らない は、設計 3-77b の表の1行を確かめる。
 //
@@ -306,7 +307,7 @@ func TestHandoff_担当者が2人以上なら触らない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P007"}
 //
 // TestHandoff_期限切れの担当を外してreleasedを書く は、設計 3-77c を確かめる。
 //
@@ -470,21 +471,25 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P005"}
 //
 // TestHandoff_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。
 //
 // 目的: **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
-// 与える情報: 枠を読む設定（`oauth_usage_api`）だが、枠を1度も読めていない状態。
+// 与える情報: 使用率を読む設定（`statusline`。issue #284）だが、ステータスラインの行が
+// 1行も届いていない状態。trust.repositories は空（statusline取得は「使える clone が無い」で終わる）。
 // 成功条件: 入札のコメントが1件も増えず、着手もしないこと。
 func TestHandoff_枠を読めない機械は入札しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			// **枠を読む設定にする。**読み取り（RateLimit）は渡していないので、
-			// 枠の写しは永久に nil のままになる（＝読めなかった状態）。
-			cfg.RateLimit.Source = "oauth_usage_api"
+			// **使用率を読む設定にする。**行は1行も入れないので、保管値は空のままになる
+			// （＝読めなかった状態）。
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
+	// **値が無いので巡回の最後に statusline取得を開き、使える clone が無いので WARN を出す。**
+	// その状況はこのテストが作っている（trust.repositories を空にしている）。
+	fx.AllowLog("使える clone が無い")
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 

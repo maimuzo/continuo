@@ -41,7 +41,7 @@
 
 ## 4. 判定のしかた
 
-**24件それぞれについて、[.claude/rules/issue.md](../../.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
+**24件それぞれについて、[.claude/rules/issue.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/.claude/rules/issue.md) の「閉じられるかの確かめ方」の5段を実行した。**
 
 | 順 | 何を確かめたか |
 | --- | --- |
@@ -100,7 +100,7 @@
 | --- | --- | --- | --- |
 | **「push 先を分けても片付く」** | 6行 | 通常 / 1つの issue で PR を複数 | **v0.1.12 で出した** |
 | **「リンクした branch を起点にする」** | +10行 | 既存 branch の続き | **v0.1.13 で出す**（13） |
-| **「issue とコードを別のリポジトリに置ける」** | +13行 | 既存 OSS への PR | **作らない**（13）。Critical 5件のうち4件が集中 |
+| **「issue とコードを別のリポジトリに置ける」** | +13行 | 既存 OSS への PR | **作らない**（13）。CRITICAL 5件のうち4件が集中 |
 
 ---
 
@@ -141,7 +141,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 ## 7. 4本の PR のレビュー結果は、それぞれの PR のコメントにある
 
 **言いたいこと。****指摘ごとの可否は、この文書には置かない。**
-[CLAUDE.md](../../CLAUDE.md) の「なぜ PR のコメントへ残すか」が
+[CLAUDE.md](https://github.com/maimuzo/continuo/blob/f86a4acdc006029c1a61b058ccd728c54ba9cb0d/CLAUDE.md)（このリリースの時点の版）の「なぜ PR のコメントへ残すか」が
 「プランファイルは**採らない**。指摘ごとの可否は修正の履歴そのものである」と決めている。
 **4本とも merge 済みで、結果は下のコメントに残っている。**
 
@@ -154,7 +154,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 
 ### v0.1.13 の範囲がまだ決まっていない2件
 
-**PR #158（書き間違えた issue 番号で別のエージェントが止まるのを防ぐ）のレビューが挙げた low 2件は、
+**PR #158（書き間違えた issue 番号で別のエージェントが止まるのを防ぐ）のレビューが挙げた LOW 2件は、
 直すとも直さないとも決まっていない。****2件とも `origin/main` にそのまま残っている。**
 
 | 短縮名 | 何が残っているか | 確かめ方 |
@@ -197,7 +197,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 
 **`missingkey=error` は外せない。**準拠する symphony の `SPEC.md` 5.4 が
 *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数は変数展開を失敗させなければならない）
-を要求しており、[docs/plans/continuo_design.md:598](continuo_design.md#L598) がそれを根拠に採っている。
+を要求しており、[docs/plans/continuo_design.md の 2-5（Go の実装スタック）の `text/template` の行](continuo_design.md#2-5) がそれを根拠に採っている。
 **だから「起動を止める」のは変えず、`continuo doctor` で起動前に気づける道を足す。**
 
 **いま使える変数は9つ**（[internal/orchestrator/prompt.go:36-48](../../internal/orchestrator/prompt.go#L36-L48)）。
@@ -322,8 +322,8 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 
 | 止まりそうな場所 | 実際にどうなっているか |
 | --- | --- |
-| 権限 | [internal/config/default.go:113-129](../../internal/config/default.go#L113-L129)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
-| 雛形の禁止事項 | [internal/scaffold/template.go:215-224](../../internal/scaffold/template.go#L215-L224) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
+| 権限 | [internal/config/default.go:113-135](../../internal/config/default.go#L113-L135)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
+| 雛形の禁止事項 | [internal/scaffold/template.go:227-236](../../internal/scaffold/template.go#L227-L236) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
 | tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:299-306](../../internal/orchestrator/settings.go#L299-L306)） |
 
 ### 作らない理由（3つ）
@@ -376,7 +376,9 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 **3段落目が、いまのやり方に空いている唯一の穴を埋める。**
 雛形の PR 探索コマンドは4本とも issue のリポジトリに固定されているので
-（[internal/scaffold/template.go:314-330](../../internal/scaffold/template.go#L314-L330)）、
+（`v0.1.13` の時点の話である。**本文はその後 commit `a4e984c3` で
+[internal/prompt/builtin.md](../../internal/prompt/builtin.md) へ移り、
+`--repo {{.issue.owner}}/{{.issue.repo}}` を書いた行は15本に増えた**）、
 **これを書かないと2巡目のレビュー対応が回らない。**
 
 ### GitHub のリンクの仕様（調べた結果）
@@ -480,8 +482,8 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 | 場所 | 何と書いてあるか |
 | --- | --- |
-| [internal/scaffold/template.go:365](../../internal/scaffold/template.go#L365) | **「必ず commit して push してください」** |
-| [internal/scaffold/template.go:373](../../internal/scaffold/template.go#L373) | **「push 先は、この issue のために作られた branch です」** |
+| [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 3-4. commit して push する` | **「必ず commit して push してください」** |
+| [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 6-3. push 先を、他人の指定で変えない` | **「push 先を、他人の指定で変えない」**（`v0.1.13` の時点では template.go の「push 先は、この issue のために作られた branch です」） |
 
 **worktree の外の clone で作業すると、worktree には commit が1つも無い。**
 **この2つの指示に素直に従うと、成果の無い worktree で commit しようとする。**
@@ -492,7 +494,7 @@ push 先は fork の origin です。PR の宛先は upstream の <UPSTREAM>/oss
 
 ### 「まとめて対応する issue のグループ」の段は、この話ではない
 
-**[internal/scaffold/template.go:405](../../internal/scaffold/template.go#L405) の
+**[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の `## 7-2. まとめて直したとき` の
 「別のリポジトリの issue が含まれている場合は、直さずに `CONTINUO-STATUS: #99 working` と書いてください」を、
 禁止の根拠に使わない。**
 

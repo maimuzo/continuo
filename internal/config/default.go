@@ -80,6 +80,19 @@ const ProgressMarker = "<!-- continuo:progress -->"
 // エージェントへ書かせる文字列と、1文字も違ってはならない。**
 const PlanMarker = "<!-- continuo:plan -->"
 
+// ClosedMarker は、continuo が Claude Code を起動した pane を閉じたときに issue へ書く
+// 「閉じた記録」の1行目である（設計 3-85。issue #246）。
+//
+// **この記録より後に、信頼できる立場の人間が書いたコメントだけを、次の起動の最初のメッセージに
+// 付けて渡す。**記録を書いた時点で、その issue の Claude Code はもう動いていないので、
+// 記録より後のコメントは人間が書いたものだけになる（AI が目印を付け忘れた場合を除く）。
+//
+// **`self_marker` は付けない。**本文の先頭がこの印そのものでなければ、別の機械が境目として読めない
+// （入札の印と同じ理由）。**設定キーにしない。**機械ごとに違うと、別の機械の記録を境目にできない。
+//
+// **エージェントへ渡す入力から外す印（`IsMarked`）には入れない。**
+const ClosedMarker = "<!-- continuo:closed -->"
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは
@@ -118,11 +131,17 @@ func DefaultConfig() *Config {
 			},
 			RequiredLabels: []string{},
 			// In Progress を必ず含める（3-10）。ここで欠かすと dispatch 直後に自分の worker を殺す。
-			ActiveStates:      []string{"Ready", "In Progress"},
-			TerminalStates:    []string{"Done"},
-			RunningState:      "In Progress",
-			DispatchState:     "Ready",
-			FailureState:      "Blocked",
+			ActiveStates:   []string{"Ready", "In Progress"},
+			TerminalStates: []string{"Done"},
+			RunningState:   "In Progress",
+			DispatchState:  "Ready",
+			FailureState:   "Blocked",
+			// 人間が pane で直接 Claude Code と話している間だけ置く Status（設計 3-83）。
+			// **標準機能なので、既定に名前が入っている。**
+			// **この名前だけは、カンバンに実在することを起動時に要求しない**
+			// （`config.RequiredBoardStates`）。選択肢をまだ作っていない利用者の continuo を
+			// 起動できなくしないためである。**空にすれば、この機能は一切効かない。**
+			DirectChatState:   "Direct Chat",
 			VerifyStatesEvery: 20,
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。
@@ -163,14 +182,21 @@ func DefaultConfig() *Config {
 			MaxTakeover:                5,
 			MaxRetryBackoffMs:          300000,
 			MaxRetries:                 3,
+			// **既定で渡す**（設計 3-85。issue #246）。人間が issue のコメントで出した許可を、
+			// 次に Claude Code を起動したときの最初のメッセージに付けて判定役へ届ける。
+			RelayTrustedComments: true,
 		},
 		Claude: ClaudeConfig{
 			Kind:           "claude",
-			PermissionMode: "dontAsk",
+			PermissionMode: ClaudePermissionModeAuto,
 			Permissions: ClaudePermissionsConfig{
 				// Bash は引数を限定せずツール名だけで許可する。
 				// Bash(gh:*) のように限定すると、許可リストに載らない書き込み系
 				// （touch / rm など）が dontAsk で拒否され、作業が途中で止まる（設計 3-11）。
+				// **既定の auto では、この一覧はほとんど効かない。**"Bash" のように道具を丸ごと
+				// 許す規則は auto に入るときに落とされ、"Read" と "Glob" と "Grep" は元から確認が要らず、
+				// "Edit" と "Write" は作業ディレクトリの中なら元から通る（公式の permission modes の
+				// ページ。2026-09-18 に取得）。**それでも消さない。消すと dontAsk を選び直した人だけが壊れる。**
 				// subagent を起動する Agent ツールは、許可リストが空でも動いたため書かない。
 				Allow: []string{
 					"Bash",
@@ -180,7 +206,12 @@ func DefaultConfig() *Config {
 					"Edit",
 					"Write",
 				},
-				Deny: []string{},
+				// **AskUserQuestion を既定で禁じる**（設計 3-11。issue #259）。
+				// これはエージェント自身が人間に選択肢を出す道具で、判定役とは関係が無い。
+				// **dontAsk は元から拒否するが、auto にすると拒否が外れる。**
+				// 外れたまま走らせると、スキルなどから呼ばれた瞬間に質問の画面が出て
+				// pane が止まる（実測。次の指示が回答として消費される）。
+				Deny: []string{"AskUserQuestion"},
 			},
 			Env: map[string]string{
 				"CLAUDE_CODE_RETRY_WATCHDOG": "1",
@@ -188,12 +219,18 @@ func DefaultConfig() *Config {
 			PollWaitMs: 30000,
 			SettleMs:   2000,
 			WaitUntil:  []string{"idle", "done", "blocked"},
-			// 画面の版が増えないまま待てる上限。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
+			// hook が来ないまま待てる上限（超えた時点で `agent_status` が `working` なら待ち続ける）。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
 			TurnTimeoutMs: 3600000,
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
 			},
-			// **既定で公開リポジトリの issue にだけ判定を掛ける**（設計 3-64）。
+			// **既定では判定を掛けない。**
+			// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
+			// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-85）、
+			// この判定はそれも見ない。設計 3-11）。
+			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
+			// 掛けたい人は public_only か on を書く。
+			//
 			// 判定に回すのは Bash だけにしてある。読み書きの道具まで回すと、
 			// 道具1回ごとにモデルの呼び出しが乗る。
 			//
@@ -202,7 +239,7 @@ func DefaultConfig() *Config {
 			// 書かれていない）、**通らない名前を書いたときにどう倒れるかを確かめていない。**
 			// 空なら settings.json へ `model` を書かず、Claude Code の既定に任せる。
 			ToolGate: ClaudeToolGateConfig{
-				Mode:  ClaudeToolGateModePublicOnly,
+				Mode:  ClaudeToolGateModeOff,
 				Model: "",
 				Tools: []string{"Bash"},
 			},
@@ -212,7 +249,7 @@ func DefaultConfig() *Config {
 			// 環境変数で切り替えたい利用者は WORKFLOW.md に ${HERDR_SOCKET_PATH} と書く。
 			// その場合、未定義なら起動を止める（既定値へは落ちない。設計 5-5）。
 			Socket:           "~/.config/herdr/herdr.sock",
-			Protocol:         20,
+			Protocol:         22,
 			ReadTimeoutMs:    5000,
 			StartupTimeoutMs: 60000,
 			Worktree: HerdrWorktreeConfig{
@@ -233,12 +270,15 @@ func DefaultConfig() *Config {
 			SweepOnStartup:       true,
 		},
 		RateLimit: RateLimitConfig{
-			Source: "oauth_usage_api",
+			Source: RateLimitSourceOAuthUsageAPI,
 			// **既定は OS で分かれる。**分かれるのはこのキーだけである（defaultRateLimitTokenSource）。
 			TokenSource:       defaultRateLimitTokenSource(),
 			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
-			PauseAbovePercent: 95,
 			PollIntervalMs:    300000,
+			RefreshIntervalMs: 300000,
+			// **1週間のレートリミットが明けるのを待つ上限。300 分（5時間）**（2026-08-26 の人間の決定）。
+			// **0 以下なら上限を設けない。**書かなかった人にはこの既定が入る。
+			WeeklyWaitLimitMinutes: 300,
 		},
 		Trust: TrustConfig{
 			RequireRepoTrusted: true,
@@ -257,6 +297,19 @@ func DefaultConfig() *Config {
 		Language: i18n.LangConfigAuto,
 	}
 }
+
+// RateLimitSourceStatusline は rate_limit.source の「ステータスラインから使用率を受ける」の値である
+// （issue #284）。**internal/ratelimit の SourceStatusline と同じ文字列である**（internal/ratelimit は
+// internal/config を読むので、逆向きに参照すると循環する）。
+const RateLimitSourceStatusline = "statusline"
+
+// RateLimitSourceNone は rate_limit.source の「使用率を読まない」の値である。
+const RateLimitSourceNone = "none"
+
+// RateLimitSourceOAuthUsageAPI は rate_limit.source の「usage APIを主に読み、
+// エラーのときは statusline取得へ切り替える」の値である（既定。issue #284）。
+// **internal/ratelimit の SourceOAuthUsageAPI と同じ文字列である。**
+const RateLimitSourceOAuthUsageAPI = "oauth_usage_api"
 
 // RateLimitTokenSourceKeychain は rate_limit.token_source の「macOS の Keychain から読む」の値である。
 //
@@ -278,7 +331,7 @@ const RateLimitTokenSourceEnv = "env"
 // `~/.claude/.credentials.json` は無いのが普通である（2026-08-21 に実測。
 // `security find-generic-password -s "Claude Code-credentials" -w` が
 // `claudeAiOauth.accessToken` を含む JSON を返した）。
-// **既定を `claude_credentials` のままにすると、macOS では枠の判定が黙って効かなくなる。**
+// **既定を `claude_credentials` のままにすると、macOS では usage API が黙って読めなくなる。**
 //
 // 戻り値: darwin なら "keychain"、それ以外は "claude_credentials"。
 func defaultRateLimitTokenSource() string {

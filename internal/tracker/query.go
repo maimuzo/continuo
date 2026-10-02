@@ -299,6 +299,31 @@ query($issueId: ID!, $first: Int!, $after: String) {
 }
 `
 
+// relayCommentsQueryTemplate は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-85）
+// だけが送るコメントの問い合わせである（issue #246）。
+//
+// **共用の `commentsQueryTemplate` と `addCommentMutation` へ項目を足してはならない。**
+// `authorAssociation` と `isMinimized` を持たない GitHub Enterprise Server では、
+// 共用の問い合わせごと落ち、**コメントの読み書きが全部止まる**（`bootstrapQueryTemplate` と
+// `projectWorkflowsQueryTemplate` を分けたのと同じ理由）。別の問い合わせにしておけば、
+// 落ちても relay がその起動で渡さないだけで済む。
+//
+// **並び順とページ送りは共用の問い合わせと同じである**（更新日時の新しい順・`maxCommentPages`）。
+// 読み切れなかったときに落ちるのは古い側だけになる。
+const relayCommentsQueryTemplate = `
+query($issueId: ID!, $first: Int!, $after: String) {
+  node(id: $issueId) {
+    __typename
+    ... on Issue {
+      comments(first: $first, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id url body createdAt updatedAt author { login } authorAssociation isMinimized }
+      }
+    }
+  }
+}
+`
+
 // maxCommentPages はコメントの取得で辿るページ数の上限である。
 //
 // **上限を置かないと、荒らされた issue1件で巡回が止まる。**1ページ100件なので
@@ -647,6 +672,12 @@ type rawComment struct {
 	// フィールドを要求していない経路がそうなる。
 	UpdatedAt *time.Time `json:"updatedAt"`
 	Author    *rawUser   `json:"author"`
+	// AuthorAssociation は投稿者とリポジトリの関係である（`OWNER` / `MEMBER` / `COLLABORATOR` など）。
+	// **relay 専用の問い合わせ（relayCommentsQueryTemplate）だけが取る。**共用の問い合わせでは空である。
+	AuthorAssociation string `json:"authorAssociation"`
+	// IsMinimized は、そのコメントが隠されているかである。
+	// **relay 専用の問い合わせだけが取る。**共用の問い合わせでは偽である。
+	IsMinimized bool `json:"isMinimized"`
 }
 
 type rawCommentConn struct {

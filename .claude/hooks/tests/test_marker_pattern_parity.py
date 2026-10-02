@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""レビュー結果の目印を数える条件が、3箇所で本当に同じかを確かめる。
+"""レビュー結果の目印を数える条件が、2箇所で本当に同じかを確かめる。
 
     python3 .claude/hooks/tests/test_marker_pattern_parity.py
 
@@ -7,7 +7,7 @@
 
 ## なぜこのテストが要るか
 
-**3箇所が「同じ条件である」と互いのコメントで名乗っているが、実際は同じでなかった。**
+**「同じ条件である」と互いのコメントで名乗っているが、実際は同じでなかった。**
 
 実測（2026-09-02）。目印の前に全角空白 U+3000 を1文字だけ置いた本文で、
 
@@ -15,21 +15,26 @@
 | --- | --- | --- |
 | .github/workflows/review-gate.yml | jq `test("^\\s*<!-- code-review-result -->")` | 数える |
 | scripts/check-release-ready.sh | 同じ jq | 数える |
-| .claude/hooks/block-merge-without-review.py | `re.compile(r"\\A\\s*…", re.ASCII)` | **数えない** |
+| .claude/hooks/block-merge-without-review.py（廃止済み） | `re.compile(r"\\A\\s*…", re.ASCII)` | **数えなかった** |
 
-**Python の `re` と jq（Oniguruma）で `\\s` の当たる範囲が違う。**
+**Python の `re` と jq（Oniguruma）で `\\s` の当たる範囲が違っていた。**
 `re.ASCII` を外すと今度は Python のほうが広くなる（`\\x1c` などにも当たる）ので、
-**どちらの `\\s` に寄せても揃わない。**そこで3箇所とも `[ \\t\\r\\n]*` と並べて書き、
-このテストが「並べたものが1文字ずつ同じか」と「実際に同じ答えを返すか」の両方を見る。
+**どちらの `\\s` に寄せても揃わなかった。**そこで数える側は全部 `[ \\t\\r\\n]*` と並べて書き、
+このテストが「並べたものが1文字ずつ同じか」と「実際に当てた答えが想定どおりか」の両方を見る。
+
+**Python の実装は、もう1つも無い。**`block-merge-without-review.py` は 2026-09-21 に廃止した
+（branch の保護設定で `enforce_admins` を有効にし、admin も赤い検査を素通りできなくしたため）。
+**残る2つはどちらも jq なので、比べる相手は jq どうしである。**
+**どちらが正本かを決めておく必要があるので、`scripts/check-release-ready.sh` を正本とする。**
 
 ## 何を見るか
 
-1. **書いてある文字列が同じか。**3つのファイルから目印の正規表現を取り出して突き合わせる
-2. **実際に同じ答えを返すか。**Python の `MARKER_RE` と、jq へ渡す式に
-   同じ本文の一覧を食わせて、1件ずつ答えを比べる（jq が無い環境では、この段は飛ばす）
+1. **書いてある文字列が同じか。**2つのファイルから目印の正規表現を取り出して突き合わせる
+2. **当てた答えが想定どおりか。**jq へ渡す式に本文の一覧を食わせ、
+   **このテストが書いている想定の一覧と1件ずつ比べる**（**jq が無い環境では飛ばさずに落とす。**
+   飛ばすと、2つの式を同時に緩めても緑になるためである）
 """
 
-import importlib.util
 import json
 import os
 import re
@@ -37,7 +42,6 @@ import shutil
 import subprocess
 import sys
 
-HOOK = os.path.join(".claude", "hooks", "block-merge-without-review.py")
 WORKFLOW = os.path.join(".github", "workflows", "review-gate.yml")
 RELEASE = os.path.join("scripts", "check-release-ready.sh")
 
@@ -46,14 +50,6 @@ MARKER = "<!-- code-review-result -->"
 # jq のソースに書いてある `test("…")` を取り出す。
 # **jq の文字列の中なので、`\t` は `\\t` と2文字で書かれている。**
 JQ_TEST_RE = re.compile(r'test\("(\^[^"]*' + re.escape(MARKER) + r')"\)')
-
-
-def load_hook():
-    """hook を module として読み込む。"""
-    spec = importlib.util.spec_from_file_location("hook", HOOK)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def jq_pattern_of(path):
@@ -71,15 +67,6 @@ def jq_pattern_of(path):
         raise AssertionError("%s に食い違う式が %d 個ある: %s" % (path, len(found), sorted(found)))
     # jq の文字列リテラルの escape を解く。`"\\t"` は `\t` の2文字になる。
     return json.loads('"' + found.pop() + '"')
-
-
-def python_pattern_of(mod):
-    """hook が使っている正規表現を、jq と同じ形（`^` 始まり）に直して返す。"""
-    pat = mod.MARKER_RE.pattern
-    if not pat.startswith(r"\A"):
-        raise AssertionError("MARKER_RE が `\\A` で始まっていない: %r" % pat)
-    # `re.escape` が目印へ入れた escape を外して、書いてある形に戻す。
-    return "^" + pat[len(r"\A"):].replace(re.escape(MARKER), MARKER)
 
 
 # 目印の前に置く文字。**全部を「同じ答えになるか」で見る。**
@@ -127,32 +114,29 @@ def jq_matches(pattern, bodies):
 def main():
     ng = 0
     ran = 0
-    mod = load_hook()
-
-    py_pat = python_pattern_of(mod)
-    jq_ci = jq_pattern_of(WORKFLOW)
+    # **正本は scripts/check-release-ready.sh とする。**
+    # Python の実装（hook）は廃止したので、比べる相手は jq どうしである。
     jq_release = jq_pattern_of(RELEASE)
+    jq_ci = jq_pattern_of(WORKFLOW)
 
-    # 段1. 書いてある文字列が同じか。
-    for name, got in (
-        (".github/workflows/review-gate.yml", jq_ci),
-        ("scripts/check-release-ready.sh", jq_release),
-    ):
-        ran += 1
-        if got is None:
-            ng += 1
-            print("NG  %s から目印の式を取り出せない" % name)
-        elif got != py_pat:
-            ng += 1
-            print("NG  %s の式が hook と違う: %r（hook は %r）" % (name, got, py_pat))
-        else:
-            print("ok  %s の式が hook と同じ（%r）" % (name, got))
+    # 段1. 書いてある文字列が、正本と同じか。
+    ran += 1
+    if jq_release is None:
+        ng += 1
+        print("NG  scripts/check-release-ready.sh（正本）から目印の式を取り出せない")
+    elif jq_ci is None:
+        ng += 1
+        print("NG  .github/workflows/review-gate.yml から目印の式を取り出せない")
+    elif jq_ci != jq_release:
+        ng += 1
+        print("NG  review-gate.yml の式が正本と違う: %r（正本は %r）" % (jq_ci, jq_release))
+    else:
+        print("ok  review-gate.yml の式が正本と同じ（%r）" % jq_ci)
 
     # 段2. `\s` を使っていないか。**engine で当たる範囲が変わるので使ってはならない。**
     for name, got in (
-        ("hook（block-merge-without-review.py）", py_pat),
+        ("scripts/check-release-ready.sh（正本）", jq_release),
         (".github/workflows/review-gate.yml", jq_ci),
-        ("scripts/check-release-ready.sh", jq_release),
     ):
         ran += 1
         if got is not None and r"\s" in got:
@@ -161,26 +145,8 @@ def main():
         else:
             print(r"ok  %s の式が `\s` を使っていない" % name)
 
-    # 段3. 実際に同じ答えを返すか。
-    bodies = [p + MARKER for _, p in PREFIXES] + [b for _, b in NON_MARKER_BODIES]
-    names = ["目印の前が %s" % n for n, _ in PREFIXES] + [n for n, _ in NON_MARKER_BODIES]
-    py_got = [bool(mod.MARKER_RE.match(b)) for b in bodies]
-
-    if shutil.which("jq") is None:
-        print("--  jq が無いので、実際に当ててみる段は飛ばした")
-    elif jq_ci is None:
-        print("--  CI の式を取り出せなかったので、実際に当ててみる段は飛ばした")
-    else:
-        jq_got = jq_matches(jq_ci, bodies)
-        for name, want, got in zip(names, py_got, jq_got):
-            ran += 1
-            if want != got:
-                ng += 1
-                print("NG  %s: hook=%s / jq=%s" % (name, want, got))
-            else:
-                print("ok  %s: どちらも %s" % (name, want))
-
-    # 段4. 想定そのものを書き下す。**「同じ」だけでは、両方まとめて緩んでも気づけない。**
+    # 段3. 実際に当てた答えが、想定どおりか。
+    # **「2つが同じ」だけでは、両方まとめて緩んでも気づけない。**想定そのものを書き下す。
     want_table = {
         "前に何も無い": True,
         "半角空白1つ": True,
@@ -200,22 +166,42 @@ def main():
         "ふつうの文字": False,
         "見出し": False,
     }
-    for (name, prefix), got in zip(PREFIXES, py_got):
-        ran += 1
-        want = want_table[name]
-        if want != got:
-            ng += 1
-            print("NG  目印の前が %s: %s（想定は %s）" % (name, got, want))
-        else:
-            print("ok  目印の前が %s: %s" % (name, got))
+    bodies = [prefix + MARKER for _, prefix in PREFIXES] + [b for _, b in NON_MARKER_BODIES]
 
-    for (name, body), got in zip(NON_MARKER_BODIES, py_got[len(PREFIXES):]):
+    if shutil.which("jq") is None:
+        # **飛ばして緑にしてはならない。**
+        # 飛ばすと、2つの式を同時に緩めても段1（互いに同じか）と段2（`\s` を使っていないか）を
+        # 通ってしまい、**手元では `3 件中 3 件が想定どおり` と出て「揃っている」と読める。**
+        # このテストが生まれた原因（2026-09-02 に全角空白で2つの実装が割れた件）は、
+        # **当てて初めて分かる。**jq はこのリポジトリの検査に必須（`gh --jq` も使う）なので、
+        # 無い環境を緑にする理由が無い。
         ran += 1
-        if got:
-            ng += 1
-            print("NG  %s を数えてしまう" % name)
-        else:
-            print("ok  %s は数えない" % name)
+        ng += 1
+        print("NG  jq が無いので、当てて確かめられない（jq を入れること）")
+    elif jq_release is None or jq_ci is None:
+        print("--  式を取り出せなかったので、実際に当ててみる段は飛ばした")
+    else:
+        for path_name, pattern in (
+            ("scripts/check-release-ready.sh（正本）", jq_release),
+            (".github/workflows/review-gate.yml", jq_ci),
+        ):
+            got_all = jq_matches(pattern, bodies)
+            for (name, _prefix), got in zip(PREFIXES, got_all):
+                ran += 1
+                want = want_table[name]
+                if want != got:
+                    ng += 1
+                    print("NG  %s / 目印の前が %s: %s（想定は %s）" % (path_name, name, got, want))
+                else:
+                    print("ok  %s / 目印の前が %s: %s" % (path_name, name, got))
+
+            for (name, _body), got in zip(NON_MARKER_BODIES, got_all[len(PREFIXES):]):
+                ran += 1
+                if got:
+                    ng += 1
+                    print("NG  %s / %s を数えてしまう" % (path_name, name))
+                else:
+                    print("ok  %s / %s は数えない" % (path_name, name))
 
     print("\n%d 件中 %d 件が想定どおり" % (ran, ran - ng))
     return 1 if ng else 0

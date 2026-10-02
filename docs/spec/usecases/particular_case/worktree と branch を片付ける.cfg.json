@@ -3,7 +3,7 @@
   "usecase_name": "worktree と branch を片付ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md",
-    "rucm_block_sha256": "f9858db0a74dc8c3240e6d0156132a6a820cd75ac641eebf42d3aabf58c713f8"
+    "rucm_block_sha256": "d8ce4fa646b009e2ecbe98e3618ae855399d1f84aa5d2313a37dbba0e2ac0f14"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -28,7 +28,7 @@
           5
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。pane を全部閉じられた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。"
     },
     "置き場所の外": {
       "rfs": {
@@ -344,10 +344,17 @@
       "statement": "システムは herdr の pane を閉じる。"
     },
     {
-      "id": "片付けの対象外-6",
+      "id": "片付けの対象外-5",
+      "type": "action",
+      "flow": "片付けの対象外",
+      "step": 5,
+      "statement": "システムは、閉じる対象の pane を全部閉じられたときだけ、Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "片付けの対象外-7",
       "type": "abort",
       "flow": "片付けの対象外",
-      "step": 6,
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -848,13 +855,18 @@
     },
     {
       "from": "片付けの対象外-3",
-      "to": "片付けの対象外-6",
+      "to": "片付けの対象外-7",
       "kind": "false",
       "condition": "NOT Status が active_states に入っていて pane に agent がいる"
     },
     {
       "from": "片付けの対象外-4",
-      "to": "片付けの対象外-6",
+      "to": "片付けの対象外-5",
+      "kind": "seq"
+    },
+    {
+      "from": "片付けの対象外-5",
+      "to": "片付けの対象外-7",
       "kind": "seq"
     },
     {
@@ -2564,7 +2576,7 @@
       "id": "P030",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。pane を全部閉じられた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2575,7 +2587,8 @@
         "片付けの対象外-2",
         "片付けの対象外-3",
         "片付けの対象外-4",
-        "片付けの対象外-6"
+        "片付けの対象外-5",
+        "片付けの対象外-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2588,6 +2601,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "IF Status が active_states に入っていて pane に agent がいる THEN",
         "システムは herdr の pane を閉じる。",
+        "システムは、閉じる対象の pane を全部閉じられたときだけ、Claude Code を閉じた記録を issue に1件コメントする。",
         "ABORT"
       ]
     },
@@ -2595,7 +2609,7 @@
       "id": "P031",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。pane を全部閉じられた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2605,7 +2619,7 @@
         "片付けの対象外-1",
         "片付けの対象外-2",
         "片付けの対象外-3",
-        "片付けの対象外-6"
+        "片付けの対象外-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2721,9 +2735,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 67,
-    "nodes_covered": 67,
-    "edges_total": 77,
-    "edges_covered": 77
+    "nodes_total": 68,
+    "nodes_covered": 68,
+    "edges_total": 78,
+    "edges_covered": 78
   }
 }

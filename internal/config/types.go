@@ -53,6 +53,8 @@ type Config struct {
 // 読むのは「エージェントがコメントを書いたかどうかを判別するため」であって、
 // プロンプトへ渡すためではない（設計 3-29）。issue の中身はプロンプトに埋め込まず、
 // エージェントが gh の JSON 出力で自分で読む（設計 3-72。テキスト表示は使わせない）。
+// **例外は1つだけある。**信頼できる人間のコメントだけを、最初のメッセージの末尾に付けて渡す
+// （`agent.relay_trusted_comments`。設計 3-85）。それは別の問い合わせで読み、この設定は使わない。
 //
 // **取得そのものを止める設定は持たない。**取得しないと、成功した run も
 // 「エージェントがコメントを書いていない」と判定されて failure_state へ落ちる。
@@ -148,14 +150,17 @@ type TrackerProviderHandoffConfig struct {
 	//
 	//	5時間余裕値 = 100 − 5時間の使用率 − FiveHourMarginPercent
 	//
-	// **余裕値がマイナスになったら入札しない**（処理する余裕が無いという意味である）。
+	// **余裕値が 0 以下になったら入札しない**（処理する余裕が無いという意味である）。
+	// **0 も含めるのは人間の決定である**（2026-09-06。issue #173）。マージンをちょうど食い潰した
+	// 状態から着手すると、人間のための取り置きへ食い込む。
 	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
 	// WeeklyMarginPercent は1週間の枠のうち continuo のために残しておきたい割合（%）である。
 	//
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//
 	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
+	// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、
+	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
@@ -199,6 +204,28 @@ type TrackerConfig struct {
 	DispatchState string `yaml:"dispatch_state"`
 	// FailureState は打ち切り・失敗のときに落とす先の状態である（4-1）。
 	FailureState string `yaml:"failure_state"`
+	// DirectChatState は「人間が pane で直接エージェントと話している」状態である（3-83）。
+	//
+	// **この Status のあいだ、continuo はその run に手を出さない。**turn を送らず、
+	// 表明（`status_signal_prefix` の1行）も読まず、Status も動かさず、stall 検知の
+	// 対象にもせず、**pane を閉じず worktree も消さない。**
+	// `active_states` へ戻すと、**同じ pane・同じセッションのまま**続きの指示を送る。
+	//
+	// **既定は `"Direct Chat"` である。**標準機能なので、既定に名前が入っている。
+	// **空にすると、この機能は一切効かない。**
+	//
+	// **この名前だけは、カンバンに実在することを起動時に要求しない**
+	// （`RequiredBoardStates` が `KnownStates` から差し引く）。**要求すると、
+	// その選択肢をまだ作っていない全利用者の continuo が起動しなくなる。**
+	// **綴りの取り違えは起動時には捕まらない。**`continuo doctor` の
+	// `Status の名前` が `!` で知らせる。
+	//
+	// **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
+	// `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` と
+	// 重ならないことを `Validate` が起動前に要求する**（3-83）。
+	// **`automated_state_rewrite` のキーとの重なりは、既存の検査が先に弾く**
+	// （`validateAutomatedStateRewrite`。`KnownStates` に入った名前はキーにできない）。
+	DirectChatState string `yaml:"direct_chat_state"`
 	// VerifyStatesEvery は Status の選択肢名を照合する間隔（巡回の回数）である（設計 3-6）。
 	// 毎巡回では行わない。選択肢名が変わるのは人間がカンバンを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
@@ -331,15 +358,60 @@ type AgentConfig struct {
 	// MaxRetries は stall や異常終了に対するリトライ回数の上限である。
 	// 尽きたら tracker.failure_state へ落とす。0 ならリトライしない。
 	MaxRetries int `yaml:"max_retries"`
+	// RelayTrustedComments は、人間が issue に書いたコメントを、次に Claude Code を起動したときの
+	// 最初のメッセージの末尾に付けて渡すかである（設計 3-85。issue #246）。**既定は true。**
+	//
+	// **渡すのは、continuo が最後に Claude Code を閉じた記録（`<!-- continuo:closed -->`）より後に、
+	// OWNER / MEMBER / COLLABORATOR が書いた、AI の目印の無いコメントだけである。**
+	// `auto` の判定役は user メッセージにある人間の意図しか許可として数えず、`gh` で読んだ
+	// issue のコメントは道具の結果として取り除く。**渡さないと、コメントで出した許可が判定役に届かない。**
+	//
+	// **効くのは `claude.permission_mode` が `auto` で、`tracker.comments.self_marker` が空でないときだけである**
+	// （`relayEnabled`）。self_marker が空だと、continuo 自身のコメントが人間のコメントとして渡る。
+	//
+	// **走行中には読み直さない**（`Reloadable` に入れない）。変えたら continuo を再起動する。
+	RelayTrustedComments bool `yaml:"relay_trusted_comments"`
 }
 
 // ClaudePermissionsConfig は Claude Code の許可リストである。
 // permission_mode が dontAsk のとき、許可リストの外は全部拒否される（3-11）。
+// auto のときは、**この一覧のうち道具を丸ごと許す規則は落とされる**（3-11）。
+// シェルのコマンドは判定役（classifier）へ回り、保護対象パスへの書き込みは
+// **許可の規則に当たっていても判定役へ回る**。**deny は auto でも効く**（実測。3-11）。
 type ClaudePermissionsConfig struct {
 	// Allow は許可するツール・コマンドのパターンである。
 	Allow []string `yaml:"allow"`
 	// Deny は明示的に拒否するパターンである。
 	Deny []string `yaml:"deny"`
+}
+
+// ClaudePermissionModeAuto は permission_mode の「判定役が実行の前に確かめる」である。
+//
+// **保護対象パス**（`.claude` 配下と `.mcp.json`）**への書き込みと、シェルのコマンドが
+// 判定役へ回る**（公式の permission modes の表。2026-09-09 に取得）。
+// **判定役は issue のコメントを読まない。**判定役への要求から道具の結果は取り除かれ
+// （公式の permission modes のページ。2026-09-18 に取得）、**issue のコメントは `gh` の出力、
+// つまり道具の結果として届く。**2026-09-18 に実測でも確かめた。
+// **例外は、continuo が最初のメッセージ（user メッセージ）の末尾に付けて渡した人間のコメントである**
+// （`agent.relay_trusted_comments`。設計 3-85。issue #246）。それは判定役が人間の意図として読む。
+// **`Bash` のように道具を丸ごと許す規則は、このモードに入るときに落とされる。**
+// `Bash(npm test)` のような狭い規則は残る（同じページ）。
+const ClaudePermissionModeAuto = "auto"
+
+// ClaudePermissionModeDontAsk は permission_mode の「許可の一覧の外は確認せずに拒否する」である。
+//
+// **入力を待たないことが保証される唯一のモードである**（公式 *"the session never waits for input"*）。
+// **そのぶん、保護対象パスへの書き込みは何をしても通らない**（3-11 の実測）。
+const ClaudePermissionModeDontAsk = "dontAsk"
+
+// ClaudePermissionModes は permission_mode に書ける値の全部である。
+// **起動時の検査はこの一覧だけを見る**（validateClaude）。
+//
+// **公開する。**検査は test/internal/config という別の package にあり、
+// 非公開だと期待値をそこへ書き写すことになる。
+var ClaudePermissionModes = []string{
+	ClaudePermissionModeAuto,
+	ClaudePermissionModeDontAsk,
 }
 
 // ClaudeToolGateModeOff は tool_gate.mode の「掛けない」である。
@@ -383,12 +455,17 @@ var ClaudeToolGateModes = []string{
 type ClaudeToolGateConfig struct {
 	// Mode は判定を掛ける範囲である。ClaudeToolGateModes のどれかを書く。
 	//
-	//	off          … 掛けない
+	//	off          … 掛けない（既定）
 	//	on           … いつでも掛ける
-	//	public_only  … 公開リポジトリの issue にだけ掛ける（既定）
+	//	public_only  … 公開リポジトリの issue にだけ掛ける
 	//
-	// **既定を public_only にする理由。**公開リポジトリの issue は誰でも書けるので、
-	// 指示そのものが攻撃になりうる（3-64）。
+	// **既定を off にする理由。**
+	// この判定は hook の入力の JSON だけを見る。**人間が issue のコメントで許可を出しても通らない**
+	// （`auto` の判定役は、continuo が最初のメッセージに付けて渡したコメントなら読むが（設計 3-85）、
+	// この判定はそれも見ない。設計 3-11）。
+	// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
+	// **公開リポジトリの issue が誰でも書けることは変わらない**ので、掛けたい人は
+	// public_only か on を書く（SECURITY.md の「使う前に減らせる危険」）。
 	Mode string `yaml:"mode"`
 	// Model は判定させるモデルである。**既定は空である**（設計 3-64）。
 	// 空なら settings.json へ `model` を書かず、Claude Code の既定の速いモデルに任せる。
@@ -420,9 +497,10 @@ type ClaudeHookBridgeConfig struct {
 type ClaudeConfig struct {
 	// Kind は herdr に渡す agent の種別である。
 	Kind string `yaml:"kind"`
-	// PermissionMode は Claude Code の権限モードである。入力を待たない唯一のモードである "dontAsk" を使う（3-11）。
+	// PermissionMode は Claude Code の権限モードである。ClaudePermissionModes のどれかを書く（3-11）。
+	// **既定は "auto"。**"dontAsk" を選べば、いままでどおり入力を待たない。
 	PermissionMode string `yaml:"permission_mode"`
-	// Permissions は dontAsk のときに参照される許可・拒否リストである。
+	// Permissions は許可・拒否リストである。**auto でも deny は効く**（3-11 の実測）。
 	Permissions ClaudePermissionsConfig `yaml:"permissions"`
 	// Env は Claude Code の起動時に渡す環境変数である。値は展開しない（5-5）。
 	Env map[string]string `yaml:"env"`
@@ -452,8 +530,12 @@ type ClaudeConfig struct {
 	// と定めている。1回の指示に数時間かかることは普通にあるので、総時間で測ってはならない。
 	//
 	// **continuo には app-server が無い。**「app-server の出力」に相当するのは
-	// 「端末の画面が変わったこと」であり、herdr はそれを pane の revision（画面の版）で表す。
-	// **版が増えていれば何時間かかっても待ち続け、版がこの時間だけ増えなければ打ち切る**（3-21）。
+	// **herdr の `agent_status` が `working` であること**である（3-21。issue #173）。
+	// **hook がこの時間だけ来なかった時点で `agent_status` を1回読む。`working` なら何時間かかっても待ち続け、`working` でなければ打ち切る。**
+	//
+	// **pane の `revision`（画面の版）では測らない。**herdr が増やすのは端末タイトルの本文が
+	// 変わったときだけで、**continuo の pane では issue の識別子で固定されるので永久に動かない**
+	// （実測。docs/spec/turn_end_detect_mechanizm.md の 3-2）。
 	//
 	// **0 以下で打ち切りを行わない**（`SPEC.md` 8.4 の
 	// *"If stall_timeout_ms <= 0, skip stall detection entirely"* に合わせる）。
@@ -531,11 +613,23 @@ type CleanupConfig struct {
 
 // RateLimitConfig は Claude Code のレートリミット待機の挙動を決める（3-27。仕様の範囲外）。
 type RateLimitConfig struct {
-	// Source はレートリミットの値をどこから取るかである。"oauth_usage_api" か "none" のどちらか。
-	// "none" なら usage API を1回も叩かず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
-	// usage API がトークンを消費するかどうかを判別できていないため、"none" は必須の逃げ道である。
+	// Source は使用率の値をどこから取るかである。"oauth_usage_api"（既定）か "statusline" か
+	// "none" のどれか（issue #284）。
+	//
+	//	oauth_usage_api … Claude の usage APIを poll_interval_ms ごとに読む。
+	//	                  usage API がどのエラーでも statusline取得へ切り替え、読めたら戻る。
+	//	                  **この起動のあいだに1度も使用率を読めず、haiku に話しかけても値が
+	//	                  届かなければ、statusline取得を止める**（API キーの機械で従量の課金を
+	//	                  1回で止めるため）
+	//	statusline      … continuo が起動する Claude Code のステータスラインが運ぶ使用率を、
+	//	                  `continuo statusline` から `sl.sock` で受けて使う。値が古ければ、
+	//	                  trust.repositories の信頼済みの clone の中で短い haiku を起動して取りに行く
+	//	                  （statusline取得）。使用率が届くのは Pro / Max だけである（公式文書）
+	//	none            … 使用率を読まず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
+	//	                  Pro / Max 以外の契約と API キーの人はこちらにする
 	Source string `yaml:"source"`
-	// TokenSource はレートリミットを読むための認証情報の出所である（3-27）。
+	// TokenSource は usage API を読むための認証情報の出所である（3-27）。
+	// **source が oauth_usage_api のときだけ使う。**
 	//
 	// 想定する値は3つである。
 	//
@@ -551,10 +645,68 @@ type RateLimitConfig struct {
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
 	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
 	TokenEnv string `yaml:"token_env"`
-	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
-	PauseAbovePercent int `yaml:"pause_above_percent"`
-	// PollIntervalMs はレートリミットの値を確認する間隔（ミリ秒）である。
+	// **`PauseAbovePercent` は消えた**（人間の決定。2026-09-06。issue #173）。
+	//
+	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+	// **仕事を取るかどうかを決めるのは `tracker.provider.handoff` の2つのマージンだけである**
+	// （`internal/handoff/handoff.go` の `Evaluate`）。
+	// **statusline取得を開くかの判定も同じ線を使う**（`statuslineFetchPointless`）。
+	//
+	// **`WORKFLOW.md` に残っている人は、起動時の検査が弾く**
+	// （`internal/config/validate.go` の知らないキーの検査。移行の手順は
+	// [docs/upgrading.md](../../docs/upgrading.md) にある）。
+	// PollIntervalMs は usage API を読む間隔（ミリ秒）である（source が oauth_usage_api のとき。
+	// 既定 300000 = 5分）。usage API が誤りのあいだは、次に試してよい時刻までの長さにもなる。
 	PollIntervalMs int `yaml:"poll_interval_ms"`
+	// RefreshIntervalMs は、入札に使ってよい使用率の値の古さの上限（ミリ秒）で、
+	// statusline取得の間隔でもある（issue #284。既定 300000 = 5分）。
+	//
+	// **`polling.interval_ms` より長くすること。**source が statusline なら、短いと起動を止める。
+	// source が oauth_usage_api なら起動は止めず、`polling.interval_ms` の2倍として扱う
+	// （起動時に WARN を1回出す）。短いと巡回のたびに statusline取得が走る。
+	// **走行中は読み直さない**（reload.go）。
+	RefreshIntervalMs int `yaml:"refresh_interval_ms"`
+	// WeeklyWaitLimitMinutes は1週間の枠が明けるのを待つ上限（分）である（設計 3-27。issue #197）。
+	//
+	// **単位は分である。**ミリ秒ではない（人間が「分数を指定できることとし」と決めた。2026-08-26）。
+	// **既定は 300（5時間）。**
+	//
+	// **これを超えて待つことになる run は、リセットを待たずに、pane が止まってから担当を手放す。**worker を止め、
+	// 自分の assignee を外し、`<!-- continuo:released -->` を1件書く（3-77c の引き渡し）。
+	// **worktree は残す。カンバンの Status も動かさない。**
+	//
+	// **「何分待つか」ではない。**「**あと何分以内にリセットされるなら待つか**」の線である。
+	// 判定は `リセット時刻 − いま > この値` で、**1週間の枠は最長7日先までリセットされない**ので、
+	// **余裕が無くなった時点でこの式はたいてい真になる。**つまり**この分数ぶん待つことは、ほとんど無い**（手放すのは pane が止まってからで、下のとおり `claude.turn_timeout_ms` に縛られる）。
+	// **それが人間の決定である**（2026-09-06。「待ってもリセットされない時は…止まったらすぐに担当を変更して」）。
+	//
+	// **実際に手放す時刻は、`claude.turn_timeout_ms` にも縛られる**（issue #173）。
+	//
+	//	既定（claude.turn_timeout_ms が正）… run が黙ってから claude.turn_timeout_ms（既定1時間）
+	//	打ち切りを切っている（0以下）      … 余裕が無くなってから weekly_wait_limit_minutes（既定300分）
+	//
+	// **同じ `rate_limit` の設定でも、2つの機械で待ち時間が変わる。**
+	// **既定の機械で「もっと早く手放したい」なら、見るのは `claude.turn_timeout_ms` のほうである。**
+	// **実際に「この分数だけ待つ」ように働くのは、余裕の無い1週間の枠のうち
+	// 1つでも `resets_at` を持たないときである。**
+	// （`LatestResetForWaitLimit` は、1つでも読めなければ「読めない」と答える。
+	// **1つも読めないときだけ、ではない。**）
+	// （使っていない `weekly_scoped` の `resets_at` は `null` で返る。使い切ったときにどうなるかは測っていない。issue #199）。
+	// **そのときは、余裕が無くなってからの経過がこの値を超えたら手放す。**
+	//
+	// **5時間の枠には効かない。**余裕の無い枠が `session` だけなら、いつまでも待つ
+	// （**「使い切っている」ではない。**線は「余裕値が0以下」である。設計 3-27）
+	// （2026-08-26 の人間の決定「5時間枠 → 待つ。担当は変えない」）。
+	//
+	// **0 なら上限を設けない**（負の値は起動時の検査が弾く）。`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向きである
+	// （`idle_timeout_ms` の「0 なら既定へ倒す」とは逆なので、雛形のコメントで断っている）。
+	//
+	// **複数の機械で見張るなら `tracker.provider.handoff.idle_timeout_ms`（既定18時間）より
+	// 短くすること。**長いと、別の機械が先に担当を外すので、この値は一度も効かない。
+	// **弾かないのは、1台で動かしている人には他の機械がいないためである。**
+	WeeklyWaitLimitMinutes int `yaml:"weekly_wait_limit_minutes"`
 }
 
 // TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 3-33 / 4-3）。
@@ -570,8 +722,9 @@ type TrustConfig struct {
 	// 並べるが、**要らない行を消すのは人間である。**カンバンは他人が編集できるので、
 	// 拾った一覧をそのまま登録すると、issue を足せる人が信頼させるリポジトリを増やせてしまう。
 	//
-	// **巡回のループはここを読まない。**dispatch の直前の検査は `~/.claude.json` を
-	// 読むだけであり（4-3）、この列挙を参照する経路を持たない。
+	// **statusline取得に使う clone を選ぶのにも読む**（issue #284。上から見て、手元に clone があり
+	// 信頼されている最初の1つ）。dispatch の直前の検査は `~/.claude.json` を読むだけである（4-3）。
+	// **走行中は読み直さない**ので、書き換えたら continuo を立て直すこと。
 	Repositories []string `yaml:"repositories"`
 }
 

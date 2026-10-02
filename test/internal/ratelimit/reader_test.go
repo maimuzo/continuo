@@ -61,8 +61,8 @@ func TestFetch_資格情報ファイルからトークンを読んで枠を取�
 	if len(snap.Limits) != 2 {
 		t.Fatalf("枠の件数が想定と違う: got %d, want 2", len(snap.Limits))
 	}
-	if snap.MaxPercent() != 7 {
-		t.Fatalf("MaxPercent が想定と違う: got %d, want 7", snap.MaxPercent())
+	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 7 }) {
+		t.Fatalf("使用率が 7 の枠が無い: got %+v", snap.Limits)
 	}
 	if gotMethod != http.MethodGet {
 		t.Fatalf("GET で送っていない: got %q", gotMethod)
@@ -78,12 +78,17 @@ func TestFetch_資格情報ファイルからトークンを読んで枠を取�
 	}
 }
 
-// 目的: 資格情報ファイルが壊れている場合・accessToken が空の場合に、枠の判定を諦めて
-// 起動を止めないことを確認する（設計 3-27）。
+// 目的: 資格情報ファイルが壊れている場合・accessToken が空の場合・無い場合に、恒久的な失敗として
+// 誤りを返し、起動を止めないことを確認する（設計 3-27 / issue #284）。
+//
+// **ba24db63 までは (nil, nil) を返して以後叩かなかった。**それでは呼び出し側が statusline取得へ
+// 切り替える判断を下せないので、そのつど *CredentialError{Permanent: true} を返す。
+// 次に試すかどうかは呼び出し側（orchestrator）が決める。
+//
 // 与える情報: 壊れた JSON、accessToken が空の JSON、ファイルが無い状態の3通り。
-// 成功条件: いずれも Fetch が (nil, nil) を返し、以後 Enabled が偽になること。
-// HTTP リクエストが1本も出ないこと。
-func TestFetch_資格情報が読めなければ諦めて起動を止めない(t *testing.T) {
+// 成功条件: いずれも Fetch が *CredentialError（Permanent が真。ErrNoCredentials を辿れる）を返し、
+// HTTP リクエストが1本も出ないこと。Enabled は真のままであること。
+func TestFetch_資格情報が読めなければ恒久的な失敗として返す(t *testing.T) {
 	cases := []struct {
 		name string
 		// body は資格情報ファイルの中身。空文字ならファイルを作らない。
@@ -107,59 +112,50 @@ func TestFetch_資格情報が読めなければ諦めて起動を止めない(t
 				writeCredentials(t, home, tc.body)
 			}
 
-			buf, logger := newTestLogger()
 			reader, err := ratelimit.NewReader(ratelimit.Options{
 				Config:   usageConfig(),
 				Endpoint: srv.URL,
 				HomeDir:  home,
-				Logger:   logger,
 			})
 			if err != nil {
 				t.Fatalf("NewReader が失敗した: %v", err)
 			}
 
-			snap, err := reader.Fetch(context.Background())
-			if err != nil {
-				t.Fatalf("資格情報が取れないのにエラーを返した（起動を止めてはならない）: %v", err)
+			for i := 1; i <= 2; i++ {
+				snap, err := reader.Fetch(context.Background())
+				var credErr *ratelimit.CredentialError
+				if !errors.As(err, &credErr) {
+					t.Fatalf("%d 回目: 資格情報が取れないのに *CredentialError を返さなかった: %v", i, err)
+				}
+				if !credErr.Permanent {
+					t.Fatalf("%d 回目: 恒久的な失敗なのに Permanent が偽である", i)
+				}
+				if !errors.Is(err, ratelimit.ErrNoCredentials) {
+					t.Fatalf("%d 回目: ErrNoCredentials を辿れない: %v", i, err)
+				}
+				if snap != nil {
+					t.Fatalf("%d 回目: 資格情報が取れないのに snapshot を返した", i)
+				}
 			}
-			if snap != nil {
-				t.Fatalf("資格情報が取れないのに snapshot を返した")
-			}
-			if reader.Enabled() {
-				t.Fatalf("諦めたあとも Enabled が真のままである（毎回読みに行ってしまう）")
+			if !reader.Enabled() {
+				t.Fatalf("Reader が自分で諦めている（諦めるかは orchestrator が決める）")
 			}
 			if calls != 0 {
 				t.Fatalf("資格情報が無いのに usage API を叩いた: %d 回", calls)
-			}
-			if !strings.Contains(buf.String(), "枠の判定を諦めます") {
-				t.Fatalf("諦めた警告がログに出ていない: %s", buf.String())
-			}
-
-			// 2回目も叩かない。警告も増えない（警告は1回だけ。設計 3-15）。
-			before := strings.Count(buf.String(), "枠の判定を諦めます")
-			if _, err := reader.Fetch(context.Background()); err != nil {
-				t.Fatalf("2回目の Fetch がエラーを返した: %v", err)
-			}
-			if calls != 0 {
-				t.Fatalf("諦めたあとに usage API を叩いた: %d 回", calls)
-			}
-			if after := strings.Count(buf.String(), "枠の判定を諦めます"); after != before {
-				t.Fatalf("警告が2回以上出ている: got %d, want %d", after, before)
 			}
 		})
 	}
 }
 
-// 目的: usage API が 401 / 403 を返したら枠の判定を諦めることを確認する
-// （レビュー指摘「401 を返しても諦めず、30秒おきに永久に叩き直す」の回帰テスト）。
+// 目的: usage API が 401 / 403 を返したら、状態コードを持った誤りを返し、諦めないことを確認する
+// （issue #284）。
 //
-// **失効した accessToken を抱えたまま放置すると、無人のプロセスが 401 を巡回のたびに
-// 取りに行き、ログも同じ頻度で汚れる。**
+// **401 は一時的でもありうる**（トークンの更新の途中など）。ba24db63 までは以後叩かなかったが、
+// いまは呼び出し側が statusline取得へ切り替え、`poll_interval_ms` のあとに試し直す。
 //
 // 与える情報: 常に 401（または 403）を返す偽の usage API。
-// 成功条件: 1回目の Fetch が (nil, nil) を返して Enabled が偽になり、2回目以降は
-// HTTP リクエストを1本も出さないこと。
-func TestFetch_401と403は諦めて叩き直さない(t *testing.T) {
+// 成功条件: Fetch が *StatusError（状態コードが一致）を返し、2回目も HTTP リクエストを出すこと。
+func TestFetch_401と403は状態コードを持った誤りを返して諦めない(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			calls := 0
@@ -173,36 +169,122 @@ func TestFetch_401と403は諦めて叩き直さない(t *testing.T) {
 			home := t.TempDir()
 			writeCredentials(t, home, `{"claudeAiOauth":{"accessToken":"expired"}}`)
 
-			buf, logger := newTestLogger()
 			reader, err := ratelimit.NewReader(ratelimit.Options{
 				Config:   usageConfig(),
 				Endpoint: srv.URL,
 				HomeDir:  home,
-				Logger:   logger,
 			})
 			if err != nil {
 				t.Fatalf("NewReader が失敗した: %v", err)
 			}
 
-			snap, err := reader.Fetch(context.Background())
+			for i := 1; i <= 2; i++ {
+				snap, err := reader.Fetch(context.Background())
+				var statusErr *ratelimit.StatusError
+				if !errors.As(err, &statusErr) || statusErr.StatusCode != status {
+					t.Fatalf("%d 回目: 状態コード %d を持った *StatusError を返さなかった: %v", i, status, err)
+				}
+				if snap != nil {
+					t.Fatalf("%d 回目: %d なのに snapshot を返した", i, status)
+				}
+			}
+			if calls != 2 {
+				t.Fatalf("%d を受けたあとに叩き直していない: %d 回", status, calls)
+			}
+		})
+	}
+}
+
+// 目的: 429 の Retry-After を、秒でも HTTP の日付でも読むことを確認する（issue #284）。
+// 与える情報: `Retry-After: 3600`・HTTP の日付・値なしの3通りで 429 を返す偽の usage API。
+// 成功条件: *RateLimitedError が返り、秒なら RetryAfter が1時間、日付なら RetryAt がその時刻、
+// 値なしなら両方ゼロ値であること。*StatusError としても取り出せ、状態コードが 429 であること。
+func TestFetch_429はRetryAfterを秒でもHTTPの日付でも読む(t *testing.T) {
+	at := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name      string
+		header    string
+		wantAfter time.Duration
+		wantAt    time.Time
+	}{
+		{name: "秒", header: "3600", wantAfter: time.Hour},
+		{name: "HTTPの日付", header: at.Format(http.TimeFormat), wantAt: at},
+		{name: "値なし", header: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.header != "" {
+					w.Header().Set("Retry-After", tc.header)
+				}
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"error":"rate_limited"}`))
+			}))
+			defer srv.Close()
+
+			home := t.TempDir()
+			writeCredentials(t, home, `{"claudeAiOauth":{"accessToken":"ok"}}`)
+			reader, err := ratelimit.NewReader(ratelimit.Options{
+				Config:   usageConfig(),
+				Endpoint: srv.URL,
+				HomeDir:  home,
+			})
 			if err != nil {
-				t.Fatalf("%d は諦める扱いなのにエラーを返した: %v", status, err)
-			}
-			if snap != nil {
-				t.Fatalf("%d なのに snapshot を返した", status)
-			}
-			if reader.Enabled() {
-				t.Fatalf("%d を受けても Enabled が真のままである（30秒おきに叩き続ける）", status)
-			}
-			if !strings.Contains(buf.String(), "枠の判定を諦めます") {
-				t.Fatalf("諦めた警告がログに出ていない: %s", buf.String())
+				t.Fatalf("NewReader が失敗した: %v", err)
 			}
 
-			if _, err := reader.Fetch(context.Background()); err != nil {
-				t.Fatalf("2回目の Fetch がエラーを返した: %v", err)
+			_, err = reader.Fetch(context.Background())
+			var limited *ratelimit.RateLimitedError
+			if !errors.As(err, &limited) {
+				t.Fatalf("429 なのに *RateLimitedError を返さなかった: %v", err)
 			}
-			if calls != 1 {
-				t.Fatalf("%d を受けたあとも叩き直している: %d 回", status, calls)
+			if limited.RetryAfter != tc.wantAfter {
+				t.Fatalf("RetryAfter が想定と違う: got %s, want %s", limited.RetryAfter, tc.wantAfter)
+			}
+			if !limited.RetryAt.Equal(tc.wantAt) {
+				t.Fatalf("RetryAt が想定と違う: got %s, want %s", limited.RetryAt, tc.wantAt)
+			}
+			var statusErr *ratelimit.StatusError
+			if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusTooManyRequests {
+				t.Fatalf("*StatusError として 429 を取り出せない: %v", err)
+			}
+		})
+	}
+}
+
+// 目的: `session` も `weekly_all` も無い 200 を誤りとして返すことを確認する（issue #284）。
+//
+// **成功にすると、入札に要る値が無いまま新しさだけが進み、statusline取得へ切り替わらない。**
+//
+// 与える情報: `limits: []` と、`weekly_scoped` だけの 200 を返す偽の usage API。
+// 成功条件: Fetch が ErrNoWindows を返し、snapshot が nil であること。
+func TestFetch_sessionもweekly_allも無い200は誤りである(t *testing.T) {
+	for name, body := range map[string]string{
+		"空":               `{"limits":[]}`,
+		"weekly_scopedだけ": `{"limits":[{"kind":"weekly_scoped","percent":3,"resets_at":"2026-09-30T19:00:00Z"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer srv.Close()
+
+			home := t.TempDir()
+			writeCredentials(t, home, `{"claudeAiOauth":{"accessToken":"ok"}}`)
+			reader, err := ratelimit.NewReader(ratelimit.Options{
+				Config:   usageConfig(),
+				Endpoint: srv.URL,
+				HomeDir:  home,
+			})
+			if err != nil {
+				t.Fatalf("NewReader が失敗した: %v", err)
+			}
+			snap, err := reader.Fetch(context.Background())
+			if !errors.Is(err, ratelimit.ErrNoWindows) {
+				t.Fatalf("ErrNoWindows を返さなかった: %v", err)
+			}
+			if snap != nil {
+				t.Fatalf("誤りなのに snapshot を返した")
 			}
 		})
 	}
@@ -250,33 +332,37 @@ func TestFetch_5xxは諦めずエラーとして返す(t *testing.T) {
 	}
 }
 
-// 目的: `rate_limit.source: none` のときに usage API を1回も叩かないことを確認する
-// （設計 3-15 の絶対条件）。
-// 与える情報: source を "none" にした設定と、叩かれたら数える偽の usage API。
+// 目的: `rate_limit.source` が `none` と `statusline` のときに usage API を1回も叩かないことを
+// 確認する（設計 3-15 の絶対条件。issue #284）。
+// 与える情報: source を "none" / "statusline" にした設定と、叩かれたら数える偽の usage API。
 // 成功条件: Enabled が偽で、Fetch が (nil, nil) を返し、リクエストが0回であること。
-func TestFetch_sourceがnoneならAPIを1回も叩かない(t *testing.T) {
-	calls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-	}))
-	defer srv.Close()
+func TestFetch_sourceがnoneかstatuslineならAPIを1回も叩かない(t *testing.T) {
+	for _, source := range []string{ratelimit.SourceNone, ratelimit.SourceStatusline} {
+		t.Run(source, func(t *testing.T) {
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+			}))
+			defer srv.Close()
 
-	reader, err := ratelimit.NewReader(ratelimit.Options{
-		Config:   config.RateLimitConfig{Source: ratelimit.SourceNone},
-		Endpoint: srv.URL,
-	})
-	if err != nil {
-		t.Fatalf("NewReader が失敗した: %v", err)
-	}
-	if reader.Enabled() {
-		t.Fatalf("source: none なのに Enabled が真である")
-	}
-	snap, err := reader.Fetch(context.Background())
-	if err != nil || snap != nil {
-		t.Fatalf("source: none なのに読みに行った: snap=%v, err=%v", snap, err)
-	}
-	if calls != 0 {
-		t.Fatalf("source: none なのに usage API を叩いた: %d 回", calls)
+			reader, err := ratelimit.NewReader(ratelimit.Options{
+				Config:   config.RateLimitConfig{Source: source},
+				Endpoint: srv.URL,
+			})
+			if err != nil {
+				t.Fatalf("NewReader が失敗した: %v", err)
+			}
+			if reader.Enabled() {
+				t.Fatalf("source: %s なのに Enabled が真である", source)
+			}
+			snap, err := reader.Fetch(context.Background())
+			if err != nil || snap != nil {
+				t.Fatalf("source: %s なのに読みに行った: snap=%v, err=%v", source, snap, err)
+			}
+			if calls != 0 {
+				t.Fatalf("source: %s なのに usage API を叩いた: %d 回", source, calls)
+			}
+		})
 	}
 }
 
@@ -287,7 +373,7 @@ func TestFetch_sourceがnoneならAPIを1回も叩かない(t *testing.T) {
 // 別の場所に置き換えられたファイルを黙って読んで HTTP ヘッダに載せることになる。
 //
 // 与える情報: 実体は別の場所に置き、`.claude/.credentials.json` をそこへの symlink にする。
-// 成功条件: Fetch が (nil, nil) を返し、Enabled が偽になること。
+// 成功条件: Fetch が恒久的な失敗（*CredentialError の Permanent が真）を返すこと。
 // usage API を1回も叩かないこと。
 func TestFetch_資格情報がsymlinkなら読まない(t *testing.T) {
 	calls := 0
@@ -319,14 +405,12 @@ func TestFetch_資格情報がsymlinkなら読まない(t *testing.T) {
 	}
 
 	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("symlink は諦める扱いなのにエラーを返した: %v", err)
+	var credErr *ratelimit.CredentialError
+	if !errors.As(err, &credErr) || !credErr.Permanent {
+		t.Fatalf("symlink なのに恒久的な失敗を返さなかった: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("symlink の資格情報を読んでしまった")
-	}
-	if reader.Enabled() {
-		t.Fatalf("symlink を読まなかったのに Enabled が真のままである")
 	}
 	if calls != 0 {
 		t.Fatalf("symlink の資格情報でトークンを送った: %d 回", calls)
@@ -340,7 +424,8 @@ func TestFetch_資格情報がsymlinkなら読まない(t *testing.T) {
 // 出ていること。
 func TestFetch_資格情報の権限が緩いと警告を出す(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"limits":[]}`))
+		// **session を1件入れる。**`session` も `weekly_all` も無い 200 は誤りである（issue #284）。
+		_, _ = w.Write([]byte(`{"limits":[{"kind":"session","percent":1,"resets_at":"2099-01-01T00:00:00Z"}]}`))
 	}))
 	defer srv.Close()
 
@@ -370,17 +455,18 @@ func TestFetch_資格情報の権限が緩いと警告を出す(t *testing.T) {
 }
 
 // 目的: token_source: env のときに環境変数からトークンを読むこと、
-// 環境変数が空なら諦めることを確認する。
+// 環境変数が空なら恒久的な失敗を返すことを確認する。
 // 与える情報: token_env に指定した環境変数を設定した場合と、設定しない場合。
 // 成功条件: 設定した場合はその値が Authorization に載ること。設定しない場合は
-// ErrNoCredentials として諦め、Enabled が偽になること。
+// ErrNoCredentials を包んだ恒久的な失敗（*CredentialError）を返すこと。
 func TestFetch_token_sourceがenvなら環境変数から読む(t *testing.T) {
 	const envName = "CONTINUO_TEST_RATE_LIMIT_TOKEN"
 
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(`{"limits":[]}`))
+		// **session を1件入れる。**`session` も `weekly_all` も無い 200 は誤りである（issue #284）。
+		_, _ = w.Write([]byte(`{"limits":[{"kind":"session","percent":1,"resets_at":"2099-01-01T00:00:00Z"}]}`))
 	}))
 	defer srv.Close()
 
@@ -409,11 +495,12 @@ func TestFetch_token_sourceがenvなら環境変数から読む(t *testing.T) {
 			t.Fatalf("NewReader が失敗した: %v", err)
 		}
 		snap, err := reader.Fetch(context.Background())
-		if err != nil || snap != nil {
-			t.Fatalf("環境変数が空なのに読みに行った: snap=%v, err=%v", snap, err)
+		var credErr *ratelimit.CredentialError
+		if !errors.As(err, &credErr) || !credErr.Permanent || !errors.Is(err, ratelimit.ErrNoCredentials) {
+			t.Fatalf("環境変数が空なのに恒久的な失敗を返さなかった: %v", err)
 		}
-		if reader.Enabled() {
-			t.Fatalf("環境変数が空でも Enabled が真のままである")
+		if snap != nil {
+			t.Fatalf("環境変数が空なのに snapshot を返した")
 		}
 	})
 }

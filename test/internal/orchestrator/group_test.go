@@ -289,7 +289,7 @@ func TestComment_runが終わるときにコメントが無ければセッショ
 	if resumeArgs == "" {
 		t.Fatalf("--resume を付けて起動していない: %v", fx.Herdr.Requests())
 	}
-	for _, want := range []string{"--resume session-1", "--settings", "--permission-mode dontAsk"} {
+	for _, want := range []string{"--resume session-1", "--settings", "--permission-mode auto"} {
 		if !strings.Contains(resumeArgs, want) {
 			t.Fatalf("復元の起動フラグに %q が無い: %q", want, resumeArgs)
 		}

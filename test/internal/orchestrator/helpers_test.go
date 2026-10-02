@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -189,6 +190,82 @@ type fakeHerdr struct {
 	nextWS int
 	// drops は「応答を返さずに接続を切る」メソッドの集合である（herdr の再起動の再現）。
 	drops map[string]bool
+	// slHandlers は statusline取得の agent（名前が `sl-` で始まるもの）に対する台本である
+	// （issue #284）。**issue の run の `agent.get` / `agent.prompt` を数える台本と分ける。**
+	// 無ければ handlers の台本を使う。
+	slHandlers map[string]herdrHandler
+	// slRequests は statusline取得の agent に対するリクエストである。
+	// **requests には積まない。**issue の run の呼び出しを数えるテストの数を変えないため。
+	slRequests []recordedRequest
+}
+
+// statuslineAgentPrefix は statusline取得の agent の名前の接頭辞である（issue #284）。
+const statuslineAgentPrefix = "sl-"
+
+// HandleSL は、statusline取得の agent（名前が `sl-` で始まるもの）に対する台本を入れる。
+//
+// method: 対象のメソッド名（`agent.start` / `agent.get` / `agent.prompt` など）。
+// fn: 応答を決める関数。**t.Fatalf を使ってはならない。**
+func (fh *fakeHerdr) HandleSL(method string, fn herdrHandler) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.slHandlers[method] = fn
+}
+
+// SLRequests は statusline取得の agent に対するリクエストを受け取った順に返す。
+func (fh *fakeHerdr) SLRequests() []recordedRequest {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	out := make([]recordedRequest, len(fh.slRequests))
+	copy(out, fh.slRequests)
+	return out
+}
+
+// CountSL は、statusline取得の agent に対する method の回数を返す。
+func (fh *fakeHerdr) CountSL(method string) int {
+	n := 0
+	for _, r := range fh.SLRequests() {
+		if r.Method == method {
+			n++
+		}
+	}
+	return n
+}
+
+// SLSessionIDs は、statusline取得の `agent.start` に渡された `--session-id` を渡された順に返す。
+func (fh *fakeHerdr) SLSessionIDs() []string {
+	var ids []string
+	for _, r := range fh.SLRequests() {
+		if r.Method != herdr.MethodAgentStart {
+			continue
+		}
+		if id := argAfter(r.Params, "--session-id"); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// argAfter は `agent.start` の params の args から、flag の次の値を返す。無ければ空文字。
+func argAfter(params map[string]any, flag string) string {
+	args, _ := params["args"].([]any)
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			s, _ := args[i+1].(string)
+			return s
+		}
+	}
+	return ""
+}
+
+// isStatuslineAgentRequest は、リクエストが statusline取得の agent に宛てたものかを返す。
+func isStatuslineAgentRequest(params map[string]any) bool {
+	for _, key := range []string{"name", "target"} {
+		if v, ok := params[key].(string); ok && strings.HasPrefix(v, statuslineAgentPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // DropConnection は、そのメソッドを受けたら応答を書かずに接続を切る台本を入れる。
@@ -205,6 +282,17 @@ func (fh *fakeHerdr) DropConnection(method string) {
 	fh.drops[method] = true
 }
 
+// StopDropping は `DropConnection` で入れた台本を外し、そのメソッドへ再び答えるようにする。
+//
+// **herdr が再起動し終えた場面の再現である。**
+//
+// method: 対象のメソッド名。
+func (fh *fakeHerdr) StopDropping(method string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	delete(fh.drops, method)
+}
+
 // fakeWorkspace はテスト用herdr mock が持つ workspace 1件である。
 //
 // **本物と同じく、リポジトリの親 workspace も持つ**（issue #19）。`worktree.open` に
@@ -215,6 +303,12 @@ type fakeWorkspace struct {
 	Checkout string
 	// RepoRoot はそのリポジトリ本体のパスである。
 	RepoRoot string
+	// Label は workspace の label である（`workspace.create` と `workspace.rename` が書く）。
+	Label string
+	// Created が真なら、`workspace.create` で作ったままの workspace である（issue #284）。
+	// **本物と同じく `workspace.list` で `worktree` 欄を返さない**（実測: 2026-09-28、herdr 0.9.1）。
+	// 同じパスを cwd にした `worktree.open` で親にされると偽になり、`worktree` 欄を返す。
+	Created bool
 }
 
 // SetGitRepoDir は worktree.remove のあとに prune を叩くリポジトリを設定する。
@@ -236,6 +330,13 @@ func (fh *fakeHerdr) workspaceFor(path, repoRoot string) string {
 	defer fh.mu.Unlock()
 	for id, ws := range fh.workspaces {
 		if ws.Checkout == path {
+			// **本物と同じく、開いている workspace を親に作り替える**（issue #284）。
+			// statusline取得の workspace が開いている clone で `worktree.open` すると、
+			// herdr はそれを issue の親にする（実測: 2026-09-28、herdr 0.9.1）。
+			if ws.Created {
+				ws.Created = false
+				fh.workspaces[id] = ws
+			}
 			return id
 		}
 	}
@@ -262,6 +363,16 @@ func (fh *fakeHerdr) forgetWorkspace(id string) {
 	fh.mu.Lock()
 	defer fh.mu.Unlock()
 	delete(fh.workspaces, id)
+}
+
+// AddWorkspace は workspace を1つ直に置く（閉じ残しや親にされた状況を作るため）。
+//
+// id: workspace の ID。
+// ws: 中身。
+func (fh *fakeHerdr) AddWorkspace(id string, ws fakeWorkspace) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.workspaces[id] = ws
 }
 
 // OpenWorkspaces は、いま開いている workspace を ID 順に返す（検査から使う）。
@@ -304,13 +415,31 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 	if err != nil {
 		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	// **serve の goroutine を、テストが終わる前に待ち切る。**
+	//
+	// **`serve` はテスト本体が終わったあとにも動く。**走行中の run は、テストが返ったあとにも
+	// `agent.prompt` を送るためである（`serve` の冒頭のコメント）。
+	// **その goroutine が `t.Logf` を叩くと、`-race` がデータ競合として落とす。**
+	// 終わった `*testing.T` の内部状態を、testing のほうが書き換えているところへ読みに行くためである。
+	// **実測（2026-09-06。CI の ubuntu-latest）。**`helpers_test.go` の
+	// 「テスト用herdr mock が応答を書けません」の `t.Logf` で `WARNING: DATA RACE` が出て、
+	// **そのとき走っていた別のテストが落ちた。**
+	//
+	// **待ち受けを閉じてから待つ。**閉じれば新しい接続は増えず、`serve` は1件のリクエストで返る。
+	// **`orc.Close` はこれより先に走る**（`t.Cleanup` は後入れ先出しで、`orc.Close` の登録は
+	// `newFakeHerdr` の呼び出しより後である）。**だから待ち始めた時点で、続きの接続はもう無い。**
+	var serving sync.WaitGroup
+	t.Cleanup(func() {
+		_ = ln.Close()
+		serving.Wait()
+	})
 
 	fh := &fakeHerdr{
 		socketPath: socketPath,
 		handlers:   map[string]herdrHandler{},
 		workspaces: map[string]fakeWorkspace{},
 		drops:      map[string]bool{},
+		slHandlers: map[string]herdrHandler{},
 	}
 	fh.installDefaults()
 
@@ -320,7 +449,11 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 			if err != nil {
 				return
 			}
-			go fh.serve(t, conn)
+			serving.Add(1)
+			go func(c net.Conn) {
+				defer serving.Done()
+				fh.serve(t, c)
+			}(conn)
 		}
 	}()
 	return fh
@@ -369,15 +502,35 @@ func (fh *fakeHerdr) installDefaults() {
 	fh.Handle(herdr.MethodWorkspaceList, func(map[string]any) (any, *rpcErr) {
 		list := []any{}
 		for id, ws := range fh.OpenWorkspaces() {
-			list = append(list, map[string]any{
-				"workspace_id": id,
-				"worktree": map[string]any{
+			entry := map[string]any{"workspace_id": id, "label": ws.Label}
+			// **`workspace.create` で作ったままの workspace は `worktree` 欄を持たない**
+			// （本物と同じ。issue #284）。
+			if !ws.Created {
+				entry["worktree"] = map[string]any{
 					"checkout_path": ws.Checkout,
 					"repo_root":     ws.RepoRoot,
-				},
-			})
+				}
+			}
+			list = append(list, entry)
 		}
 		return map[string]any{"type": "workspace_list", "workspaces": list}, nil
+	})
+	// **statusline取得の workspace を作る**（issue #284）。本物と同じく、新しい ID を払い出し、
+	// `worktree` 欄の無い workspace にして label を控える。
+	fh.Handle(herdr.MethodWorkspaceCreate, func(params map[string]any) (any, *rpcErr) {
+		cwd, _ := params["cwd"].(string)
+		label, _ := params["label"].(string)
+		fh.mu.Lock()
+		fh.nextWS++
+		id := fmt.Sprintf("w%d", fh.nextWS)
+		fh.workspaces[id] = fakeWorkspace{Checkout: cwd, RepoRoot: cwd, Label: label, Created: true}
+		fh.mu.Unlock()
+		return map[string]any{
+			"type":      "workspace_created",
+			"workspace": map[string]any{"workspace_id": id, "label": label},
+			"tab":       map[string]any{"tab_id": id + ":t1"},
+			"root_pane": map[string]any{"pane_id": id + ":p1", "workspace_id": id},
+		}, nil
 	})
 	fh.Handle(herdr.MethodWorkspaceClose, func(params map[string]any) (any, *rpcErr) {
 		fh.forgetWorkspace(fmt.Sprint(params["workspace_id"]))
@@ -402,6 +555,13 @@ func (fh *fakeHerdr) installDefaults() {
 		}, nil
 	})
 	fh.Handle(herdr.MethodWorkspaceRename, func(params map[string]any) (any, *rpcErr) {
+		id := fmt.Sprint(params["workspace_id"])
+		fh.mu.Lock()
+		if ws, ok := fh.workspaces[id]; ok {
+			ws.Label = fmt.Sprint(params["label"])
+			fh.workspaces[id] = ws
+		}
+		fh.mu.Unlock()
 		return map[string]any{
 			"type": "workspace_info",
 			"workspace": map[string]any{
@@ -508,13 +668,27 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 
 	fh.mu.Lock()
-	fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
 	handler := fh.handlers[req.Method]
 	drop := fh.drops[req.Method]
 	tl := fh.timeline
+	sl := isStatuslineAgentRequest(req.Params)
+	if sl {
+		// **statusline取得の agent の呼び出しは別に積む**（issue #284）。issue の run の
+		// `agent.get` / `agent.prompt` を数えるテストの数を変えないため。
+		fh.slRequests = append(fh.slRequests, recordedRequest{Method: req.Method, Params: req.Params})
+		if h, ok := fh.slHandlers[req.Method]; ok {
+			handler = h
+		}
+	} else {
+		fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
+	}
 	fh.mu.Unlock()
 	// **トラッカーと同じ1本の並びへ積む。**別々の記録では前後関係を比べられない。
-	tl.note("herdr." + req.Method)
+	if sl {
+		tl.note("herdr.sl." + req.Method)
+	} else {
+		tl.note("herdr." + req.Method)
+	}
 
 	// **答えずに切る**（DropConnection。herdr の再起動の再現）。
 	// 受け取ったことは上で記録済みなので、何回届いたかは検査できる。
@@ -610,6 +784,13 @@ type fakeTracker struct {
 	calls []string
 	// verifyErr は VerifyStatusOptions が返すエラーである。
 	verifyErr error
+	// lastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧である（設計 3-83）。
+	lastFetchStates []string
+	// statusOptions は StatusOptionNames が返すカンバンの選択肢名である（設計 3-83）。
+	//
+	// **nil のままなら「まだ読めていない」を表す。**`tracker.direct_chat_state` を
+	// 候補の一覧へ足すかどうかの判定は、これが在ることを条件にしている。
+	statusOptions []string
 	// statesErr は FetchIssuesByStates が返すエラーである。
 	statesErr error
 	// updateErr は UpdateStatus が返すエラーである。
@@ -664,6 +845,28 @@ type fakeTracker struct {
 	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
 	// カンバン（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
 	extraCandidates []tracker.Issue
+	// onStates は FetchIssuesByStates の入口で呼ぶ関数である（nil なら呼ばない）。
+	//
+	// **巡回の途中に何かを起こすために使う**（issue #284。statusline取得の知らせが
+	// 巡回の途中に届く状況・巡回が長引く状況を作る）。錠の外で呼ぶ。
+	onStates func()
+	// relayErr は FetchRelayComments が返すエラーである（設計 3-85）。
+	relayErr error
+	// relayTruncated は FetchRelayComments が「古い側を読み切れなかった」と名乗るかである。
+	relayTruncated bool
+	// relayGate は FetchRelayComments を待たせる関門である（nil なら待たせない。HoldRelay が仕掛ける）。
+	relayGate chan struct{}
+	// relayCalls は FetchRelayComments が呼ばれた回数である。
+	relayCalls int
+}
+
+// SetOnStates は FetchIssuesByStates の入口で呼ぶ関数を入れる。
+//
+// fn: 呼ぶ関数。nil なら外す。
+func (ft *fakeTracker) SetOnStates(fn func()) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.onStates = fn
 }
 
 // fakeViewerLogin はテスト用トラッカー mock が名乗る「gh の持ち主」のログイン名である。
@@ -966,8 +1169,9 @@ func (ft *fakeTracker) SetStateByAutomation(id, state string) {
 
 // isHandoffComment は、そのコメントが引き渡しの通知かどうかを返す。
 //
-// **continuo が自分で書くコメントは2種類ある**（設計 3-29）。引き渡しの通知と、
-// Status を動かした記録である。**どちらにも self_marker が付くので、
+// **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**（設計 3-29）。
+// 引き渡しの通知・Status を動かした記録・direct chat の案内・入札・Claude Code を閉じた記録（設計 3-85）などがある。
+// **引き渡しの通知と Status を動かした記録はどちらにも self_marker が付くので、
 // `IsSelf` だけでは区別できない。**本文で選り分ける。
 func isHandoffComment(c tracker.Comment) bool {
 	return strings.Contains(c.Body, "の作業を人間へ引き渡しました")
@@ -1164,8 +1368,18 @@ func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.
 // FetchIssuesByStates は states に含まれる Status の issue を、カンバンの並び順のまま返す。
 func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) ([]tracker.Issue, error) {
 	ft.mu.Lock()
+	hook := ft.onStates
+	ft.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchIssuesByStates")
+	// **頼まれた Status の一覧を控える**（設計 3-83）。
+	// `tracker.direct_chat_state` を足すかどうかは、カンバンの選択肢を読んでから決まる。
+	// **控えないと、足した／足さなかったを検査から見分けられない。**
+	ft.lastFetchStates = append([]string(nil), states...)
 	if ft.statesErr != nil {
 		return nil, ft.statesErr
 	}
@@ -1356,6 +1570,9 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
 		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
 		Author: ft.viewer.Login,
+		// **投稿者の立場を入れる**（設計 3-85）。本物の GitHub は、リポジトリの持ち主のアカウントが
+		// 書いたコメントに `OWNER` を付ける。入れないと、continuo が書いた閉じた記録を境目として読めない。
+		AuthorAssociation: "OWNER",
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
@@ -1379,6 +1596,117 @@ func (ft *fakeTracker) FetchAllComments(
 	out := make([]tracker.Comment, len(ft.comments[issueNodeID]))
 	copy(out, ft.comments[issueNodeID])
 	return out, ft.commentsTruncated, nil
+}
+
+// FetchRelayComments は、最初のメッセージに付けて渡すためにコメントを1件残らず返す（設計 3-85。issue #246）。
+//
+// **ctx を読む。**`relayGate` が立っていれば、閉じられるか ctx が切れるまで返らない
+// （期限切れと、読んでいる最中に止められた場面を作るため）。
+// **失敗は他の読み取りと別に立てる**（`relayErr`）。`commentsErr` を使うと、成果のコメントの確認まで落ちる。
+func (ft *fakeTracker) FetchRelayComments(ctx context.Context, issueNodeID string) ([]tracker.Comment, bool, error) {
+	ft.mu.Lock()
+	ft.record("FetchRelayComments")
+	gate := ft.relayGate
+	ft.relayCalls++
+	ft.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	if ft.relayErr != nil {
+		return nil, false, ft.relayErr
+	}
+	out := make([]tracker.Comment, len(ft.comments[issueNodeID]))
+	copy(out, ft.comments[issueNodeID])
+	return out, ft.relayTruncated, nil
+}
+
+// SetRelayError は FetchRelayComments が返すエラーを差し替える（設計 3-85）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetRelayError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.relayErr = err
+}
+
+// SetRelayTruncated は、FetchRelayComments が「古い側を読み切れなかった」と名乗るかを決める（設計 3-85）。
+//
+// truncated: 真なら名乗る。
+func (ft *fakeTracker) SetRelayTruncated(truncated bool) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.relayTruncated = truncated
+}
+
+// HoldRelay は、FetchRelayComments を返り値の関数を呼ぶまで（か ctx が切れるまで）返さないようにする（設計 3-85）。
+//
+// 戻り値: 待たせるのをやめる関数。
+func (ft *fakeTracker) HoldRelay() func() {
+	gate := make(chan struct{})
+	ft.mu.Lock()
+	ft.relayGate = gate
+	ft.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			ft.mu.Lock()
+			ft.relayGate = nil
+			ft.mu.Unlock()
+			close(gate)
+		})
+	}
+}
+
+// RelayCalls は FetchRelayComments が呼ばれた回数を返す（設計 3-85）。
+func (ft *fakeTracker) RelayCalls() int {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	return ft.relayCalls
+}
+
+// AddCommentAs は、投稿者の立場（`authorAssociation`）と URL を指定して issue にコメントを足す（設計 3-85）。
+//
+// nodeID: issue のノード ID。
+// body: 本文。
+// association: 投稿者の立場（`OWNER` / `NONE` など）。
+// url: コメントの URL（`#issuecomment-<番号>` で同じ秒の前後を決める）。
+// createdAt: 作成時刻。
+func (ft *fakeTracker) AddCommentAs(nodeID, body, association, url string, createdAt time.Time) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.comments[nodeID] = append(ft.comments[nodeID], tracker.Comment{
+		ID:                fmt.Sprintf("C_as_%d", len(ft.comments[nodeID])+1),
+		URL:               url,
+		Author:            "someone",
+		Body:              body,
+		CreatedAt:         createdAt,
+		AuthorAssociation: association,
+	})
+}
+
+// ClosedRecordsOf は issue に付いた「閉じた記録」（`<!-- continuo:closed -->`）だけを返す（設計 3-85）。
+func (ft *fakeTracker) ClosedRecordsOf(nodeID string) []tracker.Comment {
+	var out []tracker.Comment
+	for _, c := range ft.CommentsOf(nodeID) {
+		if isClosedRecord(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// isClosedRecord は、そのコメントが閉じた記録かどうかを返す（設計 3-85）。
+func isClosedRecord(c tracker.Comment) bool {
+	return strings.HasPrefix(strings.TrimLeft(c.Body, " \t\r\n"), config.ClosedMarker)
 }
 
 // FetchViewer はこのテスト用トラッカー mock が名乗る「gh の持ち主」を返す（設計 3-77b）。
@@ -1517,6 +1845,32 @@ func (ft *fakeTracker) VerifyStatusOptions(_ context.Context, _ config.TrackerCo
 	return ft.verifyErr
 }
 
+// StatusOptionNames はカンバン側の Status の選択肢名を返す（設計 3-83）。
+func (ft *fakeTracker) StatusOptionNames() []string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	out := make([]string, len(ft.statusOptions))
+	copy(out, ft.statusOptions)
+	return out
+}
+
+// LastFetchStates は FetchIssuesByStates に最後に渡された Status の一覧を返す（設計 3-83）。
+func (ft *fakeTracker) LastFetchStates() []string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	return append([]string(nil), ft.lastFetchStates...)
+}
+
+// SetStatusOptions はカンバン側の Status の選択肢名を差し替える（設計 3-83）。
+//
+// **`tracker.direct_chat_state` をここへ入れないと、候補の一覧に足されない。**
+// 選択肢がまだ読めていない状態（`Bootstrap` の前）と同じ扱いになる。
+func (ft *fakeTracker) SetStatusOptions(names ...string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.statusOptions = append([]string(nil), names...)
+}
+
 // ===== 本物の git を使うリポジトリ =====
 
 // testRepo は本物の git で作ったテスト用のリポジトリである。
@@ -1602,6 +1956,11 @@ type fixture struct {
 	RuntimeDir string
 	// SocketPath は hook を受ける socket の絶対パスである（実際には listen しない）。
 	SocketPath string
+	// StatuslineSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。
+	// **`rate_limit.source: statusline` のときだけ入る**（実際には listen しない）。
+	StatuslineSocketPath string
+	// HomeDir は `~/.claude.json` を置いたホームディレクトリである。
+	HomeDir string
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
 	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
@@ -1687,6 +2046,8 @@ func (fx *fixture) unexpectedLogLines() []string {
 type fixtureOptions struct {
 	// Mutate は設定を書き換える関数である。nil なら既定のまま。
 	Mutate func(cfg *config.Config)
+	// RateLimit は usage API の読み取りである（issue #284）。nil なら usage API を読まない。
+	RateLimit *ratelimit.Reader
 	// Untrusted を真にすると、リポジトリを信頼登録しない
 	// （dispatch の段0 で必ず弾かれる状態を作る）。
 	Untrusted bool
@@ -1700,8 +2061,12 @@ type fixtureOptions struct {
 	//
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する。
 	GHLogin func(ctx context.Context) (string, error)
-	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
-	RateLimit *ratelimit.Reader
+	// GhqExtra は `ghq list -p -e <owner>/<repo>` の偽物が返すパスの差し替えである
+	// （issue #284。statusline取得の clone の選び方を確かめるため）。
+	//
+	// **鍵は `owner/repo` である。**鍵にあれば、その値（空文字なら「clone が無い」）を返す。
+	// 鍵に無ければ、いままでどおり fixture のリポジトリのパスを返す。
+	GhqExtra map[string]string
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
@@ -1773,6 +2138,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatalf("ホームディレクトリを作成できません: %v", err)
 	}
+	// **利用者の設定ディレクトリを、この一時ディレクトリの下へ向ける**（設計 3-84a）。
+	// 向けないと、着手のたびにテストを走らせた人の `~/.claude/settings.json` を読み、
+	// その人のステータスラインが issue ごとの設定ファイルの env へ入る（読むだけだが、結果が人で変わる）。
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 
 	// 信頼の検査が読む ~/.claude.json（**読むだけで書き換えない**）。
 	toplevel := runGit(t, repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
@@ -1801,8 +2170,9 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	cfg.Herdr.ReadTimeoutMs = 2000
 	cfg.Herdr.StartupTimeoutMs = 2000
 	cfg.Polling.IntervalMs = 3600000
-	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
-	cfg.RateLimit.Source = "none"
+	// 使用率の判定は既定で行わない（statusline取得を開かず、issue ごとの設定ファイルに
+	// statusLine を書かない。issue #284）。
+	cfg.RateLimit.Source = ratelimit.SourceNone
 	// **入札の締め切りを待たない**（設計 3-77）。既定の3分を待つと、
 	// **どのテストも1回の巡回では着手できない。**
 	//
@@ -1825,13 +2195,24 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	logger := slog.New(slog.NewTextHandler(io.Writer(logs), &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	settingsRoot := filepath.Join(runtimeDir, hookserver.IssuesDirName)
+	// **本物の loop を渡す**（issue #284）。閉じるのは orc.Close のあと
+	// （t.Cleanup は後入れ先出しなので、orc.Close より先に登録する）。
+	lp := loop.New(logger)
+	lp.Start()
+	t.Cleanup(lp.Close)
 	mgr, err := workspace.New(workspace.Options{
-		Config:       cfg,
-		Herdr:        fake.Client(),
-		Logger:       logger,
-		Now:          nowFunc,
-		HomeDir:      home,
-		GhqList:      func(context.Context, string, string) (string, error) { return repo.Dir, nil },
+		Config:  cfg,
+		Herdr:   fake.Client(),
+		Loop:    lp,
+		Logger:  logger,
+		Now:     nowFunc,
+		HomeDir: home,
+		GhqList: func(_ context.Context, owner, name string) (string, error) {
+			if p, ok := opts.GhqExtra[owner+"/"+name]; ok {
+				return p, nil
+			}
+			return repo.Dir, nil
+		},
 		SettingsRoot: settingsRoot,
 	})
 	if err != nil {
@@ -1847,8 +2228,13 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		RuntimeDir:   runtimeDir,
 		SocketPath:   filepath.Join(runtimeDir, "hooks.sock"),
 		WorktreeRoot: worktreeRoot,
+		HomeDir:      home,
 		Logs:         logs,
 		Timeline:     tl,
+	}
+
+	if cfg.RateLimit.Source != ratelimit.SourceNone {
+		fx.StatuslineSocketPath = filepath.Join(runtimeDir, "sl.sock")
 	}
 
 	transcriptRoot := opts.TranscriptRoot
@@ -1897,14 +2283,17 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
 		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
 		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
-		ConfigPath:     opts.ConfigPath,
-		ConfigFile:     opts.ConfigFile,
-		Tracker:        ft,
-		Herdr:          fake.Client(),
-		Workspace:      mgr,
-		RateLimit:      opts.RateLimit,
-		HookSocketPath: fx.SocketPath,
-		ContinuoPath:   continuoPath,
+		ConfigPath: opts.ConfigPath,
+		ConfigFile: opts.ConfigFile,
+		Tracker:    ft,
+		Herdr:      fake.Client(),
+		Workspace:  mgr,
+		RateLimit:  opts.RateLimit,
+		// **使用率を読む設定なら、本番と同じく sl.sock のパスを渡す**（issue #284）。
+		// listen はしない。行はテストが OnStatusline で直に入れる。
+		StatuslineSocketPath: fx.StatuslineSocketPath,
+		HookSocketPath:       fx.SocketPath,
+		ContinuoPath:         continuoPath,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。

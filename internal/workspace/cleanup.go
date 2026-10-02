@@ -109,6 +109,13 @@ type CleanupRequest struct {
 	// branch と herdr workspace の検算は、Force が真でもそのまま通す。
 	// あれは「消してよいか」ではなく「正しい対象を消しているか」の検査である。
 	Force bool
+	// NoWait が真なら、statusline取得の workspace がこの clone で開いていて押さえられている
+	// ときに待たず、何も消さずに ErrCloneBusy を返す（issue #284。serial.go）。
+	//
+	// **巡回の中から呼ぶ片付け（取り残された worktree の片付け）だけが真にする。**
+	// 巡回が押さえを待つと、止まった run の検知と着手が止まる。**ゼロ値は偽なので、
+	// 既存の呼び出しは待つ**（run を終える片付け・復元・起動時の掃除・`continuo abandon`）。
+	NoWait bool
 }
 
 // ShouldCleanup は、その Status が cleanup.on_states に入っているかを返す（3-9 の手順1）。
@@ -250,7 +257,27 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 
 	// 段3 の準備: 消す宛先の herdr workspace も、**worktree がまだ開いているうちに**
 	// herdr に答えさせて検算する（resolveWorkspaceID を見よ）。
-	workspaceID, err := m.resolveWorkspaceID(ctx, resolvedPath, repoDir, identity)
+	//
+	// **`worktree.open` を呼ぶので、clone の key を持つ仕事として loop に通す**（issue #284）。
+	// statusline取得の workspace がこの clone で開いている間は後に回る（NoWait なら
+	// ErrCloneBusy で戻る）。**ここより前の処理は、封じ込め検査・身元ファイルの読み取り・
+	// リポジトリの検算・見送りの判定・branch の検算で、どれも何も消さない。**
+	var workspaceID string
+	resolve := func(ctx context.Context) error {
+		var err error
+		workspaceID, err = m.resolveWorkspaceID(ctx, resolvedPath, repoDir, identity)
+		return err
+	}
+	// **`create_via_herdr` が偽なら loop に積まない。**`worktree.open` を1度も呼ばないので守るものが無く、
+	// 積むと statusline取得の間（最長5分）片付けが待つだけになる（段7 も同じ条件で包む。prepare.go）。
+	switch {
+	case !m.cfg.Herdr.Worktree.CreateViaHerdr:
+		err = resolve(ctx)
+	case req.NoWait:
+		err = m.tryRun(ctx, cloneKey(repoDir), resolve)
+	default:
+		err = m.run(ctx, cloneKey(repoDir), resolve)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +386,7 @@ func (m *Manager) effectiveBase(requested normalize.SafeName, identity *Identity
 // resolveWorkspaceID は worktree.remove に渡す herdr workspace の ID を確定する（3-9 の段3）。
 //
 // **なぜ検算が要るか。**身元ファイルは worktree の直下にあり、その worktree では
-// エージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。
+// エージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 // **つまり herdr_workspace_id はエージェントが書き換えられる。**検算せずに
 // `worktree.remove`（force）へ渡すと、**同じ機械で動いている別の run の worktree を
 // 消させられる。**封じ込め検査（3-20）も未コミットの検査（3-9 の手順2）も、
@@ -501,7 +528,7 @@ const (
 // 検算する（3-9 の段4）。
 //
 // **なぜ検算が要るか。**身元ファイルは worktree の直下（`<worktree>/.continuo.json`。3-18）に
-// あり、その worktree ではエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。
+// あり、その worktree ではエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 // **つまり branch の値はエージェントが書き換えられる。**検算せずに渡すと、
 // 利用者の clone の別 branch（`main` など）を消させられる。
 //
@@ -913,9 +940,14 @@ func (m *Manager) requestWorktreeRemoval(
 		// 消す宛先が分からないだけであり、実体と git の登録は自分で片付けられる。
 		return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown, worktreePath)
 	}
-	if _, err := m.herdr.WorktreeRemove(ctx, herdr.WorktreeRemoveParams{
-		WorkspaceID: workspaceID,
-		Force:       true,
+	// **loop に通す**（issue #284。serial.go）。key は持たない（`worktree.remove` は
+	// 開いている workspace を親に作り替えない）。
+	if err := m.run(ctx, "", func(ctx context.Context) error {
+		_, err := m.herdr.WorktreeRemove(ctx, herdr.WorktreeRemoveParams{
+			WorkspaceID: workspaceID,
+			Force:       true,
+		})
+		return err
 	}); err != nil {
 		return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed, workspaceID, err)
 	}
@@ -1025,6 +1057,24 @@ func (m *Manager) closeWorktreeWorkspace(ctx context.Context, result *CleanupRes
 	if !m.cfg.Herdr.Worktree.CreateViaHerdr || m.herdr == nil {
 		return
 	}
+	// **一覧を引いてから閉じるまでを1つの仕事として loop に通す**（issue #284。serial.go）。
+	// 包むのはここだけで、共用の findWorkspaceIDByPath の中では包まない（resolveWorkspaceID の
+	// 仕事の中からも呼ばれるので、中で包むと loop が自分を待って止まる）。
+	// **仕事が1度も走らずに返ったとき（順番待ちの間に取り消された・loop が閉じた）も黙らない。**
+	// 一覧を引けなかったときと同じく、herdr workspace が残ることを人間に知らせる。
+	if err := m.run(ctx, "", func(ctx context.Context) error {
+		m.closeWorktreeWorkspaceLocked(ctx, result, worktreePath)
+		return nil
+	}); err != nil {
+		m.logger.Warn("herdr の workspace を閉じる順番が来ないまま止まったので、herdr workspace は残ります（手で閉じてください）",
+			"worktree", worktreePath, "error", err)
+		result.Leftovers = append(result.Leftovers,
+			i18n.T(i18n.KeyWorkspaceLeftoverWorkspaceCloseNotRun, err))
+	}
+}
+
+// closeWorktreeWorkspaceLocked は closeWorktreeWorkspace の本体である。loop の仕事の中で呼ぶ。
+func (m *Manager) closeWorktreeWorkspaceLocked(ctx context.Context, result *CleanupResult, worktreePath string) {
 	workspaceID, err := m.findWorkspaceIDByPath(ctx, worktreePath)
 	if err != nil {
 		m.logger.Warn("herdr の workspace の一覧を引けないので、herdr workspace は残ります（手で閉じてください）",

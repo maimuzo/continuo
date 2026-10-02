@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -10,13 +10,9 @@ package orchestrator_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,7 +80,7 @@ func TestDispatch_active_statesに無いStatusのissueを着手が上書きし�
 // 巡回の worktree の照合（設計 3-9 の手順7b）が身元ファイルを検算することを確かめる。
 //
 // 目的: 身元ファイルは worktree の直下にあり、その worktree ではエージェントが
-// `--permission-mode dontAsk` で動く（設計 3-16 の段9）。**`herdr_workspace_id` は
+// `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。**`herdr_workspace_id` は
 // エージェントが書き換えられる。**検算せずに `pane.close` へ渡すと、
 // **無関係の issue で走っている Claude Code を turn の途中で殺せる。**
 //
@@ -197,8 +193,11 @@ func TestTurn_turnを送れなかったときStopHookのせいにしない(t *te
 // TestComment_復元のworktreeOpenはリポジトリ本体をcwdに渡す は、
 // コメントの取り戻し（設計 3-25 の段4）が本物の herdr に断られない呼び方をすることを確かめる。
 //
-// 目的: `worktree.open` は `cwd` にリポジトリ本体を渡さないと
-// `worktree_not_found: worktree path not found` で断る（実測: 2026-08-25、test/live）。
+// 目的: `worktree.open` は `cwd` にリポジトリ本体を渡さないと断る
+// （実測: 2026-08-25 の herdr 0.8.x は `worktree_not_found: worktree path not found`、
+//
+//	2026-09-29 の herdr 0.9.1 は `linked_worktree_source`。test/live）。
+//
 // **`cwd` が無いと、エージェントに成果を書かせる最後の砦が本番で1度も働かない。**
 //
 // 与える情報: `worktree.open` を「`cwd` が空なら本物と同じく断る」台本に差し替えた上で、
@@ -251,8 +250,11 @@ func TestComment_復元のworktreeOpenはリポジトリ本体をcwdに渡す(t 
 
 // requireCwdOnWorktreeOpen は、テスト用herdr mock の `worktree.open` を本物と同じ厳しさにする。
 //
-// **本物の herdr は `cwd` を省くと `worktree_not_found: worktree path not found` で断る**
-// （実測: 2026-08-25、test/live。設計 6-10 の表）。テスト用herdr mock が `cwd` を見ないままだと、
+// **本物の herdr は `cwd` を省くと断る。**返すコードは版で変わり、herdr 0.8.x は
+// `worktree_not_found: worktree path not found`（実測: 2026-08-25）、**herdr 0.9.1 は
+// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`**
+// （実測: 2026-09-29）である。test/live。設計 6-10 の表。
+// **台本はいまの版に合わせる。**テスト用herdr mock が `cwd` を見ないままだと、
 // **本番で1度も通らない呼び方をテストが通してしまう。**
 //
 // t: 呼び出し元のテスト。
@@ -262,7 +264,10 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	inner := fx.Herdr.HandlerOf(herdr.MethodWorktreeOpen)
 	fx.Herdr.Handle(herdr.MethodWorktreeOpen, func(params map[string]any) (any, *rpcErr) {
 		if cwd, _ := params["cwd"].(string); strings.TrimSpace(cwd) == "" {
-			return nil, &rpcErr{Code: "worktree_not_found", Message: "worktree path not found"}
+			return nil, &rpcErr{
+				Code:    "linked_worktree_source",
+				Message: "New and open worktree actions start from the repo parent workspace.",
+			}
 		}
 		return inner(params)
 	})
@@ -300,8 +305,8 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 			return nil, &rpcErr{Code: "agent_start_failed", Message: "No conversation found"}
 		}
 		started.Do(func() {})
-		// **既定の台本と同じ形で返す。**画面の版を勝手に載せると、stall の判定が
-		// 「版が動いた」と読んで打ち切りに入らない。
+		// **既定の台本と同じ形で返す。**`agent_status` を `working` にすると、
+		// stall の判定が「進んでいる」と読んで打ち切りに入らない。
 		return map[string]any{
 			"type":  "agent_started",
 			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
@@ -490,47 +495,28 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは枠が空いていて（`pause_above_percent` に掛からない）、
-// turn を送った瞬間に 100% になる偽の usage API。`agent.prompt` は herdr の `timeout` を返し、
-// `agent.wait` は応答を書かずに接続を切る。リトライは 0 回。
+// 与える情報: 着手のときは使用率が空いていて（入札の余裕値が残っている）、
+// turn を送った瞬間にステータスラインから 100% の行が届く（issue #284）。
+// `agent.prompt` は herdr の `timeout` を返し、`agent.wait` は応答を書かずに接続を切る。
+// リトライは 0 回。
 // 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
 // **枠待ちの印も残ったままであること**（外すと stall の時計が動き出し、枠が明けるより
 // 先に stall として諦めることになる）。
 func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
-	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	// **着手が済むまでは枠を空けておく。**100% のままだと `pause_above_percent` で
-	// dispatch が止まり、turn の経路に1度も入れない。
-	var full atomic.Bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		percent := 0
-		if full.Load() {
-			percent = 100
-		}
-		w.Header().Set("Content-Type", "application/json")
-		limit := map[string]any{"kind": "session", "percent": percent, "severity": "normal"}
-		if percent == 100 {
-			limit["resets_at"] = resetsAt
-		}
-		if err := json.NewEncoder(w).Encode(map[string]any{"limits": []map[string]any{limit}}); err != nil {
-			t.Errorf("偽の usage API が応答を書けません: %v", err)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_TRANSIENT")
-
 	fx := newFixture(t, fixtureOptions{
-		RateLimit: reader,
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetries = 0
 			cfg.Tracker.VerifyStatesEvery = 0
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
-	// **turn を送った瞬間に枠を使い切る。**herdr の待ち受けは期限までに落ち着かなかった
-	// （＝枠待ちの入口。設計 3-27）。
+	// **着手が済むまでは使用率を空けておく。**100% のままだと入札の余裕値で
+	// dispatch が止まり、turn の経路に1度も入れない。値は新しいので statusline取得も開かない。
+	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 0, 0)
+	// **turn を送った瞬間に使い切る**（ステータスラインから 100% の新しい応答の行が届く）。
+	// herdr の待ち受けは期限までに落ち着かなかった（＝枠待ちの入口。設計 3-27）。
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(map[string]any) (any, *rpcErr) {
-		full.Store(true)
+		fx.Orc.OnStatusline(slLine("pane-a", 300, slWin(100, time.Now().Add(2*time.Hour)), nil))
 		return nil, &rpcErr{Code: herdr.ErrCodeTimeout, Message: "待ち受けが期限までに落ち着きませんでした"}
 	})
 	// **待ち直しの最中に herdr が再起動した。**
@@ -543,8 +529,7 @@ func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨て�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// 枠の写しを取り直させる（`pollQuota` は巡回と枠待ちの待ち直しでしか走らない）。
-	fx.Orc.Tick(context.Background())
+	// **使用率は読みに行かない**（issue #284）。届いた 100% の保管値で枠待ちに入る。
 	waitFor(t, 20*time.Second, "枠待ちの待ち直しが herdr へ届く", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentWait) > 0
 	})

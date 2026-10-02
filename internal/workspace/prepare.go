@@ -342,60 +342,15 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 			return nil, fmt.Errorf(
 				"herdr.worktree.create_via_herdr が真ですが herdr のクライアントが設定されていません")
 		}
-		focus := false
-		// **開く前に、リポジトリの親 workspace が既にあるかを見ておく**（issue #19）。
-		// 無かったのに開いたあとにあれば、それは**この呼び出しが開かせたもの**であり、
-		// 片付けで閉じる責任が continuo にある。**先にあったなら人間のものなので触らない。**
-		repoWorkspaceExisted := m.repoWorkspaceOpen(ctx, repoPath)
-		// **`path` と `branch` は片方だけ渡す。**両方渡すと herdr が
-		// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
-		// **worktree は直前に git で作ってあるので、パスで開く。**
-		//
-		// **`cwd` はリポジトリ本体を渡す。外せない。**worktree のパスを渡すと herdr は
-		// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
-		// で断り、`cwd` を省くと `worktree_not_found: worktree path not found` で断る
-		// （実測: 2026-08-25、test/live）。**リポジトリの親 workspace は herdr の必須の親である。**
-		//
-		// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
-		// 組み立ては herdr.IssueLabel に寄せてある（orchestrator 側と形がずれないため）。
-		label := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
-		opened, err := m.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{
-			Path:  resolvedPath,
-			Cwd:   repoPath,
-			Focus: &focus,
-			Label: label,
-		})
-		if err != nil {
-			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreeOpenFailed, resolvedPath, err)
-		}
-		result.HerdrWorkspaceID = opened.Workspace.WorkspaceID
-		if !repoWorkspaceExisted {
-			result.HerdrRepoWorkspaceID = m.repoWorkspaceID(ctx, repoPath)
-		}
-		result.HerdrPaneID = opened.RootPane.PaneID
-		result.AlreadyOpen = opened.AlreadyOpen
-		// **herdr が開いたものが、いま作った worktree と同じかを必ず確かめる。**
-		//
-		// **実運用で、clone のほうを開いた workspace が返ってきた**（2026-08-21、設計 6-2）。
-		// そうなると pane の cwd が clone を指し、そこで Claude Code が起動する。
-		// 気づかないまま進むと、**別の issue の作業を同じ場所で始めることになる。**
-		if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, resolvedPath) {
-			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreePathMismatch,
-				resolvedPath, opened.Worktree.Path, opened.Workspace.WorkspaceID)
-		}
-		// **label は worktree.open では上書きされない。**既に開かれていた workspace
-		// （already_open）には作成時の label が残るので、開き直すたびに書き直す。
-		// **IssueLabel が空文字を返したら呼ばない**（draft issue で壊れた label を書かない）。
-		if label != "" {
-			if _, err := m.herdr.WorkspaceRename(ctx, herdr.WorkspaceRenameParams{
-				WorkspaceID: opened.Workspace.WorkspaceID,
-				Label:       label,
-			}); err != nil {
-				// **致命にしない。**label は人間が herdr の画面で見分けるためのもので
-				// あり、復元の照合は pane の cwd で行う（設計 3-3）。
-				m.logger.Warn("herdr workspace の label を書き直せませんでした",
-					"workspace_id", opened.Workspace.WorkspaceID, "label", label, "error", err)
-			}
+		// **段7 の一続きは1つの仕事として loop に通す**（issue #284。serial.go）。
+		// statusline取得の workspace がこの clone で開いている間は、閉じるまで後に回る。
+		// 開いている間に `worktree.open` をすると、その workspace が issue の親にされる。
+		// **一続きの途中に別の開け閉めが割り込まないよう、一覧を見るところから label を
+		// 書き直すところまでをまとめる。**
+		if err := m.run(ctx, cloneKey(repoPath), func(ctx context.Context) error {
+			return m.openWorktreeInHerdr(ctx, issue, repoPath, resolvedPath, result)
+		}); err != nil {
+			return nil, err
 		}
 	}
 
@@ -404,6 +359,78 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 	m.BeginRun(resolvedPath)
 
 	return result, nil
+}
+
+// openWorktreeInHerdr は着手の段7 の一続き（親 workspace の有無を見る → worktree.open →
+// 親の ID を控える → label を書き直す）を行う。**loop の仕事の中で呼ぶ**（serial.go）。
+//
+// ctx: 仕事の ctx。
+// issue: 着手する issue。
+// repoPath: リポジトリ本体の作業ディレクトリ（worktree.open の cwd）。
+// resolvedPath: 開く worktree の絶対パス。
+// result: 開いた workspace の ID などを書き込む先。
+// 戻り値: 開けなかった理由・別のパスを開いた誤り。
+func (m *Manager) openWorktreeInHerdr(
+	ctx context.Context, issue IssueRef, repoPath, resolvedPath string, result *PrepareResult,
+) error {
+	focus := false
+	// **開く前に、リポジトリの親 workspace が既にあるかを見ておく**（issue #19）。
+	// 無かったのに開いたあとにあれば、それは**この呼び出しが開かせたもの**であり、
+	// 片付けで閉じる責任が continuo にある。**先にあったなら人間のものなので触らない。**
+	repoWorkspaceExisted := m.repoWorkspaceOpen(ctx, repoPath)
+	// **`path` と `branch` は片方だけ渡す。**両方渡すと herdr が
+	// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
+	// **worktree は直前に git で作ってあるので、パスで開く。**
+	//
+	// **`cwd` はリポジトリ本体を渡す。外せない。**worktree のパスを渡すと herdr は
+	// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
+	// で断り、`cwd` を省いても断る（**返るコードは版で変わる。**herdr 0.8.x は
+	// `worktree_not_found: worktree path not found`（実測: 2026-08-25）、
+	// herdr 0.9.1 は同じ `linked_worktree_source`（実測: 2026-09-29）。test/live）。
+	// **リポジトリの親 workspace は herdr の必須の親である。**
+	//
+	// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
+	// 組み立ては herdr.IssueLabel に寄せてある（orchestrator 側と形がずれないため）。
+	label := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
+	opened, err := m.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{
+		Path:  resolvedPath,
+		Cwd:   repoPath,
+		Focus: &focus,
+		Label: label,
+	})
+	if err != nil {
+		return i18n.Errorf(i18n.KeyWorkspacePrepareWorktreeOpenFailed, resolvedPath, err)
+	}
+	result.HerdrWorkspaceID = opened.Workspace.WorkspaceID
+	if !repoWorkspaceExisted {
+		result.HerdrRepoWorkspaceID = m.repoWorkspaceID(ctx, repoPath)
+	}
+	result.HerdrPaneID = opened.RootPane.PaneID
+	result.AlreadyOpen = opened.AlreadyOpen
+	// **herdr が開いたものが、いま作った worktree と同じかを必ず確かめる。**
+	//
+	// **実運用で、clone のほうを開いた workspace が返ってきた**（2026-08-21、設計 6-2）。
+	// そうなると pane の cwd が clone を指し、そこで Claude Code が起動する。
+	// 気づかないまま進むと、**別の issue の作業を同じ場所で始めることになる。**
+	if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, resolvedPath) {
+		return i18n.Errorf(i18n.KeyWorkspacePrepareWorktreePathMismatch,
+			resolvedPath, opened.Worktree.Path, opened.Workspace.WorkspaceID)
+	}
+	// **label は worktree.open では上書きされない。**既に開かれていた workspace
+	// （already_open）には作成時の label が残るので、開き直すたびに書き直す。
+	// **IssueLabel が空文字を返したら呼ばない**（draft issue で壊れた label を書かない）。
+	if label != "" {
+		if _, err := m.herdr.WorkspaceRename(ctx, herdr.WorkspaceRenameParams{
+			WorkspaceID: opened.Workspace.WorkspaceID,
+			Label:       label,
+		}); err != nil {
+			// **致命にしない。**label は人間が herdr の画面で見分けるためのもので
+			// あり、復元の照合は pane の cwd で行う（設計 3-3）。
+			m.logger.Warn("herdr workspace の label を書き直せませんでした",
+				"workspace_id", opened.Workspace.WorkspaceID, "label", label, "error", err)
+		}
+	}
+	return nil
 }
 
 // isRegisteredWorktree は path が git の worktree として登録されているかを返す。

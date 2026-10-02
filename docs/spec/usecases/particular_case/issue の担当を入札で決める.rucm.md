@@ -7,10 +7,17 @@
 - `docs/plans/continuo_design.md#3-77a`（入札のコメントの形と、エージェントへ渡す前に外すこと）
 - `docs/plans/continuo_design.md#3-77b`（担当は assignee で持ち、期限は hold のコメントで持つ。見えているものと、その扱い）
 - `docs/plans/continuo_design.md#3-77c`（期限が切れたときに担当が移る先と、そのとき失われるもの）
-- `docs/plans/continuo_design.md#3-27`（枠の読み方と `rate_limit.pause_above_percent`）
+- `docs/plans/continuo_design.md#3-27`（usage API と statusline の切り替え・保管値の規則・新しさの幅・statusline取得）
+- `docs/plans/continuo_design.md#3-77i`（値が新しくなければ入札しない。usage API の次の読み取りか statusline取得で値が入ってから入札する）
+- `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
 - `docs/plans/continuo_design.md#3-16`（着手の段の順番。担当が決まったあとに続く段）
-- `internal/ratelimit/ratelimit.go` の `Reader.Fetch`、`Snapshot`、`Snapshot.MaxPercent`
-- `internal/orchestrator/orchestrator.go` の `dispatchPaused`
+- `docs/plans/continuo_design.md#3-77j`（入札を見送った理由を、既定のログの水準で1行出す）
+- `internal/ratelimit/ratelimit.go` の `Snapshot`、`Snapshot.AnySelected`、`Snapshot.SelectedKinds`
+- `internal/orchestrator/quota.go` の `quotaForBid`、`quotaFreshLocked`、`quotaRefreshInterval`、`OnAPISnapshot`
+- `internal/orchestrator/handoff.go` の `evaluateBidWith`
+- `internal/handoff/handoff.go` の `Evaluate`、`WeeklyPercent`、`Short`、`ShortWeekly`、`ThresholdPercent`
+- `internal/orchestrator/dispatch.go` の `newWorkBlockedWith`、`logNewWorkBlocked`
+- `internal/orchestrator/orchestrator.go` の `Run`、`Tick`、`pollAPI`
 - `internal/tracker/query.go` の `rawUserConn`（`assignees` を運んでいる）、`commentsQueryTemplate`、`defaultCommentsPerFetch`
 - `internal/config/default.go` の `Marker`、`SelfMarker`（エージェントへ渡すコメントの目印）
 
@@ -18,10 +25,10 @@
 
 ```rucm
 USE CASE NAME: issue の担当を入札で決める
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。システムは候補の先頭の issue の担当者を読み、担当者がいなければ枠の余裕値から判定スコアを出して入札のコメントを1件書く。システムは締め切りまで待って届いた入札をすべて読み、判定スコアがいちばん大きい機械が自分であれば自分を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者が自分の issue には入札せず、そのまま着手と引き継ぎへ渡す。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは候補の先頭の issue の担当者を読み、担当者がいなければ枠の余裕値から判定スコアを出して入札のコメントを1件書く。システムは締め切りまで待って届いた入札をすべて読み、判定スコアがいちばん大きい機械が自分であれば自分を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者が自分の issue には入札せず、そのまま着手と引き継ぎへ渡す。
 PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの dispatch_state の Status に issue が1件以上ある。同じボードを見張っている機械が1台以上ある。
 PRIMARY ACTOR: 巡回タイマー
-SECONDARY ACTORS: GitHub Projects v2、Claude の usage API、ほかの機械
+SECONDARY ACTORS: GitHub Projects v2、ほかの機械
 DEPENDENCY: なし
 GENERALIZATION: なし
 
@@ -32,25 +39,24 @@ BASIC FLOW:
 4. システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。
 5. システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。
 6. IF 先頭の issue に担当者が1人もいない THEN
-7.   システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。
+7.   システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。
 8.   システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。
-9.   システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。
-10.   システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。
-11.   システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。
-12.   システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。
-13.   システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。
-14.   システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。
-15.   システムは bid_window_ms のあいだ待つ。
-16.   システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。
-17.   システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。
-18.   システムはこの機械の投稿者を先頭の issue の担当者に加える。
-19.   システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。
-20. ELSE
-21.   システムは入札のコメントを1件も書かない。
-22.   システムは hold のコメントを1件も書かない。
-23. ENDIF
-24. システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。
-25. システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。
+9.   システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。
+10.   システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。
+11.   システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。
+12.   システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。
+13.   システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。
+14.   システムは bid_window_ms のあいだ待つ。
+15.   システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。
+16.   システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。
+17.   システムはこの機械の投稿者を先頭の issue の担当者に加える。
+18.   システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。
+19. ELSE
+20.   システムは入札のコメントを1件も書かない。
+21.   システムは hold のコメントを1件も書かない。
+22. ENDIF
+23. システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。
+24. システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。
 POSTCONDITION: 先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。
 
 SPECIFIC ALTERNATIVE FLOW 担当者が2人以上:
@@ -92,22 +98,15 @@ RFS BASIC FLOW 7
 4. ABORT
 POSTCONDITION: 先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。
 
-SPECIFIC ALTERNATIVE FLOW 枠の使い過ぎ:
-RFS BASIC FLOW 9
-1. システムは入札のコメントを1件も書かない。
-2. システムは先頭の issue を着手の対象から外す。
-3. ABORT
-POSTCONDITION: 先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。
-
-SPECIFIC ALTERNATIVE FLOW 余裕値がマイナス:
-RFS BASIC FLOW 12
+SPECIFIC ALTERNATIVE FLOW 余裕値が0以下:
+RFS BASIC FLOW 11
 1. システムは入札のコメントを1件も書かない。
 2. システムは先頭の issue を着手の対象から外す。
 3. ABORT
 POSTCONDITION: 先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW 入札に負けた:
-RFS BASIC FLOW 17
+RFS BASIC FLOW 16
 1. システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。
 2. システムはこの機械の投稿者を担当者に加えない。
 3. システムは先頭の issue を着手の対象から外す。
@@ -115,7 +114,7 @@ RFS BASIC FLOW 17
 POSTCONDITION: 先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。
 
 GLOBAL ALTERNATIVE FLOW 締め切り待ちの中断:
-BRANCH FROM BASIC FLOW 15
+BRANCH FROM BASIC FLOW 14
 WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
 1. システムは締め切りを待つのをやめる。
 2. システムはこの機械の投稿者を担当者に加えない。
@@ -169,7 +168,7 @@ continuo が取り上げることはない。
 ## 判定スコアの出し方と、投稿しない条件
 
 **言いたいこと。**余裕値は使用率から作る。**使用率は「0% が未使用、100% が使い切り」で、
-usage API が返す値そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`）。
+usage API が返す値と、Claude Code のステータスラインが運ぶ `used_percentage` そのものである**（`internal/ratelimit/ratelimit.go` の `Snapshot`。設計 3-27）。
 
 ```
 5時間余裕値  = 100 − 5時間の使用率 − 5時間マージン
@@ -177,19 +176,46 @@ usage API が返す値そのものである**（`internal/ratelimit/ratelimit.go
 判定スコア   = 5時間余裕値 × 2 + 1週間余裕値
 ```
 
-**1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る**（ステップ8）。
-モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない。**
-最大を採れば自動的にそうなる。
+**1週間の使用率は、1週間全体の枠とモデル別の枠（`weekly_scoped`）のうち、いちばん大きいものを採る**（ステップ8。`internal/handoff/handoff.go` の `WeeklyPercent`）。
+**モデル別の枠は最初から `limits` に現れる。**「一定量を使うまで現れない」ではない（issue #199）。
+**使っていなければ `percent: 0` で返り、`resets_at` は `null` である**（2026-08-29 の実測。設計 3-15 のサンプル）。
+**だから最大を採れば、使っていない枠は自動的に判定へ効かない。**
+**モデル別の枠は usage API しか運ばない**（設計 3-77）。`rate_limit.source: statusline` では保管値に入らず、
+`oauth_usage_api` で usage API が誤りのあいだは更新されない（保管値に残っている値をそのまま使う）。
 
-**投稿しない条件は3つある。どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
+**投稿しない条件は2つある。どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
 
 | 投稿しない条件 | どこで受けるか | なぜ投稿しないか |
 | --- | --- | --- |
-| 枠を読めなかった | `枠を読めない` | **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう** |
-| どれかの枠の使用率が `rate_limit.pause_above_percent`（既定95）を超えた | `枠の使い過ぎ` | **この機械は入札に勝っても着手しない。**勝ったのに動かない機械が出ると、issue が誰にも着手されないまま止まる |
-| 5時間余裕値と1週間余裕値のどちらかがマイナス | `余裕値がマイナス` | 処理する余裕が無いという意味である |
+| 枠を読めなかった（保管値が無い、または古い） | `枠を読めない` | **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう**。古い値も同じで、正直に読めている機械に必ず勝つ（設計 3-77i） |
+| 5時間余裕値と1週間余裕値のどちらかが0以下 | `余裕値が0以下` | 処理する余裕が無いという意味である。**0 も含める。**マージンをちょうど食い潰した状態であり、そこから着手すると人間のための取り置きへ食い込む |
+
+**2つとも、既定のログの水準で1行出す**（issue #173。`logNewWorkBlocked`）。
+**以前は担当者のいない issue で `Debug` にしか出ておらず、利用者からは
+「continuo は動いているのに `Ready` の issue が動かない」としか見えなかった。**
+**門も1本に揃えた**（人間の決定。2026-09-06。issue #173）。
+**以前は `rate_limit.pause_above_percent`（既定95）を見る段がもう1つあったが、
+既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+**いまは余裕値だけが仕事を取るかを決める。**`rate_limit.pause_above_percent` はキーごと消えた。
+**statusline取得を開くかの判定も同じ余裕値の線を使う。**
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
+**キーは `tracker.provider.handoff.five_hour_margin_percent` と `tracker.provider.handoff.weekly_margin_percent` である**（既定はどちらも 10）。
+**`rate_limit` の下ではない。**
+
+## 値が古ければ、usage API か statusline取得で値が入ってから入札する
+
+**言いたいこと。**入札の段は保管値を読むだけで、誰にも問い合わせない。**保管値が新しいときだけ入札する**（ステップ7。設計 3-77i）。
+**保管値へ値を入れるのは、巡回の先頭の usage API の読み取り（`rate_limit.source: oauth_usage_api` のとき）と、ステータスラインの行である**（設計 3-27）。
+
+| 何を | どうするか |
+| --- | --- |
+| 「値が新しい」とは | 新しさの時刻（usage API の成功した応答か、使用率を持つ新しい応答の行を最後に受けた時刻）から新しさの幅を過ぎておらず、保管値のどの期間もリセット時刻を過ぎていないこと（`internal/orchestrator/quota.go` の `quotaFreshLocked`） |
+| 新しさの幅 | usage API の直前の試しが成功なら `max(rate_limit.refresh_interval_ms, rate_limit.poll_interval_ms + polling.interval_ms)`。それ以外（`source: statusline`・usage API が誤りで statusline へ切り替えているとき）は `rate_limit.refresh_interval_ms`（既定5分）（`quotaRefreshInterval`） |
+| usage API が誤りに変わったとき | 新しさの幅が `rate_limit.refresh_interval_ms` へ縮み、既定ではその時点で古い扱いになって入札を見送る。statusline取得か pane の行で値が入れば再開する（設計 3-77） |
+| 値が新しくないとき | その巡回では入札しない（`枠を読めない`）。`source: statusline` か、usage API が誤りで切り替えているなら、巡回の最後に開く条件を見て statusline取得を開く（`maybeStartStatuslineFetch`）。usage API が読めているなら、次の読み取り（`rate_limit.poll_interval_ms` ごと）を待つ |
+| statusline取得の値が届いたとき | 巡回のループへ知らせ、巡回を1回すぐ回して入札する（設計 3-4f） |
+| `rate_limit.source: none` のとき | 枠を見ずに入札する。**「読めなかった」とはみなさない**（`internal/orchestrator/handoff.go` の `evaluateBid`） |
 
 ## 締め切りと勝者の決め方
 
@@ -331,25 +357,24 @@ flowchart TD
     B4{"4. VALIDATES THAT 担当者が1人以下である"}
     B5{"5. VALIDATES THAT 担当者が1人もいないか、担当者がこの機械の投稿者である"}
     B6{"6. IF 担当者が1人もいない"}
-    B7{"7. VALIDATES THAT 5時間の枠と1週間の枠の使用率を読める"}
+    B7{"7. VALIDATES THAT 保管している5時間の枠と1週間の枠の使用率が新しい"}
     B8["8. 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る"]
-    B9{"9. VALIDATES THAT どの枠も pause_above_percent を超えていない"}
-    B10["10. 5時間余裕値を求める"]
-    B11["11. 1週間余裕値を求める"]
-    B12{"12. VALIDATES THAT 2つの余裕値がどちらも 0 以上である"}
-    B13["13. 判定スコアを求める"]
-    B14["14. 入札の印を付けたコメントを1件書く"]
-    B15["15. bid_window_ms のあいだ待つ"]
-    B16["16. 締め切りまでに届いた入札を1件残らず読む"]
-    B17{"17. VALIDATES THAT この機械の入札が勝っている"}
-    B18["18. この機械の投稿者を担当者に加える"]
-    B19["19. hold の印を付けたコメントを1件書く"]
-    B20["20. ELSE"]
-    B21["21. 入札のコメントを1件も書かない"]
-    B22["22. hold のコメントを1件も書かない"]
-    B23["23. ENDIF"]
-    B24["24. 入札の印と hold の印と released の印のコメントをエージェントへ渡す入力から外す"]
-    B25["25. 先頭の issue を着手と引き継ぎの相手として次の段へ渡す"]
+    B9["9. 5時間余裕値を 100 − 使用率 − マージン にする"]
+    B10["10. 1週間余裕値を 100 − 使用率 − マージン にする"]
+    B11{"11. VALIDATES THAT 2つの余裕値がどちらも 0 より大きい"}
+    B12["12. 判定スコアを 5時間余裕値の2倍と1週間余裕値の和にする"]
+    B13["13. 入札の印を付けたコメントを1件書く"]
+    B14["14. bid_window_ms のあいだ待つ"]
+    B15["15. 締め切りまでに届いた入札を1件残らず読む"]
+    B16{"16. VALIDATES THAT この機械の入札が勝っている"}
+    B17["17. この機械の投稿者を担当者に加える"]
+    B18["18. hold の印を付けたコメントを1件書く"]
+    B19["19. ELSE"]
+    B20["20. 入札のコメントを1件も書かない"]
+    B21["21. hold のコメントを1件も書かない"]
+    B22["22. ENDIF"]
+    B23["23. 入札の印と hold の印と released の印のコメントをエージェントへ渡す入力から外す"]
+    B24["24. 先頭の issue を着手と引き継ぎの相手として次の段へ渡す"]
     BPOST(["POSTCONDITION 担当者はこの機械の投稿者1人である"])
 
     B1 --> B2 --> B3 --> B4
@@ -359,16 +384,14 @@ flowchart TD
     B5 -- 真 --> B6
     B6 -- 真 --> B7
     B7 -- 偽 --> A5S1
-    B7 -- 真 --> B8 --> B9
-    B9 -- 偽 --> A6S1
-    B9 -- 真 --> B10 --> B11 --> B12
-    B12 -- 偽 --> A7S1
-    B12 -- 真 --> B13 --> B14 --> B15 --> B16 --> B17
-    B15 -. "締め切り待ちの中断: WHEN Ctrl+C を入力する場合" .-> G1S1
-    B17 -- 偽 --> A8S1
-    B17 -- 真 --> B18 --> B19 --> B23
-    B6 -- 偽 --> B20 --> B21 --> B22 --> B23
-    B23 --> B24 --> B25 --> BPOST
+    B7 -- 真 --> B8 --> B9 --> B10 --> B11
+    B11 -- 偽 --> A7S1
+    B11 -- 真 --> B12 --> B13 --> B14 --> B15 --> B16
+    B14 -. "締め切り待ちの中断: WHEN Ctrl+C を入力する場合" .-> G1S1
+    B16 -- 偽 --> A8S1
+    B16 -- 真 --> B17 --> B18 --> B22
+    B6 -- 偽 --> B19 --> B20 --> B21 --> B22
+    B22 --> B23 --> B24 --> BPOST
     A2S1 -- 偽 --> A3S1
     A2S2 -- 偽 --> A4S1
 
@@ -394,19 +417,15 @@ flowchart TD
         A5S1["1. 枠を読めなかった理由を記録に残す"] --> A5S2["2. 入札のコメントを1件も書かない"] --> A5S3["3. 着手の対象から外す"] --> A5S4["4. ABORT"]
     end
 
-    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 枠の使い過ぎ / RFS BASIC FLOW 9"]
-        A6S1["1. 入札のコメントを1件も書かない"] --> A6S2["2. 着手の対象から外す"] --> A6S3["3. ABORT"]
-    end
-
-    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 余裕値がマイナス / RFS BASIC FLOW 12"]
+    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 余裕値が0以下 / RFS BASIC FLOW 11"]
         A7S1["1. 入札のコメントを1件も書かない"] --> A7S2["2. 着手の対象から外す"] --> A7S3["3. ABORT"]
     end
 
-    subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW 入札に負けた / RFS BASIC FLOW 17"]
+    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 入札に負けた / RFS BASIC FLOW 16"]
         A8S1["1. 勝ったアカウント名を記録に残す"] --> A8S2["2. 担当者に加えない"] --> A8S3["3. 着手の対象から外す"] --> A8S4["4. ABORT"]
     end
 
-    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 締め切り待ちの中断 / BRANCH FROM BASIC FLOW 15"]
+    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 締め切り待ちの中断 / BRANCH FROM BASIC FLOW 14"]
         G1S1["1. 締め切りを待つのをやめる"] --> G1S2["2. 担当者に加えない"] --> G1S3["3. 入札のコメントを残したまま終了する"] --> G1S4["4. ABORT"]
     end
 ```
@@ -418,7 +437,6 @@ sequenceDiagram
     actor T as 巡回タイマー
     participant S as システム
     participant GH as GitHub Projects v2
-    participant Q as Claude の usage API
     participant M as ほかの機械
 
     T->>S: 巡回の開始を要求する
@@ -442,33 +460,27 @@ sequenceDiagram
     else 担当者がこの機械の投稿者1人
         S->>S: 入札のコメントも hold のコメントも書かない
     else 担当者が1人もいない
-        S->>Q: 5時間の枠と1週間の枠の使用率を要求する
-        alt 枠を読めない
-            Q-->>S: 読み取りの失敗を応答する
+        S->>S: 保管している5時間の枠と1週間の枠の使用率が新しいかを確かめる
+        alt 保管値が無いか古い
             Note over S: ABORT 投稿しない。読めない機械は必ず勝ってしまう
-        else 枠を読める
-            Q-->>S: 使用率とリセット時刻を応答する
+        else 保管値が新しい
             S->>S: 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る
-            alt どれかの枠が pause_above_percent を超えている
-                Note over S: ABORT 投稿しない
-            else どの枠も閾値以内
-                S->>S: 5時間余裕値と1週間余裕値を求める
-                alt どちらかの余裕値がマイナス
-                    Note over S: ABORT 投稿しない
-                else 2つの余裕値がどちらも 0 以上
-                    S->>S: 判定スコアを 5時間余裕値の2倍と1週間余裕値の和にする
-                    S->>GH: 入札の印を付けたコメントの投稿を要求する
-                    M->>GH: ほかの機械も入札の印を付けたコメントを投稿する
-                    S->>S: bid_window_ms のあいだ待つ
-                    S->>GH: issue のコメントの取り直しを要求する
-                    GH-->>S: 締め切りまでに届いた入札を応答する
-                    alt この機械の入札が負けている
-                        Note over S: ABORT 担当者に加えない。入札のコメントは残る
-                    else この機械の入札が勝っている
-                        S->>GH: この機械の投稿者を担当者に加えることを要求する
-                        GH-->>S: 加えた結果を応答する
-                        S->>GH: hold の印を付けたコメントの投稿を要求する
-                    end
+            S->>S: 5時間余裕値と1週間余裕値を、100 から使用率とマージンを引いて求める
+            alt どちらかの余裕値が 0 以下
+                Note over S: ABORT 投稿しない。既定のマージン10なら使用率90%から
+            else 2つの余裕値がどちらも 0 より大きい
+                S->>S: 判定スコアを 5時間余裕値の2倍と1週間余裕値の和にする
+                S->>GH: 入札の印を付けたコメントの投稿を要求する
+                M->>GH: ほかの機械も入札の印を付けたコメントを投稿する
+                S->>S: bid_window_ms のあいだ待つ
+                S->>GH: issue のコメントの取り直しを要求する
+                GH-->>S: 締め切りまでに届いた入札を応答する
+                alt この機械の入札が負けている
+                    Note over S: ABORT 担当者に加えない。入札のコメントは残る
+                else この機械の入札が勝っている
+                    S->>GH: この機械の投稿者を担当者に加えることを要求する
+                    GH-->>S: 加えた結果を応答する
+                    S->>GH: hold の印を付けたコメントの投稿を要求する
                 end
             end
         end

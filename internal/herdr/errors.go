@@ -25,6 +25,14 @@ const ErrCodeAgentPaneBusy = "agent_pane_busy"
 // （`internal/orchestrator/dispatch.go` の `startupBusyByHook`）。
 const ErrCodeAgentNotFound = "agent_not_found"
 
+// ErrCodePaneNotFound は、その ID の pane が herdr に無いことを表すエラーコードである
+// （実測: 2026-09-29、herdr 0.9.1。`pane.close` と `pane.get` に無い ID を渡すと
+// `{"error":{"code":"pane_not_found","message":"pane <ID> not found"}}` が返る）。
+//
+// **`pane.close` でこれが返ったら、その pane の Claude Code はもう動いていない。**
+// orchestrator は閉じたものとみなして、閉じた記録を書く（設計 3-85。issue #246）。
+const ErrCodePaneNotFound = "pane_not_found"
+
 // ErrCodeTimeout は、待ち受けつきの呼び出し（agent.prompt の wait / agent.wait）が
 // 期限までに落ち着かなかったときに返るエラーコードである（実測。設計 3-2）。
 //
@@ -35,6 +43,15 @@ const ErrCodeAgentNotFound = "agent_not_found"
 // ErrCodeReadTimeout になる（区別しないと、herdr へ届いてすらいない呼び出しを
 // 「turn が時間切れした」と誤認する）。
 const ErrCodeTimeout = "timeout"
+
+// ErrCodeWorkspaceGroupCloseRequired は、配下に worktree の workspace を持つリポジトリの
+// 親 workspace を、`close_group` を付けずに `workspace.close` したときに返るエラーコードである
+// （herdr 0.9.0 以降。実測: 2026-09-24、herdr 0.9.1）。**このとき herdr は何も閉じない。**
+//
+// **continuo は `close_group` を送らない。**配下が残っていないことを確かめてから親を閉じるので、
+// これが返るのは主に、確かめてから閉じるまでの間に別の worktree が開いたときである。
+// **送ると、その worktree の pane ごと閉じる。**断られたら親は残す（internal/workspace/repoworkspace.go）。
+const ErrCodeWorkspaceGroupCloseRequired = "workspace_group_close_required"
 
 // ErrCodeTransport は herdr の socket へ届かなかった・送れなかった・応答を読めなかった
 // ことを表す、**continuo 側が付けるエラーコード**である（herdr は返さない）。

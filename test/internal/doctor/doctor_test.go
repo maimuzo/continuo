@@ -52,7 +52,7 @@ var wantLabels = []i18n.Key{
 // TestDoctor_前提が揃っていれば全項目すべて通る は、揃っている状態の基準線を作る。
 //
 // 目的: 全項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
-// 与える情報: テスト用herdr mock（protocol 19）・偽カンバン（Ready の issue が1件）・
+// 与える情報: テスト用herdr mock（protocol は設定の既定値と同じ値を返す）・偽カンバン（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
 func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T) {
@@ -554,6 +554,25 @@ func TestDoctor_資格情報_sourceがnoneならtoken_sourceを見ない(t *test
 
 	credentials := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolOK)
 	if !strings.Contains(credentials.Detail, "枠の判定を行わない設定") {
+		t.Fatalf("説明が想定と違う: %q", credentials.Detail)
+	}
+}
+
+// TestDoctor_資格情報_sourceがstatuslineならtoken_sourceを見ない は、usage API を読まない設定を確かめる
+// （issue #284）。
+//
+// 目的: `rate_limit.source` が `statusline` なら、トークンを1回も読まないので、`token_source` を見ずに
+// `✓` にすること。
+// 与える情報: `source: statusline` かつ `token_source: env` で、その環境変数は未設定。
+// 成功条件: 資格情報が `✓` になり、説明が「usage API を読まない設定」であること。
+func TestDoctor_資格情報_sourceがstatuslineならtoken_sourceを見ない(t *testing.T) {
+	fx := newFixture(t)
+	fx.WriteWorkflow(t, "rate_limit:\n  source: statusline\n  token_source: env\n  token_env: CONTINUO_NO_SUCH_TOKEN\n")
+
+	report := fx.Run(t)
+
+	credentials := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolOK)
+	if !strings.Contains(credentials.Detail, "usage API を読まない設定") {
 		t.Fatalf("説明が想定と違う: %q", credentials.Detail)
 	}
 }

@@ -6,6 +6,7 @@
 - `docs/plans/continuo_design.md#5-3c`（送るプロンプトを3つの断片から組み立てる）
 - `docs/plans/continuo_design.md#5-3d`（`WORKFLOW.md` の本文に何を書くか）
 - `docs/plans/continuo_design.md#5-3f`（`continuo prompt --show`）
+- `docs/plans/continuo_design.md#3-85`（前の回のあとに人間が書いたコメントを、最初のメッセージの末尾に付ける。`continuo prompt --show` には出ない）
 - `docs/plans/continuo_design.md#5-3h`（長い作業の途中でも、状況を書かせる）
 - `docs/plans/continuo_design.md#5-3i`（PR はエージェントが出す）
 - `docs/plans/continuo_design.md#5-3m`（送る文面から、案内のコメントと空になった見出しを落とす）
@@ -42,31 +43,32 @@ BASIC FLOW:
 4. システムは VALIDATES THAT 取り除いたあとの本文に中身がある。
 5. システムは前半と本文と後半を空行1つで継ぎ合わせる。
 6. システムは継ぎ合わせた文面の変数を issue の値で展開する。
-7. システムはエージェントに展開した文面を turn として送る。
-8. エージェントは worktree の分岐元の名前を身元ファイルから決める。
-9. エージェントは VALIDATES THAT 取ってきた分岐元をマージできる。
-10. エージェントは issue の本文とコメントを JSON で読む。
-11. エージェントは issue に紐づく pull request のレビューを読む。
-12. エージェントは issue から辿れるプランファイルと過去の issue を読む。
-13. エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。
-14. エージェントは実装の計画を書く。
-15. エージェントは計画を issue へコメントする。
-16. エージェントは計画を敵対的レビューの subagent へ渡す。
-17. エージェントはレビューの判断票を issue へコメントする。
-18. エージェントは実装する。
-19. エージェントは commit して push する。
-20. エージェントは VALIDATES THAT この issue の pull request がまだ無い。
-21. エージェントは pull request を出す。
-22. エージェントは pull request を敵対的レビューの subagent へ渡す。
-23. エージェントは指摘ごとの判断票を pull request へコメントする。
-24. エージェントは指摘を直して push する。
-25. エージェントは何をしたかを issue へコメントする。
-26. エージェントは応答の最後に完了の表明を1行だけ書く。
-27. エージェントはシステムに turn の終わりを Stop hook で知らせる。
-28. システムはエージェントの会話の記録から表明を読む。
-29. システムはカンバンの issue の Status に引き渡し先を書く。
-30. システムは書いた Status を控える。
-31. システムは run を終える。
+7. システムは、最初のメッセージで relay が有効なら、いちばん新しい閉じた記録より後に OWNER / MEMBER / COLLABORATOR が AI の印を付けずに書いたコメントを、展開した文面の末尾に付ける。
+8. システムはエージェントに展開した文面を turn として送る。
+9. エージェントは worktree の分岐元の名前を身元ファイルから決める。
+10. エージェントは VALIDATES THAT 取ってきた分岐元をマージできる。
+11. エージェントは issue の本文とコメントを JSON で読む。
+12. エージェントは issue に紐づく pull request のレビューを読む。
+13. エージェントは issue から辿れるプランファイルと過去の issue を読む。
+14. エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。
+15. エージェントは実装の計画を書く。
+16. エージェントは計画を issue へコメントする。
+17. エージェントは計画を敵対的レビューの subagent へ渡す。
+18. エージェントはレビューの判断票を issue へコメントする。
+19. エージェントは実装する。
+20. エージェントは commit して push する。
+21. エージェントは VALIDATES THAT この issue の pull request がまだ無い。
+22. エージェントは pull request を出す。
+23. エージェントは pull request を敵対的レビューの subagent へ渡す。
+24. エージェントは指摘ごとの判断票を pull request へコメントする。
+25. エージェントは指摘を直して push する。
+26. エージェントは何をしたかを issue へコメントする。
+27. エージェントは応答の最後に完了の表明を1行だけ書く。
+28. エージェントはシステムに turn の終わりを Stop hook で知らせる。
+29. システムはエージェントの会話の記録から表明を読む。
+30. システムはカンバンの issue の Status に引き渡し先を書く。
+31. システムは書いた Status を控える。
+32. システムは run を終える。
 POSTCONDITION: pull request がある。issue にエージェントのコメントがある。issue の Status は引き渡し先である。システムは run を終えている。
 
 SPECIFIC ALTERNATIVE FLOW 本文が空になる:
@@ -77,20 +79,20 @@ RFS BASIC FLOW 4
 POSTCONDITION: 送る文面は組み込みの前半と後半だけである。本文が無いことが内訳に出ている。
 
 SPECIFIC ALTERNATIVE FLOW 分岐元がremoteに無い:
-RFS BASIC FLOW 9
+RFS BASIC FLOW 10
 1. エージェントは分岐元を取り込まない。
-2. RESUME STEP 10
+2. RESUME STEP 11
 POSTCONDITION: 分岐元は取り込まれていない。エージェントは作業を続けている。
 
 SPECIFIC ALTERNATIVE FLOW マージが始まる前に断られる:
-RFS BASIC FLOW 9
+RFS BASIC FLOW 10
 1. エージェントは commit していない変更を commit する。
 2. エージェントは分岐元をもう一度取ってきてマージする。
-3. RESUME STEP 10
+3. RESUME STEP 11
 POSTCONDITION: 前の試行が残した変更が commit されている。分岐元が取り込まれている。
 
 SPECIFIC ALTERNATIVE FLOW マージが衝突する:
-RFS BASIC FLOW 9
+RFS BASIC FLOW 10
 1. エージェントはマージを取り込む前へ戻す。
 2. エージェントは push していない commit を push する。
 3. エージェントは衝突したことを issue へコメントする。
@@ -100,20 +102,20 @@ RFS BASIC FLOW 9
 POSTCONDITION: マージの途中の状態は残っていない。commit は remote に載っている。issue に衝突したことが書かれている。issue の Status は人間へ渡す先である。
 
 SPECIFIC ALTERNATIVE FLOW 既にあるpullrequestを使う:
-RFS BASIC FLOW 20
+RFS BASIC FLOW 21
 1. エージェントは既にある pull request の番号を、いま居る branch から引く。
-2. RESUME STEP 22
+2. RESUME STEP 23
 POSTCONDITION: pull request は1本のままである。
 
 GLOBAL ALTERNATIVE FLOW 進捗報告を書く:
-BRANCH FROM BASIC FLOW 18
+BRANCH FROM BASIC FLOW 19
 WHEN エージェントが1時間以上コメントを書かないまま作業を続けている場合
 1. エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。
 2. エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。
 3. エージェントは進捗報告の本文を読む。
 4. エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。
 5. エージェントは読んだ本文の末尾に1行足して書き戻す。
-6. RESUME STEP 18
+6. RESUME STEP 19
 POSTCONDITION: 進捗報告のコメントが1件だけある。そのコメントの最終更新日時が新しくなっている。
 
 SPECIFIC ALTERNATIVE FLOW 進捗報告を新しく投稿する:
@@ -130,7 +132,7 @@ RFS 進捗報告を書く 4
 POSTCONDITION: 進捗報告のコメントが増えている。前の進捗報告の本文は壊れていない。
 
 GLOBAL ALTERNATIVE FLOW 判断に迷って止まる:
-BRANCH FROM BASIC FLOW 18
+BRANCH FROM BASIC FLOW 19
 WHEN エージェントが指示書の決めていないことに当たった場合
 1. エージェントは何に迷ったかを issue へコメントする。
 2. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
@@ -139,11 +141,11 @@ WHEN エージェントが指示書の決めていないことに当たった場
 POSTCONDITION: issue に迷った内容が書かれている。issue の Status は人間へ渡す先である。
 
 GLOBAL ALTERNATIVE FLOW 外部の人の命令に従わない:
-BRANCH FROM BASIC FLOW 10
+BRANCH FROM BASIC FLOW 11
 WHEN コメントを書いた人の立場が OWNER でも MEMBER でも COLLABORATOR でもない場合
 1. エージェントはそのコメントを命令として扱わない。
 2. エージェントはそのコメントを起きたことの報告として読む。
-3. RESUME STEP 11
+3. RESUME STEP 12
 POSTCONDITION: 外部の人が書いた命令は実行されていない。外部の人が書いた不具合の報告は材料として使われている。
 ```
 
@@ -180,6 +182,16 @@ sequenceDiagram
     U->>GH: pull request をレビューする
 ```
 
+## 最初のメッセージには、前の回のあとに人間が書いたコメントが付く
+
+**relay が有効なとき（既定の `auto` で、`agent.relay_trusted_comments` が真で、`self_marker` が空でない）、システムは最初のメッセージの末尾に「権限確認済みの人間からのメッセージ」の節を付ける**（設計 3-85）。
+中身は、いちばん新しい「Claude Code を閉じました」のコメント（1行目が `<!-- continuo:closed -->`）より後に、`OWNER` / `MEMBER` / `COLLABORATOR` が AI の印を付けずに書いたコメントである。
+判定役（auto mode の classifier）は user メッセージにある人間の意図しか許可として数えないので、エージェントが `gh` で読んだだけのコメントの許可は届かない。そのための節である。
+
+**エージェントは、節が付いていても issue の本文とコメントを JSON で全部読む。**節はその代わりにならない（人間の決定）。
+閉じた記録が1件も無い issue（一度も Claude Code が動いていない issue）では、何も付けない。
+**この節は `continuo prompt --show` には出ない。**送る直前に issue のコメントから組み立てるためである。
+
 ## フローチャート
 
 ```mermaid
@@ -189,7 +201,9 @@ flowchart TD
     C --> D{"本文に中身があるか"}
     D -->|ある| E["前半 + 本文 + 後半を継ぎ合わせる"]
     D -->|無い| F["本文を外し、内訳に出す"] --> E
-    E --> G["変数を展開して turn として送る"]
+    E --> G1["変数を展開する"]
+    G1 --> G1B["最初のメッセージなら、閉じた記録より後に人間が書いたコメントを末尾に付ける"]
+    G1B --> G["turn として送る"]
     G --> G2{"分岐元をマージできるか"}
     G2 -->|できない| G3["理由を issue へ書き、判断を仰ぐ表明で終える"]
     G2 -->|できる| H["issue と紐づく pull request と記録を読む"]

@@ -4,14 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
+
+// percentUnknown は「枠を読めていないので使用率が分からない」ことを表す値である
+// （設計 3-77j。issue #173）。
+//
+// **0 を使ってはならない。**0 は「1バイトも使っていない」という実在の値であり、
+// **読めていないことと取り違えると、ダッシュボードが「いちばん暇」と表示する。**
+const percentUnknown = -1
 
 // agentStartBusyBudget は agent.start が `agent_pane_busy` を返したときに粘る時間である
 // （設計 2-1 / 3-16 の段9）。
@@ -66,10 +77,17 @@ var ErrStartupBusy = i18n.Sentinel(i18n.KeyOrchestratorErrStartupBusy)
 
 // ErrStatusNotWritten は、着手の段2 でカンバンの Status を書かなかったことを表す。
 //
-// **これは失敗ではない。**item がもう見えないか、取り直した結果 `terminal_states` か
-// `failure_state` に入っていたということであり、いずれも「いま着手してはいけない」を
-// 意味する。**人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
+// **これは失敗ではない。**次のどれかであり、いずれも「いま着手してはいけない」を意味する。
+//
+//   - item がもう見えない
+//   - 取り直した Status が `terminal_states` か `failure_state` に入っていた
+//   - 候補の写しでは自分が担当だったのに、取り直したら担当者にいなかった
+//     （`ownAssigneeLostSinceSnapshot`。設計 3-27。このときも Status は書いていない）
+//
+// **人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
 // 人間が `Blocked` に置いた issue に continuo が上書きしたことになる）。
+// **3つ目の理由は、この誤りの文には出ない。**直前の Info の1行
+// 「着手の直前に取り直したら、この機械が担当者にいないので着手しません」に出る。
 //
 // **errors.Is の比較対象なので、この値の identity を変えてはならない。**
 // **i18n.Sentinel に替えても identity は変わらない**（比較するのはこの変数そのものである）。
@@ -77,6 +95,38 @@ var ErrStartupBusy = i18n.Sentinel(i18n.KeyOrchestratorErrStartupBusy)
 // **ログは運用者が読むものなので、画面に出す文言と同じ資源には載せていない。**
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に見直すこと。**
 var ErrStatusNotWritten = errors.New("カンバンの Status を書かなかったので着手しません")
+
+// statusNotWrittenError は `ErrStatusNotWritten` に、**着手の段2 が取り直した Status** を添えたものである
+// （設計 3-83c の門1 の表の下）。
+//
+// **呼び出し元（`runStartOrFail`）が、書いた担当者を消し戻すかを決めるのに使う。**
+// バックオフを挟んだやり直しで取り直した Status が `direct_chat_state` なら消し戻さない。
+// **`errors.Is(err, ErrStatusNotWritten)` はそのまま真になる**（`Is` を持たせてある）。
+type statusNotWrittenError struct {
+	// state は段2 が取り直した Status である。item が見えなかったときは空である。
+	state string
+}
+
+// Error は `ErrStatusNotWritten` と同じ文を返す（ログに出る文を変えない）。
+func (e *statusNotWrittenError) Error() string { return ErrStatusNotWritten.Error() }
+
+// Is は `ErrStatusNotWritten` との比較を真にする。
+//
+// target: 比べる相手。
+// 戻り値: `ErrStatusNotWritten` なら true。
+func (e *statusNotWrittenError) Is(target error) bool { return target == ErrStatusNotWritten }
+
+// statusNotWrittenState は、着手の段2 が取り直した Status をエラーから取り出す。
+//
+// err: `startRun` が返したエラー。
+// 戻り値: 取り直した Status。添えられていなければ空文字。
+func statusNotWrittenState(err error) string {
+	var e *statusNotWrittenError
+	if errors.As(err, &e) {
+		return e.state
+	}
+	return ""
+}
 
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
 //
@@ -114,6 +164,11 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 	}
 	add(o.cfg.Tracker.FailureState)
 	add(o.cfg.Tracker.DispatchState)
+	// **`direct_chat_state` も入れる**（設計 3-83）。
+	// **この一覧は拒否リストであって「`active_states` の外を全部」ではない。**
+	// 入れないと、**人間が着手の隙間にカードを direct chat へ動かしたとき、
+	// 段2 の最後の砦が素通りして `running_state` で上書きする。**
+	add(o.cfg.Tracker.DirectChatState)
 	for _, dest := range o.cfg.Tracker.StatusSignalMap {
 		if dest != nil {
 			add(*dest)
@@ -143,30 +198,305 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 着手する project item の ID。
 // identifier: ログに出す `<owner>/<repo>#<番号>`。
-// 戻り値: `active_states` にあれば true。**取り直しに失敗したときも false**
+// 戻り値の1つ目: `active_states` にあれば true。**取り直しに失敗したときも false**
 // （分からないなら書かない）。
-func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) bool {
+// 戻り値の2つ目: 取り直した Status（設計 3-83c。取り直せなかったときは空文字）。
+// 戻り値の3つ目: 取り直した issue の担当者のログイン名（設計 3-27。issue #197）。
+// **同じ取り直しから取る。**問い合わせを増やさない。取り直せなかったときは nil。
+func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) (bool, string, []string) {
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは `State` が
 	// `active_states` に入っているかだけである。
 	current, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{itemID})
 	if err != nil {
 		o.logger.Warn("着手の直前に Status を取り直せないので着手しません（次の巡回でやり直します）",
 			"identifier", identifier, "error", err)
-		return false
+		return false, "", nil
 	}
 	if len(current) == 0 {
 		o.logger.Warn("着手の直前に取り直したら item が見えないので着手しません",
 			"identifier", identifier)
-		return false
+		return false, "", nil
 	}
 	state := current[0].State
+	logins := assigneeLogins(current[0])
 	if containsFold(o.cfg.Tracker.ActiveStates, state) {
-		return true
+		return true, state, logins
 	}
 	o.logger.Info("着手の直前に取り直した Status が active_states に無いので着手しません（人間が動かした可能性があります）",
 		"identifier", identifier, "取り直した Status", state,
 		"active_states", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
-	return false
+	return false, state, logins
+}
+
+// ownAssigneeLostSinceSnapshot は「候補の写しでは自分が担当だったのに、
+// 着手の直前に取り直したら自分が担当者にいない」かを返す（設計 3-27。issue #197）。
+//
+// **なぜ要るか。**候補の写しは巡回の最初に1回だけ取る。**そのあとで `checkStalls` が
+// 手放しを撃ち、その goroutine が担当者を外して run の登録まで外すと、
+// 同じ巡回の着手の判定は、古い写し（担当は自分）のまま `handoffGate` を通る。**
+// **手放したばかりの issue に、同じ機械がもう1度 Claude Code を起こす。**
+// GitHub の上では担当者がいないので別の機械が入札して拾い、**同じ branch で2台が動く。**
+//
+// **見るのは「写しでは自分が担当だった」ときだけである。**
+// この巡回で入札に勝って担当者を書いた着手は、写しの担当者が0人なので、ここでは見ない
+// （書いた担当者は、取り直した issue に入っている）。
+//
+// **持ち主を引けないときは、止めない。**分からないことを理由に着手をやめると、
+// `gh` が一時的に答えないだけで、自分が担当の issue が進まなくなる。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// snapshot: 巡回の最初に取った候補の写し。
+// fresh: 着手の直前に取り直した issue の担当者のログイン名。
+// 戻り値: 写しでは自分が担当で、取り直したら自分がいなければ true。
+func (o *Orchestrator) ownAssigneeLostSinceSnapshot(
+	ctx context.Context, snapshot tracker.Issue, fresh []string,
+) bool {
+	viewer, ok := o.viewerIdentity(ctx)
+	if !ok {
+		return false
+	}
+	if !containsFold(assigneeLogins(snapshot), viewer.Login) {
+		return false
+	}
+	return !containsFold(fresh, viewer.Login)
+}
+
+// newWorkBlockedWith は「この巡回で入札の要る issue を取らないか」と、その理由を、
+// 渡された写しから返す（設計 3-27 / 3-77i / 3-77j。issue #173）。
+//
+// **「巡回を止める」とは呼ばない。**止まるのは入札の要る issue だけで、
+// **巡回そのもの（走っている run の面倒・枠の読み直し・期限切れの担当を外す経路）は続く。**
+// **担当が既にこの機械にある issue も着手する。**
+//
+// **判定は1段だけになった**（人間の決定。2026-09-06）。
+// **`rate_limit.pause_above_percent` を見る段は消えた。**理由は
+// [orchestrator.go](orchestrator.go) の `dispatchPaused` を消した箇所に3つ書いてある。
+//
+// **この巡回を丸ごとやめる戻り値も消えた。**丸ごとやめると、
+// **`handoffGate` の中にある「期限切れの担当を外す」経路まで通らなくなる。**
+//
+// **写しを取り直す版は置かない。**取り直すと、
+// **ログへ出す数字と、止めた理由が別の読み取りから作られる。**
+// **「余裕値が0以下」と名乗りながら使用率30%を並べる1行が出る。**
+//
+// **古い写しを nil にする規則は `quotaForBid` が1箇所で持つ**（設計 3-77i。issue #284）。
+// **ここでは持たない。**2箇所に置くと、新しさの幅を直したときに片方だけが残る。
+//
+// snap: この巡回で `quotaForBid` から1回だけ受けた写し（古ければ nil）。
+// 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
+func (o *Orchestrator) newWorkBlockedWith(snap *ratelimit.Snapshot) handoff.SkipReason {
+	_, skip := handoff.Evaluate(
+		snap,
+		o.cfg.RateLimit.Source != ratelimit.SourceNone,
+		o.bidMargins(),
+		o.now(),
+	)
+	return skip
+}
+
+// observedPercentsOf は、渡された枠の写しから5時間と1週間の使用率を取り出す（設計 3-77j）。
+//
+// **写しは呼び出し側が1回のロックで取る。**ここで取り直すと、
+// **同じ1行の中で違う写しの値が混ざる**（「使用率は最後に読めた値」と、
+// 新しい写しから採った「使い切っている枠」が並ぶ、など）。
+//
+// **読めていなければ percentUnknown を返す。**0 を返すと「1バイトも使っていない」と
+// 読めてしまい、**枠を読めない機械が「いちばん暇」に見える。**
+//
+// snap: 最後に読めた枠。**nil なら読めていない。**
+// 戻り値の1つ目: 5時間の枠の使用率。
+// 戻り値の2つ目: 1週間の枠の使用率。
+func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
+	if o.cfg.RateLimit.Source == ratelimit.SourceNone {
+		// **枠で判定しないと運用者が決めた状態である**（設計 3-27 の逃げ道）。
+		// **読めなかったのではない。**そう見せると、資格情報の直し方を探させることになる。
+		//
+		// **いまこの枝へは来ない。**呼ぶのは `logNewWorkBlocked` だけで、そこへ来るのは
+		// `newWorkBlockedWith` が `SkipNone` 以外を返したときである。
+		// `rate_limit.source: none` では `handoff.Evaluate` が使用率0で計算し、
+		// **マージンは100未満しか通らない**ので（`internal/config/validate.go`）、
+		// **余裕値は必ず1以上になり、`SkipNone` しか返らない。**
+		//
+		// **それでも残す。**消すと、止める理由が1つ増えたときに
+		// **「使用率0」を「1バイトも使っていない」として出す**経路が黙って開く。
+		return percentUnknown, percentUnknown
+	}
+	if snap == nil {
+		return percentUnknown, percentUnknown
+	}
+	// **返ってきた中にその種別が無いのは「使用率0」である。「読めない」ではない。**
+	// `handoff.Evaluate` が同じ扱いをしている（「**usage API が将来 kind を増やしても、
+	// 知らない kind が1つ欠けただけで黙らないためである**」）。
+	// **ここだけ「読めない」と出すと、`weekly_all` しか返さない provider の機械で、
+	// 実際には0%の5時間の枠が「使用率を読めていません」と名乗る。**
+	session, _ := handoff.SessionPercent(snap)
+	weekly, _ := handoff.WeeklyPercent(snap)
+	return session, weekly
+}
+
+// logNewWorkBlocked は、新しい issue を取らないことと、その理由を1行出す
+// （設計 3-77j。issue #173）。
+//
+// **`Warn` ではなく `Info` にする。**issue #134 で一度 `Warn` へ上げたところ、
+// **8本のテストが落ちた**（v0.1.11 で実測）。どれも正常な動作を作っているもので、
+// **「異常ではないものを異常として出そうとしている」という信号だった。**
+// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
+// **代わりに、戻し方を同じ行に書く。**
+//
+// **条件を付けずに、この関数へ来るたびに出す。**巡回は既定30秒なので1時間で120行になる。
+// **「巡回のたび」ではない。**この関数は `dispatchCandidates` の中にあり、
+// **候補の取得に失敗した巡回では呼ばれない**（その巡回には別の `Warn` が出る）。
+// **門にしてよい数と、してはいけない数がある。**混同すると、
+// **枠で止まっている機械が永久に黙る**という、issue #173 が直したい症状を作り直す。
+//
+//	門にしてよい   … `active_states` から返ってきた候補の生の件数（`len(candidates)`）
+//	門にしてはだめ … そこから絞り込んだあとの件数
+//
+// **生の件数が0なら、カンバンに issue が1件も無い。**枠は何も止めていないので、
+// **「枠に余裕が無いので着手しません」は嘘になる。**呼び出し側がこれで黙らせている。
+//
+// **絞り込んだあとの件数を門にしてはならない。**
+// **「枠の判定まで届いた候補が1件でもあったか」を門にする**（実装レビュー3周目の MEDIUM で、
+// 契約の文を実装に合わせた）。
+//
+// **呼び出し元は、候補のループの中で、枠が実際に落とした1件目で1回だけ呼ぶ。**
+// **枠の判定より手前にも門がある**（走っている・閉じる集合・`active_states`・バックオフ・
+// 信頼・必須のラベル・空きスロット）。**数は書かない。**増えたときにここだけ古くなる。
+// **手前の門で候補が全部落ちた巡回では、この関数は呼ばれない。それでよい。**
+// **手前の門に当たった issue は、枠に余裕があっても着手されない**ので、
+// **「枠に余裕が無いので着手しません」は、その巡回の事実ではない。**
+//
+// **黙ってはいけないのは、枠の判定まで届いた候補がある巡回である。**
+// **そこで黙ると、枠で止まっている機械が永久に黙る**という、issue #173 が直したい症状になる。
+//
+// **届いた候補があるかぎり、この関数は巡回のたびに出す。**
+// **同じ行が続くのが困るなら、それは別の issue である。**そのときの直し方は
+// 「数える」ではなく「理由が変わったときだけ出す」になる。
+//
+// skip: 止めた理由。**`handoff.SkipNone` を渡してはならない。**
+func (o *Orchestrator) logNewWorkBlocked(
+	skip handoff.SkipReason, snap *ratelimit.Snapshot,
+) {
+	h := o.cfg.Tracker.Provider.Handoff
+	args := []any{
+		"理由", skip.String(),
+	}
+	// **観測した使用率を出す。**閾値だけでは、
+	// **5時間の枠と1週間の枠のどちらが原因かを人間が読めない。**
+	// **読めていない枠は行ごと出さない。**出すと「使用率0」と読めてしまう。
+	// **枠を読めなかったときは、数字を1つも出さない**（issue #173）。
+	// **最後に読めた写しは残っているが、それを並べると
+	// 「枠を読めない」と名乗りながら使用率を出す1行になる。**
+	// **読む人は、どちらが本当かを決められない。**
+	if skip == handoff.SkipQuotaUnreadable {
+		snap = nil
+	}
+	session, weekly := o.observedPercentsOf(snap)
+	if session != percentUnknown {
+		args = append(args, "5時間の枠の使用率", session)
+	}
+	if weekly != percentUnknown {
+		args = append(args, "1週間の枠の使用率", weekly)
+	}
+	// **余裕の無い枠の種別を出す**（設計 3-77j）。
+	// **1週間の枠は2つある**（`weekly_all` と `weekly_scoped`）。
+	// **使用率は最大を採って1つに畳むので、それだけでは
+	// `weekly_scoped`（1週間のモデル別の枠）が原因のときに読めない。**
+	// claude.ai の画面に出る週次の全体が30%でも、**よく使っているモデルの枠に余裕が無ければ止まる。**
+	if kinds := snap.SelectedKinds(handoff.Short(o.bidMargins())); len(kinds) > 0 {
+		args = append(args, "余裕の無い枠", strings.Join(kinds, ", "))
+	}
+	// **閾値とマージンも、枠を読めなかったときは出さない**（issue #173）。
+	// **下の文面が「マージンを下げても動き出しません」と言っている。**
+	// **その隣に2本のマージンの現在値と閾値を並べると、読む人はそこへ手を伸ばす。**
+	// **数字を消したのと同じ理由である。**言っていることと、並べている値が食い違う。
+	if skip != handoff.SkipQuotaUnreadable {
+		args = append(args,
+			"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
+			"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
+			"five_hour_margin_percent", h.FiveHourMarginPercent,
+			"weekly_margin_percent", h.WeeklyMarginPercent,
+		)
+	}
+	// **出すのは1行だけにする**（人間の決定。2026-09-06。issue #173）。
+	// **「この巡回では1件も着手しません」は消えた。**丸ごとやめる段が無くなったためである。
+	// 人間の言い分は「**自分以外の状況はどちらにしても入札以外の判断材料がない**」であり、
+	// **ログで全体を追わせる形にしない。**`Ready` から進まないときに人間が見るのは issue のコメントで、
+	// **そこに誰の入札も無ければ「どの機械にも余裕が無い」と読める。**
+	//
+	// **ただし、直し方は理由で分ける。**枠を読めないのは資格情報の話であって、
+	// **マージンをいくら下げても動き出さない。**同じ文面にすると、
+	// **人間はマージンを触って、効かないまま原因を探し続ける。**
+	msg := "枠に余裕が無いので、入札の要る issue には着手しません" +
+		"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+		"枠が戻れば自分で再開します。すぐ動かしたいときは " +
+		"tracker.provider.handoff の2つのマージンを見てください"
+	// **使用率100 の枠があるときは、マージンでは動き出さない**（実装レビュー4周目の MEDIUM）。
+	// **マージンは 0〜99 に制限されている**（`internal/config/validate.go` の `validateHandoff`）。
+	// **だから余裕値は `100 − 100 − マージン` で、どの値を書いても必ず0以下になる。**
+	// **案内どおりマージンを触った人は、効かないまま原因を探し続ける。**
+	//
+	// **消した `dispatchPaused` のログが、この直し方を持っていた**（`origin/main`）。
+	// **`logNewWorkBlocked` へ移し忘れていた。**
+	// **issue #173 がまさに読めるようにしようとしている案内である。**
+	if snap != nil && snap.AnySelected(handoff.Full()) {
+		retake := "（Claude Code のアカウントを替えたなら、" +
+			"continuo を止めて quota.json を消し、立て直してください）"
+		// **statusline取得で値を取るときだけ、100 の期間が残っていると取り直さない**（issue #284）。
+		// **usage API が読めていれば 100 があっても取り直すので、この断りは当たらない。**
+		if o.cfg.RateLimit.Source == ratelimit.SourceStatusline || o.apiSwitched() {
+			retake = "（使用率が 100 の期間が残っているときは、値を取り直さないので直りません。" +
+				"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
+		}
+		msg = "枠を使い切っているので、入札の要る issue には着手しません" +
+			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"枠が戻れば自分で再開します。マージンを下げても動き出しません" + retake
+	}
+	if skip == handoff.SkipQuotaUnreadable {
+		msg = "枠を読めないので、入札の要る issue には着手しません" +
+			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"マージンを下げても動き出しません。読めた値が古くなっただけのこともあります。" +
+			"rate_limit.source が oauth_usage_api なら rate_limit.token_source と資格情報を、" +
+			"statusline なら statusline取得の WARN が出ていないかを確かめてください"
+	}
+	o.logger.Info(msg, args...)
+}
+
+// thresholdText は閾値をログに出す形にする（設計 3-77j。issue #173）。
+//
+// **100 は「この設定では止まらない」という意味である。**
+// **`100` とだけ出すと「100%で止まる」と読まれる。**
+//
+// **「止まらない」という文面は持たない。**マージンは0以上100未満しか通らないので
+// （`internal/config/validate.go` が弾く）、**閾値は必ず1から100の範囲に入る。**
+// **マージン0なら閾値は100で、使用率100に達したときだけ止まる。**それは「止まらない」ではない。
+//
+// **「これに達したら止まる」まで値の側で作る。**属性の名前に入れると、
+// **読む側が名前と値をつなげて読むことになり、閾値の意味が名前へ漏れる。**
+//
+// margin: その枠のマージン（%）。
+// 戻り値: ログに出す値。
+func (o *Orchestrator) thresholdText(margin int) string {
+	// **「これを超えたら」ではなく「これに達したら」である**（人間の決定。2026-09-06）。
+	// 余裕値は `100 − 使用率 − マージン` で、**0 も「余裕が無い」に含める。**
+	// 既定のマージン10なら、使用率90で余裕値0なので**止まるのは90からである。**
+	//
+	// **100 をここで書かない**（issue #173）。**判定を持っている package から引く。**
+	// **写しを持つと、`handoff.Short` が使う線と、ここが出す数字が別々に動きうる。**
+	return strconv.Itoa(handoff.ThresholdPercent(margin)) + "% に達したら止まります"
+}
+
+// bidMargins は入札の余裕値を作るときに引くマージンを返す（設計 3-77。issue #173）。
+//
+// **1箇所にまとめてある。**同じ2つのキーを各所で組み立てると、
+// **入札の線と、枠待ちの線と、1週間の枠を待つ上限の線がずれる。**
+//
+// 戻り値: 5時間と1週間のマージン（%）。
+func (o *Orchestrator) bidMargins() handoff.Margins {
+	return handoff.Margins{
+		FiveHour: o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
+		Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
+	}
 }
 
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
@@ -179,7 +509,7 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // 検査）・段0（dispatch 直前の検査）・段1（印を付ける）までである。**段2以降は別の
 // goroutine で回す。**段3〜段10 は git の worktree 作成・利用者が書いた workspace_hooks
 // （既定60秒）・起動の待ち（既定60秒）を順に通るので、既定値と max_concurrent_agents=2 では
-// 1回の巡回が数分返らず、その間 stall 検知も枠の読み取りも止まる。
+// 1回の巡回が数分返らず、その間 stall 検知も statusline取得の要否の判定も止まる。
 //
 // **同じ巡回で印を付けた run は、印を付けた順に1本の goroutine で処理する。**
 // 並行に走らせると、カンバンの並び順どおりに着手したことを外から確かめられなくなる。
@@ -187,18 +517,44 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（カンバンの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
-	if o.dispatchPaused() {
-		// **INFO のままにする**（issue #134）。
-		// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
-		// どれも正常な動作を作っているもので、
-		// **「異常ではないものを異常として出そうとしている」という信号だった。**
-		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
-		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
-		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
-			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
-		return
-	}
+	// **止めた理由を、既定のログの水準で1行出す**（設計 3-77j。issue #173）。
+	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
+	// 「ボードが何時間も進まない」としか見えなかった。**
+	// **理由とログの数字を、同じ1回の読み取りから作る**（設計 3-77j）。
+	// **判定とログがそれぞれロックを取ると、
+	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
+	// **だから写しは、ここで1回だけ取って両方へ渡す。**
+	blockedSnap := o.quotaForBid()
+	blocked := o.newWorkBlockedWith(blockedSnap)
+	// **「入札の要る候補」が1件も無いときは出さない**（issue #173）。
+	// **候補が0件のときだけでは足りない。**候補が全部
+	// 「既に走っている」か「自分が担当者」なら、**枠は何も止めていない。**
+	// **そこで出すと嘘になり、しかも巡回のたびに1行出し続ける**
+	// （既定の30秒間隔で1時間に120行）。**issue #173 が読めるようにしたいログを、そこで埋める。**
+	//
+	// **判定は下の門と同じにする**（`len(assigneeLogins(issue)) == 0` で落とすもの）。
+	// **ずれると、落とした issue と数えた issue が別物になる。**
+	// **数える前置きは置かない**（issue #173）。
+	//
+	// **2周目に「候補が0件なら出さない」、4周目に「走っている／担当者がいる／
+	// `Dispatchable` が偽／失敗のバックオフ中を除く」と足したが、どちらも足りなかった。**
+	// **必須のラベルが無い issue も、`active_states` の外の issue も、
+	// 枠とは関係なく落ちる。**数え直すたびに、下の門の写しが1つ増える。
+	// **そのうえ `skipByFailure` は純粋な判定ではない**（失敗の記録を消し、
+	// 一度きりの `Warn` を使い切る）**ので、数えるだけの繰り返しから呼んではならない。**
+	//
+	// **だから数えない。**下の門が実際に落とした最初の1件で、その場で1回だけ出す。
+	// **落とした issue が1件も無ければ、枠は何も止めていないので出ない。**
+	blockedLogged := false
+	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
+	//
+	// **以前は `rate_limit.pause_above_percent` を超えると `return` していた。**
+	// **打ち切ると、この機械が既に担当者になっている issue まで着手されなくなる**（印が無いので
+	// この経路からしか拾えない）。**`handoffGate` の中にある「期限切れの担当を外す」経路も
+	// 通らなくなる**ので、詰まったカンバンを誰も解けない。
+	//
+	// **止めるのは `handoffGate` が issue ごとに行う。**
+	// **担当者のいない issue は入札が要るので落ちる。担当が既にこの機械にある issue は通る。**
 
 	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
 	o.resetHandoffFetchBudget()
@@ -212,6 +568,14 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		if _, taken := o.lookupRunByID(issue.ID); taken {
 			// **関門より前で飛ばした**（設計 6-1）。止めているのは担当者の関門ではないので、
 			// 古い理由と誤った直し方をダッシュボードに出し続けない。
+			o.clearGate(issue.ID)
+			continue
+		}
+		// **閉じる集合にある issue は飛ばす**（設計 3-83f）。同じ巡回の着手が、閉じる前の pane へ
+		// `agent.start` を投げないためである。**閉じ終えれば `reconcileWorktrees` が集合から外す。**
+		if o.inCloseSet(issue.ID) {
+			o.logger.Info("この issue の worktree の pane をまだ閉じ終えていないので、この巡回では着手しません",
+				"identifier", issue.Identifier)
 			o.clearGate(issue.ID)
 			continue
 		}
@@ -276,7 +640,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
-			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
+			// **INFO のままにする**（issue #134。`logNewWorkBlocked` と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
 			// **どちらの上限で止まったかを名乗る。**上限は2つあり、
@@ -288,6 +652,42 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 				"その上限", limit,
 				"ここで打ち切った issue", issue.Identifier)
 			break
+		}
+
+		// **枠に余裕が無いなら、担当者のいない issue はここで落とす**（issue #173）。
+		// **`preflight` より前に置く。**あちらは issue ごとに git を2プロセス起こす。
+		// **どうせ下の `handoffGate` が入札しないと答えるので、その全部が捨てられる。**
+		//
+		// **節約できるのは、担当者のいない issue のぶんだけである。**
+		// **担当者のいる issue は通す**ので、そこでは `preflight` が走り続ける。
+		// **通す理由は下にある**（期限切れの担当を外す経路が `handoffGate` の中にある）。
+		//
+		// **担当者がいる issue は落とさない。**入札が要らないためである。
+		//
+		// **「走っている run の面倒を見る経路がここしかない」ではない**（issue #173）。
+		// **走っている run は、このループの入口の `lookupRunByID` が既に飛ばしている。**
+		// **行の距離で指さない**（実装レビュー5周目の LOW。実測で8行ずれていた）。
+		// **ここへ来る「担当者がいる issue」は、この機械に run が無いものだけである。**
+		//
+		// **落とせない理由は2つある。**
+		//
+		//	1. **`handoffGate` の中の「期限切れの担当を外す」経路は、担当者がいる issue しか通らない。**
+		//	   落とすと、他機械が握ったまま放置した issue を誰も解けなくなる
+		//	2. **再起動のあとの拾い直し**（`restart.orphan_running_action: redispatch`）**が、この経路である。**
+		//	   落とすと、自分が `In Progress` にした issue を自分で拾い直せない
+		//
+		// **代償がある。**枠に余裕が無いまま2の経路を通ると、**動けない Claude Code を1つ起こす。**
+		// **使用率100なら枠待ちの印が立って打ち切りの時計が止まるが、90〜99%の帯では立たない**ので、
+		// **`claude.turn_timeout_ms`（既定1時間）でリトライを1つ焼く。**
+		// **それでも落とさない。**落とすほうは issue が誰にも解かれずに残る。
+		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
+			// **枠が実際に落とした1件目で、この巡回の理由を1回だけ出す**（issue #173）。
+			if !blockedLogged {
+				blockedLogged = true
+				o.logNewWorkBlocked(blocked, blockedSnap)
+			}
+			o.clearGate(issue.ID)
+			continue
 		}
 
 		// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
@@ -303,7 +703,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
 		// 入札に勝つのは「いま着手できる機械」でなければならず、
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
-		decision := o.handoffGate(ctx, issue)
+		// **入札の判定にも、この巡回で1回だけ読んだ写しを渡す**（issue #173）。
+		// **`handoffGate` の中で取り直すと、上の `blocked` と別の読み取りになる。**
+		decision := o.handoffGate(ctx, issue, blockedSnap)
 		if decision.stop {
 			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**
@@ -408,6 +810,20 @@ func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 		return false, "agent.max_concurrent_agents_by_state", limit
 	}
 	return true, "", 0
+}
+
+// globalFreeSlot は、全体の上限（`agent.max_concurrent_agents`）だけで空きがあるかを返す
+// （設計 3-83c の門5）。
+//
+// **direct chat の pane を用意する門だけが使う。**Status ごとの上限
+// （`agent.max_concurrent_agents_by_state`）は当てない。用意する pane は `running_state` の枠を
+// 消費しないので、当てると、Status ごとの上限を書いた人に、全体が空いていても pane が来ない。
+//
+// 戻り値の1つ目: 空きがあるか。
+// 戻り値の2つ目: `agent.max_concurrent_agents` の値。
+func (o *Orchestrator) globalFreeSlot() (bool, int) {
+	limit := o.reloadableConfig().MaxConcurrentAgents
+	return len(o.snapshotRuns()) < limit, limit
 }
 
 // lookupFolded は Status 名をキーにした写像を、大文字小文字を無視して引く（設計 3-13）。
@@ -553,14 +969,29 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
 		// 待たずに戻ると、着手を取りやめた run の印が外れないまま残る。
 		if rs.claimTerminal(ctx) {
-			o.stopWorker(ctx, rs)
+			o.stopWorker(ctx, rs, closedRecordWrite)
 			o.release(rs)
 		}
 		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。カンバンは continuo が
 		// 触る前の状態のままなので、issue の担当者も元へ戻す。**残すと、着手しなかった
 		// issue をほかの機械が18時間触らない。**
+		//
+		// **例外が1つある**（設計 3-83c の門1 の表の下・3-77g）。**バックオフを挟んだやり直し
+		// （`reuse`）で、取り直した Status が `direct_chat_state` なら消し戻さない。**
+		// 人間がこの機械の担当のまま引き取ったので、次の巡回で direct chat の1パスが pane を用意する。
+		// **消すと担当者が0人になり、次の巡回で `failure_state` へ落ち、
+		// 「担当者を1人に」という事実と違うコメントが残る。**
+		// **消さないときは released も書かない**（`undoHandoffAcquire` を呼ばない。判断票6周目）。
+		// **入札した直後の着手（`reuse` が偽）では消し戻す。**入札の窓のあいだに人間が担当者を
+		// 付けずに動かしたなら、担当者0人として 3-83h の順1 に乗るのが人間の決定どおりである。
 		if rs.handoffAcquired() {
-			o.undoHandoffAcquire(ctx, issue)
+			if reuse && config.IsDirectChatState(o.cfg.Tracker, statusNotWrittenState(err)) {
+				o.logger.Info("人間が direct chat へ引き取ったので、書いた担当者は消し戻しません"+
+					"（次の巡回で pane を用意します）",
+					"identifier", issue.Identifier, "取り直した Status", statusNotWrittenState(err))
+			} else {
+				o.undoHandoffAcquire(ctx, issue)
+			}
 		}
 		return
 	}
@@ -595,12 +1026,40 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 // rs: 再 dispatch する run。
 func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	issue := rs.issue()
+	// **ここに direct chat の検査を置いてはならない**（設計 3-83b）。
+	// **守るものが1つも無く、置くと1つ壊れる。**バックオフ待ちの run では pane が既に閉じている。
+	// **置くと `clearBackoff` の手前で戻り、着手の段2 へ二度と進まない。**
+	// 設計 3-83c の門1 の表は、まさにその段2 で印が外れることを
+	// 「最大5分半で pane ができる」という約束の根拠にしている。
 	if !o.preflight(ctx, issue) {
-		// 検査に落ちたら、この巡回では何もしない。次の巡回でまた見る。
+		// 検査に落ちたら、拾い直さずに戻る。次の巡回でまた見る。
+		//
+		// **「何も起きない」わけではない**（設計 3-21 の限界。実装レビュー3周目の MEDIUM。直さないと決めた）。
+		// **バックオフの時刻は過去の値のまま残り、時計も agent 名も前の attempt のままである。**
+		// 同じ巡回の打ち切りの判定は、明けたバックオフを飛ばさないので、閉じた pane の agent を引いて
+		// 誤りを受け、**この run をもう1度打ち切る。**検査に落ち続けると、リトライを使い切って
+		// `failure_state` へ落ちる（`origin/main` から在る動き。信頼の検査に落ち続ける run で、
+		// バックオフが明けたあと巡回を3回まわすと、打ち切りは最初の1回と合わせて3回出た。2026-10-02 に測った）。
+		// **打ち切りの判定で飛ばす形にはしない。**飛ばすと、検査に落ち続ける run が
+		// スロットを握ったまま、人間が直すまで残る。どちらを取るかは設計の判断である。
 		return
 	}
 	// **印は同期で更新する。**次の巡回が同じ run をもう一度拾わないようにする。
 	rs.clearBackoff()
+	// **打ち切りの時計を、いまから数え直させる**（設計 3-21。2026-10-02 に実測して足した）。
+	//
+	// **バックオフが明けた run は、前の attempt の `LastSeenAt` を持ったままである。**
+	// 打ち切りで積んだバックオフなら、その時刻は既に `claude.turn_timeout_ms` より古い。
+	// **巡回は、この拾い直しのあと、同じ巡回の中で `checkStalls` を回す**（`Tick`）。
+	// 数え直さないと、**拾い直したばかりの run を「閾値を超えて止まっている」と読み、
+	// 閉じた pane の agent へ `agent.get` を投げて誤りを受け、もう1度打ち切る。**
+	// **1回の停止でリトライが2つ減り、起こし直している最中の run を畳む**
+	// （実測: `TestResumeBackoff_バックオフが明けた巡回で同じrunをもう1度打ち切らない`。
+	// この行が無いと、拾い直した巡回のログに `retry_count=2` の打ち切りが出る）。
+	//
+	// **`clearBackoff` と同じく、同期で行う。**着手の本体は goroutine で走るので、
+	// そちらに任せると `checkStalls` が先に読む。
+	rs.resetStallClock(o.now())
 	// **段2以降は別の goroutine で回す**（設計 3-8。巡回のループをブロックしない）。
 	o.wg.Add(1)
 	go func() {
@@ -777,8 +1236,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **書く前に ID 指定で取り直し、`active_states` にあるときだけ書く**（許可リスト）。
 	// 拒否リストだけでは `In Review` のような「設定に名前が出てこない状態」を守れず、
 	// 人間へ引き渡し済みの issue を上書きしてしまう。
-	if !o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier) {
-		return ErrStatusNotWritten
+	// **取り直した Status はエラーへ添えて返す**（設計 3-83c）。呼び出し元が
+	// 書いた担当者を消し戻すかをこれで決める。
+	allowed, state, freshLogins := o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier)
+	if !allowed {
+		return &statusNotWrittenError{state: state}
+	}
+	// **候補の写しでは自分が担当だったのに、取り直したら担当者にいないなら、着手しない**
+	// （設計 3-27。issue #197）。理由は `ownAssigneeLostSinceSnapshot` の doc にある。
+	//
+	// **バックオフを挟んだやり直し（`reuse`）には当てない。**止めたあとの後始末が違うためである。
+	// やり直しでここから戻ると、呼び出し元は `undoHandoffAcquire` を通り、
+	// **入札で取った担当だったときは `released` のコメントを issue へ書く。**
+	// 担当が既に別の機械へ移っている issue へ、こちらが「手放した」と書くことになる。
+	// **だから、人間が担当を外した run のやり直しは、この1段では止まらない。**
+	// そちらは走り出したあとの `reconcileRunning` が、担当が自分に無いことを見て止める。
+	if !reuse && o.ownAssigneeLostSinceSnapshot(ctx, issue, freshLogins) {
+		o.logger.Info("着手の直前に取り直したら、この機械が担当者にいないので着手しません"+
+			"（候補を取ったあとで担当が外れました。次の巡回で、いまの担当者で判定し直します）",
+			"identifier", issue.Identifier, "取り直した担当者", strings.Join(freshLogins, ", "))
+		return &statusNotWrittenError{state: state}
 	}
 	// **拒否リストも渡し続ける。**UpdateStatus はこのあともう一度 ID 指定で取り直すので、
 	// 上の取り直しとの隙間に人間が動かした場合は、そちらが最後の砦になる。
@@ -790,7 +1267,8 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		// **書かなかったのに段3 へ進んではならない。**item がもう見えないか、
 		// 取り直した結果 terminal_states / failure_state に入っていたということである。
 		// どちらも「いま着手してはいけない」を意味する。
-		return ErrStatusNotWritten
+		// **`Previous` は `UpdateStatus` が書く直前に取り直した値である**（設計 3-83c）。
+		return &statusNotWrittenError{state: moved.Previous}
 	}
 	// **動かしたなら、その記録を issue に残す**（設計 3-29）。
 	// **既に running_state だった場合は書き込みが起きないので、コメントも出ない。**
@@ -805,6 +1283,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 「元は何だったか」を書くために要る。
 	rs.setLastWrittenState(o.cfg.Tracker.RunningState)
 
+	return o.startRunFromWorktree(ctx, rs, issue, reuse, false)
+}
+
+// startRunFromWorktree は着手の段3〜段11 を実行する（設計 3-16）。
+//
+// **段2（Status の書き込み）は呼び出し側が済ませている。**direct chat では踏まない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 印を付けた run。
+// issue: 着手する issue。
+// reuse: 再 dispatch かどうか（真なら身元ファイルの takeover_count を1つ増やす）。
+// directChat: direct chat の用意（設計 3-83d の用意の段2）かどうか。**真なら段11 を踏まない。**
+// **この引数だけは残す**（設計 3-83b）。印は着手の goroutine が非同期に立てるので、印で判定し直すと
+// この設計が消したかった隙間が復活する。
+// 戻り値: いずれかの段で失敗した場合のエラー。**direct chat の用意で「Claude Code は既に動いている」
+// （`ErrStartupBusy`）に着地したときは、失敗ではないが `ErrStartupBusy` をそのまま返す**
+// （用意の段3 が、戻された run に1回目の本文を送る前に turn の終わりを待つかをこれで決める）。
+func (o *Orchestrator) startRunFromWorktree(
+	ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool,
+) error {
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
@@ -821,6 +1319,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		return failed
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
+	// **direct chat の用意では、`worktree.open` が開いた pane をここで控える**（設計 3-83d の用意の段2）。
+	// 段8 まで控えないと、段4〜段8 で落ちたときに後始末（`closeDirectChatSetupPane`）が閉じる相手を知らず、
+	// **シェルの pane が残る。**残った pane は門4 に当たり続けるので、用意し直されず、上限の書く経路にも届かない。
+	// **新しく開いた workspace のときだけ控える。**既に開いていた workspace の pane は人間のものでありうる
+	// （門4 がそもそも止めるが、閉じる側へ倒す理由にはしない）。段8 は `resolvePane` の値で上書きする（同じ pane）。
+	if directChat && prepared.HerdrPaneID != "" && !prepared.AlreadyOpen {
+		rs.setPaneID(prepared.HerdrPaneID)
+	}
 
 	// 段4: worktree を新しく作ったときだけ after_create を走らせる（仕様 5.3.4）。
 	if prepared.Created {
@@ -830,7 +1336,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 
 	// 段5: Claude Code の設定ファイルを worktree の外に作る（再 dispatch でも作り直す）。
-	settingsPath, err := o.writeSettingsFile(issue)
+	settingsPath, err := o.writeSettingsFile(issue, prepared.Path)
 	if err != nil {
 		return err
 	}
@@ -1024,6 +1530,15 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		//
 		// **1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので
 		// `SendFirstPrompt` は真のまま残り、走っている turn が終わった次の周で送られる。
+		if directChat {
+			// **direct chat の用意では、これが正常な着地である**（設計 3-83d の用意の段2）。
+			// herdr が登録していないだけで Claude Code は生きているので、人間はもう話しかけられる。
+			// **turn の終わりを待つ印は立てない。**入れるか戻すかは用意の段3 が決める。
+			// **`ErrStartupBusy` をそのまま返す。**戻された run へ1回目の本文を送るなら、走っている turn の
+			// 終わりを待ってからにしなければならない（通常の着手のこの道と同じ）。それを決めるのは用意の段3 である。
+			rs.markStartedIfZero(o.now())
+			return ErrStartupBusy
+		}
 		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
 			"identifier", issue.Identifier)
 		// **働き始めた時刻を入れる**（設計 3-80）。**この道は `beginTurn` を通らない。**
@@ -1035,6 +1550,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	if startErr != nil {
 		return startErr
+	}
+
+	if directChat {
+		// **段11 は踏まない**（設計 3-83d の用意の段2）。`SendFirstPrompt` は立ったままだが、
+		// 用意中のあいだは `wakeRuns` が送らない。**下ろすか送るかは用意の段3 が決める。**
+		rs.markStartedIfZero(o.now())
+		return nil
 	}
 
 	// 段11: 1回目の turn を送る。**巡回のループはここでブロックしない。**
@@ -1072,15 +1594,16 @@ func (o *Orchestrator) launchClaude(
 	// `agent_not_found` で落ち、**その場で殺すのを、1 turn ぶん遅らせるだけになる。**
 	// **issue #235 の時系列が名指しした経路は、`confirmStartup` の側で塞いである**
 	// （19:41:55 の時点で `ErrStartupBusy` に倒れるので、19:42:24 のやり直しへ進まない）。
-	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-	if err != nil {
+	if _, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)
-	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
-	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.noteRevision(started.Agent.Revision, o.now())
+	// **この pane で Claude Code が起動済みであることを控える**（設計 3-83f。判断票6周目）。
+	// 打ち切りの終え方（印を残すか、自分で開いた pane を閉じて印を外すか）をこれで決める。
+	rs.setStartedPane(params.PaneID)
+	// **画面の版を種にする段は消えた**（issue #173。実装レビュー1周目の MEDIUM）。
+	// **打ち切りの時計は run を作った時点で現在時刻が入る**（`newRunState` の `LastSeenAt`）ので、
+	// ここで種を入れ直す必要が無い。**版そのものは、どの判定も読んでいなかった。**
 	if err := o.ws.SetAgentName(ctx, worktreePath, params.Name.String()); err != nil {
 		o.logger.Warn("身元ファイルへ agent 名を書けませんでした",
 			"identifier", rs.issue().Identifier, "error", err)
@@ -1228,21 +1751,25 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 					if o.now().After(deadline) {
 						return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 							i18n.KeyOrchestratorConfirmStartupNotInteractive,
-							rs.agentName(), got.Agent.AgentStatus, rs.agentName()))
+							rs.agentName(), got.Agent.AgentStatus))
 					}
 					break
 				}
 				return nil
 			case herdr.AgentStatusBlocked:
 				o.sendEscape(ctx, rs)
+				// **起動直後の文言は、issue のコメントに書く許可の文を持たない**（設計 3-11。issue #259）。
+				// この文言は、公開かどうかを見ずに issue のコメントとして投稿される。
+				// **何の確認だったかは continuo の側に残らない**ので、許可の出し方を案内しても合っているか分からない。
+				// 案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。
 				return i18n.Errorf(
 					i18n.KeyOrchestratorConfirmStartupBlocked,
-					rs.agentName(), rs.agentName())
+					rs.agentName())
 			case herdr.AgentStatusWorking:
 				if o.now().After(deadline) {
 					return i18n.Errorf(
 						i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
-						o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
+						o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
 				}
 			default:
 				// **`unknown` は「まだ見分けられていない」であって「壊れている」ではない。**
@@ -1257,7 +1784,7 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 				if o.now().After(deadline) {
 					return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 						i18n.KeyOrchestratorConfirmStartupUnknownStatus,
-						rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName()))
+						rs.agentName(), got.Agent.AgentStatus))
 				}
 			}
 		}
@@ -1406,14 +1933,11 @@ func (o *Orchestrator) confirmStartupWithRestart(
 		if attempt > 0 {
 			o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
 				"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
-			started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-			if err != nil {
+			if _, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 				// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
 				// （既に登録されている場合も、ここへ来て次の確認で拾える。）
 				o.logger.Warn("agent.start のやり直しに失敗しました",
 					"identifier", rs.issue().Identifier, "error", err)
-			} else {
-				rs.noteRevision(started.Agent.Revision, o.now())
 			}
 		}
 

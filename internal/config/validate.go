@@ -21,6 +21,16 @@ import (
 // 波括弧ごと照合すると、正しい設定を弾いてしまう。
 const issueNumberPlaceholder = ".issue.number"
 
+// weeklyWaitLimitMaxMinutes は `rate_limit.weekly_wait_limit_minutes` の上限（分）である
+// （issue #197）。**10年ぶん。**
+//
+// **上限を置く理由。**`time.Duration(n) * time.Minute` は int64 のナノ秒なので、
+// **1.5億分あたりであふれて小さい正の値へ巻き戻る。**
+// **そうなると、1週間の枠の余裕が無くなった瞬間に担当を手放す**
+// （**印を引き金にはしない。**線は「余裕値が0以下」である。設計 3-27）。
+// **「事実上いつまでも待つ」は 0 で表す**ので、大きな値を書く必要は無い。
+const weeklyWaitLimitMaxMinutes = 10 * 365 * 24 * 60
+
 // validate は front matter をパースした直後の Config に対して、YAML としては正しいが
 // 値として不正なものが無いかを検査する。ここでの不正は「起動を止める」対象である
 // （設計「その2」。CLAUDE.md にも明示されている絶対条件）。
@@ -134,6 +144,12 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-83）。
+	// **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
+	if err := validateDirectChatState(cfg); err != nil {
+		return err
+	}
+
 	if cfg.Tracker.StatusSignalPrefix == "" {
 		return requiredValueError("tracker.status_signal_prefix")
 	}
@@ -229,8 +245,14 @@ func validate(cfg *Config) error {
 	if cfg.Claude.Kind == "" {
 		return requiredValueError("claude.kind")
 	}
-	if cfg.Claude.PermissionMode != "dontAsk" {
-		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode, `無人運用で入力を待たない唯一のモードである "dontAsk" のみサポートする（設計 3-11）`)
+	// **空文字も弾く**（設計 3-11）。空だと orchestrator が --permission-mode を付けずに
+	// 起動するため、Claude Code 側の既定で走る。利用者の手元の設定しだいで挙動が変わる。
+	if !slices.Contains(ClaudePermissionModes, cfg.Claude.PermissionMode) {
+		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode,
+			`"auto" か "dontAsk" のどちらかにすること（設計 3-11）。`+
+				`既定は "auto"（判定役が実行の前に確かめる。保護対象パスへ書ける。`+
+				`広い許可の規則は落とされるので、足すなら狭い規則にする）。`+
+				`"dontAsk" は許可の一覧の外を確認せずに拒否し、入力を待たない`)
 	}
 
 	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
@@ -250,6 +272,7 @@ func validate(cfg *Config) error {
 		{"herdr.startup_timeout_ms", cfg.Herdr.StartupTimeoutMs},
 		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
 		{"rate_limit.poll_interval_ms", cfg.RateLimit.PollIntervalMs},
+		{"rate_limit.refresh_interval_ms", cfg.RateLimit.RefreshIntervalMs},
 		{"workspace_hooks.timeout_ms", cfg.WorkspaceHooks.TimeoutMs},
 	} {
 		if item.value <= 0 {
@@ -264,7 +287,7 @@ func validate(cfg *Config) error {
 		return invalidValueError(
 			"claude.poll_wait_ms", cfg.Claude.PollWaitMs,
 			"claude.turn_timeout_ms 以下にすること"+
-				"（1回の待ちが「画面が止まったとみなす時間」より長いと、打ち切りの判定より待ちのほうが粗くなる）",
+				"（1回の待ちが「止まったとみなす時間」より長いと、打ち切りの判定より待ちのほうが粗くなる）",
 		)
 	}
 	if cfg.Claude.SettleMs > cfg.Claude.PollWaitMs {
@@ -309,13 +332,23 @@ func validate(cfg *Config) error {
 		return requiredValueError("cleanup.on_states（cleanup.enabled が true のとき必須）")
 	}
 
-	// none を受理する。usage API がトークンを消費するかどうかを判別できていないため、
-	// この経路を切って運用できる必要がある（設計 3-27 / 第6節）。
-	// none のときは枠の判定を行わず、stall 検知だけに頼る。
+	// oauth_usage_api か statusline か none のどれか（issue #284）。**none は必須の逃げ道である。**
+	// 使用率が届くのは Pro / Max だけなので、それ以外の契約と API キーの人は none にする。
 	switch cfg.RateLimit.Source {
-	case "oauth_usage_api", "none":
+	case RateLimitSourceOAuthUsageAPI:
+		// **refresh_interval_ms が polling.interval_ms 以下でも起動は止めない。**
+		// v0.1.15 までの WORKFLOW.md をそのまま通すためである。orchestrator が
+		// polling.interval_ms の2倍として扱い、起動時に WARN を1回出す（quota.go の quotaRefreshInterval）。
+	case RateLimitSourceStatusline:
+		// **refresh_interval_ms は polling.interval_ms より長くする。**短いと巡回のたびに
+		// statusline取得が走り、1日に何百回も haiku を起動する。
+		if cfg.RateLimit.RefreshIntervalMs <= cfg.Polling.IntervalMs {
+			return invalidValueError("rate_limit.refresh_interval_ms", cfg.RateLimit.RefreshIntervalMs,
+				fmt.Sprintf("polling.interval_ms（%d）より長くすること", cfg.Polling.IntervalMs))
+		}
+	case RateLimitSourceNone:
 	default:
-		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "none" のどちらか（設計 3-27）`)
+		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "statusline" か "none" のどれか（設計 3-27）`)
 	}
 	switch cfg.RateLimit.TokenSource {
 	case RateLimitTokenSourceClaudeCredentials:
@@ -323,23 +356,48 @@ func validate(cfg *Config) error {
 	case RateLimitTokenSourceKeychain:
 		// **macOS でだけ選べる。**Keychain を読む `security` は macOS の標準コマンドであり、
 		// ほかの OS には無い。ここで弾かないと、Linux の運用者は起動時ではなく5分ごとの
-		// 取得で毎回失敗し、枠の判定が黙って無効化される（5-5 と同じ理由）。
-		if runtime.GOOS != "darwin" {
+		// 取得で毎回失敗し、usage API が黙って読めなくなる（5-5 と同じ理由）。
+		// **usage API を読む設定のときだけ弾く。**statusline と none はトークンを1回も読まないので、
+		// macOS で作った WORKFLOW.md をほかの OS で共有しても起動を止めない。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && runtime.GOOS != "darwin" {
 			return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 				fmt.Sprintf(`"keychain" は macOS でだけ使える（いまの OS: %s）。"claude_credentials" か "env" にすること`, runtime.GOOS))
 		}
 	case RateLimitTokenSourceEnv:
 		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
-		// 5分ごとの取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される（5-5）。
-		if cfg.RateLimit.TokenEnv == "" {
+		// 5分ごとの取得が毎回 ErrNoCredentials になり、usage API が黙って読めなくなる（5-5）。
+		// usage API を読む設定のときだけ必須にする（statusline と none は読まない）。
+		if cfg.RateLimit.Source == RateLimitSourceOAuthUsageAPI && cfg.RateLimit.TokenEnv == "" {
 			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
 		}
 	default:
 		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
 	}
-	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
-		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")
+	// **大きすぎる値も通してはならない**（issue #197）。
+	// **分をミリ秒へ直すときに int64 があふれ、書いた値と違う長さになる。**
+	// **小さい正の値へ巻き戻ると、1週間の枠の余裕が無くなってすぐ担当を手放す**
+	// （**印を引き金にはしない。**線は「余裕値が0以下」である。設計 3-27）。
+	// **負へ巻き戻ると、上限なしになる**（判定の本体は 0 以下を「上限を設けない」と扱う）。
+	// **上限は10年ぶんにしてある。**「事実上いつまでも待つ」は 0 で表す。
+	// **負の値を通してはならない**（issue #197）。**判定の本体は 0 以下を「上限を設けない」と扱う**
+	// （`weeklyWaitExceededWith` の `limit <= 0`）ので、負を書いた人は、短くしたつもりで
+	// 上限なしを得る。**黙って逆の意味になるので、起動を止めて知らせる**
+	// （実装レビュー4周目の LOW で、この説明を実装に合わせた。以前は「即座に手放す」と書いていた）。
+	//
+	// **上限を切りたい人は 0 を書く**（`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+	//
+	// **`tracker.provider.handoff.idle_timeout_ms` との大小は検査しない。**
+	// 1台で動かしている人には他の機械がいないので、18時間より長くても正しく効く。
+	// **弾くと、その人が起動できなくなる。**案内は雛形のコメントに書いてある。
+	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 ||
+		cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
+		// **上限は文言へ埋め込む**（issue #197）。**手で書くと、定数を変えたときに置き去りになり、
+		// 弾いた線と、案内している線が食い違う。**
+		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
+			cfg.RateLimit.WeeklyWaitLimitMinutes,
+			i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange, weeklyWaitLimitMaxMinutes))
 	}
 
 	switch cfg.Trust.OnUntrusted {
@@ -584,7 +642,8 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 				"tracker.automated_state_rewrite のキー",
 				from,
 				"tracker の他のキー（active_states / terminal_states / running_state / "+
-					"dispatch_state / failure_state / status_signal_map の遷移先）に無い Status 名にすること"+
+					"dispatch_state / failure_state / direct_chat_state / status_signal_map の遷移先）"+
+					"に無い Status 名にすること"+
 					"（既に名前の出てくる Status は「知らない Status」にならないので、この行は1度も効かない）",
 			)
 		}
@@ -598,6 +657,33 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-83k）。
+//
+// **空なら何も見ない。**空はこの機能を使わないという意味である。
+//
+// **重なりを見る相手の一覧は `DirectChatConflicts` の1箇所だけに置く。**`continuo doctor` も同じものを読む。
+// 別々に持つと、どれか1つだけが古くなる。
+//
+// **`automated_state_rewrite` のキーとの重なりは、ここでは見ない**（設計 3-83k）。
+// `validateAutomatedStateRewrite` が弾くので、ここへ同じ検査を置いても弾く相手が1件も残らない。
+//
+// **エラーの文面へ「このキーを書いていない場合は既定値です」を入れる**（設計 3-83j）。
+// 既定が非空なので、この機能を1度も頼んでいない人にも当たり、しかもその人の WORKFLOW.md に
+// 1行も書いていないキーの名前が出るためである。
+//
+// cfg: 検証する設定。
+// 戻り値: 重なっていれば理由付きのエラー。
+func validateDirectChatState(cfg *Config) error {
+	conflicts := DirectChatConflicts(*cfg)
+	if len(conflicts) == 0 {
+		return nil
+	}
+	return invalidValueError(
+		"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
+		i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflicts[0]),
+	)
 }
 
 // containsStateFold は ss の中に target と同じ状態名があるかどうかを返す。
@@ -677,11 +763,16 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
 			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))
 	}
-	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent > 100 {
+	// **100 を弾く**（issue #173 / #197）。
+	// **余裕値は `100 − 使用率 − マージン` で、0以下なら「余裕が無い」である。**
+	// **マージン100 だと、使用率0でも余裕値0になり、その機械は永久に入札しない。**
+	// **さらに、1週間の枠を待つ上限の判定も永久に真になるので、
+	// 枠を1バイトも使っていないのに走っている run を全部手放す。**
+	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.five_hour_margin_percent",
 			h.FiveHourMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
-	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent > 100 {
+	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
 			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}

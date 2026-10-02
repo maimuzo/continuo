@@ -296,10 +296,25 @@ const (
 	// KeyHandoffHoldStartingNoBranch は、branch の名前を組み立てられなかったときに
 	// hold のコメントの2行目に出る。
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
+	// KeyHandoffHoldDirectChatReturned は、direct chat から作業中の Status へ戻したときの hold の
+	// 人間向けの1行目に出る（設計 3-83h。自分のログイン名を差し込む）。
+	// **印と JSON は入札の hold と同じにする。**人間向けの文だけが違う。
+	KeyHandoffHoldDirectChatReturned Key = "handoff.hold.direct_chat_returned"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
+	// KeyHandoffReleasedWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したときの
+	// released のコメントの2行目に出る（gh のアカウント名を差し込む。issue #197）。
+	//
+	// **こちらは `after_run` が成功したときに出す。**文面は「`after_run` が `git push` を含むなら」と
+	// 条件を付ける（continuo は `after_run` の中身を知らない）。
+	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
+	// KeyHandoffReleasedWeeklyWaitLimitNoPush は、同じ理由で手放したが
+	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（gh のアカウント名を差し込む）。
+	//
+	// **remote に続きが入っていない可能性がある。**次に拾う機械へそれを伝える。
+	KeyHandoffReleasedWeeklyWaitLimitNoPush Key = "handoff.released.weekly_wait_limit_no_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
@@ -474,6 +489,8 @@ const (
 	KeyDoctorCredentialsRemedyFixConfig Key = "doctor.credentials.remedy_fix_config"
 	// KeyDoctorCredentialsNone は枠の判定を行わない設定のときの説明に出る。
 	KeyDoctorCredentialsNone Key = "doctor.credentials.none"
+	// KeyDoctorCredentialsStatusline は rate_limit.source が statusline のときの説明に出る（usage API を読まない）。
+	KeyDoctorCredentialsStatusline Key = "doctor.credentials.statusline"
 	// KeyDoctorCredentialsTokenEnvEmpty は読む環境変数名が空のときの説明に出る。
 	KeyDoctorCredentialsTokenEnvEmpty Key = "doctor.credentials.token_env_empty"
 	// KeyDoctorCredentialsRemedyTokenEnv は同じときの直し方に出る。
@@ -593,7 +610,7 @@ const (
 	KeyCLIInitDetectPlaceholderNote Key = "cli.init.detect_placeholder_note"
 )
 
-// `continuo setup` が5つの役割を説明するときの文言。
+// `continuo setup` が6つの役割を説明するときの文言（6つ目の direct chat は飛ばせる）。
 //
 // **役割の名前より説明が先に出る。**初見の利用者は「どの Status がどの役割か」を
 // 知らないので、Status の名前で尋ねても選べない（RUCM の判断11）。
@@ -608,6 +625,26 @@ const (
 	KeySetupRoleBlockedDesc Key = "setup.role.blocked_desc"
 	// KeySetupRoleDoneDesc は完了の役割の説明に出る。
 	KeySetupRoleDoneDesc Key = "setup.role.done_desc"
+	// KeySetupRoleDirectChatDesc は direct chat の役割の説明に出る（設計 3-83）。
+	KeySetupRoleDirectChatDesc Key = "setup.role.direct_chat_desc"
+	// KeySetupSkipOptional は、飛ばせる役割で番号 0 を入力できることを案内する（設計 3-83）。
+	KeySetupSkipOptional Key = "setup.prompt.skip_optional"
+	// KeySetupSkippedOptional は、飛ばせる役割を飛ばしたときに出る（設計 3-83）。
+	KeySetupSkippedOptional Key = "setup.skipped_optional"
+	// KeySetupSummarySkipped は、まとめで飛ばした役割の行に出る（設計 3-83）。
+	KeySetupSummarySkipped Key = "setup.summary.skipped"
+	// KeyDoctorStatusNamesDirectChatMissing は tracker.direct_chat_state の Status が
+	// カンバンに無いときに出る（設計 3-83）。
+	KeyDoctorStatusNamesDirectChatMissing Key = "doctor.status_names.direct_chat_missing"
+	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-83）。
+	KeyDoctorStatusNamesRemedyDirectChat Key = "doctor.status_names.remedy_direct_chat"
+	// KeyDoctorStatusNamesDirectChatConflict は tracker.direct_chat_state が他の役割と重なっているときに出る
+	// （設計 3-83k）。**重なった相手のキー名を埋める。**
+	KeyDoctorStatusNamesDirectChatConflict Key = "doctor.status_names.direct_chat_conflict"
+	// KeyDoctorStatusNamesRemedyDirectChatConflict はその直し方に出る（設計 3-83k）。
+	KeyDoctorStatusNamesRemedyDirectChatConflict Key = "doctor.status_names.remedy_direct_chat_conflict"
+	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-83）。
+	KeyCLISetupKeyNotWritten Key = "cli.setup.key_not_written"
 )
 
 // `continuo setup` の対話の文言。
@@ -908,6 +945,15 @@ const (
 	// KeyAbandonErrParkActive は `--park` に作業中の状態（tracker.active_states の値）が
 	// 指定されたときに出る。**そこへ動かしても継続監視は手を離さない。**
 	KeyAbandonErrParkActive Key = "abandon.err_park_active"
+	// KeyAbandonErrParkDirectChat は `--park` にdirect chat の状態（tracker.direct_chat_state の値）が
+	// 指定されたときに出る。**そこへ動かすと継続監視は pane を1回も閉じない。**
+	KeyAbandonErrParkDirectChat Key = "abandon.err_park_direct_chat"
+	// KeyAbandonErrToDirectChat は `--to` に direct chat の状態（tracker.direct_chat_state の値）が
+	// 指定されたときに出る（設計 3-83k）。**次に continuo が起動したとき、消した worktree と pane を作り直す。**
+	KeyAbandonErrToDirectChat Key = "abandon.err_to_direct_chat"
+	// KeyAbandonErrCurrentDirectChat は、いまの Status が direct chat のときに出る（設計 3-83k）。
+	// **`--force` でも通さない。**印が永久に外れず、枠を1つ持ち続ける。
+	KeyAbandonErrCurrentDirectChat Key = "abandon.err_current_direct_chat"
 	// KeyAbandonErrUnknownState は `--to` や `--park` の値がカンバンの Status の
 	// 選択肢に無いときに出る。**worktree を消す前に出す。**
 	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
@@ -1193,6 +1239,10 @@ const (
 	KeyDashboardTotal Key = "dashboard.total"
 	// KeyDashboardNoteTokens はトークンの表の下の注記に出る。
 	KeyDashboardNoteTokens Key = "dashboard.note_tokens"
+	// KeyDashboardCaptionCumulative は run をまたぐ累計の表の見出しに出る（issue #238）。
+	KeyDashboardCaptionCumulative Key = "dashboard.caption_cumulative"
+	// KeyDashboardNoteCumulative は run をまたぐ累計の表の下の注記に出る（issue #238）。
+	KeyDashboardNoteCumulative Key = "dashboard.note_cumulative"
 	// KeyDashboardAgoSeconds は1分未満の経過に出る。
 	KeyDashboardAgoSeconds Key = "dashboard.ago_seconds"
 	// KeyDashboardAgoMinutes は1時間未満の経過に出る。
@@ -1355,6 +1405,9 @@ const (
 	// KeyConfigValidateHandoffIdleTimeoutRange は
 	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
 	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
+	// KeyConfigValidateDirectChatStateConflict は `tracker.direct_chat_state` が他の役割の Status と
+	// 重なっているときに出る（設計 3-83）。**重なった相手のキー名を埋める。**
+	KeyConfigValidateDirectChatStateConflict Key = "config.validate.direct_chat_state_conflict"
 	// KeyConfigValidateHandoffProgressIntervalRange は
 	// tracker.provider.handoff.progress_interval_ms が 0 以下のときの理由である。
 	KeyConfigValidateHandoffProgressIntervalRange Key = "config.validate.handoff_progress_interval_range"
@@ -1373,6 +1426,9 @@ const (
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
+	// KeyConfigValidateRateLimitWeeklyWaitRange は
+	// rate_limit.weekly_wait_limit_minutes が負のとき、または上限を超えたときに出る（issue #197）。
+	KeyConfigValidateRateLimitWeeklyWaitRange Key = "config.validate.rate_limit_weekly_wait_range"
 )
 
 // 設定値の環境変数の展開・チルダの展開（internal/config の expand）のエラーの文言。
@@ -1516,6 +1572,16 @@ const (
 	// KeyHookserverRemoveStaleSocketRemoveFailed は前回の実行が残した socket ファイルを
 	// 消せなかったときに出る。
 	KeyHookserverRemoveStaleSocketRemoveFailed Key = "hookserver.remove_stale_socket.remove_failed"
+	// KeyStatuslineserverStartListenFailed は使用率を受ける socket（sl.sock）を listen できなかったときに出る（issue #284）。
+	KeyStatuslineserverStartListenFailed Key = "statuslineserver.start.listen_failed"
+	// KeyStatuslineserverRemoveStaleLstatFailed は使用率を受ける socket のパスを調べられなかったときに出る。
+	KeyStatuslineserverRemoveStaleLstatFailed Key = "statuslineserver.remove_stale.lstat_failed"
+	// KeyStatuslineserverRemoveStaleAlreadyListening は使用率を受ける socket に別のプロセスが listen していたときに出る。
+	KeyStatuslineserverRemoveStaleAlreadyListening Key = "statuslineserver.remove_stale.already_listening"
+	// KeyStatuslineserverRemoveStaleRemoveFailed は前回の実行が残した使用率の socket ファイルを消せなかったときに出る。
+	KeyStatuslineserverRemoveStaleRemoveFailed Key = "statuslineserver.remove_stale.remove_failed"
+	// KeyStatuslineserverAlreadyStarted は使用率を受ける socket を2回 listen しようとしたか、閉じたあとに listen しようとしたときに出る。
+	KeyStatuslineserverAlreadyStarted Key = "statuslineserver.already_started"
 	// KeyHookserverCloseListenerCloseFailed はsocket を閉じられなかったときに出る。
 	KeyHookserverCloseListenerCloseFailed Key = "hookserver.close.listener_close_failed"
 )
@@ -1632,9 +1698,11 @@ const (
 	// （`token_source: env` にして環境変数から読む）。
 	KeyRatelimitCredentialsRemedyEnv Key = "ratelimit.credentials.remedy_env"
 
-	// KeyRatelimitCredentialsTemporaryExhausted は資格情報の一時的な失敗が
-	// 連続の上限まで続いて、枠の判定を諦めるときに出る。
-	KeyRatelimitCredentialsTemporaryExhausted Key = "ratelimit.credentials.temporary_exhausted"
+	// KeyRatelimitFetchNoWindows は usage API が 200 を返したのに、session も weekly_all も
+	// 無かったときに出る（誤りとして扱い、statusline取得へ切り替える。issue #284）。
+	KeyRatelimitFetchNoWindows Key = "ratelimit.fetch.no_windows"
+	// KeyRatelimitFetchRateLimited は usage API が 429 を返したときに出る（Retry-After を添える）。
+	KeyRatelimitFetchRateLimited Key = "ratelimit.fetch.rate_limited"
 	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
 	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
 	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
@@ -2088,6 +2156,8 @@ const (
 	// KeyWorkspaceLeftoverWorkspaceListFailed は、herdr の workspace の一覧を引けず、
 	// 閉じるべき workspace を名指しできなかったときに出る。
 	KeyWorkspaceLeftoverWorkspaceListFailed Key = "workspace.leftover.workspace_list_failed"
+	// KeyWorkspaceLeftoverWorkspaceCloseNotRun は herdr の workspace を閉じる仕事が、順番が来ないまま止まった（取り消された・loop が閉じた）ときに、片付けの結果の残ったものとして出る。
+	KeyWorkspaceLeftoverWorkspaceCloseNotRun Key = "workspace.leftover.workspace_close_not_run"
 	// KeyWorkspaceLeftoverWorkspaceCloseFailed は、herdr の workspace を閉じられなかったときに出る。
 	KeyWorkspaceLeftoverWorkspaceCloseFailed Key = "workspace.leftover.workspace_close_failed"
 	// KeyWorkspaceLeftoverBranchReasonNoIdentity は、身元ファイルに branch が書いていないことを表す。
@@ -2281,6 +2351,8 @@ const (
 	KeyWorkspaceNewSettingsRootNotAbsolute Key = "workspace.new.settings_root_not_absolute"
 	// KeyWorkspaceNewHomeDirUnknown はホームディレクトリを特定できなかったときに出る。
 	KeyWorkspaceNewHomeDirUnknown Key = "workspace.new.home_dir_unknown"
+	// KeyWorkspaceNewLoopMissing は herdr のクライアントを渡したのに、herdr の開け閉めを1つずつ行う loop を渡さなかったときに出る（組み立ての誤り）。
+	KeyWorkspaceNewLoopMissing Key = "workspace.new.loop_missing"
 	// KeyWorkspacePrepareCloneNotFound は対象リポジトリの clone が手元に無いときに出る。
 	KeyWorkspacePrepareCloneNotFound Key = "workspace.prepare.clone_not_found"
 	// KeyWorkspacePrepareStatFailed は worktree のパスの存在を確かめられなかったときに出る。
@@ -2289,6 +2361,14 @@ const (
 	KeyWorkspacePrepareBranchInUseElsewhere Key = "workspace.prepare.branch_in_use_elsewhere"
 	// KeyWorkspaceErrWorktreeBranchMismatch は worktree が期待と違う branch に載っているときの番兵の文言である（issue #142）。
 	KeyWorkspaceErrWorktreeBranchMismatch Key = "workspace.err.worktree_branch_mismatch"
+	// KeyWorkspaceErrCloneBusy は、statusline取得の workspace が開いている clone の片付けを、巡回の中では待たずに次の巡回へ回すときに返す番兵である。
+	KeyWorkspaceErrCloneBusy Key = "workspace.err.clone_busy"
+	// KeyWorkspaceStatuslineHerdrMissing は herdr のクライアントが無いのに statusline取得の workspace を開け閉めしようとしたときに出る。
+	KeyWorkspaceStatuslineHerdrMissing Key = "workspace.statusline.herdr_missing"
+	// KeyWorkspaceStatuslineCreateFailed は statusline取得の workspace を作れなかったときに出る。
+	KeyWorkspaceStatuslineCreateFailed Key = "workspace.statusline.create_failed"
+	// KeyWorkspaceStatuslineCreateNoID は workspace.create が workspace の ID を返さなかったときに出る。
+	KeyWorkspaceStatuslineCreateNoID Key = "workspace.statusline.create_no_id"
 	// KeyWorkspacePrepareBranchMismatch は再利用しようとした worktree が別の branch をチェックアウトしていたときに出る。
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
@@ -2382,6 +2462,23 @@ const (
 	// **これは失敗ではない。**受けた側は pane を閉じず、1回目の turn も送らずに、
 	// 走っている turn の終わりを待つ。
 	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
+	// KeyOrchestratorDirectChatReady は、direct chat の pane を用意したときに issue へ書く案内である
+	// （設計 3-83d の用意の段3）。表明の書き出し・failure_state・active_states の一覧を差し込む。
+	KeyOrchestratorDirectChatReady Key = "orchestrator.direct_chat.ready"
+	// KeyOrchestratorRelayClosedRecord は、continuo が Claude Code を起動した pane を閉じたときに
+	// issue へ書く「閉じた記録」の2行目である（設計 3-85。issue #246）。1行目は `<!-- continuo:closed -->`
+	// で、その印はコードが付ける（言語で変えない）。差し込む値は無い。
+	KeyOrchestratorRelayClosedRecord Key = "orchestrator.relay.closed_record"
+	// KeyOrchestratorDirectChatAssigneesInvalid は、direct chat のカードの担当者が1人ではないので
+	// failure_state へ動かしたときに issue へ書く（設計 3-83h）。人数・担当者の一覧・
+	// direct_chat_state・failure_state を差し込む。
+	KeyOrchestratorDirectChatAssigneesInvalid Key = "orchestrator.direct_chat.assignees_invalid"
+	// KeyOrchestratorDirectChatNoAssignees は、担当者の一覧が空のときに一覧の代わりに出る（設計 3-83h）。
+	KeyOrchestratorDirectChatNoAssignees Key = "orchestrator.direct_chat.no_assignees"
+	// KeyOrchestratorDirectChatSetupLimit は、direct chat の用意が上限まで続けて落ちたので
+	// failure_state へ動かしたときに issue へ書く（設計 3-83h）。回数・最後の理由・
+	// direct_chat_state・failure_state を差し込む。**担当者を直せとは書かない。**
+	KeyOrchestratorDirectChatSetupLimit Key = "orchestrator.direct_chat.setup_limit"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
 	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
 	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
@@ -2437,6 +2534,8 @@ const (
 	KeyDaemonBuildTrackerFailed Key = "daemon.build.tracker_failed"
 	// KeyDaemonBuildRateLimitFailed は依存の組み立てで枠の読み取りを作れなかったときに出る。
 	KeyDaemonBuildRateLimitFailed Key = "daemon.build.ratelimit_failed"
+	// KeyDaemonBuildStatuslineSocketFailed は rate_limit.source が statusline のとき、使用率を受ける socket（sl.sock）のパスが長すぎて起動を止めるときに出る。
+	KeyDaemonBuildStatuslineSocketFailed Key = "daemon.build.statusline_socket_failed"
 	// KeyDaemonBuildOrchestratorFailed は依存の組み立てで orchestrator を作れなかったときに出る。
 	KeyDaemonBuildOrchestratorFailed Key = "daemon.build.orchestrator_failed"
 	// KeyDaemonBuildHookServerFailed は依存の組み立てで hook の受け口を作れなかったときに出る。
@@ -2660,8 +2759,11 @@ var allKeys = []Key{
 	KeyHandoffHoldAssigned,
 	KeyHandoffHoldStarting,
 	KeyHandoffHoldStartingNoBranch,
+	KeyHandoffHoldDirectChatReturned,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
+	KeyHandoffReleasedWeeklyWaitLimit,
+	KeyHandoffReleasedWeeklyWaitLimitNoPush,
 	KeyHandoffLostReason,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
@@ -2732,6 +2834,7 @@ var allKeys = []Key{
 	KeyDoctorCredentialsConfigUnreadable,
 	KeyDoctorCredentialsRemedyFixConfig,
 	KeyDoctorCredentialsNone,
+	KeyDoctorCredentialsStatusline,
 	KeyDoctorCredentialsTokenEnvEmpty,
 	KeyDoctorCredentialsRemedyTokenEnv,
 	KeyDoctorCredentialsEnvOK,
@@ -2781,6 +2884,15 @@ var allKeys = []Key{
 	KeySetupRoleReviewDesc,
 	KeySetupRoleBlockedDesc,
 	KeySetupRoleDoneDesc,
+	KeySetupRoleDirectChatDesc,
+	KeySetupSkipOptional,
+	KeySetupSkippedOptional,
+	KeySetupSummarySkipped,
+	KeyDoctorStatusNamesDirectChatMissing,
+	KeyDoctorStatusNamesRemedyDirectChat,
+	KeyDoctorStatusNamesDirectChatConflict,
+	KeyDoctorStatusNamesRemedyDirectChatConflict,
+	KeyCLISetupKeyNotWritten,
 	KeySetupPromptOptionsHeader,
 	KeySetupPromptOptionLine,
 	KeySetupPromptIntroCount,
@@ -2908,6 +3020,9 @@ var allKeys = []Key{
 	KeyAbandonParkNotActive,
 	KeyAbandonParkMoved,
 	KeyAbandonErrParkActive,
+	KeyAbandonErrParkDirectChat,
+	KeyAbandonErrToDirectChat,
+	KeyAbandonErrCurrentDirectChat,
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
@@ -3015,6 +3130,8 @@ var allKeys = []Key{
 	KeyDashboardColOutput,
 	KeyDashboardTotal,
 	KeyDashboardNoteTokens,
+	KeyDashboardCaptionCumulative,
+	KeyDashboardNoteCumulative,
 	KeyDashboardAgoSeconds,
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
@@ -3071,11 +3188,13 @@ var allKeys = []Key{
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
 	KeyConfigValidateHandoffBidWindowRange,
 	KeyConfigValidateHandoffIdleTimeoutRange,
+	KeyConfigValidateDirectChatStateConflict,
 	KeyConfigValidateHandoffProgressIntervalRange,
 	KeyConfigValidateHandoffProgressIntervalTooLong,
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffOnAssigneeGate,
+	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
@@ -3120,6 +3239,11 @@ var allKeys = []Key{
 	KeyHookserverRemoveStaleSocketLstatFailed,
 	KeyHookserverRemoveStaleSocketAlreadyListening,
 	KeyHookserverRemoveStaleSocketRemoveFailed,
+	KeyStatuslineserverStartListenFailed,
+	KeyStatuslineserverRemoveStaleLstatFailed,
+	KeyStatuslineserverRemoveStaleAlreadyListening,
+	KeyStatuslineserverRemoveStaleRemoveFailed,
+	KeyStatuslineserverAlreadyStarted,
 	KeyHookserverCloseListenerCloseFailed,
 	KeyHookserverDecodeEventNotObject,
 	KeyHookserverPendingDirsIssuesDirUnreadable,
@@ -3150,7 +3274,8 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileNotExist,
 	KeyRatelimitCredentialsRemedyKeychain,
 	KeyRatelimitCredentialsRemedyEnv,
-	KeyRatelimitCredentialsTemporaryExhausted,
+	KeyRatelimitFetchNoWindows,
+	KeyRatelimitFetchRateLimited,
 	KeyRatelimitFetchRequestBuildFailed,
 	KeyRatelimitFetchRequestFailed,
 	KeyRatelimitFetchBodyReadFailed,
@@ -3302,6 +3427,7 @@ var allKeys = []Key{
 	KeyWorkspaceLeftoverPruneFailed,
 	KeyWorkspaceLeftoverPruneRepoUnknown,
 	KeyWorkspaceLeftoverWorkspaceListFailed,
+	KeyWorkspaceLeftoverWorkspaceCloseNotRun,
 	KeyWorkspaceLeftoverWorkspaceCloseFailed,
 	KeyWorkspaceLeftoverBranchReasonNoIdentity,
 	KeyWorkspaceLeftoverBranchReasonRepoUnknown,
@@ -3393,10 +3519,15 @@ var allKeys = []Key{
 	KeyWorkspaceRegisterExcludeCloseFailed,
 	KeyWorkspaceNewSettingsRootNotAbsolute,
 	KeyWorkspaceNewHomeDirUnknown,
+	KeyWorkspaceNewLoopMissing,
 	KeyWorkspacePrepareCloneNotFound,
 	KeyWorkspacePrepareStatFailed,
 	KeyWorkspacePrepareBranchInUseElsewhere,
 	KeyWorkspaceErrWorktreeBranchMismatch,
+	KeyWorkspaceErrCloneBusy,
+	KeyWorkspaceStatuslineHerdrMissing,
+	KeyWorkspaceStatuslineCreateFailed,
+	KeyWorkspaceStatuslineCreateNoID,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspaceErrWorktreeDetached,
 	KeyWorkspaceErrRetryable,
@@ -3438,6 +3569,11 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorErrStartupBusy,
+	KeyOrchestratorDirectChatReady,
+	KeyOrchestratorRelayClosedRecord,
+	KeyOrchestratorDirectChatAssigneesInvalid,
+	KeyOrchestratorDirectChatNoAssignees,
+	KeyOrchestratorDirectChatSetupLimit,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonErrStartup,
@@ -3461,6 +3597,7 @@ var allKeys = []Key{
 	KeyDaemonBuildTokenFailed,
 	KeyDaemonBuildTrackerFailed,
 	KeyDaemonBuildRateLimitFailed,
+	KeyDaemonBuildStatuslineSocketFailed,
 	KeyDaemonBuildOrchestratorFailed,
 	KeyDaemonBuildHookServerFailed,
 	KeyDaemonBuildDashboardFailed,

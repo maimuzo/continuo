@@ -8,6 +8,9 @@
 #                  （CLAUDE.md「PR を出すときの絶対条件」。貼ってあることが実施の唯一の証拠）
 #   対の issue   … PR が閉じた issue に、閉じたあとの説明のコメントがあるか
 #                  （自動で閉じた issue にはリンクしか残らず、報告した人に伝わらない）
+#   保護設定     … 管理者にも必須の検査を課す設定 (enforce_admins) が有効か
+#                  （外れていると、レビュー結果を貼ってあってもマージを止められない）
+#                  **区間に PR が1本も無くても、これだけは必ず見る。**
 #
 # 使い方:
 #   sh scripts/check-release-ready.sh                  … 直近のタグ → origin/main
@@ -74,12 +77,39 @@ echo ""
 # 拾い方を `gh pr list --state merged` から引く形に変えること。**
 prs="$(range_log | grep -oE 'Merge pull request #[0-9]+' | grep -oE '[0-9]+' | sort -un || true)"
 
+ng=0
+
+# **管理者にも検査が課されているか。**
+# **ここが false だと、下で数えるレビュー結果は、あってもなくてもマージを止められない。**
+# 管理者が「検査を待たずにマージする」を選べてしまうためである。
+# **外したことはリポジトリのファイルに1文字も残らないので、ここで見るしかない。**
+# 設定の手順は CONTRIBUTING.md の「管理者にも検査を課す」にある。
+enforce="$(gh api "repos/{owner}/{repo}/branches/main/protection" --jq '.enforce_admins.enabled' 2>/dev/null || echo "読めない")"
+case "${enforce}" in
+	true)  echo "管理者にも検査を課す設定 (enforce_admins) = 有効" ;;
+	false)
+		echo "管理者にも検査を課す設定 (enforce_admins) = **無効**"
+		echo "  → 管理者が赤いままマージできます。CONTRIBUTING.md の「管理者にも検査を課す」を実施してください"
+		ng=$((ng + 1))
+		;;
+	*)
+		echo "管理者にも検査を課す設定 (enforce_admins) = 読めませんでした"
+		echo "  → 管理権限が要ります。branch protection そのものが無いときも読めません"
+		echo "     読めないまま通すと、外れていても気づけません"
+		ng=$((ng + 1))
+		;;
+esac
+
 if [ -z "${prs}" ]; then
 	echo "この区間に、見る対象の PR はありません。"
+	if [ "${ng}" -gt 0 ]; then
+		echo ""
+		echo "直すもの ${ng}件"
+		echo "**直すものが残っている間は、タグを打たないこと。**"
+		exit 1
+	fi
 	exit 0
 fi
-
-ng=0
 
 # レビュー結果が貼ってあるかを見る。
 #
@@ -90,15 +120,15 @@ ng=0
 #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
 #       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
 #
-# **この条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
-#   .claude/hooks/block-merge-without-review.py … 手元の gh pr merge / gh pr ready を止める
-#   .github/workflows/review-gate.yml           … PR のマージを止める
-#   ここ                                        … タグを打つのを止める
+# **この条件は2箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+#   .github/workflows/review-gate.yml … PR のマージを止める
+#   ここ                              … タグを打つのを止める
+# **この並びの正本は、ここである。**
+# （2026-09-21 まで .claude/hooks/block-merge-without-review.py が正本だったが、その hook は廃止した）
 #
-# **`\s` を使わない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
-# 全角空白 U+3000 を前に置いた本文が、jq 側だけ通る（2026-09-02 に実測）。
+# **`\s` を使わない。**engine によって当たる範囲が違い、
+# 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
 # **当たる文字を並べて書く。**`[ \t\r\n]*` の4文字だけである。
-# この並びは block-merge-without-review.py の MARKER_SPACE_CLASS と1文字ずつ同じであること。
 # **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
 review_of() {
 	gh pr view "$1" --json comments --jq '

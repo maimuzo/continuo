@@ -107,7 +107,7 @@ git merge main --no-edit
 | PR #89（ロックの置き場所と画面の言語の既定を決める設計の記録） | マージ済み |
 | 英語版の資源を作る issue（#90） | 起票済み |
 | レートリミットの上限を issue #36 へ追記 | 追記済み |
-| 返答の検査の hook | `.claude/hooks/check-reply-clarity.py`。区切り線の検査へ差し替え済み |
+| 返答の検査の hook | `maimuzo-chat-response-hook-clarity` plugin。区切り線の検査へ差し替え済み |
 | sandbox の実機検証 | **`gh` は動かない。**全ドメイン許可でも同じ |
 
 ---
@@ -135,7 +135,7 @@ git merge main --no-edit
 
 | 順 | 何 | 状態 |
 | --- | --- | --- |
-| — | **返答の検査をプラグインへ移す** | **まだやらない。**[.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) でしばらく使い、良し悪しが分かってから `maimuzo-chat-response` へ移す（2026-08-28、人間の指示） |
+| — | **返答の検査をプラグインへ移す** | **済み。**`maimuzo-chat-response-hook-clarity` と `maimuzo-chat-response-hook-verified-commands` の2つの plugin へ移した |
 | 1 | **RUCM 作り直し 3本目**（`issue を1件処理する`） | **実行中** |
 | 2 | **RUCM 作り直し 4本目**（`着手を取り消す`） | 待ち |
 | 3 | **`fix/issue-43-rucm-redo` を push して PR を作る** | 作り直しの完了後 |

@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,11 +119,16 @@ type Tracker interface {
 	// 見るために渡す。**空文字なら投稿者を照合せず、印だけで判別する。**
 	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig, selfLogin string) ([]tracker.Comment, error)
 	// PostComment は continuo 自身のコメントを書く。
-	// **書くのは引き渡しの通知と、Status を動かした記録の2つだけである**（設計 3-29）。
+	// **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**
+	// （設計 3-29。Claude Code を閉じた記録は後者。設計 3-85）。成果の要約は書かない。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// FetchAllComments は issue のコメントを1件残らず取る（設計 3-77a）。
 	// **持ち回りの印が付いたコメントも落とさない。**担当の持ち回りの判定はこれを読む。
 	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, bool, error)
+	// FetchRelayComments は、人間のコメントを最初のメッセージに付けて渡すためにコメントを1件残らず取る
+	// （設計 3-85。issue #246）。**投稿者の立場と、隠されているかも取る**（relay 専用の問い合わせ）。
+	// 2つ目の戻り値は、ページ数の上限で古い側を読み切れなかったら true である。
+	FetchRelayComments(ctx context.Context, issueNodeID string) ([]tracker.Comment, bool, error)
 	// FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
 	// **担当者を書き足すにはノード ID が要る。**
 	FetchViewer(ctx context.Context) (tracker.Assignee, error)
@@ -132,6 +138,15 @@ type Tracker interface {
 	RemoveAssignees(ctx context.Context, issueNodeID string, assigneeIDs []string) ([]tracker.Assignee, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
+	// StatusOptionNames はカンバン側の Status の選択肢名を全部返す（設計 3-83）。
+	//
+	// **`tracker.direct_chat_state` がカンバンに在るかを、候補を取りに行く前に見るために要る。**
+	// **在らない名前を `FetchIssuesByStates` へ渡すと、その巡回の dispatch が丸ごと落ちる**
+	// （カンバンに無い Status 名は0件ではなくエラーとして返るため）。
+	//
+	// **Bootstrap を通す前は nil が返る。**そのときは「まだ分からない」として扱い、
+	// 候補の一覧へは足さない。
+	StatusOptionNames() []string
 }
 
 // HerdrClient は orchestrator が使う herdr の socket API の部分集合である。
@@ -142,9 +157,12 @@ type Tracker interface {
 type HerdrClient interface {
 	// PaneList は workspace の pane を引く（設計 3-16 の段8）。
 	PaneList(ctx context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error)
+	// WorkspaceList は workspace の一覧を引く（設計 3-83c の門4。worktree を開いている workspace を引く）。
+	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
 	// WorktreeOpen は既にある worktree を workspace として開く。
-	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
-	// 着手のときは workspace の Manager が開く。
+	// **orchestrator からは呼ばない。**`worktree.open` は、statusline取得の workspace が
+	// issue の親にされないよう loop を通すので、workspace の Manager からだけ呼ぶ（issue #284。
+	// 着手の段7 と片付け）。ここから直に呼ぶと loop の押さえを素通りする。
 	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
 	// PaneRename は pane の label に `owner/repo/issues/N` を書く（設計 3-3）。
 	// **人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
@@ -225,8 +243,13 @@ type Options struct {
 	Herdr HerdrClient
 	// Workspace は worktree の用意と片付けである。必須。
 	Workspace *workspace.Manager
-	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない（`none` と同じ動き）。
+	// RateLimit は usage APIの読み取りである（`rate_limit.source: oauth_usage_api`
+	// のとき。issue #284）。**nil なら usage API を読まない**（テストの多くは渡さない）。
 	RateLimit *ratelimit.Reader
+	// StatuslineSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。
+	// issue ごとの設定ファイルと statusline取得用の設定ファイルの `statusLine` に埋め込む。
+	// **空なら statusLine を書かず、statusline取得も開かない**（テストの多くは渡さない）。
+	StatuslineSocketPath string
 	// HookSocketPath は hook を受ける socket の絶対パスである（設定ファイルに埋め込む）。必須。
 	HookSocketPath string
 	// ContinuoPath は `continuo hook` を起動する実行ファイルの絶対パスである。
@@ -267,15 +290,24 @@ type Orchestrator struct {
 	tracker         Tracker
 	herdr           HerdrClient
 	ws              *workspace.Manager
-	rl              *ratelimit.Reader
-	socketPath      string
-	runtimeDir      string
-	continuoPath    string
-	transcriptRoot  string
-	logger          *slog.Logger
-	now             func() time.Time
-	newSessionUUID  func() (string, error)
-	ghAuthCheck     GHAuthCheckFunc
+	// rl は usage API の読み取りである（issue #284）。nil なら読まない。
+	rl *ratelimit.Reader
+	// relayTimeout は、最初のメッセージの直前にコメントを読む処理全体の期限である（設計 3-85）。
+	// **0 以下なら relayFetchTimeout（60秒）を使う。**テストが短く差し替える。
+	relayTimeout time.Duration
+	// slSocketPath は使用率を受ける socket（sl.sock）の絶対パスである（issue #284）。空なら使わない。
+	slSocketPath string
+	// slDisabled は statusline を使えなくした印である（sl.sock を開けなかったとき。DisableStatusline）。
+	// **立っていれば statusLine を書かず、statusline取得も開かない**（issue #284）。
+	slDisabled     atomic.Bool
+	socketPath     string
+	runtimeDir     string
+	continuoPath   string
+	transcriptRoot string
+	logger         *slog.Logger
+	now            func() time.Time
+	newSessionUUID func() (string, error)
+	ghAuthCheck    GHAuthCheckFunc
 	// ghLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	ghLogin tracker.GHLoginFunc
 	// ghLoginAttemptMu は取得そのものを1本に絞る。**外部プロセスを同時に何本も起こさない。**
@@ -337,7 +369,22 @@ type Orchestrator struct {
 	// 保存したまま席を立つと、同じ WARN が永久に流れる。
 	reloadNote string
 
-	// mu は runs / sessions / notified / tickCount / quota を守る。
+	// quotaMu は使用率の保管値（quota）を守る（issue #284。quota.go）。
+	// **mu とは別にする。**hook の受け取りと錠を取り合わない。錠の順は mu → quotaMu と、
+	// quotaWriteMu → quotaMu だけである。
+	quotaMu sync.Mutex
+	// quota は使用率の保管値である。
+	quota quotaStore
+	// quotaWriteMu は quota.json の書き込みを1本にする（最後に書かれるのが最新の写しになる）。
+	quotaWriteMu sync.Mutex
+	// quotaPath は quota.json の絶対パスである。空なら置かない。
+	quotaPath string
+	// statuslineNotify は、statusline取得で値が届いたことを巡回のループへ知らせる（容量1）。
+	statuslineNotify chan struct{}
+	// fetchListMu は statusline取得の閉じ残しの一覧の読み書きを1本にする。
+	fetchListMu sync.Mutex
+
+	// mu は runs / sessions / notified / tickCount を守る。
 	mu sync.Mutex
 	// runs は「自分が取った」印であり「実行中の一覧」でもある（設計 3-10 / 3-25）。
 	// キーは project item の ID。
@@ -367,19 +414,56 @@ type Orchestrator struct {
 	// 「同じ理由で必ず失敗する issue」を次の巡回が0回目として拾い直してしまう。
 	// **永続化はしない**（再起動したら数え直す。設計の方針）。
 	failures map[string]*failureNote
+	// tokenTotals は run をまたぐトークンの累計である（issue #238）。**mu が守る。**
+	//
+	// **「この continuo が起動してから、turn の終わりに読み取った transcript の合計」である。**
+	// **引き継いだ run（`Adopt`）では、起動より前に書かれた分も含む。**
+	// **走行中の turn の分はまだ入っていない**（集計は turn の終わりにしか走らない）。
+	// **メモリだけに持つ。**再起動すると0へ戻る。
+	//
+	// **`runs` に相乗りできない。**印は run が終わると `release` で消え、そのトークンも
+	// 一緒に消える。**そのため、いままで画面の合計は「いま走っている run」だけを足していた。**
+	// 作りは docs/plans/impl/09_dashboard.md の「run をまたぐ累計」にある。
+	tokenTotals TokenUsage
+	// tokenLedger は「最後に累計へ計上した内容」である（issue #238）。**mu が守る。**
+	// **キーは issue の識別子（`<owner>/<repo>#<番号>`）である。project item の ID ではない。**
+	//
+	// **item の ID にすると、ボードから外して載せ直したときに鍵が変わりうる。**
+	// continuo 自身が「続きを進めたいならカンバンへ戻してください。worktree は残してあります」と
+	// 案内している（lifecycle.go の `noteMissingItem`）ので、その操作は起きる。
+	// **鍵が変われば台帳の項目が孤児になり、同じ transcript が最初から全部足される。**
+	//
+	// **`release` では消さない。**引き渡しのあと同じセッションへ `--resume` で復帰する経路が
+	// あり、消すと二重に数える。**消すのは worktree を消したときだけである**
+	// （`forgetTokenLedger`）。**したがって上限は無い。**worktree を消さずに手放した issue
+	// （引き渡し・失敗）の数だけ増える。1件あたりは識別子とパスの文字列2本と int 5本である。
+	tokenLedger map[string]tokenLedgerEntry
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
-	// quota は最後に読んだ枠の状態である。nil なら読めていない。
-	quota *ratelimit.Snapshot
-	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
-	quotaFetchedAt time.Time
-	// quotaStale は、最後に試した枠の読み取りが失敗したかである（設計 3-77）。
+	// directChatMissingNoted は「tracker.direct_chat_state の選択肢がカンバンに無い」を
+	// 既に知らせたかどうかである（設計 3-83）。**1回だけ出す。**
+	// 選択肢は人間がカンバンを触ったときにしか増えないので、毎巡回で言い直す意味が無い。
+	directChatMissingNoted bool
+	// closeSet は「agent 名を問わず閉じる worktree の集合」である（設計 3-83f の表の最後から2行目）。
+	// **キーは project item の ID、値はその worktree の絶対パス。mu が守る。メモリだけに持つ。**
 	//
-	// **失敗したら写しを使わせない。**資格情報が切れた機械は、切れる直前の
-	// 「使用率 5%」を1日中返し続ける。**入札はそれを「いちばん暇な機械」と読み、
-	// 正直に読めている機械に必ず勝つ。**
-	// **「読めなかったら入札しない」を、初回だけでなく常に効かせる。**
-	quotaStale bool
+	// **入れるのは3つである。**復元で取り直しに失敗した worktree・復元で herdr の一覧を
+	// 取れなかった worktree・`reconcileWorktrees` が見たときに印を持たずに Status が
+	// `direct_chat_state` だった worktree。
+	// **入れないと、**取り残しの処理（3-9 の手順7b）は agent 名の無い pane を飛ばすので、
+	// 戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の
+	// 入力欄へ `claude --resume …` を送る。
+	closeSet map[string]string
+	// directChatSetupFailures は、direct chat の用意（設計 3-83d の用意の段2）が落ちた記録である
+	// （キーは project item の ID。**mu が守る。メモリだけに持つ**）。
+	//
+	// **通常の着手の失敗の記録（`failures`）とは混ぜない。**混ぜると、通常の着手で失敗が積もった
+	// issue（人間がまさに引き取りたいもの）が、用意の1回の失敗で上限を超えて `failure_state` へ落ちる。
+	directChatSetupFailures map[string]*directChatSetupFailure
+	// directChatAssigneeWriting は、担当者が1人ではない direct chat のカードへ書く経路（設計 3-83h）が
+	// 走っている最中の issue の集合である（キーは project item の ID。**mu が守る。メモリだけに持つ**）。
+	// **立っているあいだは次の書き込みを立てない**（2本が並ぶと、コメントが2件付きうる）。
+	directChatAssigneeWriting map[string]bool
 	// viewer はいま使っているトークンの持ち主である（設計 3-77b）。
 	//
 	// **一度取れたら取り直さない。**持ち主が変わるのは `gh auth switch` を人間が
@@ -409,7 +493,7 @@ type Orchestrator struct {
 
 // New は Orchestrator を組み立てる。
 //
-// opts: 設定・トラッカー・herdr・workspace・枠の読み取り・socket のパス・ログ。
+// opts: 設定・トラッカー・herdr・workspace・socket のパス・ログ。
 // 戻り値: 組み立てた Orchestrator。Tracker / Herdr / Workspace が nil の場合、
 // **Config に Status 名が1つも無い場合**、HookSocketPath が空または絶対パスでない場合、
 // `continuo` の実行ファイルの場所を決められない場合はエラーを返す。
@@ -435,7 +519,13 @@ func New(opts Options) (*Orchestrator, error) {
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
 	knownStateNames := config.KnownStates(opts.Config.Tracker)
-	if len(knownStateNames) == 0 {
+	// **門は `RequiredBoardStates` で数える**（設計 3-83）。
+	//
+	// **`KnownStates` で数えてはならない。**`tracker.direct_chat_state` の既定は
+	// `"Direct Chat"` なので、他の Status を全部空にした設定でも1件返ってしまい、
+	// **この門が二度と発火しない。**`RequiredBoardStates` はそこから direct chat だけを
+	// 差し引くので、「continuo が実際に動かす Status」の件数になる。
+	if len(config.RequiredBoardStates(opts.Config.Tracker)) == 0 {
 		return nil, errors.New(
 			"continuo が扱う Status が1つも設定されていません（Config）" +
 				"（WORKFLOW.md の tracker.active_states / terminal_states / running_state / " +
@@ -502,6 +592,7 @@ func New(opts Options) (*Orchestrator, error) {
 		herdr:           opts.Herdr,
 		ws:              opts.Workspace,
 		rl:              opts.RateLimit,
+		slSocketPath:    opts.StatuslineSocketPath,
 		socketPath:      opts.HookSocketPath,
 		runtimeDir:      filepath.Dir(opts.HookSocketPath),
 		continuoPath:    continuoPath,
@@ -518,14 +609,47 @@ func New(opts Options) (*Orchestrator, error) {
 		knownStateNames: knownStateNames,
 		configPath:      configPath,
 
-		runs:           map[string]*runState{},
-		sessions:       map[string]*runState{},
-		notified:       map[string]time.Time{},
-		labelSkipped:   map[string]struct{}{},
-		gated:          map[string]*gateNote{},
-		failures:       map[string]*failureNote{},
-		shutdown:       shutdown,
-		shutdownCancel: shutdownCancel,
+		runs:         map[string]*runState{},
+		sessions:     map[string]*runState{},
+		notified:     map[string]time.Time{},
+		labelSkipped: map[string]struct{}{},
+		gated:        map[string]*gateNote{},
+		failures:     map[string]*failureNote{},
+		tokenLedger:  map[string]tokenLedgerEntry{},
+		closeSet:     map[string]string{},
+		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-83d）。
+		directChatSetupFailures: map[string]*directChatSetupFailure{},
+		// **担当者の人数による書き込みの番**（設計 3-83h）。
+		directChatAssigneeWriting: map[string]bool{},
+		shutdown:                  shutdown,
+		shutdownCancel:            shutdownCancel,
+
+		quota:            newQuotaStore(),
+		statuslineNotify: make(chan struct{}, 1),
+	}
+	// **quota.json は実行時ディレクトリに置く**（issue #284）。使用率を読む設定（`none` 以外）のときだけ。
+	if opts.Config.RateLimit.Source != ratelimit.SourceNone && opts.HookSocketPath != "" {
+		orc.quotaPath = filepath.Join(orc.runtimeDir, quotaFileName)
+	}
+	// **`oauth_usage_api` で refresh_interval_ms が polling.interval_ms 以下なら、起動時に1回だけ知らせる**
+	// （issue #284）。起動は止めず、polling.interval_ms の2倍として扱う（quotaRefreshInterval）。
+	// **設定の読み直しでは出さない**（rate_limit は読み直さない）。
+	if rl := opts.Config.RateLimit; rl.Source == ratelimit.SourceOAuthUsageAPI &&
+		rl.RefreshIntervalMs <= opts.Config.Polling.IntervalMs {
+		logger.Warn("rate_limit.refresh_interval_ms が polling.interval_ms 以下なので、polling.interval_ms の2倍として扱います"+
+			"（短いと、usage API が読めないあいだ巡回のたびに statusline取得が走ります）。refresh_interval_ms を polling.interval_ms より長くしてください",
+			"rate_limit.refresh_interval_ms", rl.RefreshIntervalMs,
+			"polling.interval_ms", opts.Config.Polling.IntervalMs,
+			"扱う値_ms", 2*opts.Config.Polling.IntervalMs)
+	}
+	// **relay を選んでいるのに self_marker が空なら、起動時に1回だけ知らせる**（設計 3-85。issue #246）。
+	// 空だと continuo 自身の「Status を動かしました」などに目印が付かず、人間のコメントとして
+	// 渡ってしまうので、relay は効かない（`relayEnabled`）。起動は止めない。
+	if relayRequestedWithoutSelfMarker(opts.Config) {
+		logger.Warn("tracker.comments.self_marker が空なので、人間のコメントを最初のメッセージに付けて渡す機能"+
+			"（agent.relay_trusted_comments）は効きません。使うなら self_marker に目印を書いてください",
+			"agent.relay_trusted_comments", opts.Config.Agent.RelayTrustedComments,
+			"claude.permission_mode", opts.Config.Claude.PermissionMode)
 	}
 	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
 	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
@@ -571,14 +695,44 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// **巡回を呼ぶのはこの goroutine だけである**（起動直後の1回も同じ goroutine）。
+	// 2つの巡回が同時に走ることは無い。
+	o.drainStatuslineNotify()
 	o.Tick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			// **巡回を回す前に知らせを空にする。**巡回より前に溜まった知らせは、この巡回1回に
+			// 畳まれる。巡回の途中に届いた知らせは残るので、巡回のあとにもう1回回る。
+			o.drainStatuslineNotify()
 			o.Tick(ctx)
+		case <-o.statuslineNotify:
+			// **statusline取得で値が届いた。巡回を1回すぐ回して入札する**（issue #284）。
+			// 巡回のあとで30秒の刻みを数え直す（直後にふだんの巡回が続けて回らないように）。
+			// **刻みで回した巡回のあとは数え直さない**（巡回の間隔は今と同じ）。
+			o.drainStatuslineNotify()
+			o.Tick(ctx)
+			ticker.Reset(interval)
 		}
+	}
+}
+
+// drainStatuslineNotify は、溜まっている statusline取得の知らせを捨てる。
+func (o *Orchestrator) drainStatuslineNotify() {
+	select {
+	case <-o.statuslineNotify:
+	default:
+	}
+}
+
+// notifyStatusline は、statusline取得で値が届いたことを巡回のループへ知らせる。
+// **容量1で、置いてあれば足さない。**知らせが巡回の途中に何度届いても、巡回のあとに1回だけ回る。
+func (o *Orchestrator) notifyStatusline() {
+	select {
+	case o.statuslineNotify <- struct{}{}:
+	default:
 	}
 }
 
@@ -603,7 +757,8 @@ func (o *Orchestrator) Close() {
 //     （**バックオフ明けの再 dispatch より前。**再 dispatch も段0 から入り直す dispatch
 //     なので、検査に落ちた巡回では見送る）
 //  2. バックオフが明けた run を拾う（**候補の取得より前。**空きスロットの計算に効く）
-//  3. 枠を読む（poll_interval_ms に1回。`rate_limit.source: none` なら1回も叩かない）
+//  3. usage API で使用率を読む（`source: oauth_usage_api` のとき、次に試してよい時刻を過ぎていれば。
+//     issue #284。pollAPI）。ステータスラインから届いた値は受け口が保管値へ入れる
 //  4. 候補を取る                 ← 巡回の GraphQL リクエスト 1本目
 //  5. 実行中の Status を照合する  ← 2本目
 //  6. worktree を照合する         ← 3本目
@@ -632,9 +787,9 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	dispatchAllowed := o.verifyPeriodically(ctx, tick)
 
 	o.resumeBackoff(ctx, dispatchAllowed)
-	o.pollQuota(ctx)
+	o.pollAPI(ctx)
 
-	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.cfg.Tracker.ActiveStates)
+	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.candidateStates())
 	if err != nil {
 		o.logger.Warn("候補の取得に失敗しました（この巡回の dispatch は行いません）", "error", err)
 		dispatchAllowed = false
@@ -651,10 +806,81 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	o.checkStalls(ctx)
 
 	if dispatchAllowed {
-		o.dispatchCandidates(ctx, candidates)
+		// **候補を2つに分ける**（設計 3-83b）。direct chat の候補は専用の1パスへ回し、
+		// `dispatchCandidates` へは1件も渡さない（あちらに direct chat の分岐を1つも持たせない）。
+		//
+		// **direct chat のパスを先に走らせる。**両方が `agent.max_concurrent_agents` の同じ枠を取るので、
+		// 後にすると、通常の候補が枠を埋めた巡回では、人間が名指しで頼んだ pane が1つもできない。
+		// **これは「返ってきた配列の順序をそのまま使う」（設計 4-2）の例外である。**
+		//
+		// **このパスも `dispatchAllowed` が真のときだけ走らせる。**この判断に例外を作らない（設計 3-83b）。
+		directChat, others := o.splitDirectChatCandidates(candidates)
+		o.prepareDirectChatPanes(ctx, directChat)
+		o.dispatchCandidates(ctx, others)
 	}
 
 	o.wakeRuns(ctx)
+
+	// **巡回の最後に、statusline取得の要否を判定する**（issue #284。statuslinefetch.go）。
+	// 巡回の中で値を待たない。待つあいだ、止まった run の検知・ほかの issue の着手が止まる。
+	o.maybeStartStatuslineFetch(ctx)
+}
+
+// candidateStates は、この巡回で候補として取りに行く Status 名を返す（設計 3-83）。
+//
+//	tracker.active_states                    … 常に入る
+//	tracker.direct_chat_state                … **カンバンに選択肢が実在するときだけ入る**
+//
+// **実在を確かめずに足してはならない。**`FetchIssuesByStates` は、カンバンに無い Status 名を
+// 渡されると0件ではなくエラーを返す（`tracker.verifyKnownStates`）。**そのエラーは
+// 候補の取得そのものを失敗させ、その巡回の dispatch を丸ごと飛ばす。**
+// 既定が `"Direct Chat"` である以上、選択肢をまだ作っていない利用者は
+// **起動はできるのに1件も着手されない continuo を手に入れることになる。**
+//
+// **選択肢がまだ読めていないとき（`Bootstrap` の前）も足さない。**
+// 分からないものを足すのは、無いものを足すのと同じ結果になる。
+//
+// **足せなかったことは1回だけ知らせる。**毎巡回で出すと、この機能を使わない利用者の
+// ログが30秒ごとに1行ずつ埋まる。
+//
+// 戻り値: `FetchIssuesByStates` へ渡す Status 名の一覧。
+func (o *Orchestrator) candidateStates() []string {
+	want := strings.TrimSpace(o.cfg.Tracker.DirectChatState)
+	if want == "" {
+		return o.cfg.Tracker.ActiveStates
+	}
+	options := o.tracker.StatusOptionNames()
+	if !containsFold(options, want) {
+		// **選択肢がまだ読めていないのか、本当に無いのかは、ここでは区別しない。**
+		// どちらでも「足さない」が正しい。
+		if len(options) > 0 && o.noteDirectChatMissing() {
+			o.logger.Warn("tracker.direct_chat_state の Status がカンバンにありません（direct chat は使えません。"+
+				"使うなら GitHub の画面で Status の選択肢を1つ足してください。API で足すと設定済みの Status が全部消えます）",
+				"direct_chat_state", want,
+				"カンバンの選択肢", strings.Join(options, ", "))
+		}
+		return o.cfg.Tracker.ActiveStates
+	}
+	out := make([]string, 0, len(o.cfg.Tracker.ActiveStates)+1)
+	out = append(out, o.cfg.Tracker.ActiveStates...)
+	out = append(out, want)
+	return out
+}
+
+// noteDirectChatMissing は「direct chat の選択肢が無い」の警告を、まだ出していなければ真を返す。
+//
+// **1回だけ出すためだけのものである。**選択肢は人間がカンバンを触ったときにしか増えないので、
+// 増えたかどうかを毎巡回で言い直す必要が無い。
+//
+// 戻り値: この呼び出しで初めて印を立てたなら true。
+func (o *Orchestrator) noteDirectChatMissing() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.directChatMissingNoted {
+		return false
+	}
+	o.directChatMissingNoted = true
+	return true
 }
 
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
@@ -787,87 +1013,170 @@ func (o *Orchestrator) ghLoginName() string {
 	return o.selfLogin
 }
 
-// pollQuota は枠を読む（設計 3-27）。
+// DisableStatusline は statusline を使えなくする（issue #284）。
 //
-// **`rate_limit.source: none` なら1回も叩かない**（Reader.Enabled が偽になる）。
-// 読む間隔は `rate_limit.poll_interval_ms`（既定5分）である。
+// **daemon が sl.sock を開けなかったときに呼ぶ**（`source: oauth_usage_api` のときだけ。
+// `statusline` なら起動を止める）。立てたあとは、issue ごとの設定ファイルに statusLine を書かず、
+// statusline取得も開かない。**復元が設定ファイルを書く前に呼ぶこと。**
+func (o *Orchestrator) DisableStatusline() {
+	o.slDisabled.Store(true)
+}
+
+// apiMaxRetryAfter は Retry-After に掛ける上限である（issue #284）。
 //
-// ctx: 呼び出しに適用するコンテキスト。
-func (o *Orchestrator) pollQuota(ctx context.Context) {
-	if o.rl == nil || !o.rl.Enabled() {
+// **これより長い値は、この長さに丸める。**壊れた値や極端な値で、usage API を何日も試さなく
+// ならないようにする。
+const apiMaxRetryAfter = 24 * time.Hour
+
+// pollAPI は usage API で使用率を読む（`rate_limit.source: oauth_usage_api` のとき。issue #284）。
+//
+// **巡回の中で同期で叩く**（錠の外。全体の上限は30秒。ba24db63 までと同じ）。読めた値は
+// OnAPISnapshot が保管値の錠の下で入れる。次に試してよい時刻・切り替え・恒久的な失敗で
+// 諦めた印は、保管値の錠の下で持つ。
+//
+//	読めた（200 で session か weekly_all が1件以上）… 次は poll_interval_ms のあと。切り替えを解く
+//	トークンが恒久的に読めない … 切り替える。立て直すまで usage API を試さない
+//	トークンが一時的に読めない … 切り替える。次は poll_interval_ms のあと
+//	401 / 403                  … 切り替える。次は poll_interval_ms のあと（401 は一時的でもありうる）
+//	429 / 5xx / 通信の失敗 / session も weekly_all も無い 200 … 切り替える。
+//	                             次は max(poll_interval_ms, Retry-After) のあと（上限24時間）
+//
+// **止めるときの取り消しは先に判定する。**トークンでも HTTP でも、切り替えず WARN も出さない。
+// **WARN は切り替えた1回だけである**（恒久的な失敗へ変わったときはもう1回）。戻ったら INFO を1行。
+//
+// ctx: 巡回のコンテキスト。
+func (o *Orchestrator) pollAPI(ctx context.Context) {
+	if o.rl == nil || !o.rl.Enabled() || o.cfg.RateLimit.Source != ratelimit.SourceOAuthUsageAPI {
 		return
 	}
-	interval := time.Duration(o.cfg.RateLimit.PollIntervalMs) * time.Millisecond
 	now := o.now()
-
-	o.mu.Lock()
-	last := o.quotaFetchedAt
-	o.mu.Unlock()
-	if !last.IsZero() && interval > 0 && now.Sub(last) < interval {
+	o.quotaMu.Lock()
+	skip := o.quota.apiGaveUp || now.Before(o.quota.apiNextAt)
+	o.quotaMu.Unlock()
+	if skip {
 		return
 	}
 
 	snap, err := o.rl.Fetch(ctx)
-	if err != nil {
-		// **写しを古いままにしない**（設計 3-77）。入札は枠の写しで判定するので、
-		// **読めなくなった機械が、最後に読めた「暇な」値で入札し続ける。**
-		// **止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
-		// 最後に読めた値を使い続ける（読めないことを理由に走行中の run を捨てない）。
-		o.mu.Lock()
-		o.quotaStale = true
-		o.mu.Unlock()
-		o.logger.Warn("枠の読み取りに失敗しました（読めるまで入札しません）", "error", err)
+	if ctx.Err() != nil {
+		// **止めるときの取り消しは、読めなかったことにしない。**
+		return
+	}
+	if err == nil && snap == nil {
+		return
+	}
+	poll := o.apiPollInterval()
+	if err == nil {
+		o.OnAPISnapshot(snap)
+		now = o.now()
+		o.quotaMu.Lock()
+		wasSwitched := o.quota.apiSwitched
+		o.quota.apiSwitched = false
+		o.quota.apiLastOK = true
+		o.quota.apiNextAt = now.Add(poll)
+		o.quotaMu.Unlock()
+		if wasSwitched {
+			o.logger.Info("usage API で使用率を読めたので、statusline取得への切り替えを解きます")
+		}
 		return
 	}
 
-	o.mu.Lock()
-	o.quotaFetchedAt = now
-	o.quotaStale = false
-	if snap != nil {
-		o.quota = snap
+	wait := poll
+	var credErr *ratelimit.CredentialError
+	var limited *ratelimit.RateLimitedError
+	permanent := false
+	switch {
+	case errors.As(err, &credErr):
+		permanent = credErr.Permanent
+	case errors.As(err, &limited):
+		ra := limited.RetryAfter
+		if !limited.RetryAt.IsZero() {
+			ra = limited.RetryAt.Sub(o.now())
+		}
+		if ra > apiMaxRetryAfter {
+			ra = apiMaxRetryAfter
+		}
+		if ra > wait {
+			wait = ra
+		}
 	}
-	o.mu.Unlock()
+	now = o.now()
+	o.quotaMu.Lock()
+	wasSwitched := o.quota.apiSwitched
+	wasGaveUp := o.quota.apiGaveUp
+	o.quota.apiSwitched = true
+	o.quota.apiLastOK = false
+	o.quota.apiNextAt = now.Add(wait)
+	if permanent {
+		o.quota.apiGaveUp = true
+	}
+	o.quotaMu.Unlock()
+
+	if wasSwitched && (!permanent || wasGaveUp) {
+		o.logger.Debug("usage API で使用率を読めません（statusline取得へ切り替えたままです）",
+			"error", err, "next_attempt_at", now.Add(wait))
+		return
+	}
+	o.warnAPISwitched(err, credErr, permanent, now.Add(wait))
 }
 
-// quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77）。
+// warnAPISwitched は、usage API から statusline取得へ切り替えたことを WARN で1回知らせる（issue #284）。
 //
-// **最後の読み取りに失敗していたら nil を返す。**`handoff.Evaluate` は nil を
-// 「枠を読めなかった」と読み、**入札そのものを取りやめる。**
-// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
-// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
+// **Keychain の案内は、トークンの読み取りの失敗（恒久的・一時的）の WARN だけに出す。**
 //
-// 戻り値: 枠の状態。読めていない・最後の読み取りに失敗していれば nil。
-func (o *Orchestrator) quotaForBid() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.quotaStale {
-		return nil
+// err: usage API の誤り。
+// credErr: トークンの読み取りの失敗なら、その誤り（それ以外は nil）。
+// permanent: 恒久的な失敗か。
+// next: 次に試す時刻。
+func (o *Orchestrator) warnAPISwitched(err error, credErr *ratelimit.CredentialError, permanent bool, next time.Time) {
+	var why string
+	var statusErr *ratelimit.StatusError
+	keychain := o.cfg.RateLimit.TokenSource == ratelimit.TokenSourceKeychain
+	switch {
+	case credErr != nil && permanent:
+		why = "usage API のトークンを読めないので、continuo を立て直すまで usage API を試しません。" +
+			"rate_limit.token_source と rate_limit.token_env を確かめてください。" +
+			"API キーで Claude Code を使っているなら rate_limit.source を none にしてください"
+		if keychain {
+			why += "。macOS の Keychain から読むなら、continuo allow-keychain-access を1回実行して「常に許可」を選んでから立て直してください"
+		}
+	case credErr != nil:
+		why = "usage API のトークンを期限内に読めませんでした（Keychain の確認のダイアログに誰も答えていないかもしれません）。" +
+			"rate_limit.poll_interval_ms のあとに試し直します"
+		if keychain {
+			why += "。continuo allow-keychain-access を1回実行して「常に許可」を選ぶと、ダイアログは出なくなります"
+		}
+	case errors.As(err, &statusErr) &&
+		(statusErr.StatusCode == http.StatusUnauthorized || statusErr.StatusCode == http.StatusForbidden):
+		why = "usage API が使用率を返しませんでした（401 はトークンの更新の途中など一時的なこともあります）。" +
+			"rate_limit.poll_interval_ms のあとに試し直します。API キーで Claude Code を使っているなら rate_limit.source を none にしてください"
+	default:
+		why = "usage API で使用率を読めません。次に試す時刻のあとに試し直します"
 	}
-	return o.quota
+	if o.statuslineUsable() {
+		o.logger.Warn("usage API から statusline取得へ切り替えます（"+why+"）",
+			"error", err, "next_attempt_at", next)
+		return
+	}
+	o.logger.Warn("usage API で使用率を読めず、statusline も使えないので、usage API が読めるまで新しい値が入りません"+
+		"（値が古くなると入札を見送ります。"+why+"）",
+		"error", err, "next_attempt_at", next)
 }
 
-// quotaSnapshot は最後に読んだ枠の状態を返す。
+// **`dispatchPaused` は消えた**（人間の決定。2026-09-06。issue #173）。
 //
-// 戻り値: 枠の状態。読めていなければ nil。
-func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.quota
-}
-
-// dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。
+// **`rate_limit.pause_above_percent` を超えたら、この巡回の dispatch を丸ごとやめる段だった。**
+// **消した理由は3つある。**
 //
-// **これは「枠待ち」とは別の判定である。**閾値（既定95%）を超えただけでは枠待ちとみなさない。
-// 走行中の turn は止めないし、時計も止めない。
+//	一、余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。
+//	    既定（マージン10）では、担当者のいない issue には余裕値が先に効く。あちら（96から）が効いていたのは、
+//	    担当が自分の issue の着手だけである。消したので、96以上でも担当が自分の issue は着手する
+//	二、丸ごとやめると、`handoffGate` の中にある「期限切れの担当を外す」経路も通らない。
+//	    詰まったカンバンを誰も解けなくなる
+//	三、マージンは5時間と1週間で別々に持てる。あちらは全部の枠の最大値ひとつでしか判定できない
 //
-// 戻り値: 新規の dispatch を止めるべきなら true。
-func (o *Orchestrator) dispatchPaused() bool {
-	snap := o.quotaSnapshot()
-	if snap == nil {
-		return false
-	}
-	return snap.MaxPercent() > o.cfg.RateLimit.PauseAbovePercent
-}
+// **止めるのは `handoffGate` の中の余裕値の判定だけになった。**issue ごとに落とすので、
+// **巡回のループは最後まで回る。**
 
 // wakeRuns は turn ループの goroutine を必要な run について起こす（設計 3-8 / 3-4 の段5a2・段5c）。
 //
@@ -885,6 +1194,34 @@ func (o *Orchestrator) dispatchPaused() bool {
 func (o *Orchestrator) wakeRuns(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		if rs.isFinished() {
+			continue
+		}
+		// **人間が引き取っている run は起こさない**（設計 3-83）。
+		//
+		// **担当の確認より前に置くことが要である。**あとに置くと、
+		// `handoffLostOnResume` が「担当が自分でない」と判定した瞬間に
+		// `stopBecauseHandoffLost` が走る。**人間がチャットしながら自分を
+		// 担当者に付けるのは普通の操作であり、そこで画面が消える。**
+		//
+		// **印だけでなく、控えの Status でも見る**（`cardInDirectChat`）。印を立てるのは巡回の段1 なので、
+		// turn の終わりが控えを `direct_chat_state` にしたあと、段1 が印を立てる前に送る印を読むと、
+		// **カンバンでは Direct Chat のまま人間の pane へ続きの指示が届く**（巡回の取り直しが失敗した・
+		// 巡回の途中で turn が終わった）。**送る印は下ろさない。**作業中へ戻した巡回で
+		// `reconcileRunning` が控えを上書きすれば、ここで送られる。
+		if rs.inDirectChatMode() || o.cardInDirectChat(rs) {
+			continue
+		}
+		// **direct chat の pane を用意している最中の run も起こさない**（設計 3-83d の用意の段2）。
+		// 送るか下ろすかは用意の段3 が決める。**ここで担当を確かめ直すと、用意の段2 が使っている
+		// pane を `stopBecauseHandoffLost` が閉じうる。**
+		if rs.isPreparing() {
+			continue
+		}
+		// **終わらせる処理が走っている run も起こさない**（設計 3-83f）。turn の終わりが direct chat を見て
+		// 送る印を立てたあと、巡回より先に人間が `Done` などへ動かすと、印が残ったまま終わらせる処理が始まる。
+		// 起こすと、終わらせる処理（成果のコメントの確認・`after_run`・`pane.close`）と並んで続きの指示が届く。
+		// **担当の確認より前に置く。**終わらせている run で `stopBecauseHandoffLost` を走らせないためである。
+		if rs.isTerminating() {
 			continue
 		}
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
@@ -962,6 +1299,105 @@ func (o *Orchestrator) release(rs *runState) {
 	}
 }
 
+// tokenLedgerEntry は、1つの issue について最後に累計へ計上した内容である（issue #238）。
+//
+// **パスと絶対値を対で持つ。**`ReadTranscript` が返すのは「その transcript 1ファイルの
+// 絶対値」なので、**どのファイルから読んだ値なのかが分からないと差分を取れない。**
+type tokenLedgerEntry struct {
+	// session は最後に計上した transcript のセッション UUID である。
+	//
+	// **パスではなくセッション UUID にする。**transcript のファイル名はセッション UUID で、
+	// **`--resume` で復帰しても同じファイルのままである**（設計 3-3b の実測）。
+	// **hook が名乗る `transcript_path` は使わない。**あれはエージェントが書き換えられる
+	// 外部入力で（`hookinput.go` の「hook の中身はエージェントが書き換えられる外部入力である」）、
+	// **毎 turn 違うファイル名を名乗るだけで、同じ中身を何度でも新しい鍵として全額計上させられる。**
+	// **セッション UUID は continuo が `newSessionUUID` で採るか、pane から読んだ値である。**
+	session string
+	// usage は session の transcript について、ここまで累計へ計上した合計である。
+	//
+	// **「最後に読んだ絶対値」ではない。**丸めが起きたときは、項目ごとに大きいほうを残す
+	// （`addTokenUsage`）。**残さないと、次に伸びたときに丸めたぶんを二重に足す。**
+	usage TokenUsage
+}
+
+// addTokenUsage は、transcript から読み取った絶対値を run をまたぐ累計へ差分で足し、
+// あわせて run ごとの値も更新する（issue #238）。
+//
+// **`SPEC.md` 13.5 が「絶対値の合計を扱うときは、二重計上を避けるため、最後に報告した
+// 合計との差分を追うこと」と求めている。**`usage` は turn を重ねるたびに単調に増えるので、
+// **そのまま毎回足すと、10 turn 回った run は10回ぶん足される。**
+//
+// **累計と run ごとの値を、1つの `o.mu` の区間で書く。**
+// **分けて書くと、その隙間にダッシュボードが両方を読み切ったときに
+// 「累計が走行中の run の合計より小さい」写しができる。**
+// **1つにまとめれば、どの瞬間を切り取っても累計のほうが大きいか等しい。**
+// `rs.setTokens` は中で `rs.mu` を取るが、**このリポジトリの順序は `o.mu` → `rs.mu` なので
+// 入れ子にしてよい**（`RunViews` が `o.mu` の中で `rs.snapshot()` を呼ぶのと同じ形である）。
+//
+// **絶対条件: `rs.mu` を持ったまま呼んではならない。**逆向きの入れ子ができ、
+// **ダッシュボードを開いた HTTP のハンドラと turn の終わりが噛み合うと continuo 全体が固まる。**
+// **巡回も turn ループも `o.mu` を通るので、固まったことは外から「無音」としてしか見えない。**
+//
+// **丸めたときは、台帳へ小さいほうを書かない。**項目ごとに大きいほうを残す
+// （`prev.usage.Add(delta)` は項目ごとの最大値になる）。
+// **小さいほうを書くと、次にファイルが伸びたときに丸めたぶんをもう一度足す。**
+//
+// rs: 対象の run（`setTokens` を呼ぶ相手）。
+// identifier: issue の識別子（`<owner>/<repo>#<番号>`）。**project item の ID ではない**
+// （`tokenLedger` のコメントを見よ）。
+// sessionUUID: `usage` を読み出した transcript のセッション UUID。
+// **呼ぶ側が、パスを写し取ったのと同じ `rs.mu` の区間で取ること。**
+// usage: その transcript 1ファイルから読んだ絶対値。
+// now: 集計した時刻。
+// 戻り値: 差分の1項目でも0へ丸めたら true（呼ぶ側が WARN を出す）。
+func (o *Orchestrator) addTokenUsage(
+	rs *runState, identifier, sessionUUID string, usage TokenUsage, now time.Time,
+) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delta, clamped := usage, false
+	counted := usage
+	if prev, ok := o.tokenLedger[identifier]; ok && prev.session == sessionUUID {
+		delta, clamped = usage.Sub(prev.usage)
+		// **項目ごとに大きいほうを残す。**`prev.usage + delta` がちょうどそれになる。
+		counted = prev.usage.Add(delta)
+	}
+	o.tokenTotals = o.tokenTotals.Add(delta)
+	o.tokenLedger[identifier] = tokenLedgerEntry{session: sessionUUID, usage: counted}
+	rs.setTokens(usage, now)
+	return clamped
+}
+
+// forgetTokenLedger は台帳からこの issue の項目を落とす（issue #238）。
+//
+// **worktree を消したときだけ呼ぶこと。**worktree が無ければ、同じセッションへ
+// `--resume` で復帰する道が無い（復帰の条件は身元ファイルの読み取りである）。
+// **worktree を残したまま落とすと、復帰した run が transcript 全体をもう一度計上する。**
+//
+// **累計（`tokenTotals`）は減らさない。**落とすのは「次に来る値との差分の相手」だけである。
+//
+// identifier: issue の識別子。
+func (o *Orchestrator) forgetTokenLedger(identifier string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.tokenLedger, identifier)
+}
+
+// TokenTotals は run をまたぐトークンの累計を返す（issue #238）。
+//
+// **ダッシュボード（第9段階）が読む。**判断には使わない。
+// 意味は `tokenTotals` のコメントにある。
+//
+// **`RunViews` より後に呼ぶこと。**累計は減らないので、この順序なら
+// 「累計が走行中の run の合計より小さい」写しは作れない（internal/server の `snapshot`）。
+//
+// 戻り値: 累計。
+func (o *Orchestrator) TokenTotals() TokenUsage {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.tokenTotals
+}
+
 // bindSession はセッション UUID から run を引ける状態にする。
 //
 // **hook はどの run のものかを session_id でしか名乗らない**（設計 3-2）。
@@ -1027,21 +1463,26 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	rs := newRunState(issue.ID, issue, now)
 	rs.AgentName = state.AgentName
 	rs.PaneID = state.PaneID
+	// **引き取った pane では Claude Code が起動済みである**（設計 3-83f。判断票6周目）。
+	rs.startedPaneID = state.PaneID
 	rs.SessionUUID = state.SessionUUID
 	rs.WorktreePath = state.WorktreePath
 	rs.Base = state.Base
 	rs.SettingsPath = state.SettingsPath
 	rs.HerdrWorkspaceID = state.HerdrWorkspaceID
-	// **引き継いだ pane の画面の版を種にする**（設計 3-21）。種を入れないと、
-	// 最初の stall の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.LastRevision = state.Revision
 	// 引き継いだ時刻を入れる（「この run が書いたコメント」の判別に使う。設計 3-25）。
 	rs.StartedAt = now
 	rs.NeedsPrompt = needsPrompt
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
+	// **direct chat の run は、印に入れたその場で direct chat へ入れる**（設計 3-83）。
+	// **入れないと、`reconcileWorktrees` が「取り残された worktree」として
+	// 人間の pane を閉じる隙間ができる**（巡回は `reconcileRunning` より先に
+	// この印を見る保証が無い）。
+	if state.DirectChat {
+		rs.enterDirectChatMode()
+	}
 	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
 	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
 	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
@@ -1074,17 +1515,19 @@ type AdoptedRun struct {
 	SettingsPath string
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	HerdrWorkspaceID string
-	// Revision は引き継いだ pane の画面の版である（`pane.list` が返す `revision`）。
-	//
-	// **stall の判定の種になる**（設計 3-21）。0 のままでも判定は動くが、
-	// 最初の判定が必ず「版が変わった」になるぶん、打ち切りが1周期ぶん遅れる。
-	Revision uint64
+	// **`Revision` は消えた**（issue #173。実装レビュー1周目の MEDIUM）。
+	// **引き継いだ pane の画面の版を種にしていたが、どの判定も読んでいなかった。**
 	// AwaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
 	//
 	// **`agent_status` が `working` の run を引き継ぐときに真にする**（設計 3-4 の段5a2）。
 	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
 	// 起きず、その run の `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	AwaitTurnEnd bool
+	// DirectChat は「direct chat の run として引き継ぐ」ことを表す（設計 3-83）。
+	//
+	// **真なら turn を1つも送らず、pane も閉じない。**`NeedsPrompt` とも
+	// `AwaitTurnEnd` とも同時に立てない。**指示を送るのは人間である。**
+	DirectChat bool
 }
 
 // OnHook は hookserver から hook を1件受け取る（hookserver.HookSink の実装）。
@@ -1136,6 +1579,20 @@ func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 	}
 
 	if !isTurnBoundaryHook(ev) {
+		return true
+	}
+	// **direct chat では受け口へ流さない**（設計 3-83）。
+	//
+	// **読む者が居ない。**turn ループはdirect chat では走らないので、流しても溜まるだけである。
+	// 受け口は256件で埋まり、**人間が話しかけるたびに「あふれたので捨てました」の WARN が
+	// 1行ずつ出てログが埋まる。**
+	//
+	// **捨てても turn の終わりの判定は壊れない。**`beginTurn` は turn を送る直前に
+	// `stopSeenAt` と `hookSeenThisTurn` を消し、受け口も空にする。**戻したあとの
+	// 1回目の判定は、人間が話していた間の hook を1件も見ない。**
+	if rs.inDirectChatMode() {
+		o.logger.Debug("人間が引き取っているので、turn の終わりの判定に使う hook は流しません",
+			"identifier", rs.issue().Identifier, "hook", ev.HookEventName)
 		return true
 	}
 	select {

@@ -170,12 +170,20 @@ func NewAdapter(
 
 // requiredStatesForBootstrap は「カンバンに実在しなければ起動を止める」Status 名を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
-// failure_state・status_signal_map の遷移先を含める
+// failure_state・direct_chat_state・status_signal_map の遷移先を含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
+// **`direct_chat_state` だけは入らない**（設計 3-83）。既定が `"Direct Chat"` なので、
+// 入れると**その選択肢をまだ作っていない全利用者の continuo が起動しなくなる。**
+// **止めてよい理由が、この Status には当てはまらない。**止めるのは
+// 「GraphQL がエラーを出さずに0件を返し続ける」ためだが、選択肢が無ければ
+// **そこへ遷移できる issue が存在しない。**黙って壊れる経路が無い。
+// **差し引くのは `config.RequiredBoardStates` の中である。**ここで自前に落とさない。
+//
+// **集めるのは `config` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
 // **実行時に「知っている Status か」を判定する一覧**（orchestrator の `knownStates`）
-// **とぴったり同じにする。**ずれると、起動時に通した設定が実行時には別の意味になる。
+// **とは、`direct_chat_state` の1件だけが違う。**それ以外がずれると、
+// 起動時に通した設定が実行時には別の意味になる。
 //
 // **`automated_state_rewrite` のキーは入れない**（設計 3-57）。
 // キーは定義上「continuo が知らない Status」であり、**カンバンに実在しなくてよい。**
@@ -187,7 +195,7 @@ func NewAdapter(
 // **戻す先（値）も足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
 // 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	return config.KnownStates(cfg)
+	return config.RequiredBoardStates(cfg)
 }
 
 // missingRewriteKeys は `tracker.automated_state_rewrite` のキーのうち、カンバンの Status の
@@ -1137,7 +1145,7 @@ func (a *Adapter) FetchComments(
 	keep := commentsPerFetch(cfg.Max)
 	// **切れたかどうかは捨てる。**この経路は `keep` で狙って打ち切るので、
 	// 「古い側を読み切れなかった」は最初から想定どおりである。
-	oldestFirst, _, err := a.fetchCommentNodes(ctx, issueNodeID, keep, keep)
+	oldestFirst, _, err := a.fetchCommentNodes(ctx, commentsQueryTemplate, issueNodeID, keep, keep)
 	if err != nil {
 		return nil, err
 	}
@@ -1173,8 +1181,9 @@ func (a *Adapter) FetchComments(
 
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
-// 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。
-// 成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
+// **continuo が書くコメントは、self_marker（空でないとき）か `<!-- continuo:` の印で始まる**
+// （設計 3-29。引き渡しの通知・Status を動かした記録・direct chat の案内・関門の案内・入札・
+// Claude Code を閉じた記録（設計 3-85）など）。成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。
 //
@@ -1235,7 +1244,32 @@ func (a *Adapter) FetchAllComments(
 	issueNodeID string,
 	_ config.TrackerProviderCommentsConfig,
 ) ([]Comment, bool, error) {
-	nodes, truncated, err := a.fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)
+	nodes, truncated, err := a.fetchCommentNodes(ctx, commentsQueryTemplate, issueNodeID, maxCommentsPerFetch, 0)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]Comment, 0, len(nodes))
+	for _, c := range nodes {
+		out = append(out, rawCommentToComment(c))
+	}
+	return out, truncated, nil
+}
+
+// FetchRelayComments は、人間のコメントを最初のメッセージに付けて渡す機能（relay。設計 3-85）の
+// ためにコメントを読む（issue #246）。
+//
+// **`FetchAllComments` と同じく1件も落とさずに読むが、問い合わせは relay 専用である**
+// （relayCommentsQueryTemplate）。投稿者の立場（`authorAssociation`）と、隠されているか
+// （`isMinimized`）を足して取る。**共用の問い合わせへ足してはならない**（持たない
+// GitHub Enterprise Server で、コメントの読み書きが全部落ちるため）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issueNodeID: 下敷きの GitHub issue のノード ID。
+// 戻り値の1つ目: 正規化したコメントの一覧（**古い順**）。IsAgent / IsSelf / MarkedByOther は立てない。
+// 戻り値の2つ目: **ページ数の上限で古い側を読み切れなかったら true**。落ちるのは更新日時の古い側だけである。
+// 戻り値の3つ目: エラー。
+func (a *Adapter) FetchRelayComments(ctx context.Context, issueNodeID string) ([]Comment, bool, error) {
+	nodes, truncated, err := a.fetchCommentNodes(ctx, relayCommentsQueryTemplate, issueNodeID, maxCommentsPerFetch, 0)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1297,7 +1331,13 @@ func keepNewestUnmarked(oldestFirst []rawComment, keep int) []rawComment {
 // **上限に達したら WARN を1行残す。**黙って途中で切ると、
 // 「hold が見えない＝人間が付けた担当」と読み違える。
 //
+// **問い合わせの文は引数で受ける**（issue #246）。relay は `authorAssociation` と
+// `isMinimized` を足した専用の問い合わせで同じページ送りを使う。共用の問い合わせへ項目を
+// 足すと、持たない GitHub Enterprise Server でコメントの読み書きが全部落ちるためである。
+//
 // ctx: 呼び出しに適用するコンテキスト。
+// query: 送る問い合わせ（`commentsQueryTemplate` か `relayCommentsQueryTemplate`）。
+// 変数（`issueId` / `first` / `after`）と応答の形は同じでなければならない。
 // issueNodeID: 下敷きの GitHub issue のノード ID。
 // perPage: 1ページで要求する件数（1 以上 maxCommentsPerFetch 以下）。
 // keep: 印の付いていないコメントがこれだけ揃ったら取るのをやめる。**0 以下なら全ページ取る。**
@@ -1307,6 +1347,7 @@ func keepNewestUnmarked(oldestFirst []rawComment, keep int) []rawComment {
 // 戻り値の3つ目: エラー。
 func (a *Adapter) fetchCommentNodes(
 	ctx context.Context,
+	query string,
 	issueNodeID string,
 	perPage int,
 	keep int,
@@ -1322,7 +1363,7 @@ func (a *Adapter) fetchCommentNodes(
 		if after != "" {
 			vars["after"] = after
 		}
-		if err := a.gql.do(ctx, commentsQueryTemplate, vars, &resp); err != nil {
+		if err := a.gql.do(ctx, query, vars, &resp); err != nil {
 			return nil, false, err
 		}
 		if resp.Node == nil || resp.Node.Comments == nil {
@@ -1469,7 +1510,10 @@ func (a *Adapter) changeAssignees(
 // **埋め戻すと、応答からフィールドが落ちたことに誰も気づけなくなる。**
 // 新しいほうを採るのは、判定する側（`handoff.CommentView.LastTouched`）の仕事である。
 func rawCommentToComment(c rawComment) Comment {
-	comment := Comment{ID: c.ID, URL: c.URL, Body: c.Body}
+	comment := Comment{
+		ID: c.ID, URL: c.URL, Body: c.Body,
+		AuthorAssociation: c.AuthorAssociation, IsMinimized: c.IsMinimized,
+	}
 	if c.CreatedAt != nil {
 		comment.CreatedAt = *c.CreatedAt
 	}

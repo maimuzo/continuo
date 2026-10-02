@@ -24,7 +24,8 @@
 //	自動化            … カンバンの自動化が有効なのに書き戻しの対応表が空でないか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
-//	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
+//	資格情報          … rate_limit.source が oauth_usage_api のとき、rate_limit の設定に応じて
+//	                   環境変数・ファイル・Keychain のいずれかから取れるか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 //
@@ -98,7 +99,7 @@ type Options struct {
 	// GhqList は `ghq list -p -e <owner>/<repo>` を実行する関数である。nil なら本物を実行する。
 	GhqList workspace.GhqListFunc
 	// LookupEnv は環境変数を引く関数である。nil なら os.LookupEnv を使う。
-	// **資格情報の検査（rate_limit.token_source が env のとき）が使う。**
+	// **資格情報の検査（rate_limit.token_source が env のとき）と Agent Teams の検査（agentteams.go）が使う。**
 	LookupEnv func(key string) (string, bool)
 	// LookPath は実行ファイルを PATH から探す関数である。nil なら exec.LookPath を使う。
 	//
@@ -253,7 +254,7 @@ func Run(ctx context.Context, opts Options) Report {
 	// **Bootstrap は「設定に書いた名前がカンバンに在るか」しか見ない。**カンバンに
 	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
 	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
-	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
+	report.add(checkStatusNames(cfg, opts.ConfigPath, boardStates, boardResult.Symbol))
 
 	// 段5c: 対応表のキー。**同じ応答を使い回すので、ここでもリクエストは増えない。**
 	// **起動時の警告（tracker の missingRewriteKeys）は doctor には出てこない。**

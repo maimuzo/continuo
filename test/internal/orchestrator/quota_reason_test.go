@@ -1,0 +1,289 @@
+// {"RUCM-CFG-SHA256": "28c7411d34dd0445e061bcaebcc7256bc7b7b1a7643cdff5ddbe6dcafe24fa44", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
+//
+// **入札の要る issue を取らないと決めたとき、その理由が既定のログの水準で出ることを検査する**
+// （issue #173）。**以前は `Debug` にしか出ておらず、既定（`--log-level info`）では1行も出なかった。**
+package orchestrator_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/ratelimit"
+)
+
+// **CFG のパスに対応づけない。**このユースケース記述は「走っている run が枠明けを待って
+// 再開するまで」を書いたもので、**新しい issue を取るかどうかの門は1段も持っていない。**
+// 対応づけると、無関係なパスに代表を立てたことになる。
+//
+// TestQuota_枠を読めなければ入札の要るissueには着手しない は、2つの門を1つに揃えたことを
+// 確かめる（設計 3-77j。issue #173）。
+//
+// 目的: **枠を読めないとき、入札は「黙る」、新規 dispatch は「止めない」で逆を向いていた。**
+// 入札が先に効くので後ろは一度も効かず、**ボードが1件も進まないのに出るのは `Debug` の1行だけ**
+// だった。**判定を1つに揃え、既定の水準で理由を出すことを示す。**
+//
+// 与える情報: usage API が 500 を返す（枠を読めない）。担当者のいない `Ready` の issue が1件。
+// 成功条件: その issue が dispatch されず、`Info` で理由が出ること。
+func TestQuota_枠を読めなければ入札の要るissueには着手しない(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_UNREADABLE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		// **ログを溜める。**止めた理由が既定の水準で出ることを検査する（issue #173）。
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(190, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#190" {
+			t.Fatalf("枠を読めないのに入札の要る issue へ着手している: %+v", v)
+		}
+	}
+	// **止まったことが人間に見えなければ、直したことにならない。**
+	got := fx.Logs.String()
+	// **同じ1行に INFO と文面の両方があることを見る**（実装レビュー2周目の LOW）。
+	// 別々に探すと、ほかの行の `level=INFO` で通ってしまう。
+	infoLine := false
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "level=INFO") && strings.Contains(line, "枠を読めないので") {
+			infoLine = true
+			break
+		}
+	}
+	if !infoLine {
+		t.Fatalf("止めた理由を INFO で出していない:\n%s", got)
+	}
+	// **直し方を取り違えさせない。**枠を読めないのは資格情報の話であって、
+	// **マージンをいくら下げても動き出さない。**
+	if !strings.Contains(got, "マージンを下げても動き出しません") {
+		t.Fatalf("枠を読めないときに、マージンでは直らないと書いていない:\n%s", got)
+	}
+}
+
+// TestQuota_枠を読めなくても自分が担当のissueには着手する は、巡回を打ち切っていないことを
+// 確かめる（設計 3-77j。issue #173）。
+//
+// 目的: **枠を読めないだけで巡回を打ち切ってはならない。**打ち切ると、
+// **この機械が既に担当者になっている issue まで着手されなくなる**（印が無いのでこの経路からしか
+// 拾えない）。**期限切れの担当を外す経路も通らない。**
+//
+// 与える情報: usage API が 500 を返す。**この機械（gh の持ち主）が担当者の `Ready` の issue が1件。**
+// 成功条件: その issue が dispatch されること。
+func TestQuota_枠を読めなくても自分が担当のissueには着手する(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_MINE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		// **ログを溜める。**止めた理由が既定の水準で出ることを検査する（issue #173）。
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(assignedIssue(191, "Ready", testGHLogin))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#191" {
+			return
+		}
+	}
+	t.Fatalf("既に自分が担当の issue にまで着手していない（枠を読めないだけで巡回を打ち切っている）:\n%s",
+		fx.Logs.String())
+}
+
+// TestQuota_枠が逼迫していても担当が自分のissueには着手する は、
+// 止める範囲が入札の要る issue だけであることを確かめる（設計 3-27。issue #173）。
+//
+// 目的: **巡回を丸ごと打ち切ってはならない。**
+// **以前は `rate_limit.pause_above_percent` を超えると `dispatchCandidates` が即 `return` していた。**
+// **その設定は消えた**（人間の決定。2026-09-06）。**打ち切ると、この機械が既に担当者に
+// なっている issue まで着手されなくなる**（印が無いのでこの経路からしか拾えない）。
+// **再起動で復元した run も拾えない**（`restart.orphan_running_action` の既定 `redispatch` は
+// 復元では何もせず、次の巡回に委ねる）。**`handoffGate` の中にある「期限切れの担当を外す」
+// 経路も通らなくなる**ので、詰まったカンバンを誰も解けない。
+//
+// 与える情報: 1回目は 99% を返し、2回目以降は 500 を返す usage API。
+// **この機械が担当者の `Ready` の issue が1件**（入札を要さない経路）。
+// 成功条件: その issue に着手すること。
+func TestQuota_枠が逼迫していても担当が自分のissueには着手する(t *testing.T) {
+	var reads atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if reads.Add(1) > 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		body := map[string]any{"limits": []map[string]any{
+			{"kind": "session", "percent": 99, "resets_at": nil, "severity": "normal"},
+		}}
+		if err := json.NewEncoder(w).Encode(body); err != nil {
+			t.Errorf("偽の usage API が応答を書けません: %v", err)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_STALE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		// **ログを溜める。**止めた理由が既定の水準で出ることを検査する（issue #173）。
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(assignedIssue(192, "Ready", testGHLogin))
+
+	// 1回目で 99% を読み、2回目からは読めなくなる。
+	fx.Orc.Tick(context.Background())
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#192" {
+			return
+		}
+	}
+	t.Fatalf("担当が自分の issue にまで着手していない（巡回を丸ごと打ち切っている）:\n%s",
+		fx.Logs.String())
+}
+
+// TestQuota_マージンが先に効いて止まり使用率と閾値が出る は、出す1行の中身を確かめる
+// （設計 3-77j。issue #173）。
+//
+// 目的: **新規着手が止まる使用率は `100 − マージン` である。**
+// マージン10なら **90% から**である（`rate_limit.pause_above_percent` は消えた。issue #173）。
+// **観測した使用率と、枠ごとの閾値の両方を出さないと、どちらの枠が原因かを読めない。**
+//
+// 与える情報: 1週間の枠が 92%。担当者のいない `Ready` の issue が1件。
+// 成功条件: dispatch されず、使用率と閾値が1行に出ること。
+func TestQuota_マージンが先に効いて止まり使用率と閾値が出る(t *testing.T) {
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 30, "resets_at": nil, "severity": "normal"},
+		{"kind": "weekly_all", "percent": 92, "resets_at": nil, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_MARGIN")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		// **ログを溜める。**止めた理由が既定の水準で出ることを検査する（issue #173）。
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Tracker.Provider.Handoff.FiveHourMarginPercent = 10
+			cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = 10
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(193, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#193" {
+			t.Fatalf("余裕値がマイナスなのに着手している: %+v", v)
+		}
+	}
+	got := fx.Logs.String()
+	for _, want := range []string{
+		"余裕値が0以下",
+		"1週間の枠の使用率=92",
+		"5時間の枠の使用率=30",
+		`1週間の枠の閾値="90% に達したら止まります"`,
+		`5時間の枠の閾値="90% に達したら止まります"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("1行に %q が入っていない:\n%s", want, got)
+		}
+	}
+}
+
+// TestQuota_枠を使い切っているときはquotaJSONを消す手順まで出す は、100% の機械への案内を確かめる
+// （issue #173。実装レビュー5周目の MEDIUM）。
+//
+// 目的: **使用率100 では、マージンをどう書いても動き出さない。**
+// マージンは 0〜99 に制限されているので（`internal/config/validate.go` の `validateHandoff`）、
+// **余裕値は `100 − 100 − マージン` で必ず0以下になる。**
+// **それなのに「2つのマージンを見てください」とだけ案内すると、
+// 利用者はマージンを触って、効かないまま原因を探し続ける。**
+//
+// **この案内は一度実際に失われている。**消した `rate_limit.pause_above_percent` の判定が
+// 持っていたものを、`logNewWorkBlocked` へ移し忘れていた（2026-09-29 に戻した）。
+// **検査が無いと、同じことがもう一度起きても誰も気づかない。**
+//
+// 与える情報: 5時間の枠が 100% で、リセットは2時間後。担当者のいない `Ready` の issue が1件。
+// 成功条件: 着手しないこと。**「マージンを下げても動き出しません」と
+// 「quota.json を消し」の両方が、同じ1行に出ること。**
+func TestQuota_枠を使い切っているときはquotaJSONを消す手順まで出す(t *testing.T) {
+	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+		{"kind": "weekly_all", "percent": 10, "resets_at": resetsAt, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_FULL_RETAKE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		Logs:      true,
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Tracker.Provider.Handoff.FiveHourMarginPercent = 10
+			cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = 10
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(194, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#194" {
+			t.Fatalf("枠を使い切っているのに着手している: %+v", v)
+		}
+	}
+	got := fx.Logs.String()
+	for _, want := range []string{
+		"枠を使い切っているので",
+		"マージンを下げても動き出しません",
+		"quota.json を消し",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("案内に %q が出ていない:\n%s", want, got)
+		}
+	}
+	// **`**` のような markdown の強調を混ぜない**（実装レビュー5周目の LOW）。
+	// **ログは平文で出るので、そのまま画面に出る。**
+	if strings.Contains(got, "**マージンを下げても") {
+		t.Fatalf("ログの本文に markdown の強調が混ざっている:\n%s", got)
+	}
+}

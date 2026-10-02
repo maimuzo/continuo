@@ -62,13 +62,14 @@ tracker:
                                             # 5時間余裕値 = 100 − 5時間の使用率 − この値
       weekly_margin_percent: 10             # 1週間の枠のうち、continuo のために残しておきたい割合。
                                             # 1週間余裕値 = 100 − 1週間の使用率 − この値。
-                                            # どちらかの余裕値がマイナスなら入札しない
+                                            # どちらかの余裕値が0以下なら入札しない（既定10なら使用率90%から）
       on_assignee_gate: warn_and_comment    # 担当者が付いていて着手できないとき（1人でも2人以上でも）の扱い。
                                             # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
-    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡や Status を動かした記録などで、成果は書かない。
+                                            # 空にすると agent.relay_trusted_comments は効かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
@@ -80,6 +81,20 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+  direct_chat_state: "Direct Chat"          # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
+                                            # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
+                                            # Status も動かさず、pane を閉じず worktree も消さない。
+                                            # 動かす前に、issue の担当者を、pane を開きたい PC の continuo の
+                                            # gh のアカウント1人だけにすること。0人か2人以上だと failure_state へ動かして知らせる。
+                                            # 途中で担当者を別の1人に替えると、この PC の continuo は pane を閉じて手を離す。
+                                            # pane がまだ無ければ、ここで1つ用意する
+                                            # （continuo がその issue をまだ抱えていないときだけ。
+                                            #   やり直し待ちの issue も「抱えている」に入る）。
+                                            # 上の active_states へ戻すと、たいていは同じ pane・同じ会話のまま続きの指示を送る。
+                                            # 使うには、カンバンの画面で Status の選択肢をこの名前で1つ足すこと
+                                            # （API で足すと設定済みの Status が全部消える）。
+                                            # 足すまでは、この機能が使えないだけで、他は何も変わらない。
+                                            # 空にすると、この機能は一切効かない
   verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
@@ -125,35 +140,53 @@ agent:
   max_takeover: 5                           # continuo が落ちたあと、同じ worktree を引き継いだ回数の上限
   max_retry_backoff_ms: 300000              # やり直しの前に待つ時間の上限。失敗のたびに待ち時間を伸ばしていく
   max_retries: 3                            # 応答が止まった・異常終了したときにやり直す回数の上限。0 ならやり直さない
+  relay_trusted_comments: true              # 人間が issue に書いたコメントを、次に Claude Code を起動したときの最初のメッセージに付けて渡す。
+                                            # 渡すのは、continuo が Claude Code を閉じたときに書く記録（<!-- continuo:closed -->）より後に、
+                                            # OWNER / MEMBER / COLLABORATOR が新しく書いた、AI の目印の無いコメントだけ。
+                                            # auto の判定役は、こうして渡したコメントなら人間の許可として読む。
+                                            # 効くのは claude.permission_mode が auto で、tracker.comments.self_marker が空でないときだけ。
+                                            # false にすると渡さず、閉じた記録も書かない。変えたら continuo を再起動する
 
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
-  permission_mode: dontAsk                  # 人間に確認を出さない唯一のモード。無人で回すので必ずこれにする
-  permissions:                              # dontAsk のとき、allow に書いていないツールは全部拒否される
+  permission_mode: auto                     # auto か dontAsk。auto は判定役が実行の前に確かめるので、.claude/ と .mcp.json にも書ける。
+                                            # 判定役は gh で読んだ issue のコメントを読まない（判定役への要求から道具の結果は取り除かれる）。
+                                            # ただし agent.relay_trusted_comments が最初のメッセージに付けて渡したコメントは読む。
+                                            # 決まった操作をいつも許すなら、このファイルに書き、足したら continuo を再起動する。
+                                            # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
+  permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
+                                            # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけを書く。引数まで絞ると書き込み系の操作が拒否される
+      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される。
+                                            # auto では、道具を丸ごと許すこの書き方は落とされる。auto で足すなら Bash(gh:*) のように狭く書く
       - "Read"
       - "Glob"
       - "Grep"
       - "Edit"
       - "Write"
-    deny: []                                # 明示的に禁じるツール。subagent を起動するツールは allow に書かなくても動く
+    deny: ["AskUserQuestion"]               # 明示的に禁じるツール。AskUserQuestion はエージェントが人間に選択肢を出す道具で、
+                                            # 外すと無人運転中に質問の画面が出て pane が止まる（次の指示が回答として食われる）。
+                                            # subagent を起動するツールは allow に書かなくても動く
   env:                                      # Claude Code に渡す環境変数
     CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
   wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。書けるのは idle / working / blocked / done / unknown。
                                             # blocked を外すと、確認で止まった turn を時間切れまで拾えない
-  turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
-                                            # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
+  turn_timeout_ms: 3600000                  # hook が届かず、agent の状態も working でない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
+                                            # turn の総実行時間の上限ではない。agent の状態が working である限り何時間でも待つ
   hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る。
                                             # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
   tool_gate:                                # 危ない道具の呼び出しを、Claude Code の中のモデルに実行の前に断らせる仕掛け
-    mode: public_only                       # off なら掛けない。on ならいつでも掛ける。public_only なら公開リポジトリの issue にだけ掛ける。
-                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）
+    mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
+                                            # public_only なら公開リポジトリの issue にだけ掛ける。
+                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
+                                            # コメントで許可を出しても通らない（この検査は、最初のメッセージに付けて渡したコメントも読まない）。
+                                            # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
+                                            # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。
                                             # 書ける名前の一覧は公式文書に無いので、書くなら自分の手元で1件通してから
     tools: ["Bash"]                         # 判定に回す道具の名前。空なら全部の道具に掛かり、道具1回ごとに判定の待ち時間が乗る
@@ -162,7 +195,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20。0.8.0 は 19）
+  protocol: 22                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.9.1 と 0.9.0 が 22。0.8.2 は 20、0.8.0 は 19）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -184,11 +217,22 @@ cleanup:
   sweep_on_startup: true                    # 起動したときに、終わっている worktree と行き場の無い branch を消す
 
 rate_limit:
-  source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
+  source: oauth_usage_api                   # Claude の使用量 API（usage API）から枠の使用率を読む。読めないあいだは statusline取得へ切り替える。
+                                            # statusline なら usage API を読まずステータスラインだけ、none なら枠を見ない。
+                                            # API キーの機械は none にすること（しないと立て直すたびに haiku の会話が1回従量で課金されうる）。
+                                            # statusline取得には trust.repositories の信頼済みの clone が1つ要る
   token_source: claude_credentials          # ~/.claude/.credentials.json から読む。macOS なら keychain（Keychain から読む）にできる。env なら下の token_env から読む
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
-  pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
-  poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
+  poll_interval_ms: 300000                  # usage API を読む間隔。読めないときは、この間隔（429 なら Retry-After との長いほう）のあとに試し直す
+  refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
+  weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
+                                            # 「あと何分以内にリセットされるなら待つか」であって「何分待つか」ではない。
+                                            # 超える issue は、Claude Code が止まってから担当を手放し、入札からやり直させる
+                                            # （worktree は残し、Status も動かさない）。5時間の枠には効かない。
+                                            # 止まったと見なすのは、hook が claude.turn_timeout_ms のあいだ来ていないときである。
+                                            # workspace_hooks.after_run が null のままだと、push せずに手放す。
+                                            # 0 なら上限を設けず、いつまでも待つ（idle_timeout_ms とは 0 の意味が逆）。
+                                            # 複数の機械で見張るなら idle_timeout_ms より短くすること
 
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
@@ -196,7 +240,8 @@ trust:
   repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
                                             # continuo init がカンバンから拾って並べるので、要らない行は消すこと。
                                             # **これから issue を作るリポジトリは、まだカンバンに無いので拾えない。**手で足すこと。
-                                            # 巡回のループはここを読まない。continuo trust だけが読む
+                                            # statusline取得に使う clone を選ぶのにも読む（上から見て、信頼済みの最初の1つ）。
+                                            # 走行中は読み直さないので、書き換えたら continuo を立て直すこと
 
 restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
@@ -270,10 +315,11 @@ language: auto                              # 画面に出す文言の言語。a
 
 ### レビューを頼む subagent
 
-<!-- 組み込みの 3-2 と 3-6 が「敵対的レビューの subagent」と言っています。 -->
-<!-- このリポジトリで使う名前を書いてください。例: code-reviewer と security-reviewer。 -->
+<!-- 組み込みの 5-6 が「差分を読む役」と「関連処理まで見る役」を毎周並列に走らせろと言っています。 -->
+<!-- 差分を読む役・関連処理まで見る役 の順に、使う名前を2つ書いてください。 -->
 <!-- subagent を起動する道具の名前は Claude Code の版によって変わります。 -->
-<!-- 起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
+<!-- dontAsk で起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
 <!-- claude.permissions.allow に足してください。 -->
+<!-- permission_mode: auto（既定）では Agent の規則は落とされ、Agent の呼び出しも判定役が確かめるので、allow に足す話ではありません。 -->
 
 `

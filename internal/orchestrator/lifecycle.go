@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -26,6 +27,17 @@ import (
 // rs: 対象の run。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
+	// **人間が引き取っていたら、この turn の表明を1行も読まない**（設計 3-83）。
+	//
+	// **turn ループの手前の検査と2重になっているが、外してはならない。**すり抜けると
+	// `applySignals` が走り、**人間がさっき動かしたカードが `Blocked` へ書き換えられる。**
+	// そうなると Status がdirect chat から外れ、次の巡回が pane を閉じにいく。
+	if rs.inDirectChatMode() {
+		o.logger.Info("人間が引き取っているので、この turn の表明は読みません（pane は閉じません）",
+			"identifier", rs.issue().Identifier)
+		return true
+	}
+
 	// **担当が自分でなくなっていないかを、turn の終わりで確かめる**（設計 3-77c）。
 	// **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
 	// **移っていたらここで止める。push しない。**
@@ -69,6 +81,24 @@ func (o *Orchestrator) decideAfterTurn(
 	ctx context.Context, rs *runState, current tracker.Issue, mayRewrite bool,
 ) bool {
 	switch {
+	case config.IsDirectChatState(o.cfg.Tracker, current.State):
+		// **人間が引き取った**（設計 3-83f）。**巡回より先に turn の終わりが来ただけである。**
+		//
+		// **引き渡しとして扱ってはならない。**`default` へ落とすと `finishRun` が
+		// 引き渡しの通知を投稿し、`ensureAgentComment` が人間の pane へ指示を送り、
+		// **pane を閉じる。**カードを動かしてから話しかけた利用者が、そのまま踏む。
+		//
+		// **ここでは direct chat へ入れない**（設計 3-83b）。turn の後始末をせずに戻るだけで、
+		// **入れるのは次の巡回の段1 である。**担当者の判定（3-83h）を当てる場所を1つに保つためである。
+		//
+		// **送る印は立てておく。**ここで turn ループは終わるので、次の巡回より先に人間が作業中の Status へ
+		// 戻すと、ループも送る印も無い run が残り、戻しても指示が1つも届かない。
+		// direct chat へ入れば `wakeRuns` が飛ばし、抜けるときに `updateDirectChatMode` が下ろす
+		// （hold と `running_state` を書き終えてから立て直す）。入らずに戻れば次の巡回で送る。
+		o.logger.Info("人間が引き取ったので、この turn の後始末をせずに戻ります（次の巡回で direct chat へ入れます）",
+			"identifier", current.Identifier, "状態", current.State)
+		rs.setNeedsPrompt()
+		return true
 	case containsFold(o.cfg.Tracker.TerminalStates, current.State):
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました", current.State))
 		return true
@@ -174,8 +204,8 @@ func (o *Orchestrator) rewriteAndDecide(
 		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
-		// **書きに行く直前のカンバンは `terminal_states` に入っていた。**
-		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
+		// **書きに行く直前のカンバンは `terminal_states` か `direct_chat_state` に入っていた**（`protectedStates`）。
+		// 人間が「終わった」にしたか、引き取ったということなので、**その値で判定し直す。**
 		next = moved.Previous
 	}
 
@@ -210,6 +240,10 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 	rs.mu.Lock()
 	path := rs.TranscriptPath
 	promptID := rs.PromptID
+	// **セッション UUID を、パスと同じ区間で写し取る**（issue #238）。
+	// **別々に読むと、その間に `restartWithNewSession` がセッションを採り直したときに、
+	// 別のセッションのパスと UUID の対を台帳へ入れることになる。**
+	sessionUUID := rs.SessionUUID
 	rs.mu.Unlock()
 
 	if path == "" {
@@ -238,35 +272,55 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 		}
 		last = result
 		if len(result.Signals) > 0 {
-			o.logTokens(rs, result.Usage)
+			o.logTokens(rs, path, sessionUUID, result.Usage)
 			return result.Signals
 		}
 	}
 
 	if last != nil {
-		o.logTokens(rs, last.Usage)
+		o.logTokens(rs, path, sessionUUID, last.Usage)
 	}
 	o.logger.Info("この turn には表明がありませんでした（次の turn で促します）", "identifier", snap.Identifier)
 	return nil
 }
 
-// logTokens は集計したトークンをログに出し、`runState` に控える（設計 3-15）。
+// logTokens は集計したトークンをログに出し、`runState` と run をまたぐ累計に控える
+// （設計 3-15 / issue #238）。
 //
 // **控えるのはダッシュボード（第9段階）が読むためだけである。**判断には使わない。
 // **HTTP の要求ごとに transcript を開き直さない**ので、turn の終わりに1回だけ書く。
 //
+// **書き込みは `addTokenUsage` が1つの `o.mu` の区間でまとめて行う。**
+// 累計と run ごとの値を別々に書くと、その隙間にダッシュボードが両方を読み切ったときに
+// **「累計が走行中の run の合計より小さい」写しができる。**
+// **ここで順序を守る必要は無い**（`addTokenUsage` の doc コメントを見よ）。
+//
+// **`addTokenUsage` は `rs.mu` の外で呼ぶ。**中で `o.mu` → `rs.mu` の順に取るので、
+// `rs.mu` を持ったまま呼ぶと逆向きの入れ子ができる。
+//
+// **`path` は、ログに出すためだけに受け取る。**台帳が使うのはセッション UUID である
+// （hook の `transcript_path` はエージェントが書き換えられる外部入力なので、鍵にしない）。
+//
 // rs: 対象の run。
-// usage: 集計したトークン。
-func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
-	rs.setTokens(usage, o.now())
+// path: `usage` を読み出した transcript のパス（ログに出す）。
+// sessionUUID: そのパスのセッション UUID。**`readSignals` がパスと同じ区間で写し取ったもの。**
+// usage: 集計したトークン（その transcript 1ファイルの絶対値）。
+func (o *Orchestrator) logTokens(rs *runState, path, sessionUUID string, usage TokenUsage) {
+	identifier := rs.issue().Identifier
+	clamped := o.addTokenUsage(rs, identifier, sessionUUID, usage, o.now())
 	o.logger.Info("トークンを集計しました",
-		"identifier", rs.issue().Identifier,
+		"identifier", identifier,
 		"api_calls", usage.APICalls,
 		"input", usage.Input,
 		"cache_creation", usage.CacheCreation,
 		"cache_read", usage.CacheRead,
 		"output", usage.Output,
 	)
+	if clamped {
+		// **黙って丸めない。**累計が実際より小さくなったことを、あとから確かめられるようにする。
+		o.logger.Warn("transcript の集計のうち、前回より小さかった項目の差分を0にしました",
+			"identifier", identifier, "transcript_path", path)
+	}
 }
 
 // applySignals は拾った表明どおりに Status を動かす（設計 3-25 / 3-26）。
@@ -353,7 +407,7 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 			nodeID = issueNodeID(found)
 		}
 
-		moved, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("表明どおりに Status を動かせません",
 				"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "error", err)
@@ -494,6 +548,11 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 		issues, err = o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{rs.IssueID})
 	}
 	if err != nil {
+		// **ここに1回きりの札を付けてはならない**（issue #173。9周目の6段で削除した）。
+		// **この `Warn` は `origin/main` から在る既存のログである。**
+		// **`refreshIssue` は4箇所から呼ばれ、枠の経路はそのうち1つでしかない。**
+		// 枠の話のために、残る3つの経路のログの出方まで変えることになる。
+		// **資料の 4-5 の #4 も、この症状を「直すものが無い」と結論している。**
 		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
 		return rs.issue(), true, false
 	}
@@ -549,6 +608,9 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
+	// **送る印を下ろす**（設計 3-83f）。turn の終わりが direct chat を見て立てたものが残っている
+	// ことがある。`wakeRuns` は終わらせている run を起こさないが、残すと打ち切りで run が続いたあとに読まれる。
+	rs.takeNeedsPrompt()
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
@@ -563,6 +625,13 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
+	// **人間が direct chat へ引き取っていたら、終わらせる処理をやめる**（設計 3-83f）。
+	// **入口の1回だけでは足りない。**長い待ち（バックグラウンド処理・`ensureAgentComment`・`after_run`）の
+	// あいだに人間がカードを動かすのが、この機能のいちばん普通の使い方である。
+	// だから入口・通知の直前・`ensureAgentComment` を抜けた直後・`release` の直前で見る。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
 	// **pane を閉じる前に、turn の終わりと同じ判定を1度通す**（設計 3-81）。
@@ -577,17 +646,24 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.waitForBackgroundTasks(ctx, rs)
 
 	if failureState != "" {
-		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("Status を落とせません",
 				"identifier", rs.issue().Identifier, "遷移先", failureState, "error", err)
 		}
+		// **`postHandoffComment` の直前にも見る**（設計 3-83f）。待っている間に人間が引き取っていたら、
+		// 事実と違う引き渡しの通知を投稿しない（Status は `protectedStates` が守っている）。
+		if o.abortTerminalForHuman(ctx, rs, reason) {
+			return
+		}
 		o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, failureState))
 	}
 
-	o.ensureAgentComment(ctx, rs)
+	if o.ensureAgentComment(ctx, rs) || o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.runAfterRun(ctx, rs)
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
 
 	// **最後まで通った run は、過去の失敗の記録を消す。**次に失敗したら0から数え直す。
 	o.forgetFailure(rs.IssueID)
@@ -595,10 +671,47 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。ここで見るのは `State` だけであり、
 	// **`rs.setIssue` でも控えない**ので、記録を読む経路へ空の写しが流れることも無い。
 	current, ok, _ := o.refreshIssue(ctx, rs, false)
+	// **`release` の直前にも見る**（設計 3-83f）。`after_run` のあいだに引き取られていたら、印を外さない。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	if ok && o.ws.ShouldCleanup(current.State) {
 		o.cleanupWorktree(ctx, rs)
 	}
 	o.release(rs)
+}
+
+// protectedStates は「この Status になっていたら Status を書き込まない」一覧を返す
+// （`tracker.UpdateStatus` の `blockedStates`）。
+//
+// **`tracker.terminal_states` に `tracker.direct_chat_state` を足したものである**（設計 3-83）。
+//
+// **人間が引き取ったカードの上へ書いてはならない。**書くと Status がdirect chat から外れ、
+// **次の巡回が pane を閉じにいく。**とくに危ないのは表明の適用（`applySignals`）である。
+// 人間と話している最中のエージェントの応答に `CONTINUO-STATUS: blocked` の1行が入るのは
+// よくあることで、**それがそのままカードを `Blocked` へ動かしていた。**
+// **issue #263 が名指ししている症状そのものである。**
+//
+// **`tracker.direct_chat_state` が空なら `terminal_states` そのものを返す。**
+//
+// **`dispatchBlockedStates` は別の一覧である。**あちらは着手の段2 が使う拒否リストで、
+// `terminal_states` / `failure_state` / `dispatch_state` / `status_signal_map` の遷移先 /
+// **`direct_chat_state`** を集める。**「`active_states` の外を全部」ではない。**
+//
+// 戻り値: 書き込みを断る Status の一覧。
+func (o *Orchestrator) protectedStates() []string {
+	directChat := strings.TrimSpace(o.cfg.Tracker.DirectChatState)
+	if directChat == "" {
+		return o.cfg.Tracker.TerminalStates
+	}
+	// **元の並びを書き換えない。**呼び出しごとに新しい並びを作る。
+	out := make([]string, 0, len(o.cfg.Tracker.TerminalStates)+1)
+	out = append(out, o.cfg.Tracker.TerminalStates...)
+	if containsFold(o.cfg.Tracker.TerminalStates, directChat) {
+		// **設定の検査が起動前に弾いているので、ここへは来ない。**来ても二重に足さない。
+		return out
+	}
+	return append(out, directChat)
 }
 
 // failRun は着手やテンプレートの変数展開に失敗した run を失敗として扱う。
@@ -619,7 +732,12 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	if !rs.claimTerminal(ctx) {
 		return
 	}
-	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	// **人間が direct chat へ引き取っていたら、失敗として扱うのをやめる**（設計 3-83f）。
+	// 入口・通知の直前・`ensureAgentComment` を抜けた直後・`release` の直前で見る（`finishRunClaimed` と同じ理由）。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", rs.issue().Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
@@ -627,10 +745,21 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	// **失敗は issue 単位で数える**（設計 3-16）。印はこのあと release で消えるので、
 	// 印の中の RetryCount では次の巡回が0回目として拾い直してしまう。
 	o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+	// **`postHandoffComment` の直前にも見る**（設計 3-83f。`finishRunClaimed` と同じ理由）。
+	// 書き込みを待っている間に人間が引き取っていたら、事実と違う引き渡しの通知を投稿しない
+	// （Status は `protectedStates` が守っている）。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
-	o.ensureAgentComment(ctx, rs)
+	if o.ensureAgentComment(ctx, rs) || o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.runAfterRun(ctx, rs)
-	o.stopWorker(ctx, rs)
+	o.stopWorker(ctx, rs, closedRecordWrite)
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	o.release(rs)
 }
 
@@ -686,6 +815,10 @@ func (o *Orchestrator) abandonRunAsync(ctx context.Context, rs *runState, reason
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reason string) {
+	// **人間が direct chat へ引き取っていたら、打ち切るのをやめる**（設計 3-83f）。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
 	snap := rs.snapshot()
 	if snap.RetryCount >= o.cfg.Agent.MaxRetries {
 		o.logger.Warn("リトライの回数を使い切りました（人間へ渡します）",
@@ -695,23 +828,39 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		// 先に ensureAgentComment を呼ぶと、その中の failCommentRecovery が
 		// 「作業を終えたと表明したのに何も書き残さなかった」という別の文面で枠を使い切り、
 		// **stall で打ち切ったという本当の理由が issue に1文字も残らない。**
-		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("Status を落とせません", "identifier", snap.Identifier, "error", err)
 		}
 		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
 		o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+		// **`postHandoffComment` の直前にも見る**（設計 3-83f。`finishRunClaimed` と同じ理由）。
+		if o.abortTerminalForHuman(ctx, rs, reason) {
+			return
+		}
 		o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
 		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
-		o.ensureAgentComment(ctx, rs)
+		if o.ensureAgentComment(ctx, rs) || o.abortTerminalForHuman(ctx, rs, reason) {
+			return
+		}
 		o.runAfterRun(ctx, rs)
-		o.stopWorker(ctx, rs)
+		o.stopWorker(ctx, rs, closedRecordWrite)
+		if o.abortTerminalForHuman(ctx, rs, reason) {
+			return
+		}
 		o.release(rs)
 		return
 	}
 
 	o.runAfterRun(ctx, rs)
-	o.stopWorker(ctx, rs)
+	// **リトライが残る枝は `ensureAgentComment` も `release` も通らない**（設計 3-83f）。
+	// **`after_run` のあと、`addRetry` の直前に見る。**当たったら、バックオフへ入れずに
+	// `PaneID` の判定で終える。生きた pane を持ったままバックオフへ入ると、明けたときの
+	// 着手の段2 で印が外れ、誰も管理しない pane が残る。
+	if o.abortTerminalForHuman(ctx, rs, reason) {
+		return
+	}
+	o.stopWorker(ctx, rs, closedRecordWrite)
 
 	backoff := retryBackoff(snap.RetryCount, time.Duration(o.cfg.Agent.MaxRetryBackoffMs)*time.Millisecond)
 	count := rs.addRetry(o.now(), backoff)
@@ -734,9 +883,25 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
+	// **人間が引き取っている run は、印からも外さない**（設計 3-83）。
+	//
+	// **ここへ来る道が1つある。**巡回が「この issue はカンバンから見えなくなった」と
+	// 判断したときである（`reconcileRunning` の最後のループ）。**item を archive しただけでも、
+	// 取り直しが一時的にその item を返さなかっただけでも同じ形になる。**
+	// **印を外すと、issue が戻ってきたときに巡回がこの run を見失い、
+	// 同じ worktree にもう1つ Claude Code が立つ。**
+	//
+	// **`stopWorker` の門だけでは足りない。**あちらは pane を守るが、印は外れる。
+	if rs.inDirectChatMode() {
+		o.logger.Info("人間が引き取っているので、印からも外しません（pane も worktree も残します）",
+			"identifier", rs.issue().Identifier)
+		return
+	}
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
+	// **送る印を下ろす**（`finishRunAsync` と同じ理由。設計 3-83f）。
+	rs.takeNeedsPrompt()
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
@@ -752,7 +917,12 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 			context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 		defer cancel()
 		o.runAfterRun(cleanupCtx, rs)
-		o.stopWorker(cleanupCtx, rs)
+		o.stopWorker(cleanupCtx, rs, closedRecordWrite)
+		// **`release` の直前にも見る**（設計 3-83f）。入口は断るが、入口のあと `after_run` の最中に
+		// direct chat へ動かすと、印だけ外れる。
+		if o.abortTerminalForHuman(cleanupCtx, rs, "worker を止めて印から外すところでした") {
+			return
+		}
 		o.release(rs)
 	}()
 }
@@ -880,9 +1050,33 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // `turn を送れませんでした（agent is no longer running）` を WARN で印字する。
 // **それは外の障害ではなく、continuo が1秒前に自分で pane を閉じた結果である。**
 //
+// **閉じたら、閉じた記録を issue へ書く**（設計 3-85。issue #246。`settleClosedRecord`）。
+// 書くのは、閉じた pane でその run の `agent.start` が済んでいたときか、保留が立っているとき
+// （閉じる pane が無くても書く）である。**閉じ損ねたら書かない。**`mode` で書かない・保留するを指定する。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
+// mode: 閉じた記録の扱い（ふつうは closedRecordWrite）。
+// 戻り値: pane が残っていないなら true（閉じられた・その pane は既に無かった・閉じる pane が無かった）。
+// **direct chat の門で閉じずに戻ったときと、閉じ損ねたときは false。**要らない呼び出し側は捨ててよい。
+func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closedRecordMode) bool {
+	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-83）。
+	//
+	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは14箇所あり、
+	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
+	// 最大 `claude.turn_timeout_ms`（既定1時間）待っている間 / 「issue がカンバンから
+	// 見えなくなった」ループ / 担当が別の機械へ移ったとき）。**1箇所でも漏らすと、
+	// 人間が話している画面が予告なく消える。**だから門をここに1つ置く。
+	//
+	// **印（`o.runs`）を外すことまでは止めない。**外れても、Status が
+	// `tracker.direct_chat_state` のあいだは巡回も dispatch もその issue を触らないので、
+	// pane はそのまま残る。
+	if rs.inDirectChatMode() {
+		// **閉じた記録は書かない。保留も残す**（設計 3-85）。direct chat を抜けて閉じるときに書く。
+		o.logger.Info("人間が引き取っているので pane を閉じません（direct chat のままです）",
+			"identifier", rs.issue().Identifier)
+		return false
+	}
 	rs.mu.Lock()
 	paneID := rs.PaneID
 	rs.PaneID = ""
@@ -890,17 +1084,24 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// **閉じる前に伝える。**順番を入れ替えてはならない。
 	rs.markWorkerStopped()
 	if paneID == "" {
-		return
+		// **保留が立っていれば、閉じる pane が無くても書く**（設計 3-85）。
+		// 報告の書かせ直しの段2 で閉じたあと、段3 以降で抜けた道がここへ来る。
+		o.settleClosedRecord(ctx, rs, "", false, mode)
+		return true
 	}
 	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に同じセッションへ
 	// 復帰したときに発火する「前のバックグラウンドコマンドに完了の記録が無い」という
 	// 通知の出どころを、人間が辿れない。**
 	//
 	// **`waitForBackgroundTasks` ではなくここに置く。**`stopWorker` の呼び出しは
-	// **11箇所・9関数**である（`git grep -n 'o\.stopWorker(' -- internal/`。
+	// **14箇所・12関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
 	// `finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
-	// `ensureAgentComment` の段2 / `failCommentRecovery` / コメントが書けたので閉じる道 /
-	// 知らない Status / 担当が移った / 着手をやめた）。
+	// `ensureAgentComment` の段2 / `failCommentRecovery` / `failCommentRecoveryBusy` /
+	// コメントが書けたので閉じる道 / 知らない Status / 担当が移った（`stopBecauseHandoffLost`）/
+	// direct chat の担当者が替わった（`letGoOfDirectChatAsync`）/
+	// 枠の上限で担当を手放した（`releaseBecauseQuotaWaitClaimed`。設計 3-27）/ 着手をやめた）。
+	// **direct chat の用意に失敗した道は、ここを通らない**（`closeDirectChatSetupPane` が
+	// pane ID を直接閉じる。設計 3-83）。
 	// **待つのは1つだけだが、道連れにするのは全部だからである。**
 	if left := rs.runningBackgroundTasks(); len(left) > 0 {
 		o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",
@@ -920,10 +1121,20 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 		defer cancel()
 	}
 	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
+		if paneAlreadyGone(err) {
+			// **その pane はもう無い。**Claude Code は動いていないので、閉じたとみなす（設計 3-85）。
+			o.logger.Info("閉じようとした pane はもうありませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID)
+			o.settleClosedRecord(ctx, rs, paneID, true, mode)
+			return true
+		}
 		o.logger.Warn("pane を閉じられませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)
-		return
+		// **閉じ損ねたら記録を書かない。保留も捨てる**（設計 3-85）。Claude Code が生きたまま記録を付けない。
+		o.settleClosedRecord(ctx, rs, paneID, false, mode)
+		return false
 	}
 	o.logger.Info("pane を閉じました", "identifier", rs.issue().Identifier, "pane_id", paneID)
+	o.settleClosedRecord(ctx, rs, paneID, true, mode)
+	return true
 }
 
 // runAfterRun は workspace_hooks.after_run を実行する（設計 3-9 の段0）。
@@ -934,20 +1145,120 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
+	o.runAfterRunOK(ctx, rs)
+}
+
+// afterRunSkip は `workspace_hooks.after_run` を走らせなかった理由である（issue #197）。
+//
+// **`released` のコメントは「`after_run` で push できたことを確かめられませんでした
+// （理由はログに出ています）」と書く。****本文では理由を並べない**（理由は下の4つあり、
+// 並べると、当たらない理由で来た利用者が存在しないものを探す）。
+// **黙って偽を返すと、その約束が果たされない**（実装レビュー2周目の MEDIUM）。
+// **既定の `WORKFLOW.md` は `after_run` を持たないので、未設定のほうが普通の状態である。**
+// 利用者は存在しないログを探すことになる。
+//
+// **判定そのものは `internal/workspace` に置いたままにする。**ここが返すのは語だけである。
+// **判定を写すと、あちらが「設定されている」の規則を変えたときに、この1行だけが古い規則で答え続ける。**
+const (
+	// afterRunSkipNone は、走らせて成功した（か、既に走らせてあった）ことを表す。
+	afterRunSkipNone = ""
+	// afterRunSkipNoWorktree は、走らせる相手が無かった（worktree のパスが空）ことを表す。
+	afterRunSkipNoWorktree = "worktree のパスを持っていません"
+	// afterRunSkipNotConfigured は、`workspace_hooks.after_run` が書かれていないことを表す。
+	afterRunSkipNotConfigured = "workspace_hooks.after_run が設定されていません"
+	// afterRunSkipFailed は、走ったが失敗したことを表す。**その詳細は別の WARN に出ている。**
+	afterRunSkipFailed = "workspace_hooks.after_run が失敗しました"
+	// afterRunSkipAlreadyRan は、**この worktree で既に走っていた**ことを表す。
+	//
+	// **成功したとは言えない。**印を立てるのは実行の前なので、
+	// **前に走った回が失敗していても印は残る。**だから偽を返す。
+	afterRunSkipAlreadyRan = "workspace_hooks.after_run は、この worktree で既に走っていました"
+)
+
+// runAfterRunOK は `workspace_hooks.after_run` を走らせ、**成功したかどうかを返す。**
+//
+// **`released` のコメントは「`after_run` は実行済みです」と断言する**（設計 3-27）。
+// **失敗したのに断言すると、次に拾う機械が「remote の続きから始めてください」に従い、
+// 入っていない commit の続きから始める。**手元の作業が黙って取り残される。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値の1つ目: `after_run` が走って成功したら true。
+// **走らせる相手が無かったとき（worktree のパスが空）も false である。**
+// 戻り値の2つ目: 走らせなかった理由（`afterRunSkip…` のどれか）。**成功したときは空である。**
+func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, string) {
 	snap := rs.snapshot()
 	if snap.WorktreePath == "" {
-		return
+		return false, afterRunSkipNoWorktree
 	}
-	if _, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath); err != nil {
-		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
+	// **設定されていないときは、走らせたと言ってはならない**（issue #197）。
+	// **`RunAfterRunOnce` は「この worktree で初めて呼ばれたか」を返すだけで、
+	// コマンドが空でも真を返す**（`RunHook` は設定が無ければ nil を返して終わる）。
+	// **既定の `WORKFLOW.md` は `after_run` を持たない。**
+	// **そのまま真として扱うと、1バイトも push していないのに
+	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	// **次に拾う機械は remote から worktree を作り直すので、push していない commit がその機械に見えない**
+	// （この機械の worktree には残る）。
+	// **判定は `internal/workspace` に持たせる**（issue #173）。
+	// **ここへ写すと、あちらが「設定されている」の規則を変えたときに、
+	// この1行だけが古い規則で答え続ける。**
+	if !o.ws.HookConfigured(workspace.HookAfterRun) {
+		return false, afterRunSkipNotConfigured
+	}
+	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
+	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
+	// **走らせ切ったことを run が覚えている**（issue #197）。
+	// **やり直しのために要る。**担当を外すのに失敗して次の巡回でやり直すと、
+	// `RunAfterRunOnce` は「走らせていない」を返すので、
+	// **既に push してあるのに「remote に続きが入っていないことがあります」と issue へ書く。**
+	//
+	// **この段を2つ書いてはならない**（issue #173）。
+	// **6周目のレビューが「`ran` をそのまま返している」と挙げたので同じ段を足したが、
+	// この段が既にそれを塞いでいた**（`2a2e60d` から在る）。**2つ目は到達しない。**
+	if rs.afterRunDone() {
+		return true, afterRunSkipNone
+	}
+	// **`ran` は「この worktree で初めて呼ばれたか」であって、成否ではない。**
+	// **走って失敗したときも真が返る。**
+	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
+	if err != nil {
+		// **走ったが失敗した。**偽を返す。**remote に続きが入っていない恐れがあるためである。**
+		//
+		// **「issue のコメントにこう出ます」とは書かない**（issue #173）。
+		// **この関数は2つの経路から呼ばれる。**枠の上限で手放す経路はコメントを書くが、
+		// **ふつうの完了の経路（`finishRun`）は書かない。**
+		// **書いてあると、利用者が存在しない文字列を issue の中で探すことになる。**
+		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
+			"（remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
+		return false, afterRunSkipFailed
 	}
+	if ran {
+		rs.markAfterRunDone()
+		return true, afterRunSkipNone
+	}
+	// **`ran` が偽になるのは「既に走らせてあった」ときだけである。**
+	// 上の `rs.afterRunDone()` が先に受けるので、ここへ来るのは、前の回の `after_run` が失敗して印だけが残った run である（印は `workspace.Manager` のメモリにあり、再起動で消える）。
+	return false, afterRunSkipAlreadyRan
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。
 //
 // **見送った理由は、身元ファイルの cleanup_deferred_at がゼロ値のときだけ issue へ書く**
 // （毎巡回で警告を積まない。設計 3-9 の手順2c）。
+//
+// **実際に消えたときだけ、トークンの台帳からもこの issue を落とす**（issue #238）。
+// **worktree が残っているうちは落とせない。**残っていると、人間が Status を戻したときに
+// 同じセッションへ `--resume` で復帰し、**同じ transcript が最初から全部足される。**
+// **消えなかったとき（`cleanupPath` が false）は落とさない**ので、見送りでも二重に数えない。
+//
+// **`cleanupPath` を呼ぶ場所は他にも2つある**（`SweepOnStartup` と復元の `cleanupInto`）。
+// **そちらは台帳を落としていない。**どちらも起動時にしか走らず、その時点で台帳は空だからである。
+// **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
+//
+// **`reconcileWorktrees` も巡回の最中に worktree を消すが、台帳を落としていない。**
+// **これは欠陥ではない。**理由と、そこへ足すときの注意は
+// docs/plans/impl/09_dashboard.md の「いつ台帳を消すか」にある（**そちらが正である**）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -956,7 +1267,9 @@ func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
 	if snap.WorktreePath == "" {
 		return
 	}
-	o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue()))
+	if o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue())) {
+		o.forgetTokenLedger(snap.Identifier)
+	}
 }
 
 // cleanupPath は worktree と branch と設定ファイルを、パスを指定して片付ける（設計 3-9）。
@@ -1062,8 +1375,9 @@ func limitStrings(in []string, n int) []string {
 
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
-// **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
-// Status を動かした記録（`postStatusMove`）の2つだけである。
+// **成果の要約は書かない**（設計 3-29）。**continuo が書くコメントは、self_marker（空でないとき）か
+// `<!-- continuo:` の印で始まる**（この通知・Status を動かした記録（`postStatusMove`）・
+// direct chat の案内・関門の案内・入札・Claude Code を閉じた記録（設計 3-85）など）。
 //
 // **1つの run について1件だけ投稿する。**2件目以降は理由をログに残して捨てる。
 //

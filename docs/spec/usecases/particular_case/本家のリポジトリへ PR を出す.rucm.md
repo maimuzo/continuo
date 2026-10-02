@@ -7,10 +7,10 @@
 - `docs/plans/continuo_design.md#3-12`（issue ごとの設定ファイルを worktree の外に作る）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイルと除外の一覧への登録）
-- `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
+- `docs/plans/continuo_design.md#3-21`（打ち切りは `agent_status` で測る）
 - `docs/plans/continuo_design.md#3-22`（base の決め方。`herdr.worktree.base` が null なら既定 branch）
 - `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
-- `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` の既定）
+- `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` のときの掛かり方）
 - `docs/plans/continuo_design.md#3-78b`（雛形の WORKFLOW.md へ足す本文。hook の cwd の実測）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/workspace/prepare.go` の `resolveBase` と `NativeRefDefaultBranch`
@@ -26,7 +26,7 @@
 ```rucm
 USE CASE NAME: 本家のリポジトリへ PR を出す
 BRIEF DESCRIPTION: issue は非公開のリポジトリにあり、コードは public の fork にある。システムは issue のリポジトリの既定 branch を base にした worktree を1つ作り、エージェントをそこで起動する。エージェントは issue からコードのリポジトリの名前を読み、worktree の外の clone でコードを直し、fork の origin へ push し、本家のリポジトリへ PR を出す。システムは worktree の中身を見ずに Status を動かし、成果が worktree の外にあるままでも片付けを通す。
-PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。claude.permission_mode は既定の dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。issue の本文にコードのリポジトリの名前を書いたのは OWNER である。
+PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は public_only である。claude.permission_mode は dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。issue の本文にコードのリポジトリの名前を書いたのは OWNER である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: エージェント、GitHub Projects v2、利用者
 DEPENDENCY: なし
@@ -80,7 +80,7 @@ SPECIFIC ALTERNATIVE FLOW 作業ディレクトリがworktreeの外:
 RFS BASIC FLOW 20
 1. システムは Stop hook を捨てる。
 2. システムは turn の終わりを検知しない。
-3. システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。
+3. システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。
 4. システムはエージェントを止める。
 5. システムは issue に打ち切った理由をコメントする。
 6. ABORT
@@ -152,7 +152,7 @@ flowchart TD
     B19 --> B20{"20. VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない"}
     B20 -- 偽 --> O1["作業ディレクトリがworktreeの外 1. Stop hook を捨てる"]
     O1 --> O2["作業ディレクトリがworktreeの外 2. turn の終わりを検知しない"]
-    O2 --> O3["作業ディレクトリがworktreeの外 3. 画面の版が増えないことを見つける"]
+    O2 --> O3["作業ディレクトリがworktreeの外 3. agent_status が working にならないことを見つける"]
     O3 --> O4["作業ディレクトリがworktreeの外 4. エージェントを止める"]
     O4 --> O5["作業ディレクトリがworktreeの外 5. 打ち切った理由をコメントする"]
     O5 --> OEND([ABORT])
@@ -218,7 +218,7 @@ sequenceDiagram
     end
     CC->>SYS: 19. turn の終わりを Stop hook で知らせる
     alt Stop hook の cwd が worktree の外だと分かった
-        SYS->>SYS: 作業ディレクトリがworktreeの外 1-3. hook を捨て画面の版を見張る
+        SYS->>SYS: 作業ディレクトリがworktreeの外 1-3. hook を捨て agent_status を見張る
         SYS->>CC: 作業ディレクトリがworktreeの外 4. エージェントを止める
         SYS->>BOARD: 作業ディレクトリがworktreeの外 5. 打ち切った理由をコメントする
         Note over SYS,BOARD: ABORT worktree は残っている

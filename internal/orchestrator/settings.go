@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -67,13 +69,43 @@ type hookMatcher struct {
 type claudeSettings struct {
 	// Hooks はイベント名から matcher の並びへの対応である。
 	Hooks map[string][]hookMatcher `json:"hooks"`
-	// Permissions は許可・拒否リストである（`dontAsk` のとき許可リストの外は全部拒否される）。
+	// Permissions は許可・拒否リストである（`dontAsk` のとき許可リストの外は全部拒否される。
+	// `auto` でも deny は効く）。
 	Permissions claudeSettingsPermissions `json:"permissions"`
 	// Env は Claude Code のプロセスへ渡す環境変数である。
 	//
 	// **環境変数はここにしか書けない。**`worktree.open` にも `agent.start` にも env の
 	// 引数が無い（設計 3-2 / 3-12。2026-08-19 に実測で確認済み）。
 	Env map[string]string `json:"env,omitempty"`
+	// StatusLine はステータスラインのコマンドである（issue #284）。
+	// **`rate_limit.source` が `none` でなく、statusline を使えるときだけ入れる**（none なら書かず、
+	// 利用者のステータスラインがそのまま出る。`oauth_usage_api` でも書く）。hook の組み立ては変えない。
+	StatusLine *statusLineSetting `json:"statusLine,omitempty"`
+}
+
+// statusLineSetting は設定ファイルの statusLine である（issue #284）。
+type statusLineSetting struct {
+	// Type は "command" である。
+	Type string `json:"type"`
+	// Command は `continuo statusline --socket <sl.sock>` のコマンド行である。
+	Command string `json:"command"`
+}
+
+// statusLineSetting は、設定ファイルへ書く statusLine を組み立てる（issue #284）。
+//
+// **コマンド行は hook と同じ shellQuote で引用する。**パスに空白が入っても割れないようにする。
+// **使うフラグは `--socket` だけである**（internal/cli の runStatusline）。
+//
+// 戻り値: statusLine。`source: none` か、statusline を使えない（sl.sock のパスが無いか、
+// DisableStatusline された）なら nil。
+func (o *Orchestrator) statusLineSetting() *statusLineSetting {
+	if o.cfg.RateLimit.Source == ratelimit.SourceNone || !o.statuslineUsable() {
+		return nil
+	}
+	return &statusLineSetting{
+		Type:    "command",
+		Command: fmt.Sprintf("%s statusline --socket %s", shellQuote(o.continuoPath), shellQuote(o.slSocketPath)),
+	}
 }
 
 // claudeSettingsPermissions は設定ファイルの permissions である。
@@ -244,6 +276,10 @@ func toolGatePrompt() string {
 	return fmt.Sprintf(toolGatePromptTemplate, toolGateFenceOpen(id), toolGateFenceClose(id))
 }
 
+// askUserQuestionTool は、エージェントが人間に選択肢を出す道具の名前である（設計 3-11）。
+// **dontAsk は元から拒否するが、auto では拒否が外れる。**
+const askUserQuestionTool = "AskUserQuestion"
+
 // toolGateMatcherAll は tool_gate.tools が空のときに使う matcher である（全部の道具に掛ける）。
 const toolGateMatcherAll = "*"
 
@@ -319,7 +355,7 @@ func toolGateApplies(mode string, repoIsPrivate *bool) bool {
 //	{
 //	  "hooks": { "Stop": [{"hooks":[{"type":"command",
 //	              "command":"'/usr/local/bin/continuo' hook --socket '/…/hooks.sock' --pending-dir '/…/pending'"}]}], … },
-//	  "permissions": { "allow": ["Bash","Read","Glob","Grep","Edit","Write"], "deny": [] },
+//	  "permissions": { "allow": ["Bash","Read","Glob","Grep","Edit","Write"], "deny": ["AskUserQuestion"] },
 //	  "env": { "CLAUDE_CODE_RETRY_WATCHDOG": "1" }
 //	}
 //
@@ -331,11 +367,15 @@ func toolGateApplies(mode string, repoIsPrivate *bool) bool {
 // Claude Code の中の判定モデルに断らせる `type: "prompt"` の hook である。
 // 載るかどうかは `claude.tool_gate.mode` と、この issue のリポジトリが公開かどうかで決まる。
 //
+// **statusLine を書くときは、`env` に利用者のステータスラインの転送先
+// （`CONTINUO_STATUSLINE_COMMAND`）も書く**（設計 3-84a）。`claude.env` を写した新しい map に書く。
+//
 // issue: 着手する issue。**識別子（置き場所のスラグを作る）とリポジトリの公開・非公開
 // （判定を掛けるかどうかを決める）の両方に使う。**
+// worktree: issue の worktree の絶対パス（転送先を探す設定ファイルの置き場所。設計 3-84a）。
 // 戻り値の1つ目: 書いた設定ファイルの絶対パス。
 // 戻り値の2つ目: ディレクトリを作れない・JSON 化できない・書けない場合のエラー。
-func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
+func (o *Orchestrator) writeSettingsFile(issue tracker.Issue, worktree string) (string, error) {
 	identifier := issue.Identifier
 	dir := o.issueDir(identifier)
 	if err := os.MkdirAll(dir, settingsDirPerm); err != nil {
@@ -364,13 +404,29 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
 		hooks[hookPreToolUse] = append(hooks[hookPreToolUse], gate...)
 	}
 
+	// **`auto` なのに AskUserQuestion を禁じていなければ、警告を出す**（設計 3-11。issue #259）。
+	// **黙って足さない。**利用者が deny を空にして外せることは、設計が決めた逃がし口である。
+	// **だが外れたまま無人で走ると、静かに止まる。**その道具が呼ばれた瞬間に質問の画面が出て
+	// pane が待ちに入り、**continuo が次に送る指示が、その質問への回答として消費される**（実測）。
+	// 既定を dontAsk から auto へ移す途中で、2行のうち1行だけを当てた人がここに落ちる。
+	if o.cfg.Claude.PermissionMode != config.ClaudePermissionModeDontAsk &&
+		!slices.Contains(o.cfg.Claude.Permissions.Deny, askUserQuestionTool) {
+		o.logger.Warn("permission_mode が dontAsk 以外なのに、claude.permissions.deny に "+
+			askUserQuestionTool+" がありません（エージェントが質問の画面を出すと pane が止まり、"+
+			"次に送る指示がその回答として消費されます）",
+			"permission_mode", o.cfg.Claude.PermissionMode,
+			"deny", o.cfg.Claude.Permissions.Deny)
+	}
+
+	statusLine := o.statusLineSetting()
 	settings := claudeSettings{
 		Hooks: hooks,
 		Permissions: claudeSettingsPermissions{
 			Allow: o.cfg.Claude.Permissions.Allow,
 			Deny:  o.cfg.Claude.Permissions.Deny,
 		},
-		Env: o.cfg.Claude.Env,
+		Env:        o.issueSettingsEnv(statusLine, worktree),
+		StatusLine: statusLine,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

@@ -8,6 +8,7 @@ package ratelimit_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,8 +108,8 @@ func TestFetch_keychainからトークンを読んで枠を取得する(t *testi
 	if snap == nil {
 		t.Fatalf("枠を読めていない（snapshot が nil）")
 	}
-	if snap.MaxPercent() != 42 {
-		t.Errorf("読み取った使用率が違う: got %d, want %d", snap.MaxPercent(), 42)
+	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 42 }) {
+		t.Errorf("使用率が 42 の枠が無い: got %+v", snap.Limits)
 	}
 	if want := "Bearer " + keychainTestToken; gotAuth != want {
 		t.Errorf("Keychain から読んだトークンが Authorization ヘッダに載っていない: got %q, want %q", gotAuth, want)
@@ -138,12 +139,12 @@ func TestNewReader_keychainならホームディレクトリを要求しない(t
 	}
 }
 
-// 目的: `security` が返した中身が JSON として壊れているとき、枠の判定を捨てて
-// **起動を止めない**ことを確認する。
+// 目的: `security` が返した中身が JSON として壊れているとき、恒久的な失敗として返すことを
+// 確認する（issue #284。呼び出し側は立て直すまで usage API を試さず、statusline取得へ切り替える）。
 //
 // 与える情報: JSON になっていない文字列を返すテスト用security mock。
-// 成功条件: Fetch が (nil, nil) を返し（**エラーを上へ投げない**）、以後 Enabled が偽になること。
-func TestFetch_keychainの中身が壊れていたら枠の判定を捨てる(t *testing.T) {
+// 成功条件: Fetch が *CredentialError（Permanent が真）を返し、snapshot が nil であること。
+func TestFetch_keychainの中身が壊れていたら恒久的な失敗として返す(t *testing.T) {
 	fakeSecurity(t, `printf '%s' 'これは JSON ではありません'`)
 
 	reader, err := ratelimit.NewReader(ratelimit.Options{Config: keychainConfig()})
@@ -152,14 +153,12 @@ func TestFetch_keychainの中身が壊れていたら枠の判定を捨てる(t 
 	}
 
 	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("壊れた中身をエラーとして上へ投げた（起動が止まる）: %v", err)
+	var credErr *ratelimit.CredentialError
+	if !errors.As(err, &credErr) || !credErr.Permanent {
+		t.Fatalf("壊れた中身なのに恒久的な失敗を返さなかった: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("壊れた中身なのに枠を読めたことになっている: %+v", snap)
-	}
-	if reader.Enabled() {
-		t.Fatal("諦めたのに Enabled が真のまま（次の巡回でも読みに行ってしまう）")
 	}
 }
 
@@ -177,7 +176,7 @@ func TestFetch_keychainの中身が壊れていたら枠の判定を捨てる(t 
 // 数える前に死ぬので、1回目と2回目の区別が付かなくなる（実測: 期限 300ms では
 // 1回目の子プロセスの起動そのものが間に合わず、スクリプトが1行も走らなかった）。
 //
-// 成功条件: 1回目の Fetch はエラーを返すが **Enabled は真のまま**であり、
+// 成功条件: 1回目の Fetch は一時的な失敗（*CredentialError の Permanent が偽）を返し、
 // 2回目の Fetch で枠を読めること。
 func TestFetch_keychainが1回返ってこなくても諦めない(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -205,14 +204,12 @@ func TestFetch_keychainが1回返ってこなくても諦めない(t *testing.T)
 	}
 
 	snap, err := reader.Fetch(context.Background())
-	if err == nil {
-		t.Fatal("返ってこなかったのにエラーを返さなかった（呼び出し側が気づけない）")
+	var credErr *ratelimit.CredentialError
+	if !errors.As(err, &credErr) || credErr.Permanent {
+		t.Fatalf("返ってこなかったのに一時的な失敗を返さなかった: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("返ってこないのに枠を読めたことになっている: %+v", snap)
-	}
-	if !reader.Enabled() {
-		t.Fatal("1回返ってこなかっただけで枠の判定を諦めた（復帰する経路が無い）")
 	}
 
 	if err := os.WriteFile(markerFile, []byte("ready\n"), 0o600); err != nil {
@@ -226,22 +223,20 @@ func TestFetch_keychainが1回返ってこなくても諦めない(t *testing.T)
 	if snap == nil {
 		t.Fatal("2回目も枠を読めていない（一時的な失敗から戻れていない）")
 	}
-	if snap.MaxPercent() != 42 {
-		t.Errorf("読み取った使用率が違う: got %d, want %d", snap.MaxPercent(), 42)
+	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 42 }) {
+		t.Errorf("使用率が 42 の枠が無い: got %+v", snap.Limits)
 	}
 }
 
-// TestFetch_keychainが返らない状態が続けば最後には諦める は、
-// 粘る回数に上限があることを固定する。
+// TestFetch_keychainが返らない状態が6回続いても諦めない は、一時的な失敗で諦めないことを固定する
+// （issue #284）。
 //
-// 目的: 一時的な失敗で諦めないことと、読めないものを毎回読みに行かないことの両立である。
-// **上限が無いと、巡回のたびに `security` を起こし続ける。**
+// 目的: ba24db63 までは5回続くと諦めていた。**いまは Reader は諦めず、そのつど一時的な失敗を返す。**
+// 何回まで試すか（`poll_interval_ms` ごと）は呼び出し側が決める。
 //
-// 与える情報: 一度も返ってこないテスト用security mock と、短い KeychainTimeout。
-// Fetch を ratelimit.MaxTemporaryCredentialFailures 回呼ぶ。
-//
-// 成功条件: 最後の1回の手前までは Enabled が真のままで、上限に達した回で偽になること。
-func TestFetch_keychainが返らない状態が続けば最後には諦める(t *testing.T) {
+// 与える情報: 一度も返ってこないテスト用security mock と、短い KeychainTimeout。Fetch を6回呼ぶ。
+// 成功条件: 6回とも一時的な失敗（*CredentialError の Permanent が偽、ErrKeychainTimeout を辿れる）を返すこと。
+func TestFetch_keychainが返らない状態が6回続いても諦めない(t *testing.T) {
 	fakeSecurity(t, "exec sleep 30")
 
 	reader, err := ratelimit.NewReader(ratelimit.Options{
@@ -252,24 +247,21 @@ func TestFetch_keychainが返らない状態が続けば最後には諦める(t 
 		t.Fatalf("NewReader が失敗した: %v", err)
 	}
 
-	for i := 1; i < ratelimit.MaxTemporaryCredentialFailures; i++ {
-		if _, err := reader.Fetch(context.Background()); err == nil {
-			t.Fatalf("%d 回目: 返ってこなかったのにエラーを返さなかった", i)
+	for i := 1; i <= 6; i++ {
+		snap, err := reader.Fetch(context.Background())
+		var credErr *ratelimit.CredentialError
+		if !errors.As(err, &credErr) || credErr.Permanent {
+			t.Fatalf("%d 回目: 一時的な失敗を返さなかった: %v", i, err)
 		}
-		if !reader.Enabled() {
-			t.Fatalf("%d 回目で諦めた（上限は %d 回）", i, ratelimit.MaxTemporaryCredentialFailures)
+		if !errors.Is(err, ratelimit.ErrKeychainTimeout) {
+			t.Fatalf("%d 回目: ErrKeychainTimeout を辿れない: %v", i, err)
+		}
+		if snap != nil {
+			t.Fatalf("%d 回目: 返ってこないのに枠を読めたことになっている: %+v", i, snap)
 		}
 	}
-
-	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("諦めたときはエラーを上へ投げない約束なのに投げた（起動が止まる）: %v", err)
-	}
-	if snap != nil {
-		t.Fatalf("返ってこないのに枠を読めたことになっている: %+v", snap)
-	}
-	if reader.Enabled() {
-		t.Fatalf("上限の %d 回まで続いたのに諦めていない", ratelimit.MaxTemporaryCredentialFailures)
+	if !reader.Enabled() {
+		t.Fatal("Reader が自分で諦めている（諦めるかは orchestrator が決める）")
 	}
 }
 
@@ -279,7 +271,7 @@ func TestFetch_keychainが返らない状態が続けば最後には諦める(t 
 // 記録すると、次に起動するまで枠の判定が戻らない。**打ち切りは資格情報の問題ではない。
 //
 // 与える情報: 返ってこないテスト用security mock と、呼ぶ前に cancel 済みのコンテキスト。
-// 成功条件: Fetch がエラーを返し、**Enabled が真のまま**であること。
+// 成功条件: Fetch がエラーを返し、それが *CredentialError ではない（一時的とも恒久的とも数えない）こと。
 func TestFetch_打ち切りでは枠の判定を諦めない(t *testing.T) {
 	fakeSecurity(t, "exec sleep 30")
 
@@ -294,11 +286,13 @@ func TestFetch_打ち切りでは枠の判定を諦めない(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := reader.Fetch(ctx); err == nil {
+	_, err = reader.Fetch(ctx)
+	if err == nil {
 		t.Fatal("打ち切ったのにエラーを返さなかった")
 	}
-	if !reader.Enabled() {
-		t.Fatal("打ち切っただけで枠の判定を諦めた（次に起動するまで戻らない）")
+	var credErr *ratelimit.CredentialError
+	if errors.As(err, &credErr) {
+		t.Fatalf("打ち切りを資格情報の失敗として返した（次に起動するまで usage API が戻らなくなる）: %v", err)
 	}
 }
 
@@ -308,7 +302,7 @@ func TestFetch_打ち切りでは枠の判定を諦めない(t *testing.T) {
 // そのまま Claude の API を叩けてしまう。
 //
 // 与える情報: **トークンそのものを** JSON ではない形で返すテスト用security mock。
-// 成功条件: 諦めたときのログにトークンの値が含まれないこと。
+// 成功条件: 返した誤りの文面にもログにもトークンの値が含まれないこと。
 func TestFetch_keychainのトークンはログにもエラー文にも出ない(t *testing.T) {
 	// **`security` の標準出力に生のトークンが出る状況を作る。**JSON として壊れているので
 	// 解析に失敗し、その失敗の文言がログへ流れる経路になる。
@@ -320,44 +314,45 @@ func TestFetch_keychainのトークンはログにもエラー文にも出ない
 		t.Fatalf("NewReader が失敗した: %v", err)
 	}
 
-	if _, err := reader.Fetch(context.Background()); err != nil {
-		t.Fatalf("Fetch がエラーを上へ投げた: %v", err)
+	_, err = reader.Fetch(context.Background())
+	if err == nil {
+		t.Fatal("壊れた中身なのに誤りを返さなかった（気づけない）")
+	}
+	if strings.Contains(err.Error(), keychainTestToken) {
+		t.Fatalf("誤りの文面にトークンの値が出ている: %v", err)
 	}
 	if got := buf.String(); strings.Contains(got, keychainTestToken) {
 		t.Fatalf("ログにトークンの値が出ている:\n%s", got)
 	}
-	if buf.Len() == 0 {
-		t.Fatal("諦めたのに警告が1行も出ていない（気づけない）")
-	}
 }
 
-// 目的: `security` が異常終了したとき、その理由（標準エラー出力）をエラー文に残しつつ、
-// 枠の判定を捨てて起動を止めないことを確認する。
+// 目的: `security` が異常終了したとき、その理由（標準エラー出力）を誤りの文面に残し、
+// 恒久的な失敗として返すことを確認する（issue #284）。
 //
 // 与える情報: 標準エラーへ理由を書いて終了コード 44 で終わるテスト用security mock。
-// 成功条件: Fetch が (nil, nil) を返し、ログに標準エラーの内容が残ること。
-func TestFetch_keychainに項目が無ければ理由を残して捨てる(t *testing.T) {
+// 成功条件: Fetch が *CredentialError（Permanent が真）を返し、その文面に標準エラーの内容が残ること。
+func TestFetch_keychainに項目が無ければ理由を残して恒久的な失敗として返す(t *testing.T) {
 	fakeSecurity(t, "echo 'security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.' >&2\nexit 44")
 
-	buf, logger := newTestLogger()
-	reader, err := ratelimit.NewReader(ratelimit.Options{Config: keychainConfig(), Logger: logger})
+	reader, err := ratelimit.NewReader(ratelimit.Options{Config: keychainConfig()})
 	if err != nil {
 		t.Fatalf("NewReader が失敗した: %v", err)
 	}
 
 	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("異常終了をエラーとして上へ投げた（起動が止まる）: %v", err)
+	var credErr *ratelimit.CredentialError
+	if !errors.As(err, &credErr) || !credErr.Permanent {
+		t.Fatalf("異常終了なのに恒久的な失敗を返さなかった: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("異常終了なのに枠を読めたことになっている: %+v", snap)
 	}
-	if got := buf.String(); !strings.Contains(got, "could not be found in the keychain") {
-		t.Fatalf("ログに security の標準エラー出力が残っていない（原因が分からない）:\n%s", got)
+	if !strings.Contains(err.Error(), "could not be found in the keychain") {
+		t.Fatalf("誤りの文面に security の標準エラー出力が残っていない（原因が分からない）: %v", err)
 	}
 }
 
-// 目的: `security` が PATH に無い環境で、コマンドを起動しに行かずに枠の判定を捨てることを
+// 目的: `security` が PATH に無い環境で、コマンドを起動しに行かずに恒久的な失敗として返すことを
 // 確認する。
 //
 // **macOS 以外にはこのコマンドが無い。**設定の検査（internal/config）が
@@ -365,25 +360,25 @@ func TestFetch_keychainに項目が無ければ理由を残して捨てる(t *te
 // 起動しに行かない**ことをここで固定する。
 //
 // 与える情報: PATH を空にした環境。
-// 成功条件: Fetch が (nil, nil) を返し、ログに `security` が無いことが残ること。
-func TestFetch_securityが無ければ起動せずに捨てる(t *testing.T) {
+// 成功条件: Fetch が *CredentialError（Permanent が真）を返し、その文面に `security` が無いことが残ること。
+func TestFetch_securityが無ければ起動せずに恒久的な失敗として返す(t *testing.T) {
 	emptyPATH(t)
 
-	buf, logger := newTestLogger()
-	reader, err := ratelimit.NewReader(ratelimit.Options{Config: keychainConfig(), Logger: logger})
+	reader, err := ratelimit.NewReader(ratelimit.Options{Config: keychainConfig()})
 	if err != nil {
 		t.Fatalf("NewReader が失敗した: %v", err)
 	}
 
 	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("security が無いことをエラーとして上へ投げた（起動が止まる）: %v", err)
+	var credErr *ratelimit.CredentialError
+	if !errors.As(err, &credErr) || !credErr.Permanent {
+		t.Fatalf("security が無いのに恒久的な失敗を返さなかった: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("security が無いのに枠を読めたことになっている: %+v", snap)
 	}
-	if got := buf.String(); !strings.Contains(got, "security") {
-		t.Fatalf("ログに security が見つからないことが残っていない:\n%s", got)
+	if !strings.Contains(err.Error(), "security") {
+		t.Fatalf("誤りの文面に security が見つからないことが残っていない: %v", err)
 	}
 }
 

@@ -22,6 +22,9 @@ import (
 // **issue の本文とコメントは入れない**（設計 3-29）。エージェントが
 // `gh` の JSON 出力（`gh issue view --json comments` と REST）で自分で読む。
 // **テキスト表示（`--comments`）は使わせない**（設計 3-72）。
+// **例外は1つだけある。**閉じた記録より後に信頼できる人間が書いたコメントを、
+// 組み立てたあとの末尾に付ける（relay。設計 3-85）。付けるのは呼び出し側の `buildTurnText` であり、
+// ここ（と `continuo prompt --show`）の文面には入らない。
 //
 // issue: 対象の issue。
 // attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として
@@ -107,15 +110,36 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
+// 書き分けは [docs/upgrading.md:901-909](docs/upgrading.md#L901-L909) に揃える。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
-	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n")
+	// **run の宣言をここでも名乗る**（issue #245。設計 3-82b）。
+	// 組み込みの 1 の宣言は、長い run では compaction の要約で消えうる。
+	// そのあとで人間が入れた `continuo-issue-comments` のスキルに従うと、
+	// スキルは `<!-- continuo:ai -->` を付けさせ、`marker` を使わせない。**この報告が数えられず、また書かせ直しになる。**
+	// スキルの §1 は「プロンプトが continuo の run だと言っていれば止まる」ので、ここで名乗れば止まる。
+	b.WriteString("このセッションは continuo が起動した run です。" +
+		"`continuo-issue-comments` のスキルが見えても従わず、下の印を使ってください。\n")
+	// **本文は二重引用符の中へ書かせない。**シェルは二重引用符の中の backtick と `$( )` を展開するので、
+	// 報告に書いた `auto` のような語や、引用した第三者の `$(…)` が worktree の中で実行される。
+	// 組み込みの指示書の 3-2 と 5-5 と同じく、ファイルへ書いてから `--body-file` で渡させる。
+	b.WriteString("本文は、ファイルへ書いてから `--body-file` で渡してください。" +
+		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n")
+	// **見本は囲みに入れ、中身を行頭から書く。**この文面は表示されず、文字列のまま届く。
+	// 字下げした見本をそのまま写すと、`DONE` の行が終わりと読まれず、後ろの `gh` まで本文に取り込まれて
+	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。
+	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n")
+	// **本文に `DONE` だけの行があると、そこで本文が切れ、後ろの行がシェルのコマンドになる**（設計 5-3t）。
+	// 書かせ直しは単独で届き、組み込みの 3-2 を読み直すとは限らないので、ここにも書く。
+	b.WriteString("本文の中に `DONE` だけの行を作らないでください。入るなら、終わりの語を別のものに変えてください（例: `DONE2`）。\n\n")
+	b.WriteString("```bash\nF=$(mktemp)\n")
+	fmt.Fprintf(&b, "cat > \"$F\" <<'DONE'\n%s\nここに何をしたかを書く\nDONE\n", marker)
+	fmt.Fprintf(&b, "gh issue comment %s --body-file \"$F\"\n```\n\n", issueURL)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
 	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、

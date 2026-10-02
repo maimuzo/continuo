@@ -25,6 +25,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/loop"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -429,6 +430,10 @@ type fixtureOptions struct {
 	// **ログにしか現れない振る舞い**（孤児 branch を消す前に控えた SHA など）を
 	// 検証するテストが、出力を受け取るために使う。
 	Logger *slog.Logger
+	// Loop は herdr の開け閉めを1つずつ行う loop である（issue #284）。
+	// **nil なら loop.Inline を使う**（押さえは効かない）。押さえの振る舞いを確かめる
+	// テストだけが、起動した本物の loop を渡す。
+	Loop loop.Runner
 }
 
 // newFixture はテスト用の Manager を組み立てる。
@@ -475,9 +480,14 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 		ghqList = func(_ context.Context, _, _ string) (string, error) { return repo.Dir, nil }
 	}
 
+	var lp loop.Runner = loop.Inline{}
+	if opts.Loop != nil {
+		lp = opts.Loop
+	}
 	mgr, err := workspace.New(workspace.Options{
 		Config:       cfg,
 		Herdr:        fake.Client(),
+		Loop:         lp,
 		HomeDir:      home,
 		GhqList:      ghqList,
 		SettingsRoot: settingsRoot,

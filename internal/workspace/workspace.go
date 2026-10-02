@@ -24,6 +24,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/loop"
 )
 
 // HerdrClient は internal/workspace が使う herdr の socket API の部分集合である。
@@ -51,6 +52,9 @@ type HerdrClient interface {
 	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
 	// WorkspaceClose は herdr workspace を閉じる（worktree の実体は消さない）。
 	WorkspaceClose(ctx context.Context, params herdr.WorkspaceCloseParams) (*herdr.WorkspaceCloseResult, error)
+	// WorkspaceCreate は herdr workspace を作る。**statusline取得の workspace にだけ使う**
+	// （issue #284。statusline.go）。
+	WorkspaceCreate(ctx context.Context, params herdr.WorkspaceCreateParams) (*herdr.WorkspaceCreateResult, error)
 }
 
 // GhqListFunc は `ghq list -p -e <owner>/<repo>` 相当の処理を行う関数の型である。
@@ -73,6 +77,15 @@ type Options struct {
 	// Herdr は herdr の socket API のクライアントである。
 	// nil でも Manager は作れる（herdr.worktree.create_via_herdr が false のときは使わない）。
 	Herdr HerdrClient
+	// Loop は herdr の workspace の開け閉めを1つずつ行う loop である（issue #284。serial.go）。
+	//
+	// **Herdr を渡すなら必須である。**無ければ New が誤りを返す（渡し忘れを黙って
+	// その場で呼ぶ形にしない。渡し忘れると、statusline取得の workspace が issue の親に
+	// される守りが黙って消える）。常駐は1つの loop を渡し、`continuo abandon` は
+	// loop.Inline を渡す（1つの issue を1つずつ片付け、statusline取得をしないため）。
+	// **Herdr を渡さない Manager は loop を持たない**（`continuo doctor`・テストの一部）。
+	// そのときは包んだ箇所をその場で呼ぶ。
+	Loop loop.Runner
 	// Logger は構造化ログの出力先である。nil なら何も出力しないロガーを使う。
 	Logger *slog.Logger
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
@@ -87,7 +100,7 @@ type Options struct {
 	//
 	// **片付けが身元ファイルの settings_path を消す前に、このディレクトリの内側かを
 	// 確かめるために持つ。**身元ファイルは worktree の直下にあり、その worktree では
-	// エージェントが `--permission-mode dontAsk` で動く（3-16 の段9）ので、
+	// エージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）ので、
 	// **settings_path はエージェントが書き換えられる値である。**検査せずに os.Remove へ
 	// 渡すと、任意の1ファイルを消させられる。
 	//
@@ -112,8 +125,10 @@ type Options struct {
 //   - **`info/exclude` の更新は共通ディレクトリごとに直列化する**（identityMu の別の鍵）。
 //     1つのリポジトリの1本のファイルを、worktree ごとに触るためである
 type Manager struct {
-	cfg          config.Config
-	herdr        HerdrClient
+	cfg   config.Config
+	herdr HerdrClient
+	// loop は herdr の workspace の開け閉めを1つずつ行う（serial.go）。herdr が無ければ nil。
+	loop         loop.Runner
 	logger       *slog.Logger
 	now          func() time.Time
 	homeDir      string
@@ -173,6 +188,9 @@ func New(opts Options) (*Manager, error) {
 	if opts.SettingsRoot != "" && !filepath.IsAbs(opts.SettingsRoot) {
 		return nil, i18n.Errorf(i18n.KeyWorkspaceNewSettingsRootNotAbsolute, opts.SettingsRoot)
 	}
+	if opts.Herdr != nil && opts.Loop == nil {
+		return nil, i18n.Errorf(i18n.KeyWorkspaceNewLoopMissing)
+	}
 
 	resolvedRoot, err := EnsureRoot(opts.Config.Workspace.Root)
 	if err != nil {
@@ -213,6 +231,7 @@ func New(opts Options) (*Manager, error) {
 	return &Manager{
 		cfg:          opts.Config,
 		herdr:        opts.Herdr,
+		loop:         managerLoop(opts),
 		logger:       logger,
 		now:          nowFunc,
 		homeDir:      homeDir,
@@ -261,4 +280,12 @@ type IssueRef struct {
 	// （herdr.worktree.base が null のときの base。3-22 の段4。
 	// 「orchestrator は NativeRef の中身を解釈しない」の唯一の例外がここである）。
 	NativeRef map[string]any
+}
+
+// managerLoop は Manager が持つ loop を決める。herdr を渡さない Manager は loop を持たない。
+func managerLoop(opts Options) loop.Runner {
+	if opts.Herdr == nil {
+		return nil
+	}
+	return opts.Loop
 }

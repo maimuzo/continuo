@@ -19,9 +19,9 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 - **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
 - **continuo waits out a spent quota.** When the window resets, it picks the work back up on its own
 - **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
-- **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR` — read [Before you start](#before-you-start)
+- **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR`, and never a comment that an AI marked as its own — read [Before you start](#before-you-start)
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
-- **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
+- **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to six roles (the sixth, direct chat, can be skipped)
 - **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
 
 ## How the kanban board drives it
@@ -69,9 +69,11 @@ How many issues run at once is a setting (two by default).
 
 ## Before you start
 
-**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with permission prompts turned off and allows `Bash` without argument restrictions. Nothing will stop and ask you.
+**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default), which is meant to run without asking you. Whether it falls back to a prompt after repeated classifier blocks has not been verified yet (see the `permission_mode: auto` table in [docs/upgrading.md](docs/upgrading.md)). Shell commands are checked by a classifier inside Claude Code before they run (choosing `dontAsk` denies anything outside the allow list without asking).
 
-**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The agent still runs `Bash` with no prompt, so whatever it decides to run, runs.
+**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. A comment whose first line is an AI marker (an HTML comment starting with `<!-- continuo:`, or a review marker) is read as a note, not an instruction, even from those three ([FAQ](docs/FAQ.md)). **That narrows the hole; it does not close it.** The classifier does not read the issue comments the agent fetches with `gh`, so a stranger's text cannot argue it into approving something, **but that text can still steer what the agent tries to run.**
+
+**One kind of issue comment does reach the classifier.** Each time continuo closes Claude Code, it posts a "Closed Claude Code" comment whose first line is `<!-- continuo:closed -->`. The next time it starts Claude Code, **it attaches to the first message every comment written after that record by an `OWNER` / `MEMBER` / `COLLABORATOR` without an AI marker** (with the default `auto`). To give the agent a permission such as "you may open an issue", wait until that record appears, then write it **as a new comment**. **If a trusted person quotes an outsider, the quoted part reaches the classifier as a human's permission too.** To turn this off, set `agent.relay_trusted_comments: false` ([SECURITY.md](SECURITY.md)).
 
 **On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
 
@@ -91,8 +93,8 @@ How many issues run at once is a setting (two by default).
 | | |
 | --- | --- |
 | OS | macOS or Linux. **No native Windows** — use WSL2 |
-| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.8.0** (it refuses to start on a socket protocol mismatch) |
-| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.233 |
+| [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.9.1** (it refuses to start on a socket protocol mismatch; set `herdr.protocol: 22` in `WORKFLOW.md`) |
+| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.283. continuo reads your plan's usage window from the usage API and, while that API returns errors, from Claude Code's status line (**only Pro and Max report it there**). **With an API key, set `rate_limit.source: none`** |
 | [`gh`](https://cli.github.com/) | Signed in with `gh auth login -s project`. Verified against 2.97.0 |
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |
@@ -154,7 +156,7 @@ continuo init      # writes WORKFLOW.md and continuo-ci.yaml; owner and kanban b
 **Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the kanban board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
 
 ```bash
-continuo setup                    # map your Status options to the five roles (interactive)
+continuo setup                    # map your Status options to six roles (interactive; the sixth can be skipped)
 continuo trust --dry-run          # show what would be trusted, without doing it
 continuo trust                    # trust those repositories; clone them if needed
 continuo allow-keychain-access    # macOS only, once — lets continuo read your plan's usage
@@ -229,7 +231,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 **The second file, `continuo-ci.yaml`, is not config** — continuo never reads it. It is a sample GitHub Actions workflow that fails pull requests whose review results were never posted. Review it, then move it to `.github/workflows/`. continuo works fine if you don't.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent.
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent. (The section that attaches comments people wrote since the last run is built from the issue comments right before sending, so it does not appear there.)
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 
@@ -241,17 +243,17 @@ tracker:
 agent:
   max_concurrent_agents: 2        # issues running at once
 claude:
-  turn_timeout_ms: 3600000        # give up after this long with no change on screen
+  turn_timeout_ms: 3600000        # give up after this long with no sign of progress
 ```
 
-`turn_timeout_ms` is **not** a cap on how long a turn may take. As long as the pane keeps changing, a single instruction can run for hours.
+`turn_timeout_ms` is **not** a cap on how long a turn may take. As long as herdr reports the agent as `working`, a single instruction can run for hours. continuo gives up only when no hook has arrived from Claude Code for this long and the agent is not `working`.
 
 **Do not write things like "write `CONTINUO-STATUS: review` when you are done" or "commit and push before that" in the body.** They already live in the brief built into the continuo binary.
 
 **Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (it ships saying Japanese — change it if you want something else), and so on. Delete any you do not need. **continuo still runs with an empty body.**
 
 ```bash
-continuo prompt --show            # the whole text that gets sent (built-in + your body)
+continuo prompt --show            # the whole text that gets sent (built-in + your body, minus the section that attaches people's comments)
 continuo prompt --show --builtin  # the built-in part only
 ```
 

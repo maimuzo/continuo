@@ -1,14 +1,16 @@
-// {"RUCM-CFG-SHA256": "84fe18b373fccaaaa45abd54d35647770fded53bfa246c36c3e7178accdb62d7", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4b38a9791ef09fdddfd89a5ff014dcf0d970a16a6375f34b95bbde6083fd670c", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
-// 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
+// 11本のパスは、9通りの終端フロー（と、どのフローにも属さない周回1本）の組み合わせである。
+// **終端フローごとに代表を1本ずつ**対応づける。
+// **件数は `.cfg.json` を数えた実測である**（2026-09-29。実装レビュー3周目の MEDIUM で直した。
+// **以前は「15本・6通り」と書いていたが、それは `origin/main` の時点の値である**）。
 package orchestrator_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,53 +19,6 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
-
-// newUsageServer は Claude の OAuth usage API の代わりに使う偽のサーバを立てる。
-//
-// **本番の API へは接続しない。**
-//
-// t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
-// limits: 返す枠の一覧（JSON にそのまま載る形）。
-// 戻り値の1つ目: 偽サーバの URL。
-// 戻り値の2つ目: 受け取ったリクエストの回数を数えるカウンタ。
-func newUsageServer(t *testing.T, limits []map[string]any) (string, *atomic.Int32) {
-	t.Helper()
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{"limits": limits}); err != nil {
-			t.Errorf("偽の usage API が応答を書けません: %v", err)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv.URL, &count
-}
-
-// newUsageReader は偽の usage API を向いた枠の読み取りを作る。
-//
-// t: 呼び出し元のテスト。
-// endpoint: 偽サーバの URL。
-// tokenEnv: トークンを入れた環境変数の名前。
-// 戻り値: 組み立てた Reader。
-func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
-	t.Helper()
-	t.Setenv(tokenEnv, "test-token")
-	reader, err := ratelimit.NewReader(ratelimit.Options{
-		Config: config.RateLimitConfig{
-			Source:            ratelimit.SourceOAuthUsageAPI,
-			TokenSource:       ratelimit.TokenSourceEnv,
-			TokenEnv:          tokenEnv,
-			PauseAbovePercent: 95,
-			PollIntervalMs:    1,
-		},
-		Endpoint: endpoint,
-	})
-	if err != nil {
-		t.Fatalf("ratelimit.NewReader に失敗した: %v", err)
-	}
-	return reader
-}
 
 // {"RUCM-PATH": "P001"}
 //
@@ -77,24 +32,20 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 // **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
 // 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
 //
-// 与える情報: 枠が100%。hook が来ていない run と、閾値の手前で hook を受けた run。
+// 与える情報: ステータスラインから届いた5時間の期間の使用率が100%（issue #284）。
+// hook が来ていない run と、閾値の手前で hook を受けた run。
 // 成功条件: 前者だけが枠待ちになり、時計が止まる。後者は枠待ちにならない。
 func TestQuota_100パーセントかつhookが来ていないrunだけを枠待ちにする(t *testing.T) {
-	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	endpoint, _ := newUsageServer(t, []map[string]any{
-		{"kind": "session", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
-	})
-	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_A")
-
 	fx := newStubFixture(t, stubFixtureOptions{
 		AgentStatus: herdr.AgentStatusUnknown,
-		RateLimit:   reader,
 		Mutate: func(cfg *config.Config) {
 			cfg.Claude.TurnTimeoutMs = 50
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
+	t.Cleanup(fx.Close)
+	// **回復待ちと閾値は新しさを問わない**ので、初めて見るセッションの1行で足りる。
+	fx.Orc.OnStatusline(slLine("pane-a", 100, slWin(100, time.Now().Add(2*time.Hour)), nil))
 	adoptRun(fx, 188)
 	adoptRun(fx, 189)
 
@@ -124,31 +75,31 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// TestQuota_余裕値が0以下なら新規のdispatchだけを止める は、
+// 「新規を止める線」と「この run は枠待ちである」を分けていることを確かめる。
 //
-// TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める は、
-// 「新規を止める閾値」と「この run は枠待ちである」を分けていることを確かめる。
-//
-// 目的: 設計 3-27 の「`pause_above_percent`（既定95%）を超えただけでは、枠待ちとみなさない。
+// 目的: 設計 3-27 の「使用率が 100 に達していなければ枠待ちとみなさない。
 // **走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
 //
-// 与える情報: 枠が 96%（100 には達していない）。`Ready` の issue が1件。
+// **新規を止める線は入札の余裕値1本だけである**（人間の決定。2026-09-06。issue #173）。
+// 使用率96・マージン既定10なので、5時間余裕値は `100 − 96 − 10 = −6` で0以下になる。
+// **`rate_limit.pause_above_percent` はキーごと消えた**（この test は触らない）。
+//
+// **RUCM のパス印は付けない。**この判定は「issue の担当を入札で決める」の側にあり、
+// この file の SOURCE（レートリミットで待って再開する）のパスには当たらない。
+//
+// 与える情報: ステータスラインから届いた使用率が 96%（100 には達していない。issue #284）。
+// `Ready` の issue が1件。
 // 成功条件: 新規の dispatch が起きず、既にある run は枠待ちにならない。
-func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める(t *testing.T) {
-	endpoint, _ := newUsageServer(t, []map[string]any{
-		{"kind": "session", "percent": 96, "resets_at": nil, "severity": "normal"},
-	})
-	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_B")
-
+func TestQuota_余裕値が0以下なら新規のdispatchだけを止める(t *testing.T) {
 	fx := newStubFixture(t, stubFixtureOptions{
-		RateLimit: reader,
 		Mutate: func(cfg *config.Config) {
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
-			cfg.RateLimit.PauseAbovePercent = 95
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 			cfg.Trust.RequireRepoTrusted = false
 		},
 	})
+	t.Cleanup(fx.Close)
+	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 96, 10)
 	running := adoptRun(fx, 188)
 	fx.Tracker.AddIssue(sampleIssue(190, "Ready"))
 
@@ -156,91 +107,51 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#190" {
-			t.Fatalf("閾値を超えているのに新規を dispatch している: %+v", v)
+			t.Fatalf("余裕値が0以下なのに新規を dispatch している: %+v", v)
 		}
 		if v.Identifier == running.Identifier && v.WaitingQuota {
-			t.Fatalf("95%%を超えただけで走行中の run の時計を止めている: %+v", v)
+			t.Fatalf("使用率が 100 に達していないのに走行中の run の時計を止めている: %+v", v)
 		}
 	}
 }
 
-// TestQuota_source_noneならusageAPIを1回も叩かない は、設定の意味を確かめる。
+// TestQuota_source_noneなら使用率を読まずに0として入札に参加する は、`rate_limit.source: none` の意味を
+// 確かめる（issue #284。計画の「source: none のとき」）。
 //
-// 目的: 設計 3-27 の「`rate_limit.source` に `none` を指定すれば、この API を1回も
-// 叩かずに運用できる」を守っていることを示す。
+// 目的: `none` は「読めなかった」ではなく、運用者が使用率で判定しないと決めた状態である
+// （設計 3-27 の逃げ道）。**statusline取得を開かず、quota.json を読まず、届いた行も保管しない。**
 //
-// 与える情報: `rate_limit.source: none` の Reader。巡回を3回。
-// 成功条件: 偽の usage API へのリクエストが0件になる。
-func TestQuota_source_noneならusageAPIを1回も叩かない(t *testing.T) {
-	endpoint, count := newUsageServer(t, []map[string]any{
-		{"kind": "session", "percent": 100, "resets_at": nil, "severity": "normal"},
-	})
-	t.Setenv("CONTINUO_TEST_OAUTH_TOKEN_C", "test-token")
-	reader, err := ratelimit.NewReader(ratelimit.Options{
-		Config: config.RateLimitConfig{
-			Source:      ratelimit.SourceNone,
-			TokenSource: ratelimit.TokenSourceEnv,
-			TokenEnv:    "CONTINUO_TEST_OAUTH_TOKEN_C",
-		},
-		Endpoint: endpoint,
-	})
-	if err != nil {
-		t.Fatalf("ratelimit.NewReader に失敗した: %v", err)
+// 与える情報: `rate_limit.source: none`。実行時ディレクトリに 100% を書いた quota.json。
+// 起動時の準備（PrepareStatusline）と巡回3回。ステータスラインの行を1行。
+// 成功条件: 保管値が空のまま（quota.json を読まず、枠待ちの判定に使う写しが nil）で、
+// statusline取得を1度も開かないこと。
+func TestQuota_source_noneなら使用率を読まずに0として入札に参加する(t *testing.T) {
+	root := t.TempDir()
+	quota := `{"session":{"percent":100,"resets_at":"` + time.Now().Add(2*time.Hour).UTC().Format(time.RFC3339) + `"}}`
+	if err := os.WriteFile(filepath.Join(root, "quota.json"), []byte(quota), 0o600); err != nil {
+		t.Fatalf("quota.json を書けません: %v", err)
 	}
+	fx := newStubFixture(t, stubFixtureOptions{Root: root, Logs: true})
+	t.Cleanup(fx.Close)
 
-	fx := newStubFixture(t, stubFixtureOptions{RateLimit: reader})
+	fx.Orc.PrepareStatusline(context.Background())
 	adoptRun(fx, 188)
 	for i := 0; i < 3; i++ {
 		fx.Orc.Tick(context.Background())
 	}
 
-	if got := count.Load(); got != 0 {
-		t.Fatalf("rate_limit.source が none なのに usage API を %d 回叩いた", got)
+	if snap := fx.Orc.QuotaSnapshotForTest(); snap != nil {
+		t.Errorf("source が none なのに quota.json を読んだ: %+v", snap)
 	}
-	if reader.Enabled() {
-		t.Fatalf("rate_limit.source が none なのに Enabled が真である")
+	if fx.Orc.StatuslineFetchRunningForTest() || fx.countLog("statusline取得") != 0 {
+		t.Errorf("source が none なのに statusline取得を開いた:\n%s", fx.Logs.String())
 	}
-}
-
-// TestQuota_資格情報が取れなければ枠の判定を諦めて起動は続ける は、macOS での既定の動きを確かめる。
-//
-// 目的: 設計 3-15 / 3-27 の「資格情報が取れなかったら、枠の判定を諦めて `none` と同じ動きに
-// する。**起動は止めない**」「**macOS では `~/.claude/.credentials.json` が無いのが普通である**
-// （Keychain にある）」を守っていることを示す。
-//
-// 与える情報: `~/.claude/.credentials.json` が無いホームディレクトリ。
-// 成功条件: `Fetch` がエラーを返さず nil を返し、以後 `Enabled` が偽になる。
-func TestQuota_資格情報が取れなければ枠の判定を諦めて起動は続ける(t *testing.T) {
-	endpoint, count := newUsageServer(t, nil)
-	reader, err := ratelimit.NewReader(ratelimit.Options{
-		Config: config.RateLimitConfig{
-			Source:      ratelimit.SourceOAuthUsageAPI,
-			TokenSource: ratelimit.TokenSourceClaudeCredentials,
-		},
-		Endpoint: endpoint,
-		// **Keychain は読まない。**このディレクトリには .claude/.credentials.json が無い。
-		HomeDir: t.TempDir(),
-	})
-	if err != nil {
-		t.Fatalf("ratelimit.NewReader に失敗した: %v", err)
-	}
-
-	snap, err := reader.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("資格情報が無いだけでエラーを返した（起動を止めてはならない）: %v", err)
-	}
-	if snap != nil {
-		t.Fatalf("資格情報が無いのに枠を返した: %+v", snap)
-	}
-	if reader.Enabled() {
-		t.Fatalf("諦めたあとも Enabled が真である")
-	}
-	if got := count.Load(); got != 0 {
-		t.Fatalf("資格情報が無いのに usage API を %d 回叩いた", got)
+	if got := len(fx.Herdr.SLStarts()); got != 0 {
+		t.Errorf("source が none なのに statusline取得の Claude Code を %d 回起動した", got)
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の指示を送らない は、
 // 二重投入の防止を確かめる。
@@ -249,39 +160,20 @@ func TestQuota_資格情報が取れなければ枠の判定を諦めて起動�
 // 機能を既定で持つ。**continuo がそこへ継続の指示を送ると二重投入になる。送る前に
 // `agent_status` を見る（`working` なら送らない。hook を待つ）」を守っていることを示す。
 //
-// 与える情報: 1回目の巡回では枠に余裕があり dispatch される。turn を投げたあとに枠が
-// 100%（`resets_at` は既に過去）になり、`agent.prompt` が `timeout` で返る。
-// `agent.get` は起動の確認のあと `working` を返す。
-// 成功条件: `agent.prompt` が1回だけで、枠明けの継続の指示が送られない。
+// 与える情報: 1回目の巡回では使用率に余裕があり dispatch される（ステータスラインから 50% が
+// 届いている。issue #284）。turn を投げたあとに、数秒後に明ける5時間の期間が 100% で届き、
+// `agent.prompt` が `timeout` で返る。`agent.get` は起動の確認のあと `working` を返す。
+// 成功条件: 期間が明けたあとも `agent.prompt` が1回だけで、枠明けの継続の指示が送られない。
 // そのあと `Stop` を流せば turn が終わる。
 func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の指示を送らない(t *testing.T) {
-	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
-	var usageReads atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		percent := 100
-		if usageReads.Add(1) == 1 {
-			// 1回目の巡回では枠に余裕がある（dispatch させるため）。
-			percent = 50
-		}
-		w.Header().Set("Content-Type", "application/json")
-		body := map[string]any{"limits": []map[string]any{
-			{"kind": "session", "percent": percent, "resets_at": past, "severity": "normal"},
-		}}
-		if err := json.NewEncoder(w).Encode(body); err != nil {
-			t.Errorf("偽の usage API が応答を書けません: %v", err)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_D")
-
 	fx := newFixture(t, fixtureOptions{
-		RateLimit: reader,
 		Mutate: func(cfg *config.Config) {
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 			cfg.Claude.PollWaitMs = 100
 		},
 	})
+	// **1回目の巡回では使用率に余裕がある**（値が新しいので statusline取得も開かない）。
+	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 50, 10)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
 	transcriptDir := t.TempDir()
@@ -327,14 +219,17 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// 2回目の巡回で枠が100%になる。そのあと agent.prompt を timeout で返す。
-	fx.Orc.Tick(context.Background())
+	// **turn の途中で使用率が 100% になる。**その期間は数秒後に明ける。
+	// そのあと agent.prompt を timeout で返す。
+	resetsAt := time.Now().Add(3 * time.Second)
+	fx.Orc.OnStatusline(slLine("pane-a", 300, slWin(100, resetsAt), nil))
 	close(released)
 
 	waitFor(t, 10*time.Second, "枠待ちの待ち直しへ入る", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentWait) > 0
 	})
-	time.Sleep(500 * time.Millisecond)
+	// **期間が明けるまで待つ。**明けたあとに継続の指示を送るかどうかを見る。
+	time.Sleep(time.Until(resetsAt) + time.Second)
 
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != 1 {
 		t.Fatalf("Claude Code が自分で継続しているのに継続の指示を送った（二重投入になる）: agent.prompt が %d 回", got)
@@ -360,24 +255,18 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 // 使い切っていないのに待ち直すと、動いていない run を永久に抱える。
 //
 // 目的: 枠に余裕があるとき、枠待ちにしないこと。
-// 与える情報: 使用率 50% を返す usage API と、hook を1件も受けていない run。
+// 与える情報: ステータスラインから届いた使用率 50%（issue #284）と、hook を1件も受けていない run。
 // 成功条件: 枠待ちの印が立たないこと。
 func TestQuota_枠を使い切っていなければ待ち直さない(t *testing.T) {
-	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	endpoint, _ := newUsageServer(t, []map[string]any{
-		{"kind": "session", "percent": 50, "resets_at": resetsAt, "severity": "normal"},
-	})
-	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_A")
-
 	fx := newStubFixture(t, stubFixtureOptions{
 		AgentStatus: herdr.AgentStatusUnknown,
-		RateLimit:   reader,
 		Mutate: func(cfg *config.Config) {
 			cfg.Claude.TurnTimeoutMs = 50
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
+	t.Cleanup(fx.Close)
+	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 50, 10)
 	adoptRun(fx, 188)
 
 	time.Sleep(120 * time.Millisecond)
@@ -392,32 +281,36 @@ func TestQuota_枠を使い切っていなければ待ち直さない(t *testing
 	}
 }
 
-// TestQuota_resets_atがnullの枠は待ち時間を決められない は、リセット時刻の扱いを確かめる。
+// TestQuota_resets_atの無い期間は保管しない は、リセット時刻の扱いを確かめる（issue #284）。
 //
-// **`resets_at` が null の枠がある**（設計 3-27）。
-// **いつ明けるか分からないものを「待つ」と決めると、永久に待つ run ができる。**
+// **いつ明けるか分からないものを「待つ」と決めると、永久に待つ run ができる**（設計 3-27）。
+// ステータスラインの `resets_at` が欠けた期間は、`resets_at` が 0（1970年）として届く。
+// **今より前の `resets_at` の期間は取り込まない**（計画の「値の形」）ので、保管値にも入らない。
 //
-// 目的: 使い切っている枠の `resets_at` が null のとき、その時刻を待ち時間にしないこと。
-// 与える情報: `percent: 100` かつ `resets_at: null` の枠。
-// 成功条件: 落ちずに巡回が回りきること（**時刻を決められないまま先へ進まない**）。
-func TestQuota_resets_atがnullの枠は待ち時間を決められない(t *testing.T) {
-	endpoint, _ := newUsageServer(t, []map[string]any{
-		{"kind": "session", "percent": 100, "resets_at": nil, "severity": "normal"},
-	})
-	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_A")
-
+// 目的: `resets_at` の無い 100% の期間で、枠待ちにしないこと。
+// 与える情報: `used_percentage: 100` かつ `resets_at` の無い5時間の期間と、hook を送らない run。
+// 成功条件: 落ちずに巡回が回りきり、保管値が空で、run が枠待ちにならないこと。
+func TestQuota_resets_atの無い期間は保管しない(t *testing.T) {
 	fx := newStubFixture(t, stubFixtureOptions{
 		AgentStatus: herdr.AgentStatusUnknown,
-		RateLimit:   reader,
 		Mutate: func(cfg *config.Config) {
 			cfg.Claude.TurnTimeoutMs = 50
-			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
-			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
+	t.Cleanup(fx.Close)
+	fx.Orc.OnStatusline(slLine("pane-a", 100, slWin(100, time.Unix(0, 0)), nil))
+	fx.Orc.OnStatusline(slLine("pane-a", 200, slWin(100, time.Unix(0, 0)), nil))
 	adoptRun(fx, 188)
 
 	time.Sleep(120 * time.Millisecond)
 	// **落ちないことを確かめる。**時刻を決められないまま進むと、ここで panic するか固まる。
 	fx.Orc.Tick(context.Background())
+
+	if snap := fx.Orc.QuotaSnapshotForTest(); snap != nil {
+		t.Errorf("resets_at の無い期間を保管した: %+v", snap)
+	}
+	if v, ok := viewOf(fx, "octocat/hello-world#188"); !ok || v.WaitingQuota {
+		t.Errorf("resets_at の無い期間で枠待ちにした: ok=%v %+v", ok, v)
+	}
 }
