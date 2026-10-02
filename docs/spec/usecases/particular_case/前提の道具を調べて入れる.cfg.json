@@ -1,0 +1,1165 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "前提の道具を調べて入れる",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/前提の道具を調べて入れる.rucm.md",
+    "rucm_block_sha256": "adc6a3923e66d6efeaa6f8854097100e7eac6017451ed819752004402393a7a5"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。"
+    },
+    "道具が既にある": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは選んだ道具について何も応答していない。システムはパッケージ管理に何も要求していない。"
+    },
+    "入れるコマンドが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。選んだ道具が ghq である実行では、案内は標準出力に出ている。選んだ道具が git か gh である実行では、案内は標準エラーに出ている。"
+    },
+    "端末が無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。"
+    },
+    "導入を断る": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          10
+        ]
+      },
+      "postcondition": "システムはパッケージ管理に何も要求していない。"
+    },
+    "導入の失敗": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          12
+        ]
+      },
+      "postcondition": "導入に失敗したことは標準エラーに出ている。システムは導入を止めていない。"
+    },
+    "依存を入れない指定": {
+      "when": "利用者が依存を入れない指定をした場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。"
+    },
+    "確認を省く指定": {
+      "when": "利用者が確認を省く指定をした場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            7
+          ]
+        }
+      ],
+      "postcondition": "システムは利用者に尋ねていない。システムは端末から応答を受け取れるかどうかを調べていない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに前提の道具の検査を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "利用者はシステムに実行してよいかどうかを答える。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT 利用者が実行を承諾している。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムはパッケージ管理に選んだ道具の導入を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは VALIDATES THAT 選んだ道具の導入が成功している。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムは利用者に選んだ道具を入れたことを応答する。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "UNTIL システムが git と gh と ghq を調べ終えている"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "道具が既にある-1",
+      "type": "action",
+      "flow": "道具が既にある",
+      "step": 1,
+      "statement": "システムは選んだ道具を足りないままの道具に数えない。"
+    },
+    {
+      "id": "道具が既にある-2",
+      "type": "resume",
+      "flow": "道具が既にある",
+      "step": 2,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "入れるコマンドが無い-1",
+      "type": "action",
+      "flow": "入れるコマンドが無い",
+      "step": 1,
+      "statement": "システムは利用者に選んだ道具を自分で入れる案内を応答する。"
+    },
+    {
+      "id": "入れるコマンドが無い-2",
+      "type": "action",
+      "flow": "入れるコマンドが無い",
+      "step": 2,
+      "statement": "システムは選んだ道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "入れるコマンドが無い-3",
+      "type": "resume",
+      "flow": "入れるコマンドが無い",
+      "step": 3,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "端末が無い-1",
+      "type": "action",
+      "flow": "端末が無い",
+      "step": 1,
+      "statement": "システムは選んだ道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "端末が無い-2",
+      "type": "resume",
+      "flow": "端末が無い",
+      "step": 2,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "導入を断る-1",
+      "type": "action",
+      "flow": "導入を断る",
+      "step": 1,
+      "statement": "システムは選んだ道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "導入を断る-2",
+      "type": "resume",
+      "flow": "導入を断る",
+      "step": 2,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "導入の失敗-1",
+      "type": "action",
+      "flow": "導入の失敗",
+      "step": 1,
+      "statement": "システムは利用者に選んだ道具の導入に失敗したことを応答する。"
+    },
+    {
+      "id": "導入の失敗-2",
+      "type": "action",
+      "flow": "導入の失敗",
+      "step": 2,
+      "statement": "システムは選んだ道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "導入の失敗-3",
+      "type": "resume",
+      "flow": "導入の失敗",
+      "step": 3,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "依存を入れない指定-1",
+      "type": "action",
+      "flow": "依存を入れない指定",
+      "step": 1,
+      "statement": "システムは選んだ道具を足りないままの道具に数える。"
+    },
+    {
+      "id": "依存を入れない指定-2",
+      "type": "resume",
+      "flow": "依存を入れない指定",
+      "step": 2,
+      "statement": "RESUME STEP 14"
+    },
+    {
+      "id": "確認を省く指定-1",
+      "type": "action",
+      "flow": "確認を省く指定",
+      "step": 1,
+      "statement": "システムは利用者が選んだ道具の導入を承諾しているものとして扱う。"
+    },
+    {
+      "id": "確認を省く指定-2",
+      "type": "resume",
+      "flow": "確認を省く指定",
+      "step": 2,
+      "statement": "RESUME STEP 11"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "選んだ道具が利用者の手元に無い"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "道具が既にある-1",
+      "kind": "false",
+      "condition": "NOT 選んだ道具が利用者の手元に無い"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "依存を入れない指定-1",
+      "kind": "global",
+      "condition": "利用者が依存を入れない指定をした場合"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "パッケージ管理に選んだ道具を入れるコマンドがある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "入れるコマンドが無い-1",
+      "kind": "false",
+      "condition": "NOT パッケージ管理に選んだ道具を入れるコマンドがある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "端末から利用者の応答を受け取れる"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "端末が無い-1",
+      "kind": "false",
+      "condition": "NOT 端末から利用者の応答を受け取れる"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "確認を省く指定-1",
+      "kind": "global",
+      "condition": "利用者が確認を省く指定をした場合"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "利用者が実行を承諾している"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "導入を断る-1",
+      "kind": "false",
+      "condition": "NOT 利用者が実行を承諾している"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "true",
+      "condition": "選んだ道具の導入が成功している"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "導入の失敗-1",
+      "kind": "false",
+      "condition": "NOT 選んだ道具の導入が成功している"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "システムが git と gh と ghq を調べ終えている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-3",
+      "kind": "loop",
+      "condition": "NOT システムが git と gh と ghq を調べ終えている"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "道具が既にある-1",
+      "to": "道具が既にある-2",
+      "kind": "seq"
+    },
+    {
+      "from": "道具が既にある-2",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "入れるコマンドが無い-1",
+      "to": "入れるコマンドが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "入れるコマンドが無い-2",
+      "to": "入れるコマンドが無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "入れるコマンドが無い-3",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "端末が無い-1",
+      "to": "端末が無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "端末が無い-2",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "導入を断る-1",
+      "to": "導入を断る-2",
+      "kind": "seq"
+    },
+    {
+      "from": "導入を断る-2",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "導入の失敗-1",
+      "to": "導入の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "導入の失敗-2",
+      "to": "導入の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "導入の失敗-3",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "依存を入れない指定-1",
+      "to": "依存を入れない指定-2",
+      "kind": "seq"
+    },
+    {
+      "from": "依存を入れない指定-2",
+      "to": "BASIC FLOW-14",
+      "kind": "resume"
+    },
+    {
+      "from": "確認を省く指定-1",
+      "to": "確認を省く指定-2",
+      "kind": "seq"
+    },
+    {
+      "from": "確認を省く指定-2",
+      "to": "BASIC FLOW-11",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "システムは利用者に選んだ道具を入れたことを応答する。",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "cycle",
+      "terminal_flow": "",
+      "postcondition": "",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "システムは利用者に選んだ道具を入れたことを応答する。",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "導入の失敗-1",
+        "導入の失敗-2",
+        "導入の失敗-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "CONDITION: NOT 選んだ道具の導入が成功している",
+        "システムは利用者に選んだ道具の導入に失敗したことを応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "cycle",
+      "terminal_flow": "導入の失敗",
+      "postcondition": "導入に失敗したことは標準エラーに出ている。システムは導入を止めていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "導入の失敗-1",
+        "導入の失敗-2",
+        "導入の失敗-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "CONDITION: NOT 選んだ道具の導入が成功している",
+        "システムは利用者に選んだ道具の導入に失敗したことを応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "導入を断る-1",
+        "導入を断る-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "CONDITION: NOT 利用者が実行を承諾している",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "導入を断る",
+      "postcondition": "システムはパッケージ管理に何も要求していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "導入を断る-1",
+        "導入を断る-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "システムは利用者に実行するコマンドを示して実行してよいかを尋ねる。",
+        "利用者はシステムに実行してよいかどうかを答える。",
+        "システムは VALIDATES THAT 利用者が実行を承諾している。",
+        "CONDITION: NOT 利用者が実行を承諾している",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "端末が無い-1",
+        "端末が無い-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: NOT 端末から利用者の応答を受け取れる",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "cycle",
+      "terminal_flow": "端末が無い",
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "端末が無い-1",
+        "端末が無い-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: NOT 端末から利用者の応答を受け取れる",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "確認を省く指定-1",
+        "確認を省く指定-2",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: 利用者が確認を省く指定をした場合",
+        "システムは利用者が選んだ道具の導入を承諾しているものとして扱う。",
+        "RESUME STEP 11",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "システムは利用者に選んだ道具を入れたことを応答する。",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "cycle",
+      "terminal_flow": "確認を省く指定",
+      "postcondition": "システムは利用者に尋ねていない。システムは端末から応答を受け取れるかどうかを調べていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "確認を省く指定-1",
+        "確認を省く指定-2",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: 利用者が確認を省く指定をした場合",
+        "システムは利用者が選んだ道具の導入を承諾しているものとして扱う。",
+        "RESUME STEP 11",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "システムは利用者に選んだ道具を入れたことを応答する。",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "確認を省く指定-1",
+        "確認を省く指定-2",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "導入の失敗-1",
+        "導入の失敗-2",
+        "導入の失敗-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: 利用者が確認を省く指定をした場合",
+        "システムは利用者が選んだ道具の導入を承諾しているものとして扱う。",
+        "RESUME STEP 11",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "CONDITION: NOT 選んだ道具の導入が成功している",
+        "システムは利用者に選んだ道具の導入に失敗したことを応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "cycle",
+      "terminal_flow": "導入の失敗",
+      "postcondition": "導入に失敗したことは標準エラーに出ている。システムは導入を止めていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "確認を省く指定-1",
+        "確認を省く指定-2",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "導入の失敗-1",
+        "導入の失敗-2",
+        "導入の失敗-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "システムは VALIDATES THAT 端末から利用者の応答を受け取れる。",
+        "CONDITION: 利用者が確認を省く指定をした場合",
+        "システムは利用者が選んだ道具の導入を承諾しているものとして扱う。",
+        "RESUME STEP 11",
+        "システムはパッケージ管理に選んだ道具の導入を要求する。",
+        "システムは VALIDATES THAT 選んだ道具の導入が成功している。",
+        "CONDITION: NOT 選んだ道具の導入が成功している",
+        "システムは利用者に選んだ道具の導入に失敗したことを応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "入れるコマンドが無い-1",
+        "入れるコマンドが無い-2",
+        "入れるコマンドが無い-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "CONDITION: NOT パッケージ管理に選んだ道具を入れるコマンドがある",
+        "システムは利用者に選んだ道具を自分で入れる案内を応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "cycle",
+      "terminal_flow": "入れるコマンドが無い",
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。選んだ道具が ghq である実行では、案内は標準出力に出ている。選んだ道具が git か gh である実行では、案内は標準エラーに出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "入れるコマンドが無い-1",
+        "入れるコマンドが無い-2",
+        "入れるコマンドが無い-3",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "システムは VALIDATES THAT パッケージ管理に選んだ道具を入れるコマンドがある。",
+        "CONDITION: NOT パッケージ管理に選んだ道具を入れるコマンドがある",
+        "システムは利用者に選んだ道具を自分で入れる案内を応答する。",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "依存を入れない指定-1",
+        "依存を入れない指定-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "CONDITION: 利用者が依存を入れない指定をした場合",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P016",
+      "terminal": "cycle",
+      "terminal_flow": "依存を入れない指定",
+      "postcondition": "システムは利用者に尋ねていない。システムはパッケージ管理に何も要求していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "依存を入れない指定-1",
+        "依存を入れない指定-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "システムは利用者に選んだ道具が無いことと選んだ道具の使い道を応答する。",
+        "CONDITION: 利用者が依存を入れない指定をした場合",
+        "システムは選んだ道具を足りないままの道具に数える。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    },
+    {
+      "id": "P017",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは git と gh と ghq を全部調べ終えている。足りないままの道具の一覧が決まっている。足りないままの道具の一覧は、システムが入れなかった git と gh と ghq と、利用者の手元に無い herdr と claude である。システムは herdr と claude を入れていない。案内は標準出力に出ている。実行してよいかを尋ねる文言は端末へ直接出ている。尋ねる文言は標準出力にも標準エラーにも出ていない。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "道具が既にある-1",
+        "道具が既にある-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "CONDITION: NOT 選んだ道具が利用者の手元に無い",
+        "システムは選んだ道具を足りないままの道具に数えない。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "システムは利用者に herdr と claude のうち足りない道具の導入先を応答する。",
+        "システムは herdr と claude のうち足りない道具を足りないままの道具に数える。"
+      ]
+    },
+    {
+      "id": "P018",
+      "terminal": "cycle",
+      "terminal_flow": "道具が既にある",
+      "postcondition": "システムは選んだ道具について何も応答していない。システムはパッケージ管理に何も要求していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "道具が既にある-1",
+        "道具が既にある-2",
+        "BASIC FLOW-14",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに前提の道具の検査を要求する。",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。",
+        "システムは VALIDATES THAT 選んだ道具が利用者の手元に無い。",
+        "CONDITION: NOT 選んだ道具が利用者の手元に無い",
+        "システムは選んだ道具を足りないままの道具に数えない。",
+        "RESUME STEP 14",
+        "UNTIL システムが git と gh と ghq を調べ終えている",
+        "CONDITION: NOT システムが git と gh と ghq を調べ終えている",
+        "システムは git と gh と ghq の順に次の道具を1つ選ぶ。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 31,
+    "nodes_covered": 31,
+    "edges_total": 38,
+    "edges_covered": 38
+  }
+}
