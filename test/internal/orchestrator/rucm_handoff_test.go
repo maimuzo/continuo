@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c433f1cd699399a4fa8a90f167ed1d0a6b15dbce3184450b8072ef50968e99e7", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "d24d3bbfa0a4976ed20f7baf334b19f9bfbb12308203b4065437d6f333120478", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **RUCM から生成したテストである。**「人間に判断を渡す」の代替フローのうち、
 // **continuo が Status を書いてはならない2つの経路**を検査する。

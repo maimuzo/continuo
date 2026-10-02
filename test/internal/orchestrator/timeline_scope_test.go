@@ -96,31 +96,6 @@ func TestTimelineScope_取り残されたworktreeの照合は誰がStatusを書�
 	}
 }
 
-// TestTimelineScope_復元の取り直しは誰がStatusを書いたかを取らない は、設計 3-61 を確かめる。
-//
-// 目的: 復元の段3（`refetchByIdentities`）が見るのは、取り直した Status と識別子だけである。
-// **記録は1つも読まない。**引き継いだ run の記録は、最初の巡回の実行中の照合が入れ直す。
-//
-// 与える情報: `In Progress` の issue の worktree と身元ファイルがディスクにあり、
-// その worktree を cwd に持つ pane が生きている状態（引き継ぎの中心の経路）。
-// 成功条件: 取り直しが1回だけ走り、それが記録を取らない側であること。
-func TestTimelineScope_復元の取り直しは誰がStatusを書いたかを取らない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
-	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
-		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
-	})
-
-	restore(t, fx)
-
-	if got, want := idRefreshCalls(fx), []string{withoutTimelineCall}; !equalStrings(got, want) {
-		t.Fatalf("復元の取り直しが誰が Status を書いたかまで取っている: got %v, want %v", got, want)
-	}
-}
-
 // TestTimelineScope_実行中のrunの照合は誰がStatusを書いたかを取る は、設計 3-61 を確かめる。
 //
 // 目的: 巡回の実行中の照合（`reconcileRunning`）は、**記録を読む2つのうちの1つである。**

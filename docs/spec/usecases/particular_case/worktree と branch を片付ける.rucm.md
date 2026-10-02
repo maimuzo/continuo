@@ -1,504 +1,467 @@
 # ユースケース: worktree と branch を片付ける
 
+> **この記述は、巡回が起こす片付けを書いている。**実装の入口は `internal/orchestrator/reconcile.go` の `reconcileWorktrees` で、
+> 実行中の印に入っていない worktree を1つずつ調べ、Status が `cleanup.on_states` に入っていれば
+> `internal/workspace/cleanup.go` の `Cleanup` を呼ぶ。**記述の対象は worktree 1つである。**巡回は同じ手順を worktree の数だけ繰り返す。
+> そこで実装が「この worktree を飛ばして次の worktree へ進む」ところは、この記述では `ABORT`（この worktree についてはここで終わる）と書く。
+>
+> **片付けを起こす契機は、巡回のほかに4つある**（turn の終わり・復元・起動時の掃除・`continuo abandon`）。
+> どれも同じ `Cleanup` を通るので、基本フローの「置き場所の内側にあることを確かめる」段から後ろは共通である。
+> **違うのは、見送ったときにコメントを書くか・何をログに出すか・clone が押さえられているときに待つか、である。**
+> 違いは下の「片付けを起こす契機は5つある」の表に書く。
+>
+> **worktree を消したあとの2つの始末は、別の記述に分けてある。**リポジトリの親 workspace は
+> [リポジトリの親 workspace を閉じる.rucm.md](リポジトリの親%20workspace%20を閉じる.rucm.md)、branch は
+> [branch を始末する.rucm.md](branch%20を始末する.rucm.md) に書く。どちらも失敗しても止まらずに次の段へ進むので、
+> 1本に書くと、worktree の消え方・親 workspace の結末・branch の結末の掛け算で経路が増える。
+
 ## 根拠資料
 
-- `docs/plans/continuo_design.md#3-9`（後始末の手順0 から手順7b）
-- `docs/plans/continuo_design.md#3-85c`（印に入っていない worktree の pane を閉じたら、閉じた記録を書く）
-- `docs/plans/continuo_design.md#3-18`（身元ファイル。片付けを見送った時刻）
-- `docs/plans/continuo_design.md#3-20`（worktree が置き場所の内側にあることを検査する）
-- `docs/plans/continuo_design.md#3-22`（worktree の置き場所は gwq の規則に合わせる）
-- `docs/plans/continuo_design.md#4-1`（worktree を消す契機は Done だけにする）
-- `docs/plans/continuo_design.md#8-1`（branch を消す。仕様は workspace のディレクトリだけを消す）
-- `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
-- `internal/workspace/cleanup.go` の `ShouldCleanup`、`Cleanup`、`effectiveBase`、`resolveWorkspaceID`、`deletableBranch`、`removeWorktree`、`removeWorktreeByHand`
-- `internal/workspace/git.go` の `gitBranchExists`
-- `internal/workspace/sweep.go` と `internal/workspace/scan.go`
-- `internal/orchestrator/reconcile.go` の `reconcileWorktrees`、`closeOrphanPane`
-- `internal/orchestrator/lifecycle.go` の `cleanupWorktree`、`cleanupPath`
+- `docs/plans/continuo_design.md` の「3-9. worktree と branch の後始末」（手順1 から手順7b。手順7 が巡回の片付け）
+- `docs/plans/continuo_design.md` の「3-83f. 印を外す道は、門とは別に6本ある」（閉じる集合）
+- `docs/plans/continuo_design.md` の「3-85c. 閉じた記録を書く場所と、書かない場所」
+- `docs/plans/continuo_design.md` の「6-17. 片付けの RUCM は、止まる経路を3つ足して11本にする」
+- `internal/orchestrator/reconcile.go` の `reconcileWorktrees` / `closeOrphanPane` / `recordOrphanClosed`
+- `internal/orchestrator/lifecycle.go` の `cleanupPath` / `cleanupWorktree` / `finishRunClaimed`（巡回ではない契機）
+- `internal/orchestrator/restore.go` の `cleanupInto`、`internal/orchestrator/sweep.go` の `sweepFinishedWorktrees`、`internal/abandon/abandon.go` の `remove`（巡回ではない契機）
+- `internal/workspace/scan.go` の `Scan`
+- `internal/workspace/cleanup.go` の `ShouldCleanup` / `Cleanup` / `leftoverReasons` / `effectiveBase` / `deletableBranch` / `resolveWorkspaceID` / `fallbackWorkspaceID` / `removeWorktree` / `requestWorktreeRemoval` / `removeWorktreeByHand` / `closeWorktreeWorkspace` / `removeSettingsFile`
+- `internal/workspace/repo.go` の `verifiedRepo`
+- `internal/workspace/serial.go` の `tryRun`（`ErrCloneBusy`）
 
 ## RUCM
 
 ```rucm
 USE CASE NAME: worktree と branch を片付ける
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは worktree の身元ファイルを読み、ボードの Status をまとめて取り直す。システムは Status が cleanup.on_states に入った worktree について、失うものが残っていないことを確かめてから worktree と branch と設定ファイルを消す。
-PRECONDITION: システムは常駐している。worktree の置き場所に身元ファイルを持つ worktree が1つ以上ある。利用者はボードの issue の Status を cleanup.on_states の選択肢へ動かしている。設定の cleanup.enabled は true である。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは実行中の印に入っていない worktree の身元ファイルを読む。システムはボードの Status をまとめて取り直す。システムは Status が cleanup.on_states に入った worktree について、失うものが残っていないことを確かめる。システムは worktree を消す。システムはリポジトリの親 workspace と branch の始末を別の記述に任せる。システムは issue ごとの Claude Code の設定ファイルを消す。
+PRECONDITION: システムは常駐している。worktree の置き場所に worktree が1つある。worktree の issue は実行中の印に入っていない。設定の herdr.worktree.create_via_herdr は真である。設定の cleanup.require_clean_worktree は真である。設定の cleanup.require_pushed は真である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、herdr、git
-DEPENDENCY: なし
+DEPENDENCY: INCLUDE USE CASE リポジトリの親 workspace を閉じる、INCLUDE USE CASE branch を始末する
 GENERALIZATION: なし
 
 BASIC FLOW:
 1. 巡回タイマーはシステムに巡回の開始を要求する。
 2. システムは VALIDATES THAT worktree の置き場所を走査できる。
 3. システムは VALIDATES THAT worktree の中の身元ファイルを読める。
-4. システムは VALIDATES THAT ボードを project item の ID 指定でまとめて取り直せる。
-5. システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。
-6. システムは VALIDATES THAT worktree が workspace.root の内側にある。
-7. システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。
-8. システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。
-9. システムは VALIDATES THAT worktree を消す宛先の herdr workspace を確定できる。
-10. システムは workspace_hooks の before_remove を実行する。
-11. システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。
-12. システムは VALIDATES THAT worktree の実体が置き場所から消えている。
-13. IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN
-14.   システムは herdr に workspace の一覧を要求する。
-15.   IF 控えた ID の workspace がそのリポジトリ本体を開いている THEN
-16.     IF 同じリポジトリの worktree の workspace が1つも残っていない THEN
-17.       システムは herdr にリポジトリの親 workspace を閉じることを要求する。
-18.     ELSE
-19.       システムは同じリポジトリの残っている worktree のうち、置き場所の内側にあって身元ファイルを読めて親 workspace の ID をまだ持っていないものすべてへ、その ID を書き移す。
-20.     ENDIF
-21.   ENDIF
-22. ENDIF
-23. IF 身元ファイルに書かれた branch がリポジトリに実在しない THEN
-24.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
-25. ELSEIF 設定の cleanup.delete_branch が偽である THEN
-26.   システムは branch を残し、残ったものとして利用者に伝える。
-27. ELSE
-28.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
-29. ENDIF
-30. システムは issue ごとの Claude Code の設定ファイルを消す。
-31. システムは利用者に片付けの完了をログで応答する。
-POSTCONDITION: worktree は置き場所に無い。branch は、設定の cleanup.delete_branch が真であれば無い（元から無かった場合を含む）。偽であれば残っており、残ったものとして利用者に伝えている。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。残っていた場合は、その worktree の身元ファイルが親 workspace の ID を持っている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
+4. システムは GitHub Projects v2 に project item の ID を渡して issue の取り直しを要求する。
+5. システムは VALIDATES THAT GitHub Projects v2 が取り直した issue の一覧を応答する。
+6. システムは VALIDATES THAT 取り直した issue の一覧に worktree の issue が入っている。
+7. システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。
+8. システムは VALIDATES THAT 設定の cleanup.enabled が真である。
+9. システムは VALIDATES THAT worktree が workspace.root の内側にある。
+10. システムは VALIDATES THAT worktree の .git が指すリポジトリが置き場所のパスから決めた clone と食い違っていない。
+11. システムは git にコミットされていない変更の一覧を要求する。
+12. システムは git に push されていない成果の有無を要求する。
+13. システムは VALIDATES THAT 見送る理由が1つも無い。
+14. システムは身元ファイルの branch を消してよいかを判定する。
+15. システムは VALIDATES THAT リポジトリ本体の clone が statusline取得の workspace に押さえられていない。
+16. システムは herdr に worktree を開いている workspace の ID を要求する。
+17. システムは VALIDATES THAT herdr が別のパスの worktree を応答していない。
+18. システムは workspace_hooks の before_remove を実行する。
+19. システムは herdr に workspace の ID を渡して worktree の削除を要求する。
+20. IF worktree の実体が herdr への要求で消えていない THEN
+21.   システムは worktree のディレクトリを消す。
+22.   システムは VALIDATES THAT worktree のディレクトリの削除が成功している。
+23.   システムは git の worktree の登録の掃除を試みる。
+24.   システムは herdr に残っている worktree の workspace の close を要求する。
+25. ENDIF
+26. INCLUDE USE CASE リポジトリの親 workspace を閉じる
+27. INCLUDE USE CASE branch を始末する
+28. システムは issue ごとの Claude Code の設定ファイルを消す。
+29. システムは利用者に片付けの完了をログで応答する。
+POSTCONDITION: worktree は置き場所に無い。worktree の herdr workspace は閉じている。リポジトリの親 workspace の扱いは、リポジトリの親 workspace を閉じる の事後条件のとおりである。branch の扱いは、branch を始末する の事後条件のとおりである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。issue にコメントは増えていない。
 
 BOUNDED ALTERNATIVE FLOW 材料を取れない:
-RFS BASIC FLOW 2,3,4
-1. システムは材料を取れなかった worktree を消さない。
+RFS BASIC FLOW 2,5
+1. システムは worktree を1つも消さない。
 2. システムは利用者に材料を取れない理由をログで応答する。
 3. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue にコメントは増えていない。身元ファイルは書き換えられていない。次の巡回が同じ worktree をもう一度調べられる。
+POSTCONDITION: worktree は残っている。branch は残っている。issue にコメントは増えていない。身元ファイルは書き換えられていない。巡回は片付けを1つも行わずに終わっている。次の巡回が同じ worktree をもう一度調べる。
+
+SPECIFIC ALTERNATIVE FLOW 身元ファイルを読めない:
+RFS BASIC FLOW 3
+1. システムは身元ファイルを読めない worktree を消さない。
+2. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。issue にコメントは増えていない。システムは身元ファイルを読めないことをログに出していない。巡回はほかの worktree の照合を続けている。
+
+SPECIFIC ALTERNATIVE FLOW 見えないissue:
+RFS BASIC FLOW 6
+1. システムは worktree を消さない。
+2. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。pane は閉じていない。issue にコメントは増えていない。システムはログを出していない。
 
 SPECIFIC ALTERNATIVE FLOW 片付けの対象外:
-RFS BASIC FLOW 5
-1. システムは worktree を残す。
-2. システムは herdr に workspace の pane の一覧を要求する。
-3. IF Status が active_states に入っていて pane に agent がいる THEN
-4.   システムは herdr の pane を閉じる。
-5.   システムは、閉じる対象の pane を全部閉じられたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
-6. ENDIF
-7. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。pane を全部閉じられた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。
+RFS BASIC FLOW 7
+1. IF Status が tracker.direct_chat_state である THEN
+2.   システムは worktree を閉じる集合へ入れる。
+3. ELSEIF Status が active_states に入っている THEN
+4.   システムは herdr に pane の一覧を要求する。
+5.   システムは worktree を cwd に持つ閉じる対象の pane を閉じる。
+6.   IF システムが閉じる対象の pane を全部閉じていて、閉じた pane が1枚以上ある THEN
+7.     システムは issue に Claude Code を閉じた記録を1件コメントする。
+8.   ENDIF
+9. ENDIF
+10. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。issue の Status は変わっていない。Status が active_states に入っていれば、システムは worktree を cwd に持つ閉じる対象の pane の close を要求している。pane を全部閉じられて1枚以上閉じた場合は、issue に Claude Code を閉じた記録のコメントが1件増えている。Status が active_states にも tracker.direct_chat_state にも入っていなければ、システムは herdr に何も要求していない。
+
+SPECIFIC ALTERNATIVE FLOW 片付けの無効:
+RFS BASIC FLOW 8
+1. システムは片付けを1つも行わない。
+2. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。issue にコメントは増えていない。巡回は片付けを行わないことをログに出していない。
 
 SPECIFIC ALTERNATIVE FLOW 置き場所の外:
-RFS BASIC FLOW 6
+RFS BASIC FLOW 9
 1. システムは worktree を1つも消さない。
 2. システムは利用者に封じ込め検査の失敗をログで応答する。
 3. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。置き場所の外のディレクトリは1つも消えていない。
+POSTCONDITION: worktree は残っている。branch は残っている。置き場所の外のディレクトリは1つも消えていない。システムは herdr に何も要求していない。
 
-SPECIFIC ALTERNATIVE FLOW 未コミットの変更:
-RFS BASIC FLOW 7
+SPECIFIC ALTERNATIVE FLOW リポジトリの食い違い:
+RFS BASIC FLOW 10
 1. システムは worktree を消さない。
-2. システムは issue に片付けを見送った理由を1件コメントする。
-3. システムは身元ファイルに片付けを見送った時刻を書く。
-4. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。身元ファイルに片付けを見送った時刻がある。
+2. システムは利用者にリポジトリの食い違いをログで応答する。
+3. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。システムは herdr に何も要求していない。issue にコメントは増えていない。
 
-SPECIFIC ALTERNATIVE FLOW 未pushの成果:
-RFS BASIC FLOW 8
+SPECIFIC ALTERNATIVE FLOW 失うものが残っている:
+RFS BASIC FLOW 13
 1. システムは worktree を消さない。
-2. システムは issue に片付けを見送った理由を1件コメントする。
-3. システムは身元ファイルに片付けを見送った時刻を書く。
-4. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。
+2. システムは利用者に見送る理由をログで応答する。
+3. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。巡回は issue に片付けを見送った理由をコメントしていない。巡回は身元ファイルに片付けを見送った時刻を書いていない。次の巡回が同じ判定をもう一度行う。
+
+SPECIFIC ALTERNATIVE FLOW cloneが押さえられている:
+RFS BASIC FLOW 15
+1. システムは worktree を消さない。
+2. システムは利用者に片付けを次の巡回へ回すことをログで応答する。
+3. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。workspace_hooks の before_remove は実行していない。システムは herdr に worktree を開いている workspace の ID を要求していない。次の巡回が同じ worktree の片付けをやり直す。
 
 SPECIFIC ALTERNATIVE FLOW 宛先が定まらない:
-RFS BASIC FLOW 9
+RFS BASIC FLOW 17
 1. システムは worktree を消さない。
-2. システムは workspace_hooks の before_remove を実行しない。
-3. システムは利用者に宛先が定まらない理由をログで応答する。
-4. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。before_remove は実行していない。herdr の workspace は1つも閉じていない。issue ごとの Claude Code の設定ファイルは残っている。
+2. システムは利用者に宛先が定まらない理由をログで応答する。
+3. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。workspace_hooks の before_remove は実行していない。システムは herdr に worktree の削除を要求していない。issue ごとの Claude Code の設定ファイルは残っている。
 
 SPECIFIC ALTERNATIVE FLOW 消せないworktree:
-RFS BASIC FLOW 12
+RFS BASIC FLOW 22
 1. システムは branch の削除を要求しない。
 2. システムは issue ごとの Claude Code の設定ファイルを消さない。
 3. システムは利用者に worktree を消せない理由をログで応答する。
 4. ABORT
-POSTCONDITION: worktree は消し切れずに残っている。branch は残っている。issue ごとの Claude Code の設定ファイルは残っている。workspace_hooks の before_remove は実行済みである。リポジトリの親 workspace は閉じていない。
-
-GLOBAL ALTERNATIVE FLOW 壊れたref:
-BRANCH FROM BASIC FLOW 23
-WHEN branch の ref が読めず git が branch の実在にも削除にも答えられない場合
-1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
-2. システムは壊れた ref のファイルを1つ消す。
-3. システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。
-4. システムは VALIDATES THAT 消したあとに branch が残っていない。
-5. システムは branch の始末の結果を利用者に応答する。
-6. RESUME STEP 30
-POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。
-
-SPECIFIC ALTERNATIVE FLOW 消さないref:
-RFS 壊れたref 1
-1. システムは branch を残す。
-2. RESUME STEP 5
-POSTCONDITION: branch は残っている。ref のファイルは1バイトも消えていない。worktree は置き場所に無い。
-
-SPECIFIC ALTERNATIVE FLOW 生き返ったref:
-RFS 壊れたref 4
-1. システムは branch をもう一度消すことを要求する。
-2. システムは残った branch を利用者に応答する。
-3. RESUME STEP 6
-POSTCONDITION: 壊れた ref のファイルは消えている。branch が残ったなら、残ったものとして利用者に伝えている。
-
-GLOBAL ALTERNATIVE FLOW 片付けの無効:
-BRANCH FROM BASIC FLOW 5
-WHEN 設定の cleanup.enabled が false である場合
-1. システムは片付けを1つも行わない。
-2. システムは issue にコメントを書かない。
-3. システムは利用者に片付けを行わないことをログで応答する。
-4. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。issue にコメントは増えていない。
+POSTCONDITION: worktree は消し切れずに残っている。branch は残っている。issue ごとの Claude Code の設定ファイルは残っている。workspace_hooks の before_remove は実行済みである。システムはリポジトリの親 workspace を閉じる を行っていない。システムは branch を始末する を行っていない。
 ```
+
+## 片付けを起こす契機は5つある
+
+**この記述の基本フローと代替フローは、1行目の「巡回」を書いている。**ほかの4つは、段1〜7（worktree を見つけて Status を確かめるまで）が契機ごとに違い、段8 から後ろは同じ `Cleanup` を通る。
+
+| 契機 | 実装の入口 | 渡す base | clone が押さえられているとき | 見送り・失敗を誰へ出すか |
+| --- | --- | --- | --- | --- |
+| **巡回**（この記述） | `internal/orchestrator/reconcile.go` の `reconcileWorktrees` | 渡さない（身元ファイルの `base` で補う） | **待たない。**何も消さずに次の巡回へ回す | ログだけ。**issue へコメントしない。身元ファイルへ時刻も書かない** |
+| turn の終わり | `internal/orchestrator/lifecycle.go` の `finishRunClaimed` → `cleanupWorktree` → `cleanupPath` | run が持っている base | 待つ | ログと、issue へのコメント1件 |
+| 復元 | `internal/orchestrator/restore.go` の `cleanupInto` → `cleanupPath` | 渡さない | 待つ | ログと、issue へのコメント1件 |
+| 起動時の掃除 | `internal/orchestrator/sweep.go` の `sweepFinishedWorktrees` → `cleanupPath` | 渡さない | 待つ | ログと、issue へのコメント1件 |
+| `continuo abandon` | `internal/abandon/abandon.go` の `remove` | 渡さない | 待つ | 画面（標準出力と標準エラー）。ログは出ない |
+
+**`cleanupPath` を通る3つの契機だけが、見送りをコメントする。**`Cleanup` が返した `ShouldComment` が真（身元ファイルの `cleanup_deferred_at` がゼロ値）で、
+issue のノード ID が分かるときに、「worktree を片付けずに残しました」のコメントを1件書く。**投稿に成功したあとで** `MarkCleanupDeferred` が身元ファイルへ時刻を書くので、2回目からは書かない。
+
+**巡回は `Cleanup` の戻り値の `ShouldComment` を見ない。**`reconcileWorktrees` は、エラーなら WARN、消せたら INFO を出すだけである。
+見送ったときは `Cleanup` 自身が WARN（`worktree を消さずに残しました`）を出すが、**これは巡回のたびに出る。**コメントも時刻も残らない。
+
+| 何が起きたか | 巡回が出すもの | `cleanupPath` を通る契機が出すもの |
+| --- | --- | --- |
+| `cleanup.enabled` が偽 | **何も出さない** | WARN `worktree を片付けずに残しました`（理由つき）。コメントは書かない |
+| 失うものが残っている | `Cleanup` の WARN `worktree を消さずに残しました`（毎巡回） | 同じ WARN に加えて WARN `worktree を片付けずに残しました`。**1回目だけ issue へコメントし、身元ファイルへ時刻を書く** |
+| git が答えない（壊れた worktree） | 上の WARN の `next_steps` に、人間が次にすることが入る | 上に加えて WARN `壊れた worktree です。次にこれをしてください` を手順の数だけ出す |
+| `Cleanup` がエラーを返した | WARN `取り残された worktree を片付けられません` | WARN `worktree を片付けられません` |
+| clone が押さえられている | INFO。次の巡回へ回す | 起きない（押さえが外れるまで待つ） |
+| 片付けた | `Cleanup` の INFO（branch の扱いで3通り）と INFO `取り残された worktree を片付けました` | `Cleanup` の INFO と、`cleanupPath` の INFO（branch の扱いで3通り） |
+
+**`continuo abandon` は `Force` を真で渡す。**`cleanup.enabled` の検査と、失うものの検査（段11〜13）を飛ばす。
+封じ込め検査・リポジトリの検算・branch の検算・herdr workspace の検算は飛ばさない。
+**片付けの結果に記録した「残ったもの」（`Leftovers`）と「continuo が自分で行ったこと」（`Notices`）を画面へ1行ずつ出すのは、`continuo abandon` だけである。**
+巡回と `cleanupPath` は、この2つの並びを読まない。同じ内容は `Cleanup` の中のログに出る。
+
+## 巡回が触らない worktree
+
+**言いたいこと。**巡回は、材料が揃わない worktree と、自分の持ち場でない worktree について何も決めない。消さないし、issue にも書かない。
+
+| 何が起きたか | 実装がどうするか | ログ | この記述のどこか |
+| --- | --- | --- | --- |
+| 置き場所を走査できない | その回は worktree を1つも見ない | WARN | `材料を取れない`（段2） |
+| 身元ファイルが無い | 走査の結果に入れない（人間が置いた worktree かもしれない） | 出さない | 事前条件の外 |
+| 身元ファイルが壊れている | その worktree だけを飛ばす | **出さない** | `身元ファイルを読めない`（段3） |
+| issue が実行中の印に入っている | その worktree だけを飛ばす（実行中の照合が見る） | 出さない | 事前条件の外 |
+| ボードを取り直せない | その回は片付けを1つも行わない | WARN | `材料を取れない`（段5） |
+| 取り直した一覧に issue が無い | その worktree だけを飛ばす。**勝手に消さない** | 出さない | `見えないissue`（段6） |
+
+**見送りのコメントを issue へ書かない。**書く相手（issue）が分からない場合が混ざっており、次の巡回で材料が揃えば、そのまま片付けへ進める。
+
+**`Cleanup` も、封じ込め検査（段9）のすぐあとで身元ファイルを読み直す。**読めなければエラーを返して止まり、何も消さない。
+巡回では、走査のあとに身元ファイルが壊れたときにしか起きないので、この記述には段を置いていない。
+
+## Status が片付けの対象でないとき
+
+**`片付けの対象外` は、worktree を残したうえで、Status によって3通りに分かれる。**
+
+| Status | 実装がどうするか |
+| --- | --- |
+| `tracker.direct_chat_state` | その worktree を**閉じる集合**（agent 名を問わず pane を閉じる worktree の集合。設計 3-83f）へ入れる。**pane は閉じない。**herdr へは何も要求しない |
+| `active_states` に入っている | herdr に **pane の一覧を絞り込みなしで**要求し、cwd がその worktree を指す pane を閉じる |
+| どちらでもない（`In Review`・`Blocked` など） | **何もしない。**pane の一覧も要求しない |
+
+**`tracker.direct_chat_state` と `active_states` は重ならない**（`internal/config/states.go` の `DirectChatConflicts` が起動時に断る）ので、1行目と2行目が同時に当たることは無い。
+
+**閉じる対象の pane。**通常は agent 名のある pane だけである。その worktree が閉じる集合に入っているときは、agent 名の無い pane と、
+その worktree を開いている herdr workspace の pane（cwd を問わない）も閉じる。このときだけ herdr に workspace の一覧も要求する。
+全部閉じられたら、その worktree を閉じる集合から外す。
+
+**pane の一覧を取れないとき・worktree のパスを解決できないときは、WARN を出して1枚も閉じない。**閉じ損ねた pane は次の巡回でやり直す。
+
+**閉じた記録を書くのは、閉じる対象を全部閉じられ、1枚以上閉じたときだけである**（設計 3-85c）。
+次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
+巡回の中で書き終えるまで待つ（10秒の期限で1回）。書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、
+取り直した issue が worktree の置き場所と違うリポジトリのときは書かない。
+
+**worktree を消す基本フローでは書かない。**`worktree.remove` と後始末の `workspace.close` は pane を `pane.close` で閉じないためである。
 
 ## 失うものがあるかを2つの検査で見る
 
-**手順7 と手順8 は両方通す**（設計 3-9）。片方だけでは失うものを見落とす。
+**段11 と段12 は両方行い、理由を集めてから段13 で1回だけ判定する**（設計 3-9）。片方だけでは失うものを見落とす。
+理由が1つでもあれば `失うものが残っている` へ分かれる。**どちらの検査で止まったかは、ログに出る理由の文面で分かる。**
 
 | 検査 | 何を見るか | 消してよい条件 |
 | --- | --- | --- |
-| コミットされていない変更 | `git status --porcelain` の出力 | 出力が空である。未追跡のファイルも数に入れる |
-| push されていない成果（段1） | `git for-each-ref --count=1 --contains HEAD refs/remotes/` | 1行でも返る。HEAD は remote に載っている |
-| push されていない成果（段3。段1 が偽で upstream が無い） | base からの差分 | 差分が無い |
+| コミットされていない変更（段11） | `git status --porcelain -uall` の出力。continuo が置いた身元ファイルは数えない | 出力が空である。未追跡のファイルも数に入れる |
+| push されていない成果（段12 の1段目） | `git for-each-ref --count=1 --contains HEAD refs/remotes/` | 1行でも返る。HEAD は remote に載っている |
+| push されていない成果（段12 の3段目。1段目が偽で upstream が無い） | base からの差分 | 差分が無い |
 
-**段1 が判定の中心である。**`git push origin HEAD:<別名>` は `-u` を付けない限り
-upstream を張り替えないので、upstream だけを見ると push 先を分けた worktree が片付かない。
-**upstream との差の件数（`git rev-list --count @{u}..HEAD`）は、見送る理由の文面を作るためだけに見る。**
+**1段目が偽で upstream が在れば、base と差分が無くても見送る。**upstream との差の件数は、見送る理由の文面を作るためだけに見る。
+**1段目が偽で upstream も base も無ければ、判定できないので見送る。**巡回は base を渡さないので、身元ファイルの `base` で補う。
 
-**git が答えられないときは「消してよい」に丸めない。**worktree の `.git` が壊れていると
-`git -C <worktree> …` は1つも通らない（issue #23）。**そのときは判定できなかったことを
-見送りの理由に積む。**エラーとして投げ返すと、`continuo abandon` が worktree の中身を
-1行も見せられなくなる。
+**設定で検査を飛ばせる。**`cleanup.require_clean_worktree` が偽なら段11 を行わず、`cleanup.require_pushed` が偽なら段12 を行わない。
+既定はどちらも真で、この記述は真の場合を書いている（事前条件）。
 
-## 材料が揃わない巡回では、その worktree に触らない
+**git が答えられないときは「消してよい」に丸めない。**worktree の `.git` が壊れていると `git -C <worktree> …` は1つも通らない。
+そのときは判定できなかったことを見送りの理由に積み、人間が次にすることを添える。エラーとして投げ返すと、`continuo abandon` が worktree の中身を1行も見せられなくなる。
 
-**言いたいこと。**置き場所を走査できない・身元ファイルを読めない・ボードを取り直せない
-のどれかが起きたら、**その worktree について何も決めない。**消さないし、issue にも書かない。
+## リポジトリを検算できないときと、食い違っているとき
 
-**採る扱い。**3つとも同じ終わり方（ログに理由を出して止まる）なので、
-`BOUNDED ALTERNATIVE FLOW 材料を取れない` 1本にまとめる。
+**言いたいこと。**「調べられない」と「食い違っている」は別である。止まるのは食い違っているときだけである（段10）。
 
-| 何が取れないか | 実装がどうするか |
+| 状態 | 実装がどうするか |
 | --- | --- |
-| 置き場所（ステップ2） | 巡回のその回は worktree を1つも見ない |
-| 身元ファイル（ステップ3） | その worktree だけを飛ばし、ほかは見る |
-| ボードの Status（ステップ4） | 巡回のその回は片付けを1つも行わない |
+| worktree の `.git` が指すリポジトリが、置き場所のパスと ghq から決めた clone と食い違う | **1バイトも消さずに止まる**（`リポジトリの食い違い`）。消す相手を取り違えている可能性がある |
+| clone を引けない・共通ディレクトリをどこからも引けない | **止まらない。**WARN を出し、branch には触らずに worktree と herdr workspace だけを片付ける。branch は `branch を始末する` の「検算に落ちている」の枝へ入る |
+| worktree の `.git` が壊れている | clone のほうにリポジトリを答えさせて続ける |
 
-**見送りのコメントを issue へ書かない。**書く相手（issue）が分からない場合が混ざっており、
-**次の巡回で材料が揃えば、そのまま片付けへ進める。**同じ理由のコメントを毎巡回積むだけになる。
+## clone が押さえられているときは次の巡回へ回す
 
-## 宛先が定まらないうちは before_remove も撃たない
+**言いたいこと。**同じリポジトリ本体で statusline取得の workspace が開いていると、その clone は閉じるまで押さえられる。
+巡回の中で待つと、止まった run の検知と着手が止まる。**巡回の片付けだけは待たず、何も消さずに次の巡回へ回す**（段15）。
 
-**言いたいこと。**消す相手の herdr workspace を確定できないまま `before_remove` を実行すると、
-**利用者のフックだけが走って worktree は残る。**確定を先、フックを後にする（ステップ9 → ステップ10）。
+**ここより前の段は、どれも何も消さない**（封じ込め検査・身元ファイルの読み取り・リポジトリの検算・見送りの判定・branch の検算）。
+`cloneが押さえられている` は、ほかの「飛ばす」分岐と同じく ABORT で終わる（実装は INFO を出して次の worktree へ進む）。次の巡回が同じ worktree を最初から調べ直す。
+
+## 宛先が定まらないうちは before_remove も実行しない
+
+**言いたいこと。**消す相手の herdr workspace を確定できないまま `before_remove` を実行すると、利用者のフックだけが走って worktree は残る。確定を先、フックを後にする（段16・17 → 段18）。
 
 **止まる条件は2つある。**
 
 | 条件 | なぜ止まるか |
 | --- | --- |
-| `create_via_herdr` が真なのに herdr のクライアントが無い | 消す手段そのものが無い |
 | herdr が**別のパス**の worktree を答えた | 無関係の workspace を消しに行くことになる |
+| `create_via_herdr` が真なのに herdr のクライアントが無い | 消す手段そのものが無い |
 
-**「答えが無い」は止まる理由にしない。**`worktree.open` が断ったときと workspace の ID が
-空だったときは `workspace.list` で探し直し、それでも見つからなければ**実体だけを片付ける**
-（herdr workspace は残ったものとして人間へ出す）。
+**「答えが無い」は止まる理由にしない。**`worktree.open` が断ったときと workspace の ID が空だったときは `workspace.list` で探し直し、
+それでも見つからなければ宛先を空のまま進む。段19 の要求は通らないので、段20 の IF が真になり、実体を自分で消す。
+
+**`herdr.worktree.create_via_herdr` が偽のとき**（この記述の事前条件の外）は、段15〜17 を行わず、段19 で herdr の代わりに git へ `git worktree remove` を要求する。段24 も行わない。
+
+**`before_remove` が失敗しても止まらない。**WARN を出して段19 へ進む。
 
 ## worktree の実体が残ったまま先へ進まない
 
-**言いたいこと。**`git worktree remove` も herdr の `worktree.remove` も自分の `os.RemoveAll` も
-通らなかったとき、**そのまま branch と設定ファイルを消すと、中身のある worktree だけが取り残される。**
+**言いたいこと。**herdr も git も「消した」と答えて消えていないことがある（実測: 2026-08-25）。**実体を自分で見て決める**（段20）。
 
-**採る扱い。**ステップ12 で実体が消えたことを確かめ、消えていなければ止まる。
-**branch の削除も設定ファイルの削除も要求しない。**`before_remove` は既に走っているので、
-そのことを人間へ言う。
+**段20 の IF が真になるのは、herdr が要求を断ったときと、断られていないのに実体が残っているときである。**
+`git worktree remove` は worktree の `.git` が壊れていると必ず断る。断られたまま終わると、その worktree だけが永久に残る。
+そこで worktree のディレクトリを自分で消す（段21）。**消せなかったときだけ止まる**（`消せないworktree`）。branch の削除も設定ファイルの削除も要求しない。
 
-**「要求が通った」を「消えた」と読み替えない。**herdr も git も「消した」と答えて
-消えていないことがある（実測: 2026-08-25）ので、**実体を自分で見て決める。**
+**段23 の登録の掃除（`git worktree prune`）は、実体の無い登録がその1件だけのときにしか要求しない。**
+prune はリポジトリ全体に効くので、利用者がディレクトリごと移した worktree の登録も一緒に落とす。
+次のときは要求せず、登録が残ったことを片付けの結果に記録して先へ進む。
 
-## 消せなかったときに、消せる分まで諦めない
-
-**言いたいこと。**`git worktree remove` は、worktree の `.git` が壊れていると
-`validation failed, cannot remove working tree` で必ず断る（実測: 2026-08-25）。
-**断られたまま終わると、その worktree だけが永久に残る。**
-
-**採る扱い。**要求が断られたときと、**断られていないのに実体が残っているとき**は、
-worktree のディレクトリを自分で消し、残った herdr workspace を `workspace.close` で閉じる
-（ステップ11）。
-**消えたかどうかは必ず自分で確かめる。**herdr も git も「消した」と答えて消えていないことがある。
-
-**`git worktree prune` は、実体の無い登録がその1件だけのときにしか撃たない。**
-prune はリポジトリ全体に効くので、**利用者がディレクトリごと移した worktree の登録も
-一緒に落とす。**落とされた側の branch は git に守られなくなり、あとの `git branch -D` が
-通ってしまう。ほかにもあるなら撃たず、**登録が残ったことと、掃除するコマンドを画面へ出す。**
-
-**リポジトリを検算できないときは branch に触らない。**clone を人間が移した・消した環境では、
-どの branch を消してよいかを確かめる手立てが無い。**worktree のディレクトリと
-herdr workspace はリポジトリを知らなくても消せる**ので、そこまではやって、残したものを言う。
-
-## 壊れた ref は branch の削除では消えない
-
-**言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になっていると、
-`git branch -D` は `error: branch '<名前>' not found` で断る。**その branch は誰にも消せない。**
-そこで GLOBAL ALTERNATIVE FLOW `壊れたref` が、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
-
-**消してよい条件は設計 3-22b にある5つで、全部を満たすときだけ消す。**
-とくに `herdr.worktree.branch_template` から作った接頭辞で始まる名前だけを対象にし、
-**packed-refs は1バイトも触らない。**
-
-**壊れた ref を「実在しない」と読み替えてはならない。**ステップ23 の実在の検査
-（`git show-ref --verify --quiet refs/heads/<名前>`）は、**壊れた ref にも
-終了コード 1 を返す**（実測: 2026-08-25、git 2.50.1）。**そこを「元から無かった」に
-丸めると、壊れた ref のファイルが誰にも消されないまま残る。**そこで実在の検査が
-「無い」と答えたときは、**壊れた ref かどうかを先に見てから**答えを決める。
-
-**ref が壊れていると、branch の検算そのものが答えを出せない。**
-`git worktree list --porcelain` はその worktree について
-`HEAD 0000000000000000000000000000000000000000` の行だけを出し、`branch` の行も
-`detached` の行も出さない（実測: 2026-08-25）。**そこで「git が branch を1つも答えず、
-detached でもない」ときに限り、壊れた ref の判定を検算の答えの代わりに使う。**
-**detached HEAD の worktree でも branch 名は空になる**ので、そこを混ぜない。
-**そのうえで `<共通ディレクトリ>/worktrees/<名前>/HEAD` の symref を直接読み**、
-その worktree が本当にその branch を指していることを確かめる。
-
-**消す前に、指していた commit を控える。**`<共通ディレクトリ>/logs/refs/heads/<branch>` の
-最後の行に、最後の SHA がそのまま残っている。**読めたら、戻せるコマンドを利用者に伝える。**
-
-**ファイルを消しただけでは branch が消えたことにならない。**その branch が packed-refs にも
-載っていると、loose を消した瞬間に packed 側が生き返る。**消したあとに存在を確かめ直し、
-生き返っていたら消し直す。**消し切れなければ「片付けた」とは言わず、残ったものとして伝える。
-
-## リポジトリの親 workspace を閉じる条件
-
-**`worktree.open` は herdr の workspace を2つ開く**（issue #19）。worktree のぶんと、
-`cwd` に渡したリポジトリのぶん（**リポジトリの親 workspace**）である。
-**`worktree.remove` は後者を閉じない**ので、閉じるのは continuo の仕事になる。
-
-**`cwd` を外す案は採れない。**herdr が断る（**返るコードは版で変わる。**0.8.x は
-`worktree_not_found`、0.9.1 は `linked_worktree_source`。実測: 2026-08-25 と 2026-09-29、
-[test/live/herdr_test.go](test/live/herdr_test.go)）。`cwd` に worktree のパスを渡す案も
-`linked_worktree_source` で断られる。**親は herdr の必須の親である。**
-
-**閉じてよい条件は2つあり、両方満たすときだけ閉じる**（ステップ13〜22）。
-
-| 条件 | 落とすと何が起きるか |
+| 状態 | 記録する内容 |
 | --- | --- |
-| continuo がその親を開かせたこと | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
-| 同じリポジトリの worktree の workspace が1つも残っていないこと | 別の issue が使っている pane が消える |
+| リポジトリを名指しできない | 登録が残ったこと |
+| 登録の一覧を引けない | 引けなかった理由と、掃除するコマンド |
+| 実体の無い登録がほかにも在る | ほかの登録の一覧と、掃除するコマンド |
+| prune が失敗した | 失敗の理由と、掃除するコマンド |
 
-**2つ目が要るのは、親を閉じると配下の worktree の workspace と pane も一緒に消えるからである**
-（実測: 2026-08-25）。1つ目の判定は身元ファイルの `herdr_repo_workspace_id` で持つ。
-**その値は herdr の現物と突き合わせてから使う**（worktree の直下にあり、エージェントが
-書き換えられるため）。
+**段24 が close を要求するのは、その worktree を開いている herdr workspace が一覧に残っているときだけである。**宛先は `workspace.list` の `checkout_path` で引く。
+一覧を引けない・close が失敗したときは、片付けの結果に記録して先へ進む。
 
-## 閉じずに残したら、閉じる責任を残った worktree へ渡す
+## worktree を消したあとの段は、前の段の結末で分かれない
 
-**言いたいこと。**閉じずに残したまま自分の身元ファイルを消すと、**その親 workspace は
-誰にも閉じられない。**残っている worktree の身元ファイルへ ID を書き移す（ステップ19）。
+**段26（親 workspace）と段27（branch）は、どう終わっても段28 へ進む。**引いた2本の記述の中で閉じられなかった・消せなかったときも、
+`Cleanup` は WARN を出すか片付けの結果に記録するだけで、設定ファイルの削除（段28）へ進む。**段28 と段29 は、2本の結末で分岐しない。**
 
-**何が問題だったか。**リポジトリの親を控えるのは、**それを最初に開かせた1つの issue だけ**
-である（2件目以降は「自分より先からあった」と見て空文字を書く）。その1件が先に片付くと、
-ID はどこにも残らない。`agent.max_concurrent_agents` の既定は2なので、
-**同じリポジトリの issue を2件並行して走らせれば、ふつうに起きる。**
-issue #19 で直したはずの「issue 1件につき1つ溜まる」が、並行実行のときだけ元に戻る。
+**段29 のログの文面だけは、branch の結末で変わる。**`Cleanup` の INFO は `worktree と branch を片付けました`・
+`worktree を片付けました（branch は元からありませんでした）`・`worktree を片付けました（branch は残しました）` の3通りである。
+出す・出さないは変わらないので、段は1つにしてある。巡回はそのあとに INFO `取り残された worktree を片付けました` を1行足す。
 
-**採る扱い。**
+**branch を消してよいかの判定（段14）は、この記述に残してある。**git に現物を答えさせる検査は worktree が在るうちにしかできないので、
+実装は worktree を消す前に判定し、結果を `branch を始末する` が使う。判定の中身は、そちらの記述に書く。
 
-| 何を | どうするか |
-| --- | --- |
-| 渡す相手 | 同じリポジトリに属し、**置き場所の内側にあって身元ファイルを読める** worktree の**全部** |
-| 既に ID を持っている worktree | **上書きしない**（別のリポジトリの親を閉じにいく身元ファイルを作らないため） |
-| 1件も渡せなかったとき | 手で閉じてほしいことをログに残す |
+## 設定ファイルを消す条件
 
-**1つだけに渡さない。**渡した先の片付けが途中で落ちれば、そこで責任が消える。
-**全部が持っていれば、最後に片付いた1つが閉じる**（それより前の片付けは
-「まだ他の worktree がある」ので閉じずに書き直すだけである）。
-
-## `cleanup.delete_branch` が偽なら1本も消さない
-
-**言いたいこと。**設定で「branch は消すな」と言われているなら、片付けも起動時の掃除も
-**1本も消さない。**壊れた ref だけは消す、という例外も作らない。
-
-| どの経路が消しうるか | 設定が偽のときどうするか |
-| --- | --- |
-| 片付け（ステップ23〜29） | 消さずに、残ったものとして利用者に伝える |
-| 起動時の孤児 branch の掃除 | **1本も消さない。**壊れた ref も消さない |
-
-**なぜ起動時の掃除にも要るか。**片付けが残した branch は、(1) 接頭辞に一致し
-(2) どの worktree も出しておらず (3) 実行中の run も無いので、**掃除の3条件を全部満たす。**
-設定を見ない掃除は、**次に continuo を起動しただけでその branch を強制削除で消す。**
-`continuo abandon --force` で片付けた worktree の branch には未 push の commit が
-載っていることがあり、消えれば reflog を掘る以外に戻す手立てが無い。
-
-**起動時の掃除の手順は
-[再起動して実行中の issue を引き継ぐ.rucm.md](%E5%86%8D%E8%B5%B7%E5%8B%95%E3%81%97%E3%81%A6%E5%AE%9F%E8%A1%8C%E4%B8%AD%E3%81%AE%20issue%20%E3%82%92%E5%BC%95%E3%81%8D%E7%B6%99%E3%81%90.rucm.md)
-にある**（起動の手順の一部であり、巡回の片付けとは契機が違う）。
-
-## 実在しない branch を「残っている」と言わない
-
-**言いたいこと。**着手が `git worktree add` で失敗し続けると、**ディレクトリだけが残って
-branch は1度も作られない。**そこを片付けたとき「branch が残っています」と出すと、
-**利用者は存在しないものを探して消しに行く**（issue #27）。
-
-**採る扱い。**`git branch -D` に渡す前に `git show-ref --verify refs/heads/<名前>` で
-**実在するかを見る**（ステップ23）。
-
-| 実在するか | どうするか |
-| --- | --- |
-| 実在しない | **残ったものに数えない。**画面にも出さない（消す対象が無かっただけである） |
-| 実在する | いままでどおり現物と突き合わせ、消せなければ理由を出す |
-| **確かめられない**（リポジトリを名指しできない・git が答えない） | **「無い」とは言わない。**いままでどおり残ったものとして出す |
-| **ref が壊れている** | **「無い」とは言わない。**壊れた ref のファイルとして片付ける（上の節） |
-
-**`cleanup.delete_branch` が false でも同じである。**設定で消さないことにしていても、
-**元から無いものを「残っています」と言う理由は無い。**
-
-## 片付けが始まる契機は3つある
-
-| 契機 | 誰が起こすか | 参照 |
-| --- | --- | --- |
-| turn が終わって Status が cleanup.on_states になっていた | システム | 設計 3-9 の手順1 |
-| 巡回で worktree の身元ファイルを照合した | システム | 設計 3-9 の手順7 |
-| 起動時の掃除で cleanup.on_states の issue を取った | システム | 設計 3-9 の手順6 |
-
-## pane を閉じたときだけ、閉じた記録を書く
-
-**「片付けの対象外」で pane を閉じたときは、閉じる対象を全部閉じられ、1枚以上閉じたときだけ、「Claude Code を閉じました」のコメントを1件書く**（設計 3-85c）。
-次に Claude Code を起動するとき、この記録より後に人間が書いたコメントを最初のメッセージに付けて渡すための境目である。
-1枚でも閉じ損ねたら書かない（Claude Code が生きたまま記録が付くのを防ぐ）。次の巡回で閉じたときに書く。
-**巡回の中で書き終えるまで待つ**（設計 3-8 の例外。10秒の期限で1回）。同じ巡回の着手より前に記録を付けるためである。
-書くのは relay が有効なときだけで、担当者が他人のアカウントのときと、取り直した issue が worktree の置き場所と違うリポジトリのときは書かない。
-
-**worktree を消す基本フローでは書かない（書けない）。**`worktree.remove` と後始末の `workspace.close` は pane を `pane.close` で閉じないためである。
-これは設計 3-85h の残る心配に入れてある。
+**段28 は、身元ファイルの `settings_path` が issue ごとの設定ファイルの置き場所の内側に在るときだけ消す。**
+`settings_path` もエージェントが書き換えられる値である。空のとき・置き場所が分からないとき・置き場所の外のときは消さない（後ろの2つは WARN を出す）。消せなくても片付けは止めない。
 
 ## フローチャート
 
 ```mermaid
 flowchart TD
-    B1["1. 巡回タイマーが巡回の開始を要求する"]
-    B2{"2. VALIDATES THAT 置き場所を走査できる"}
-    B3{"3. VALIDATES THAT 身元ファイルを読める"}
-    B4{"4. VALIDATES THAT ボードを ID 指定でまとめて取り直せる"}
-    B5{"5. VALIDATES THAT Status が cleanup.on_states に入っている"}
-    B6{"6. VALIDATES THAT worktree が workspace.root の内側にある"}
-    B7{"7. VALIDATES THAT コミットされていない変更がなく判定ができている"}
-    B8{"8. VALIDATES THAT push されていない成果がなく判定ができている"}
-    B9{"9. VALIDATES THAT 消す宛先の herdr workspace を確定できる"}
-    B10["10. workspace_hooks の before_remove を実行する"]
-    B11["11. worktree の削除を要求し残っていれば自分で消し登録がその1件だけなら掃除する"]
-    B12{"12. VALIDATES THAT worktree の実体が置き場所から消えている"}
-    B13{"13. IF 開かせた親 workspace を控えてある"}
-    B14["14. workspace の一覧を要求する"]
-    B15{"15. IF 控えた ID が現物と一致する"}
-    B16{"16. IF 同じリポジトリの worktree が残っていない"}
-    B17["17. リポジトリの親 workspace を閉じることを要求する"]
-    B18["18. ELSE"]
-    B19["19. 残っている worktree の身元ファイルへ親 workspace の ID を書き移す"]
-    B20["20. ENDIF"]
-    B21["21. ENDIF"]
-    B22["22. ENDIF"]
-    B23{"23. IF 身元ファイルの branch がリポジトリに実在しない"}
-    B24["24. 消す対象が無かったものとして扱い残ったものに数えない"]
-    B25{"25. ELSEIF cleanup.delete_branch が偽である"}
-    B26["26. branch を残し残ったものとして伝える"]
-    B27["27. ELSE"]
-    B28["28. リポジトリ側で branch の現物を確かめて削除を要求する"]
-    B29["29. ENDIF"]
-    B30["30. issue ごとの設定ファイルを消す"]
-    B31["31. 片付けの完了をログで応答する"]
-    BPOST(["POSTCONDITION worktree が無く branch は設定どおりに始末されている"])
-
-    B1 --> B2
-    B2 -- 偽 --> N1S1
-    B2 -- 真 --> B3
-    B3 -- 偽 --> N1S1
-    B3 -- 真 --> B4
-    B4 -- 偽 --> N1S1
-    B4 -- 真 --> B5
-    B5 -- 偽 --> F1S1
-    B5 -- 真 --> B6
-    B6 -- 偽 --> F2S1
-    B6 -- 真 --> B7
-    B7 -- 偽 --> F3S1
-    B7 -- 真 --> B8
-    B8 -- 偽 --> F4S1
-    B8 -- 真 --> B9
-    B9 -- 偽 --> F7S1
-    B9 -- 真 --> B10 --> B11 --> B12
-    B12 -- 偽 --> F8S1
-    B12 -- 真 --> B13
-    B13 -- 偽 --> B22
-    B13 -- 真 --> B14 --> B15
-    B15 -- 偽 --> B21
-    B15 -- 真 --> B16
-    B16 -- 真 --> B17 --> B20
-    B16 -- 偽 --> B18 --> B19 --> B20
-    B20 --> B21
-    B21 --> B22
-    B22 --> B23
-    B23 -- 真 --> B24 --> B29
-    B23 -- 偽 --> B25
-    B25 -- 真 --> B26 --> B29
-    B25 -- 偽 --> B27 --> B28 --> B29
-    B29 --> B30 --> B31 --> BPOST
-    B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
-    B23 -. "壊れたref: WHEN ref が読めず branch の実在にも削除にも答えられない場合" .-> G2S1
-
-    subgraph BND1 ["BOUNDED ALTERNATIVE FLOW 材料を取れない / RFS BASIC FLOW 2,3,4"]
-        N1S1["1. 材料を取れなかった worktree を消さない"] --> N1S2["2. 材料を取れない理由をログで応答する"] --> N1S3["3. ABORT"]
-    end
-
-    subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
-        F1S1["1. worktree を残す"] --> F1S2["2. workspace の pane の一覧を要求する"] --> F1S3{"3. IF active_states に戻っていて pane に agent がいる"}
-        F1S3 -- 真 --> F1S4["4. pane を閉じる"] --> F1S5["5. 全部閉じられたら閉じた記録をコメントする"] --> F1S6["6. ENDIF"]
-        F1S3 -- 偽 --> F1S6
-        F1S6 --> F1S7["7. ABORT"]
-    end
-
-    subgraph SAF2 ["SPECIFIC ALTERNATIVE FLOW 置き場所の外 / RFS BASIC FLOW 6"]
-        F2S1["1. worktree を1つも消さない"] --> F2S2["2. 封じ込め検査の失敗をログで応答する"] --> F2S3["3. ABORT"]
-    end
-
-    subgraph SAF3 ["SPECIFIC ALTERNATIVE FLOW 未コミットの変更 / RFS BASIC FLOW 7"]
-        F3S1["1. worktree を消さない"] --> F3S2["2. 見送った理由を1件コメントする"] --> F3S3["3. 身元ファイルに見送った時刻を書く"] --> F3S4["4. ABORT"]
-    end
-
-    subgraph SAF4 ["SPECIFIC ALTERNATIVE FLOW 未pushの成果 / RFS BASIC FLOW 8"]
-        F4S1["1. worktree を消さない"] --> F4S2["2. 見送った理由を1件コメントする"] --> F4S3["3. 身元ファイルに見送った時刻を書く"] --> F4S4["4. ABORT"]
-    end
-
-    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 宛先が定まらない / RFS BASIC FLOW 9"]
-        F7S1["1. worktree を消さない"] --> F7S2["2. before_remove を実行しない"] --> F7S3["3. 宛先が定まらない理由をログで応答する"] --> F7S4["4. ABORT"]
-    end
-
-    subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW 消せないworktree / RFS BASIC FLOW 12"]
-        F8S1["1. branch の削除を要求しない"] --> F8S2["2. issue ごとの設定ファイルを消さない"] --> F8S3["3. worktree を消せない理由をログで応答する"] --> F8S4["4. ABORT"]
-    end
-
-    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 片付けの無効 / BRANCH FROM BASIC FLOW 5"]
-        G1S1["1. 片付けを1つも行わない"] --> G1S2["2. issue にコメントを書かない"] --> G1S3["3. 片付けを行わないことをログで応答する"] --> G1S4["4. ABORT"]
-    end
-
-    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 23"]
-        G2S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
-        G2S1 -- 真 --> G2S2["2. 壊れた ref のファイルを1つ消す"] --> G2S3["3. 消したパスと消す前の commit と理由を応答する"] --> G2S4{"4. VALIDATES THAT 消したあとに branch が残っていない"}
-        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 30"]
-    end
-
-    subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
-        F5S1["1. branch を残す"] --> F5S2["2. RESUME STEP 5"]
-    end
-
-    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 生き返ったref / RFS 壊れたref 4"]
-        F6S1["1. branch をもう一度消すことを要求する"] --> F6S2["2. 残った branch を応答する"] --> F6S3["3. RESUME STEP 6"]
-    end
-
-    G2S1 -- 偽 --> F5S1
-    F5S2 --> G2S5
-    G2S4 -- 偽 --> F6S1
-    F6S3 --> G2S6
-    G2S6 --> B30
+    BS1["1 巡回タイマーはシステムに巡回の開始を要求する"]
+    BS2{"2 worktree の置き場所を走査できる"}
+    BS3{"3 worktree の中の身元ファイルを読める"}
+    BS4["4 システムは GitHub Projects v2 に project item の ID を渡して issue の取り直しを要求する"]
+    BS5{"5 GitHub Projects v2 が取り直した issue の一覧を応答する"}
+    BS6{"6 取り直した issue の一覧に worktree の issue が入っている"}
+    BS7{"7 取り直した Status が cleanup.on_states に入っている"}
+    BS8{"8 設定の cleanup.enabled が真である"}
+    BS9{"9 worktree が workspace.root の内側にある"}
+    BS10{"10 worktree の .git が指すリポジトリが置き場所のパスから決めた clone と食い違っていない"}
+    BS11["11 システムは git にコミットされていない変更の一覧を要求する"]
+    BS12["12 システムは git に push されていない成果の有無を要求する"]
+    BS13{"13 見送る理由が1つも無い"}
+    BS14["14 システムは身元ファイルの branch を消してよいかを判定する"]
+    BS15{"15 リポジトリ本体の clone が statusline取得の workspace に押さえられていない"}
+    BS16["16 システムは herdr に worktree を開いている workspace の ID を要求する"]
+    BS17{"17 herdr が別のパスの worktree を応答していない"}
+    BS18["18 システムは workspace_hooks の before_remove を実行する"]
+    BS19["19 システムは herdr に workspace の ID を渡して worktree の削除を要求する"]
+    BS20{"20 IF worktree の実体が herdr への要求で消えていない THEN"}
+    BS21["21 システムは worktree のディレクトリを消す"]
+    BS22{"22 worktree のディレクトリの削除が成功している"}
+    BS23["23 システムは git の worktree の登録の掃除を試みる"]
+    BS24["24 システムは herdr に残っている worktree の workspace の close を要求する"]
+    BS26[["26 INCLUDE USE CASE リポジトリの親 workspace を閉じる"]]
+    BS27[["27 INCLUDE USE CASE branch を始末する"]]
+    BS28["28 システムは issue ごとの Claude Code の設定ファイルを消す"]
+    BS29["29 システムは利用者に片付けの完了をログで応答する"]
+    A1S1["材料を取れない 1 システムは worktree を1つも消さない"]
+    A1S2["材料を取れない 2 システムは利用者に材料を取れない理由をログで応答する"]
+    A1S3(["材料を取れない 3 ABORT"])
+    A2S1["身元ファイルを読めない 1 システムは身元ファイルを読めない worktree を消さない"]
+    A2S2(["身元ファイルを読めない 2 ABORT"])
+    A3S1["見えないissue 1 システムは worktree を消さない"]
+    A3S2(["見えないissue 2 ABORT"])
+    A4S1{"片付けの対象外 1 IF Status が tracker.direct_chat_state である THEN"}
+    A4S2["片付けの対象外 2 システムは worktree を閉じる集合へ入れる"]
+    A4S3{"片付けの対象外 3 ELSEIF Status が active_states に入っている THEN"}
+    A4S4["片付けの対象外 4 システムは herdr に pane の一覧を要求する"]
+    A4S5["片付けの対象外 5 システムは worktree を cwd に持つ閉じる対象の pane を閉じる"]
+    A4S6{"片付けの対象外 6 IF システムが閉じる対象の pane を全部閉じていて、閉じた pane が1枚以上ある THEN"}
+    A4S7["片付けの対象外 7 システムは issue に Claude Code を閉じた記録を1件コメントする"]
+    A4S10(["片付けの対象外 10 ABORT"])
+    A5S1["片付けの無効 1 システムは片付けを1つも行わない"]
+    A5S2(["片付けの無効 2 ABORT"])
+    A6S1["置き場所の外 1 システムは worktree を1つも消さない"]
+    A6S2["置き場所の外 2 システムは利用者に封じ込め検査の失敗をログで応答する"]
+    A6S3(["置き場所の外 3 ABORT"])
+    A7S1["リポジトリの食い違い 1 システムは worktree を消さない"]
+    A7S2["リポジトリの食い違い 2 システムは利用者にリポジトリの食い違いをログで応答する"]
+    A7S3(["リポジトリの食い違い 3 ABORT"])
+    A8S1["失うものが残っている 1 システムは worktree を消さない"]
+    A8S2["失うものが残っている 2 システムは利用者に見送る理由をログで応答する"]
+    A8S3(["失うものが残っている 3 ABORT"])
+    A9S1["cloneが押さえられている 1 システムは worktree を消さない"]
+    A9S2["cloneが押さえられている 2 システムは利用者に片付けを次の巡回へ回すことをログで応答する"]
+    A9S3(["cloneが押さえられている 3 ABORT"])
+    A10S1["宛先が定まらない 1 システムは worktree を消さない"]
+    A10S2["宛先が定まらない 2 システムは利用者に宛先が定まらない理由をログで応答する"]
+    A10S3(["宛先が定まらない 3 ABORT"])
+    A11S1["消せないworktree 1 システムは branch の削除を要求しない"]
+    A11S2["消せないworktree 2 システムは issue ごとの Claude Code の設定ファイルを消さない"]
+    A11S3["消せないworktree 3 システムは利用者に worktree を消せない理由をログで応答する"]
+    A11S4(["消せないworktree 4 ABORT"])
+    BS1 --> BS2
+    BS2 -- はい --> BS3
+    BS2 -- いいえ --> A1S1
+    BS3 -- はい --> BS4
+    BS3 -- いいえ --> A2S1
+    BS4 --> BS5
+    BS5 -- はい --> BS6
+    BS5 -- いいえ --> A1S1
+    BS6 -- はい --> BS7
+    BS6 -- いいえ --> A3S1
+    BS7 -- はい --> BS8
+    BS7 -- いいえ --> A4S1
+    BS8 -- はい --> BS9
+    BS8 -- いいえ --> A5S1
+    BS9 -- はい --> BS10
+    BS9 -- いいえ --> A6S1
+    BS10 -- はい --> BS11
+    BS10 -- いいえ --> A7S1
+    BS11 --> BS12
+    BS12 --> BS13
+    BS13 -- はい --> BS14
+    BS13 -- いいえ --> A8S1
+    BS14 --> BS15
+    BS15 -- はい --> BS16
+    BS15 -- いいえ --> A9S1
+    BS16 --> BS17
+    BS17 -- はい --> BS18
+    BS17 -- いいえ --> A10S1
+    BS18 --> BS19
+    BS19 --> BS20
+    BS20 -- はい --> BS21
+    BS20 -- いいえ --> BS26
+    BS21 --> BS22
+    BS22 -- はい --> BS23
+    BS22 -- いいえ --> A11S1
+    BS23 --> BS24
+    BS24 --> BS26
+    BS26 --> BS27
+    BS27 --> BS28
+    BS28 --> BS29
+    A1S1 --> A1S2
+    A1S2 --> A1S3
+    A2S1 --> A2S2
+    A3S1 --> A3S2
+    A4S1 -- はい --> A4S2
+    A4S1 -- いいえ --> A4S3
+    A4S2 --> A4S10
+    A4S3 -- はい --> A4S4
+    A4S3 -- いいえ --> A4S10
+    A4S4 --> A4S5
+    A4S5 --> A4S6
+    A4S6 -- はい --> A4S7
+    A4S6 -- いいえ --> A4S10
+    A4S7 --> A4S10
+    A5S1 --> A5S2
+    A6S1 --> A6S2
+    A6S2 --> A6S3
+    A7S1 --> A7S2
+    A7S2 --> A7S3
+    A8S1 --> A8S2
+    A8S2 --> A8S3
+    A9S1 --> A9S2
+    A9S2 --> A9S3
+    A10S1 --> A10S2
+    A10S2 --> A10S3
+    A11S1 --> A11S2
+    A11S2 --> A11S3
+    A11S3 --> A11S4
+    BS29 --> END(["終了"])
 ```
 
 ## シーケンス図
@@ -515,64 +478,59 @@ sequenceDiagram
     S->>S: 置き場所を走査して身元ファイルを読む
     S->>GH: project item の ID 指定での取り直しを要求する
     GH-->>S: 現在の Status を応答する
-    alt 走査・身元ファイル・取り直しのどれかが答えない
-        Note over S: ABORT 材料の取れない worktree には触らない
+    alt 走査できない、または取り直せない
+        Note over S: ABORT 理由をログに出す。片付けを1つも行わない
+    else 身元ファイルを読めない、または取り直した一覧に issue が無い
+        Note over S: ABORT ログを出さずに worktree を飛ばす
     else Status が cleanup.on_states に入っていない
-        S->>H: workspace の pane の一覧を要求する
-        H-->>S: pane と agent を応答する
-        opt Status が active_states に戻っていて pane に agent がいる
-            S->>H: pane の close を要求する
-            S->>GH: 全部閉じられたら、Claude Code を閉じた記録のコメントの投稿を要求する
+        opt Status が tracker.direct_chat_state である
+            S->>S: worktree を閉じる集合へ入れる
+        end
+        opt Status が active_states に入っている
+            S->>H: pane の一覧を要求する
+            H-->>S: 全 pane を応答する
+            S->>H: worktree を cwd に持つ閉じる対象の pane の close を要求する
+            opt 全部閉じられて1枚以上閉じた
+                S->>GH: Claude Code を閉じた記録のコメントの投稿を要求する
+            end
         end
         Note over S: ABORT worktree は残す
     else Status が cleanup.on_states に入っている
-        S->>S: worktree が workspace.root の内側にあることを検証する
-        S->>G: コミットされていない変更の有無を要求する
-        G-->>S: 変更の一覧を応答する
-        S->>G: push されていない成果の有無を要求する
-        G-->>S: 差分の件数を応答する
-        alt 失うものが残っている
-            S->>GH: 見送った理由のコメントの投稿を要求する
-            S->>S: 身元ファイルに見送った時刻を書く
-            Note over S: ABORT worktree は残す
-        else 失うものが残っていない
-            S->>H: worktree を開いている workspace の ID を要求する
-            H-->>S: workspace の ID か、別のパスを応答する
-            alt 消す宛先を確定できない
-                Note over S: ABORT before_remove も実行しない
-            else 消す宛先を確定できた
-                S->>S: workspace_hooks の before_remove を実行する
-                S->>H: workspace の ID を渡して worktree の削除を要求する
-                H-->>S: workspace を閉じたことを応答する
-                S->>S: worktree の実体が置き場所から消えたことを確かめる
-                alt 実体が残っている
-                    Note over S: ABORT branch も設定ファイルも消さない
-                else 実体が消えている
-                    opt システムが開かせたリポジトリの親 workspace を控えてある
-                        S->>H: workspace の一覧を要求する
-                        H-->>S: 開いている workspace を応答する
-                        alt 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない
-                            S->>H: リポジトリの親 workspace の close を要求する
-                        else 同じリポジトリの worktree が残っている
-                            S->>S: 残っている worktree の身元ファイルへ親 workspace の ID を書き移す
+        alt cleanup.enabled が偽である
+            Note over S: ABORT 巡回はログもコメントも出さない
+        else worktree が workspace.root の外にある、またはリポジトリが食い違っている
+            Note over S: ABORT 理由をログに出す。何も消さない
+        else 検査を通った
+            S->>G: コミットされていない変更の一覧を要求する
+            G-->>S: 変更の一覧を応答する
+            S->>G: push されていない成果の有無を要求する
+            G-->>S: 成果の有無を応答する
+            alt 見送る理由が1つでもある
+                Note over S: ABORT 理由をログに出す。巡回はコメントも時刻も書かない
+            else 見送る理由が無い
+                S->>G: branch の実在と worktree がチェックアウトしている branch を要求する
+                G-->>S: branch の現物を応答する
+                alt clone が statusline取得の workspace に押さえられている
+                    Note over S: ABORT 何も消さずに次の巡回へ回す
+                else clone が押さえられていない
+                    S->>H: worktree を開いている workspace の ID を要求する
+                    H-->>S: workspace の ID か、別のパスを応答する
+                    alt herdr が別のパスを応答した
+                        Note over S: ABORT before_remove も実行しない
+                    else 宛先を確定できた
+                        S->>S: workspace_hooks の before_remove を実行する
+                        S->>H: workspace の ID を渡して worktree の削除を要求する
+                        opt worktree の実体が消えていない
+                            S->>S: worktree のディレクトリを消す
+                            Note over S: 消せなければ ABORT branch も設定ファイルも消さない
+                            S->>G: worktree の登録の掃除を要求する
+                            S->>H: 残っている workspace の close を要求する
                         end
+                        S->>S: リポジトリの親 workspace を閉じる（INCLUDE）
+                        S->>S: branch を始末する（INCLUDE）
+                        S->>S: issue ごとの設定ファイルを消す
+                        S-->>T: 片付けの完了をログで応答する
                     end
-                    S->>G: branch がリポジトリに実在するかを要求する
-                    G-->>S: 実在するかどうかを応答する
-                    alt branch が実在しない
-                        S->>S: 消す対象が無かったものとして扱い、残ったものに数えない
-                    else cleanup.delete_branch が偽である
-                        S-->>T: branch を残したことを応答する
-                    else branch が実在し cleanup.delete_branch が真である
-                        S->>G: branch の削除を要求する
-                    end
-                    opt branch の ref が読めず git が実在にも削除にも答えられない
-                        S->>S: 消す前の commit を reflog から控え、壊れた ref のファイルを1つ消す
-                        S->>G: branch がまだ残っていないかの確認を要求する
-                        S-->>T: 消したパスと消す前の commit と、残った branch を応答する
-                    end
-                    S->>S: issue ごとの設定ファイルを消す
-                    S-->>T: 片付けの完了をログで応答する
                 end
             end
         end

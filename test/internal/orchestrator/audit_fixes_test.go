@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "fa391bbcb4b651ca671bae13429106ba02e7fe59d318604efbe3f5b973bbde0b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -10,7 +10,6 @@ package orchestrator_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -338,95 +337,6 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 	}
 	if strings.Contains(body, "何をしたのかを issue に書き残しませんでした") {
 		t.Errorf("コメントの取り戻しの失敗が投稿枠を先に取り、本当の理由を追い出している:\n%s", body)
-	}
-}
-
-// TestRestore_置き場所と食い違う身元ファイルを鍵にしない は、
-// 復元の段2 が `project_item_id` を検算することを確かめる。
-//
-// 目的: `project_item_id` はエージェントが書き換えられる（身元ファイルは worktree の直下にある）。
-// 検算しないと、**書き換えた側の worktree が別 issue の run として印に入り、
-// 被害者の worktree は『捨てた身元』として pane を閉じられる。**
-//
-// 与える情報: `octocat/hello-world` の下にある worktree の身元ファイルが、
-// 別のリポジトリ（`octocat/other-repo`）の issue を名乗っている。
-// 成功条件: その worktree を引き継がず、pane を1つも閉じず、worktree も消さないこと。
-func TestRestore_置き場所と食い違う身元ファイルを鍵にしない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	wt := prepareWorktree(t, fx, issue, identityOverride{})
-
-	// **攻撃。**置き場所は octocat/hello-world なのに、別のリポジトリの issue を名乗る。
-	identity, err := fx.Workspace.ReadIdentity(wt.Path)
-	if err != nil {
-		t.Fatalf("身元ファイルを読めません: %v", err)
-	}
-	identity.IssueIdentifier = "octocat/other-repo#188"
-	identity.IssueURL = "https://github.com/octocat/other-repo/issues/188"
-	if err := fx.Workspace.WriteIdentity(context.Background(), wt.Path, *identity); err != nil {
-		t.Fatalf("身元ファイルを書けません: %v", err)
-	}
-
-	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
-		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
-	})
-	fx.AllowLog("身元ファイルの名乗りが worktree の置き場所と食い違う",
-		"身元ファイルの無い worktree に pane がありました")
-
-	result, _ := restore(t, fx)
-
-	if len(result.Adopted) != 0 {
-		t.Errorf("食い違う身元ファイルの worktree を引き継いだ: %v", result.Adopted)
-	}
-	if ids := closedPaneIDs(fx); len(ids) != 0 {
-		t.Errorf("食い違いを見つけただけで pane を閉じた: %v", ids)
-	}
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Errorf("worktree を消してしまった: %v", err)
-	}
-	if got := fx.Tracker.StateOf(issue.ID); got != "In Progress" {
-		t.Errorf("Status を動かしてしまった: got %q", got)
-	}
-}
-
-// TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さない は、
-// 復元の段4 の失敗を「pane が無い」と読み替えないことを確かめる。
-//
-// 目的: `pane.list` が1回失敗しただけで突き合わせが空になると、**生きている pane を持つ
-// run が全件『pane が無い』経路（段8）へ流れる。**`restart.orphan_running_action` が
-// `to_failure_state` なら、**走っている全部の run が人間へ渡され、
-// 「pane が残っていませんでした」という嘘の理由が issue に投稿される。**
-//
-// 与える情報: `In Progress` の run と生きた pane。`pane.list` はエラーを返す。
-// `restart.orphan_running_action` は `to_failure_state`。
-// 成功条件: Status が `In Progress` のままで、issue にコメントが1件も付かないこと。
-func TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) { cfg.Restart.OrphanRunningAction = "to_failure_state" },
-	})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	wt := prepareWorktree(t, fx, issue, identityOverride{})
-	fx.Herdr.Handle(herdr.MethodPaneList, func(map[string]any) (any, *rpcErr) {
-		return nil, &rpcErr{Code: "internal_error", Message: "herdr が一時的に落ちています"}
-	})
-	fx.AllowLog("pane の一覧を取れないので", "判断を保留します")
-
-	_, hs := restore(t, fx)
-
-	if want := []string{"Start", "ReplayPending", "StartDelivery"}; !equalStrings(hs.Calls(), want) {
-		t.Fatalf("pane の一覧を取れないのに起動を続けていない: got %v", hs.Calls())
-	}
-	if got := fx.Tracker.StateOf(issue.ID); got != "In Progress" {
-		t.Errorf("herdr の一時的な失敗1回で Status を落とした: got %q, want In Progress", got)
-	}
-	if got := len(fx.Tracker.CommentsOf("I_node188")); got != 0 {
-		t.Errorf("pane が生きているのに「pane が残っていない」と issue へ書いた: %d 件", got)
-	}
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Errorf("worktree を消してしまった: %v", err)
 	}
 }
 

@@ -1,0 +1,579 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "branch を始末する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/branch を始末する.rucm.md",
+    "rucm_block_sha256": "7c0f972767ac1f2b44cf6c4274465b3bb7e6dd676dd6332fe2f7ea831b135bef"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。"
+    },
+    "壊れたref": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。消したファイルのパスが片付けの結果に記録されている。"
+    },
+    "消さないref": {
+      "rfs": {
+        "flow": "壊れたref",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "branch は残っている。ref のファイルは1バイトも消えていない。branch を消せなかった理由が片付けの結果に記録されている。"
+    },
+    "生き返ったref": {
+      "rfs": {
+        "flow": "壊れたref",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。branch は、もう一度の削除が通っていれば無い。branch が残っていれば、消せなかった理由が片付けの結果に記録されている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "IF 身元ファイルの branch がリポジトリに実在しない THEN"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは branch を残ったものに数えない。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "ELSEIF 設定の cleanup.delete_branch が偽である THEN"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは branch を残ったものとして片付けの結果に記録する。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは branch を残した理由を片付けの結果に記録する。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは git に branch の削除を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは VALIDATES THAT git が branch を削除している。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+    },
+    {
+      "id": "壊れたref-1",
+      "type": "condition",
+      "flow": "壊れたref",
+      "step": 1,
+      "statement": "システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。"
+    },
+    {
+      "id": "壊れたref-2",
+      "type": "action",
+      "flow": "壊れたref",
+      "step": 2,
+      "statement": "システムは壊れた ref のファイルを1つ消す。"
+    },
+    {
+      "id": "壊れたref-3",
+      "type": "action",
+      "flow": "壊れたref",
+      "step": 3,
+      "statement": "システムは消したファイルのパスと消す前の commit を片付けの結果に記録する。"
+    },
+    {
+      "id": "壊れたref-4",
+      "type": "condition",
+      "flow": "壊れたref",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。"
+    },
+    {
+      "id": "壊れたref-5",
+      "type": "resume",
+      "flow": "壊れたref",
+      "step": 5,
+      "statement": "RESUME STEP 11"
+    },
+    {
+      "id": "消さないref-1",
+      "type": "action",
+      "flow": "消さないref",
+      "step": 1,
+      "statement": "システムは branch を消せなかった理由を片付けの結果に記録する。"
+    },
+    {
+      "id": "消さないref-2",
+      "type": "resume",
+      "flow": "消さないref",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "生き返ったref-1",
+      "type": "action",
+      "flow": "生き返ったref",
+      "step": 1,
+      "statement": "システムは git に branch の削除をもう一度要求する。"
+    },
+    {
+      "id": "生き返ったref-2",
+      "type": "condition",
+      "flow": "生き返ったref",
+      "step": 2,
+      "statement": "IF branch が残っている THEN"
+    },
+    {
+      "id": "生き返ったref-3",
+      "type": "action",
+      "flow": "生き返ったref",
+      "step": 3,
+      "statement": "システムは branch を消せなかった理由を片付けの結果に記録する。"
+    },
+    {
+      "id": "生き返ったref-5",
+      "type": "resume",
+      "flow": "生き返ったref",
+      "step": 5,
+      "statement": "RESUME STEP 5"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "true",
+      "condition": "身元ファイルの branch がリポジトリに実在しない"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-3",
+      "kind": "false",
+      "condition": "NOT 身元ファイルの branch がリポジトリに実在しない"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "設定の cleanup.delete_branch が偽である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-5",
+      "kind": "false",
+      "condition": "NOT 設定の cleanup.delete_branch が偽である"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "身元ファイルの branch が消してよい branch の検算に落ちている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-8",
+      "kind": "false",
+      "condition": "NOT 身元ファイルの branch が消してよい branch の検算に落ちている"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "git が branch を削除している"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "壊れたref-1",
+      "kind": "false",
+      "condition": "NOT git が branch を削除している"
+    },
+    {
+      "from": "壊れたref-1",
+      "to": "壊れたref-2",
+      "kind": "true",
+      "condition": "branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている"
+    },
+    {
+      "from": "壊れたref-1",
+      "to": "消さないref-1",
+      "kind": "false",
+      "condition": "NOT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている"
+    },
+    {
+      "from": "壊れたref-2",
+      "to": "壊れたref-3",
+      "kind": "seq"
+    },
+    {
+      "from": "壊れたref-3",
+      "to": "壊れたref-4",
+      "kind": "seq"
+    },
+    {
+      "from": "壊れたref-4",
+      "to": "壊れたref-5",
+      "kind": "true",
+      "condition": "壊れた ref のファイルを消したあとに branch が残っていない"
+    },
+    {
+      "from": "壊れたref-4",
+      "to": "生き返ったref-1",
+      "kind": "false",
+      "condition": "NOT 壊れた ref のファイルを消したあとに branch が残っていない"
+    },
+    {
+      "from": "壊れたref-5",
+      "to": "BASIC FLOW-11",
+      "kind": "resume"
+    },
+    {
+      "from": "消さないref-1",
+      "to": "消さないref-2",
+      "kind": "seq"
+    },
+    {
+      "from": "消さないref-2",
+      "to": "壊れたref-5",
+      "kind": "resume"
+    },
+    {
+      "from": "生き返ったref-1",
+      "to": "生き返ったref-2",
+      "kind": "seq"
+    },
+    {
+      "from": "生き返ったref-2",
+      "to": "生き返ったref-3",
+      "kind": "true",
+      "condition": "branch が残っている"
+    },
+    {
+      "from": "生き返ったref-2",
+      "to": "生き返ったref-5",
+      "kind": "false",
+      "condition": "NOT branch が残っている"
+    },
+    {
+      "from": "生き返ったref-3",
+      "to": "生き返ったref-5",
+      "kind": "seq"
+    },
+    {
+      "from": "生き返ったref-5",
+      "to": "壊れたref-5",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "システムは branch を残ったものに数えない。",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "システムは branch を残ったものとして片付けの結果に記録する。",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "システムは branch を残した理由を片付けの結果に記録する。",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "CONDITION: NOT 身元ファイルの branch が消してよい branch の検算に落ちている",
+        "システムは git に branch の削除を要求する。",
+        "システムは VALIDATES THAT git が branch を削除している。",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "壊れたref-5",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "CONDITION: NOT 身元ファイルの branch が消してよい branch の検算に落ちている",
+        "システムは git に branch の削除を要求する。",
+        "システムは VALIDATES THAT git が branch を削除している。",
+        "CONDITION: NOT git が branch を削除している",
+        "システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit を片付けの結果に記録する。",
+        "システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。",
+        "RESUME STEP 11",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "生き返ったref-1",
+        "生き返ったref-2",
+        "生き返ったref-3",
+        "生き返ったref-5",
+        "壊れたref-5",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "CONDITION: NOT 身元ファイルの branch が消してよい branch の検算に落ちている",
+        "システムは git に branch の削除を要求する。",
+        "システムは VALIDATES THAT git が branch を削除している。",
+        "CONDITION: NOT git が branch を削除している",
+        "システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit を片付けの結果に記録する。",
+        "システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。",
+        "CONDITION: NOT 壊れた ref のファイルを消したあとに branch が残っていない",
+        "システムは git に branch の削除をもう一度要求する。",
+        "IF branch が残っている THEN",
+        "システムは branch を消せなかった理由を片付けの結果に記録する。",
+        "RESUME STEP 5",
+        "RESUME STEP 11",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "生き返ったref-1",
+        "生き返ったref-2",
+        "生き返ったref-5",
+        "壊れたref-5",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "CONDITION: NOT 身元ファイルの branch が消してよい branch の検算に落ちている",
+        "システムは git に branch の削除を要求する。",
+        "システムは VALIDATES THAT git が branch を削除している。",
+        "CONDITION: NOT git が branch を削除している",
+        "システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit を片付けの結果に記録する。",
+        "システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。",
+        "CONDITION: NOT 壊れた ref のファイルを消したあとに branch が残っていない",
+        "システムは git に branch の削除をもう一度要求する。",
+        "IF branch が残っている THEN",
+        "CONDITION: NOT branch が残っている",
+        "RESUME STEP 5",
+        "RESUME STEP 11",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "branch の扱いが片付けの結果に入っている。片付けの結果は呼び出し元へ渡っている。branch は、git か壊れた ref の始末が消していれば無い。branch は、設定の cleanup.delete_branch が偽であるか検算に落ちているか消せなかった場合は残っている。残っている branch は片付けの結果に記録されている。リポジトリに実在しない branch は片付けの結果に記録されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "壊れたref-1",
+        "消さないref-1",
+        "消さないref-2",
+        "壊れたref-5",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "IF 身元ファイルの branch がリポジトリに実在しない THEN",
+        "CONDITION: NOT 身元ファイルの branch がリポジトリに実在しない",
+        "ELSEIF 設定の cleanup.delete_branch が偽である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が偽である",
+        "ELSEIF 身元ファイルの branch が消してよい branch の検算に落ちている THEN",
+        "CONDITION: NOT 身元ファイルの branch が消してよい branch の検算に落ちている",
+        "システムは git に branch の削除を要求する。",
+        "システムは VALIDATES THAT git が branch を削除している。",
+        "CONDITION: NOT git が branch を削除している",
+        "システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。",
+        "CONDITION: NOT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている",
+        "システムは branch を消せなかった理由を片付けの結果に記録する。",
+        "RESUME STEP 5",
+        "RESUME STEP 11",
+        "システムは branch の扱いを片付けの結果として呼び出し元へ渡す。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 20,
+    "nodes_covered": 20,
+    "edges_total": 26,
+    "edges_covered": 26
+  }
+}

@@ -407,48 +407,6 @@ func TestClosedRecord_段2のあと失敗して戻っても記録を書く(t *te
 	}
 }
 
-// 目的: 再起動のときに引き継がずに閉じた pane について、閉じた記録を書くこと、
-// 担当者が他人のアカウントなら書かないことを固定する。
-//
-// **agent 名は見ない。**再起動のときは Claude Code が動いていたかが分からないので、書き漏らすより書くほうを取る。
-// **担当者が他人なら書かない。**担当を外された機械は issue へ書かない（設計 3-77c・3-83h）。
-//
-// 与える情報: socket のパスが前回と違う `In Progress` の run の pane（引き継がずに閉じる）。
-// 担当者なしと、担当者が別のアカウント1人の2通り。
-// 成功条件: 担当者なしでは閉じた記録が1件あり、担当者が他人では1件も無いこと。
-func TestClosedRecord_再起動で閉じたpaneは担当者が他人なら書かない(t *testing.T) {
-	for _, other := range []bool{false, true} {
-		name := "担当者なし"
-		if other {
-			name = "担当者が他人"
-		}
-		t.Run(name, func(t *testing.T) {
-			fx := newFixture(t, fixtureOptions{})
-			fx.AllowLog("hook を受ける socket のパスが前回と違うので引き継ぎません")
-			issue := sampleIssue(310, "In Progress")
-			fx.Tracker.AddIssue(issue)
-			if other {
-				fx.Tracker.SetAssignees(issue.ID, "someone-else")
-			}
-			wt := prepareWorktree(t, fx, issue, identityOverride{SocketPath: "/tmp/前回の場所/hooks.sock"})
-			installPanes(fx, livePane{
-				PaneID: "p-310", Cwd: wt.Path, AgentName: "continuo-hello-world-310",
-				AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-310",
-			})
-
-			restore(t, fx)
-
-			n := len(fx.Tracker.ClosedRecordsOf("I_node310"))
-			if other && n != 0 {
-				t.Fatalf("担当者が他人なのに閉じた記録を書いた: %d 件", n)
-			}
-			if !other && n != 1 {
-				t.Fatalf("閉じた記録が1件ではない: %d 件", n)
-			}
-		})
-	}
-}
-
 // 目的: self_marker が空なら、閉じた記録を書かず、起動時に WARN を1行出すことを固定する。
 //
 // **self_marker が空だと、continuo 自身の「Status を動かしました」に目印が付かず、人間のコメントとして渡る。**

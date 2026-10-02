@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c433f1cd699399a4fa8a90f167ed1d0a6b15dbce3184450b8072ef50968e99e7", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "d24d3bbfa0a4976ed20f7baf334b19f9bfbb12308203b4065437d6f333120478", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **設定に名前の無い Status へ動かされたときの検査である**（設計 3-50 / 3-51）。
 //

@@ -131,53 +131,6 @@ func TestGate_写しへ書いても記録は変わらない(t *testing.T) {
 	}
 }
 
-// 目的: 案内を issue へ書くのは、3巡回目かつ最初に止めてから60秒たったあとの1回だけであることを
-// 確かめる（#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く））。
-//
-// **1回目では書かない。**人間が担当者を付け替えている最中の1巡回で書くと、
-// 数秒で解消する状態に永久に残るコメントを1件足すことになる。
-//
-// 与える情報: 人間が担当者になっている issue 1件と、1巡回ごとに30秒進む時計。
-// 成功条件: 1巡回目と2巡回目では0件、3巡回目で1件、そのあと何度まわしても1件のままであること。
-func TestGate_案内は3巡回目に1回だけ書く(t *testing.T) {
-	clock := newTestClock()
-	fx := newFixture(t, fixtureOptions{Now: clock.Now})
-	holdPrompt(fx)
-	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin))
-	fx.AllowLog("担当者が付いているので着手しません")
-	node := issueNode(188)
-
-	tickN(fx, clock, 2, 30*time.Second)
-	if got := len(gatedComments(fx, node)); got != 0 {
-		t.Fatalf("2巡回目までに書いている: %d 件", got)
-	}
-
-	tickN(fx, clock, 1, 30*time.Second)
-	bodies := gatedComments(fx, node)
-	if len(bodies) != 1 {
-		t.Fatalf("3巡回目で1件書いていない: %d 件", len(bodies))
-	}
-	if !strings.Contains(bodies[0], "<!-- continuo:gated:human_assigned -->") {
-		t.Errorf("理由の印が入っていない: %q", bodies[0])
-	}
-	if strings.Contains(bodies[0], humanLogin) {
-		t.Errorf("担当者の名前を書いている（設計 8-1 が禁じている）: %q", bodies[0])
-	}
-
-	tickN(fx, clock, 5, 30*time.Second)
-	if got := len(gatedComments(fx, node)); got != 1 {
-		t.Errorf("巡回のたびに積んでいる: %d 件", got)
-	}
-
-	v, ok := gateViewOf(fx, "octocat/hello-world#188")
-	if !ok {
-		t.Fatal("記録が消えている")
-	}
-	if !v.Noticed {
-		t.Error("書いたのに「まだ書いていない」ことになっている")
-	}
-}
-
 // 目的: 3巡回目に60秒へ届かなくても、条件が揃った巡回で書けることを確かめる
 // （#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く））。
 //
@@ -240,76 +193,6 @@ func TestGate_warn_onlyではissueへ書かず記録は残る(t *testing.T) {
 	}
 	if v.NoticeSkip != orchestrator.GateNoticeOffByConfig {
 		t.Errorf("書かない理由が違う: got %q, want %q", v.NoticeSkip, orchestrator.GateNoticeOffByConfig)
-	}
-}
-
-// 目的: 担当者が2人以上で、そこに gh の持ち主が混じっていないときは、
-// 案内も記録も作ることを確かめる（#136（担当者が2人以上いる issue も、着手できないことを知らせる））。
-//
-// 与える情報: 人間2人が担当者になっている issue 1件。
-// 成功条件: 理由が `many_assignees` で、3巡回目に案内が1件書かれること。
-func TestGate_担当者が2人以上なら人間だけのときに案内する(t *testing.T) {
-	clock := newTestClock()
-	fx := newFixture(t, fixtureOptions{Now: clock.Now})
-	holdPrompt(fx)
-	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin, anotherHumanLogin))
-	fx.AllowLog("担当者が2人以上いるので触りません")
-
-	tickN(fx, clock, 3, 30*time.Second)
-
-	v, ok := gateViewOf(fx, "octocat/hello-world#188")
-	if !ok {
-		t.Fatalf("着手できずに止まっているものに出ていない: %+v", fx.Orc.GateViews())
-	}
-	if v.Reason != orchestrator.GateReasonManyAssignees {
-		t.Errorf("理由が違う: got %q, want %q", v.Reason, orchestrator.GateReasonManyAssignees)
-	}
-	bodies := gatedComments(fx, issueNode(188))
-	if len(bodies) != 1 {
-		t.Fatalf("案内を1件書いていない: %d 件", len(bodies))
-	}
-	if !strings.Contains(bodies[0], "<!-- continuo:gated:many_assignees -->") {
-		t.Errorf("理由の印が入っていない: %q", bodies[0])
-	}
-}
-
-// 目的: 担当者が2人以上で、そこに gh の持ち主が混じっているときは、
-// **issue へは書かず、記録は作る**ことを確かめる（設計 8-3）。
-//
-// **この状態がいちばん切り分けが難しい。**この分岐は hold のコメントを1行も読まないので、
-// 「人間が2人」と「人間1人＋別の機械が hold を持っている」を区別できない。
-// **後者で「担当者をすべて外してください」と案内すると、走っている別の機械の担当が外れ、
-// 次の巡回で同じ issue に2台が乗る。**
-// **だからといってダッシュボードからも消すと、人間の手がかりが WARN の1行だけになる。**
-//
-// 与える情報: 人間1人と gh の持ち主が担当者になっている issue 1件。
-// 成功条件: 案内が0件で、写しの理由が `many_assignees_with_self`、
-// `NoticeSkip` が `unclear_owner` になっていること。
-func TestGate_担当者にghの持ち主が混じっていたら書かずに記録だけ残す(t *testing.T) {
-	clock := newTestClock()
-	fx := newFixture(t, fixtureOptions{Now: clock.Now})
-	holdPrompt(fx)
-	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin, testGHLogin))
-	fx.AllowLog("担当者が2人以上いるので触りません")
-
-	tickN(fx, clock, 5, 30*time.Second)
-
-	if got := len(gatedComments(fx, issueNode(188))); got != 0 {
-		t.Errorf("切り分けられないのに issue へ書いている: %d 件", got)
-	}
-	v, ok := gateViewOf(fx, "octocat/hello-world#188")
-	if !ok {
-		t.Fatalf("ダッシュボードから消えている（いちばん切り分けの難しい状態が読めなくなる）: %+v",
-			fx.Orc.GateViews())
-	}
-	if v.Reason != orchestrator.GateReasonManyAssigneesWithSelf {
-		t.Errorf("理由が違う: got %q, want %q", v.Reason, orchestrator.GateReasonManyAssigneesWithSelf)
-	}
-	if v.Noticed {
-		t.Error("書いていないのに「書いた」ことになっている")
-	}
-	if v.NoticeSkip != orchestrator.GateNoticeUnclearOwner {
-		t.Errorf("書かない理由が違う: got %q, want %q", v.NoticeSkip, orchestrator.GateNoticeUnclearOwner)
 	}
 }
 

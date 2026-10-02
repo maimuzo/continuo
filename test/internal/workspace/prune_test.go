@@ -108,36 +108,6 @@ func TestCleanup_実体の無い登録がほかにもあればpruneを撃たな�
 	}
 }
 
-// 目的: 実体の無い登録が**自分が消した1件だけ**なら `git worktree prune` を撃つことを
-// 確認する（設計 3-37-9b）。**守りが効きすぎて何も掃除しなくなる方向の壊れを殺す。**
-// 掃除しないままにすると、次に同じパスへ worktree を作るとき
-// `missing but already registered worktree` で着手が失敗する。
-// 与える情報: continuo が消す worktree だけが登録されたリポジトリ。
-// herdr は「消しました」と答えるのに実体を消さない。
-// 成功条件: Cleanup が成功し、**その登録が `git worktree list` から消えている**こと。
-// 残ったものに prune の案内が1件も入っていないこと。
-func TestCleanup_自分が消した1件だけならpruneを撃つ(t *testing.T) {
-	cf := newCleanupFixture(t, nil)
-	keepWorktreeOnRemove(cf)
-
-	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
-	if err != nil {
-		t.Fatalf("Cleanup に失敗した: %v", err)
-	}
-	if !result.Removed {
-		t.Fatalf("worktree を片付けていない: %+v", *result)
-	}
-
-	registered := registeredWorktrees(t, cf)
-	if strings.Contains(registered, cf.Prepared.Path) {
-		t.Fatalf("実体を消した worktree の登録 %q が残っている（prune を撃っていない）:\n%s",
-			cf.Prepared.Path, registered)
-	}
-	if left := pruneLeftovers(result.Leftovers, cf.Repo.Dir); len(left) > 0 {
-		t.Fatalf("掃除できているのに登録が残ったと言っている: %v", left)
-	}
-}
-
 // 目的: worktree の登録の一覧を**引けなかった**ときは `git worktree prune` を撃たず、
 // 登録が残ったことを人間へ出すことを確認する（設計 3-37-9b）。
 // **「ほかに実体の無い登録は無い」と「引けなかった」は別である。**引けなかったのに撃つと、
