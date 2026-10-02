@@ -3,48 +3,41 @@
   "usecase_name": "画面に出す文言の言語を決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/画面に出す文言の言語を決める.rucm.md",
-    "rucm_block_sha256": "e2bfd13be86837a465bc9d903c7a4a17ef1dc35cf057ca8046fb1048db9e186d"
+    "rucm_block_sha256": "3472e3f8597802637eca87cd883f5144a0a1081e41c39a0a59bd461dd78ce2ad"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。"
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。"
     },
-    "資源が欠けている": {
+    "資源が使えない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          2
+          2,
+          3,
+          4
         ]
       },
-      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行わない。欠けている資源のファイルの名前が出力されている。"
+      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行っていない。使えない資源のファイルの名前と理由は標準エラーに出ている。標準出力には何も出ていない。終了コード 2 が返っている。"
     },
     "設定ファイルを読み取れない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          11
+          13
         ]
       },
-      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは設定ファイルの language の値を画面に出す文言の言語に採っていない。利用者が要求したコマンドは、設定ファイルを読めないことを自分の文言で報告する。"
-    },
-    "対応していない言語の指定": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          12
-        ]
-      },
-      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは対応していない値を画面に出す文言の言語に採っていない。常駐プロセスは起動しない。language に書ける値の一覧が出力されている。"
+      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは設定ファイルの language の値を画面に出す文言の言語に採っていない。設定ファイルの language の値が受け付けられない値である実行も、設定ファイルを読み取れない実行と同じ扱いである。言語を決める処理は、利用者が要求したコマンドを止めていない。利用者が要求したコマンドは、設定ファイルを読めない理由を環境変数 LANG から決めた言語の文言で報告する。continuo doctor と continuo setup は、報告したあとも処理を続ける。常駐プロセスと continuo trust と continuo prompt と continuo abandon は、報告して終わる。"
     },
     "文言が登録されていない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          23
+          24
         ]
       },
-      "postcondition": "画面に出す文言は引けなかったキーだけの文字列ではない。引けなかったキーが控えに残っている。控えが空でない状態はシステムの実装の誤りである。"
+      "postcondition": "画面に出す文言は引けなかったキーだけの文字列ではない。画面に出す文言は引けなかったキーを含む英語の文字列である。引けなかったキーが控えに残っている。控えが空でない状態はシステムの実装の誤りである。"
     }
   },
   "nodes": [
@@ -60,138 +53,145 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。"
+      "statement": "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。"
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは環境変数 LANG の値を読む。"
+      "statement": "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "IF 環境変数 LANG の値が資源のある言語を表す THEN"
+      "statement": "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。"
     },
     {
       "id": "BASIC FLOW-5",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。"
+      "statement": "システムは環境変数 LANG の値を読む。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "IF 環境変数 LANG の値が資源のある言語を表す THEN"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは既定の言語である英語を画面に出す文言の言語に決める。"
+      "statement": "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "condition",
-      "flow": "BASIC FLOW",
-      "step": 9,
-      "statement": "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN"
-    },
-    {
-      "id": "BASIC FLOW-10",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 10,
-      "statement": "システムは設定ファイルを読む。"
+      "step": 9,
+      "statement": "システムは既定の言語である英語を画面に出す文言の言語に決める。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは VALIDATES THAT 設定ファイルを読み取れる。"
+      "statement": "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。"
+      "statement": "システムは設定ファイルを読む。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "IF 設定ファイルの language の値が言語を名指しする THEN"
+      "statement": "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。"
     },
     {
       "id": "BASIC FLOW-14",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
+      "statement": "IF 設定ファイルの language の値が言語を名指しする THEN"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
       "statement": "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。"
     },
     {
-      "id": "BASIC FLOW-16",
+      "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 16,
+      "step": 17,
       "statement": "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。"
     },
     {
-      "id": "BASIC FLOW-19",
+      "id": "BASIC FLOW-20",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 19,
+      "step": 20,
       "statement": "システムは画面に出す文言をキーで引く。"
     },
     {
-      "id": "BASIC FLOW-20",
+      "id": "BASIC FLOW-21",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 20,
+      "step": 21,
       "statement": "IF 画面に出す文言の言語の資源にキーの文言がある THEN"
     },
     {
-      "id": "BASIC FLOW-21",
+      "id": "BASIC FLOW-22",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 21,
+      "step": 22,
       "statement": "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。"
     },
     {
-      "id": "BASIC FLOW-23",
+      "id": "BASIC FLOW-24",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 23,
+      "step": 24,
       "statement": "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。"
     },
     {
-      "id": "BASIC FLOW-24",
+      "id": "BASIC FLOW-25",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 24,
+      "step": 25,
       "statement": "システムは日本語の資源の文言を画面に出す文言に採る。"
     },
     {
-      "id": "BASIC FLOW-26",
+      "id": "BASIC FLOW-27",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 26,
+      "step": 27,
       "statement": "システムは利用者に画面に出す文言を応答する。"
     },
     {
-      "id": "資源が欠けている-1",
+      "id": "資源が使えない-1",
       "type": "action",
-      "flow": "資源が欠けている",
+      "flow": "資源が使えない",
       "step": 1,
-      "statement": "システムは利用者に欠けている資源のファイルの名前を応答する。"
+      "statement": "システムは利用者に使えない資源のファイルの名前と理由を応答する。"
     },
     {
-      "id": "資源が欠けている-2",
+      "id": "資源が使えない-2",
       "type": "abort",
-      "flow": "資源が欠けている",
+      "flow": "資源が使えない",
       "step": 2,
       "statement": "ABORT"
     },
@@ -207,35 +207,7 @@
       "type": "resume",
       "flow": "設定ファイルを読み取れない",
       "step": 2,
-      "statement": "RESUME STEP 19"
-    },
-    {
-      "id": "対応していない言語の指定-1",
-      "type": "action",
-      "flow": "対応していない言語の指定",
-      "step": 1,
-      "statement": "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。"
-    },
-    {
-      "id": "対応していない言語の指定-2",
-      "type": "action",
-      "flow": "対応していない言語の指定",
-      "step": 2,
-      "statement": "システムは利用者に設定ファイルの language の値が対応していないことを応答する。"
-    },
-    {
-      "id": "対応していない言語の指定-3",
-      "type": "action",
-      "flow": "対応していない言語の指定",
-      "step": 3,
-      "statement": "システムは利用者に language に書ける値の一覧を応答する。"
-    },
-    {
-      "id": "対応していない言語の指定-4",
-      "type": "abort",
-      "flow": "対応していない言語の指定",
-      "step": 4,
-      "statement": "ABORT"
+      "statement": "RESUME STEP 20"
     },
     {
       "id": "文言が登録されていない-1",
@@ -249,14 +221,14 @@
       "type": "action",
       "flow": "文言が登録されていない",
       "step": 2,
-      "statement": "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。"
+      "statement": "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。"
     },
     {
       "id": "文言が登録されていない-3",
       "type": "resume",
       "flow": "文言が登録されていない",
       "step": 3,
-      "statement": "RESUME STEP 26"
+      "statement": "RESUME STEP 27"
     }
   ],
   "edges": [
@@ -269,55 +241,62 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "true",
-      "condition": "埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある"
+      "condition": "埋め込んだ資源のファイルを全部読み取れる"
     },
     {
       "from": "BASIC FLOW-2",
-      "to": "資源が欠けている-1",
+      "to": "資源が使えない-1",
       "kind": "false",
-      "condition": "NOT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある"
+      "condition": "NOT 埋め込んだ資源のファイルを全部読み取れる"
     },
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "正の言語である日本語の資源に文言が1つ以上ある"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "資源が使えない-1",
+      "kind": "false",
+      "condition": "NOT 正の言語である日本語の資源に文言が1つ以上ある"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
       "kind": "true",
-      "condition": "環境変数 LANG の値が資源のある言語を表す"
+      "condition": "既定の言語である英語の資源のファイルがある"
     },
     {
       "from": "BASIC FLOW-4",
+      "to": "資源が使えない-1",
+      "kind": "false",
+      "condition": "NOT 既定の言語である英語の資源のファイルがある"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "環境変数 LANG の値が資源のある言語を表す"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-9",
       "kind": "false",
       "condition": "NOT 環境変数 LANG の値が資源のある言語を表す"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-9",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-9",
+      "to": "BASIC FLOW-11",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-9",
-      "to": "BASIC FLOW-10",
-      "kind": "true",
-      "condition": "利用者が要求したコマンドが設定ファイルの language を読む"
-    },
-    {
-      "from": "BASIC FLOW-9",
-      "to": "BASIC FLOW-19",
-      "kind": "false",
-      "condition": "NOT 利用者が要求したコマンドが設定ファイルの language を読む"
-    },
-    {
-      "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
       "kind": "seq"
     },
@@ -325,90 +304,95 @@
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
       "kind": "true",
-      "condition": "設定ファイルを読み取れる"
+      "condition": "利用者が要求したコマンドが設定ファイルの language を読む"
     },
     {
       "from": "BASIC FLOW-11",
-      "to": "設定ファイルを読み取れない-1",
+      "to": "BASIC FLOW-20",
       "kind": "false",
-      "condition": "NOT 設定ファイルを読み取れる"
+      "condition": "NOT 利用者が要求したコマンドが設定ファイルの language を読む"
     },
     {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "true",
-      "condition": "設定ファイルの language の値が受け付けられる値である"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "対応していない言語の指定-1",
-      "kind": "false",
-      "condition": "NOT 設定ファイルの language の値が受け付けられる値である"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
       "kind": "true",
-      "condition": "設定ファイルの language の値が言語を名指しする"
+      "condition": "設定ファイルの読み込みと検証が成功している"
     },
     {
       "from": "BASIC FLOW-13",
-      "to": "BASIC FLOW-16",
+      "to": "設定ファイルを読み取れない-1",
+      "kind": "false",
+      "condition": "NOT 設定ファイルの読み込みと検証が成功している"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "設定ファイルの language の値が言語を名指しする"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-17",
       "kind": "false",
       "condition": "NOT 設定ファイルの language の値が言語を名指しする"
     },
     {
-      "from": "BASIC FLOW-14",
-      "to": "BASIC FLOW-19",
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-16",
-      "to": "BASIC FLOW-19",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-19",
+      "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-20",
       "to": "BASIC FLOW-21",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-22",
       "kind": "true",
       "condition": "画面に出す文言の言語の資源にキーの文言がある"
     },
     {
-      "from": "BASIC FLOW-20",
-      "to": "BASIC FLOW-23",
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-24",
       "kind": "false",
       "condition": "NOT 画面に出す文言の言語の資源にキーの文言がある"
     },
     {
-      "from": "BASIC FLOW-21",
-      "to": "BASIC FLOW-26",
+      "from": "BASIC FLOW-22",
+      "to": "BASIC FLOW-27",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-23",
-      "to": "BASIC FLOW-24",
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
       "kind": "true",
       "condition": "正の言語である日本語の資源にキーの文言がある"
     },
     {
-      "from": "BASIC FLOW-23",
+      "from": "BASIC FLOW-24",
       "to": "文言が登録されていない-1",
       "kind": "false",
       "condition": "NOT 正の言語である日本語の資源にキーの文言がある"
     },
     {
-      "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-26",
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-27",
       "kind": "seq"
     },
     {
-      "from": "資源が欠けている-1",
-      "to": "資源が欠けている-2",
+      "from": "資源が使えない-1",
+      "to": "資源が使えない-2",
       "kind": "seq"
     },
     {
@@ -418,23 +402,8 @@
     },
     {
       "from": "設定ファイルを読み取れない-2",
-      "to": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "resume"
-    },
-    {
-      "from": "対応していない言語の指定-1",
-      "to": "対応していない言語の指定-2",
-      "kind": "seq"
-    },
-    {
-      "from": "対応していない言語の指定-2",
-      "to": "対応していない言語の指定-3",
-      "kind": "seq"
-    },
-    {
-      "from": "対応していない言語の指定-3",
-      "to": "対応していない言語の指定-4",
-      "kind": "seq"
     },
     {
       "from": "文言が登録されていない-1",
@@ -448,7 +417,7 @@
     },
     {
       "from": "文言が登録されていない-3",
-      "to": "BASIC FLOW-26",
+      "to": "BASIC FLOW-27",
       "kind": "resume"
     }
   ],
@@ -457,34 +426,36 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
@@ -497,35 +468,37 @@
       "id": "P002",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
@@ -540,37 +513,39 @@
       "id": "P003",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
+        "BASIC FLOW-24",
         "文言が登録されていない-1",
         "文言が登録されていない-2",
         "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
@@ -579,8 +554,8 @@
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
         "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
         "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -588,34 +563,36 @@
       "id": "P004",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
@@ -629,35 +606,37 @@
       "id": "P005",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
@@ -673,37 +652,39 @@
       "id": "P006",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
+        "BASIC FLOW-24",
         "文言が登録されていない-1",
         "文言が登録されていない-2",
         "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
@@ -713,84 +694,97 @@
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
         "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
         "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
     {
       "id": "P007",
-      "terminal": "abort",
-      "terminal_flow": "対応していない言語の指定",
-      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは対応していない値を画面に出す文言の言語に採っていない。常駐プロセスは起動しない。language に書ける値の一覧が出力されている。",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
-        "対応していない言語の指定-1",
-        "対応していない言語の指定-2",
-        "対応していない言語の指定-3",
-        "対応していない言語の指定-4"
+        "BASIC FLOW-13",
+        "設定ファイルを読み取れない-1",
+        "設定ファイルを読み取れない-2",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
-        "CONDITION: NOT 設定ファイルの language の値が受け付けられる値である",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "システムは利用者に設定ファイルの language の値が対応していないことを応答する。",
-        "システムは利用者に language に書ける値の一覧を応答する。",
-        "ABORT"
+        "RESUME STEP 20",
+        "システムは画面に出す文言をキーで引く。",
+        "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
+        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "システムは利用者に画面に出す文言を応答する。"
       ]
     },
     {
       "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "設定ファイルを読み取れない-1",
         "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "システムは日本語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -798,41 +792,50 @@
       "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "設定ファイルを読み取れない-1",
         "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "文言が登録されていない-1",
+        "文言が登録されていない-2",
+        "文言が登録されていない-3",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
         "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "システムは日本語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
+        "システムは引けなかったキーを控えに記録する。",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -840,46 +843,34 @@
       "id": "P010",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "BASIC FLOW-11",
-        "設定ファイルを読み取れない-1",
-        "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "文言が登録されていない-1",
-        "文言が登録されていない-2",
-        "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
-        "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
-        "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
+        "CONDITION: NOT 利用者が要求したコマンドが設定ファイルの language を読む",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
-        "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -887,22 +878,27 @@
       "id": "P011",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-19",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-11",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
@@ -910,7 +906,9 @@
         "CONDITION: NOT 利用者が要求したコマンドが設定ファイルの language を読む",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "システムは日本語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -918,23 +916,29 @@
       "id": "P012",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-9",
-        "BASIC FLOW-19",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-11",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "文言が登録されていない-1",
+        "文言が登録されていない-2",
+        "文言が登録されていない-3",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
@@ -944,7 +948,10 @@
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
         "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "システムは日本語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
+        "システムは引けなかったキーを控えに記録する。",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -952,38 +959,42 @@
       "id": "P013",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-19",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "文言が登録されていない-1",
-        "文言が登録されていない-2",
-        "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
-        "システムは環境変数 LANG が表す言語を画面に出す文言の言語に決める。",
+        "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
+        "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
-        "CONDITION: NOT 利用者が要求したコマンドが設定ファイルの language を読む",
+        "システムは設定ファイルを読む。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "IF 設定ファイルの language の値が言語を名指しする THEN",
+        "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
-        "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -991,40 +1002,45 @@
       "id": "P014",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "システムは日本語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1032,43 +1048,50 @@
       "id": "P015",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-15",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "文言が登録されていない-1",
+        "文言が登録されていない-2",
+        "文言が登録されていない-3",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
         "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "システムは日本語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
+        "システムは引けなかったキーを控えに記録する。",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1076,48 +1099,43 @@
       "id": "P016",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-19",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "文言が登録されていない-1",
-        "文言が登録されていない-2",
-        "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
-        "システムは language の値が名指しする言語を画面に出す文言の言語に決め直す。",
+        "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
+        "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
-        "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1125,41 +1143,46 @@
       "id": "P017",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "システムは日本語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1167,36 +1190,40 @@
       "id": "P018",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "文言が登録されていない-1",
+        "文言が登録されていない-2",
+        "文言が登録されていない-3",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
         "IF 設定ファイルの language の値が言語を名指しする THEN",
         "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
@@ -1204,7 +1231,10 @@
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
         "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "システムは日本語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
+        "システムは引けなかったキーを控えに記録する。",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1212,127 +1242,142 @@
       "id": "P019",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "BASIC FLOW-16",
-        "BASIC FLOW-19",
+        "設定ファイルを読み取れない-1",
+        "設定ファイルを読み取れない-2",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "文言が登録されていない-1",
-        "文言が登録されていない-2",
-        "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
-        "IF 設定ファイルの language の値が言語を名指しする THEN",
-        "CONDITION: NOT 設定ファイルの language の値が言語を名指しする",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
+        "RESUME STEP 20",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
-        "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
     {
       "id": "P020",
-      "terminal": "abort",
-      "terminal_flow": "対応していない言語の指定",
-      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは対応していない値を画面に出す文言の言語に採っていない。常駐プロセスは起動しない。language に書ける値の一覧が出力されている。",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
-        "対応していない言語の指定-1",
-        "対応していない言語の指定-2",
-        "対応していない言語の指定-3",
-        "対応していない言語の指定-4"
+        "BASIC FLOW-13",
+        "設定ファイルを読み取れない-1",
+        "設定ファイルを読み取れない-2",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "システムは VALIDATES THAT 設定ファイルの language の値が受け付けられる値である。",
-        "CONDITION: NOT 設定ファイルの language の値が受け付けられる値である",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "システムは利用者に設定ファイルの language の値が対応していないことを応答する。",
-        "システムは利用者に language に書ける値の一覧を応答する。",
-        "ABORT"
+        "RESUME STEP 20",
+        "システムは画面に出す文言をキーで引く。",
+        "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "システムは日本語の資源の文言を画面に出す文言に採る。",
+        "システムは利用者に画面に出す文言を応答する。"
       ]
     },
     {
       "id": "P021",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "設定ファイルを読み取れない-1",
         "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-24",
+        "文言が登録されていない-1",
+        "文言が登録されていない-2",
+        "文言が登録されていない-3",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
         "システムは既定の言語である英語を画面に出す文言の言語に決める。",
         "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
         "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
+        "システムは VALIDATES THAT 設定ファイルの読み込みと検証が成功している。",
+        "CONDITION: NOT 設定ファイルの読み込みと検証が成功している",
         "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは画面に出す文言をキーで引く。",
         "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "システムは画面に出す文言の言語の資源の文言を画面に出す文言に採る。",
+        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
+        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
+        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
+        "システムは引けなかったキーを控えに記録する。",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
       ]
     },
@@ -1340,113 +1385,26 @@
       "id": "P022",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "設定ファイルを読み取れない-1",
-        "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-26"
-      ],
-      "steps": [
-        "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
-        "システムは環境変数 LANG の値を読む。",
-        "IF 環境変数 LANG の値が資源のある言語を表す THEN",
-        "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
-        "システムは既定の言語である英語を画面に出す文言の言語に決める。",
-        "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
-        "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
-        "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
-        "システムは画面に出す文言をキーで引く。",
-        "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "システムは日本語の資源の文言を画面に出す文言に採る。",
-        "システムは利用者に画面に出す文言を応答する。"
-      ]
-    },
-    {
-      "id": "P023",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-7",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "設定ファイルを読み取れない-1",
-        "設定ファイルを読み取れない-2",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-23",
-        "文言が登録されていない-1",
-        "文言が登録されていない-2",
-        "文言が登録されていない-3",
-        "BASIC FLOW-26"
-      ],
-      "steps": [
-        "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
-        "システムは環境変数 LANG の値を読む。",
-        "IF 環境変数 LANG の値が資源のある言語を表す THEN",
-        "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
-        "システムは既定の言語である英語を画面に出す文言の言語に決める。",
-        "IF 利用者が要求したコマンドが設定ファイルの language を読む THEN",
-        "システムは設定ファイルを読む。",
-        "システムは VALIDATES THAT 設定ファイルを読み取れる。",
-        "CONDITION: NOT 設定ファイルを読み取れる",
-        "システムは環境変数 LANG から決めた言語を画面に出す文言の言語のまま残す。",
-        "RESUME STEP 19",
-        "システムは画面に出す文言をキーで引く。",
-        "IF 画面に出す文言の言語の資源にキーの文言がある THEN",
-        "CONDITION: NOT 画面に出す文言の言語の資源にキーの文言がある",
-        "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
-        "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
-        "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
-        "システムは利用者に画面に出す文言を応答する。"
-      ]
-    },
-    {
-      "id": "P024",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-7",
-        "BASIC FLOW-9",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-26"
+        "BASIC FLOW-22",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
@@ -1460,26 +1418,30 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P023",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-19",
+        "BASIC FLOW-11",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
         "BASIC FLOW-24",
-        "BASIC FLOW-26"
+        "BASIC FLOW-25",
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
@@ -1495,28 +1457,32 @@
       ]
     },
     {
-      "id": "P026",
+      "id": "P024",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。設定ファイルの language を読まない実行では、決まった言語は環境変数 LANG から決めた言語である。利用者への応答は決まった言語の資源の文言である。",
+      "postcondition": "画面に出す文言の言語が1つ決まっている。設定ファイルの読み込みと検証が成功して language が言語を名指しする実行では、決まった言語は language の値が名指しする言語である。残りの実行では、決まった言語は環境変数 LANG から決めた言語である。決まった言語の資源にキーの文言がある実行では、利用者への応答は決まった言語の資源の文言である。決まった言語の資源にキーの文言がなくて日本語の資源にキーの文言がある実行では、利用者への応答は日本語の資源の文言である。日本語の資源にもキーの文言がない実行では、利用者への応答は文言が登録されていないことを表す文字列である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-7",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "BASIC FLOW-9",
-        "BASIC FLOW-19",
+        "BASIC FLOW-11",
         "BASIC FLOW-20",
-        "BASIC FLOW-23",
+        "BASIC FLOW-21",
+        "BASIC FLOW-24",
         "文言が登録されていない-1",
         "文言が登録されていない-2",
         "文言が登録されていない-3",
-        "BASIC FLOW-26"
+        "BASIC FLOW-27"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
         "システムは環境変数 LANG の値を読む。",
         "IF 環境変数 LANG の値が資源のある言語を表す THEN",
         "CONDITION: NOT 環境変数 LANG の値が資源のある言語を表す",
@@ -1529,35 +1495,79 @@
         "システムは VALIDATES THAT 正の言語である日本語の資源にキーの文言がある。",
         "CONDITION: NOT 正の言語である日本語の資源にキーの文言がある",
         "システムは引けなかったキーを控えに記録する。",
-        "システムは文言が登録されていないことを表す文字列を画面に出す文言に採る。",
-        "RESUME STEP 26",
+        "システムは文言が登録されていないことを表す英語の文字列を画面に出す文言に採る。",
+        "RESUME STEP 27",
         "システムは利用者に画面に出す文言を応答する。"
+      ]
+    },
+    {
+      "id": "P025",
+      "terminal": "abort",
+      "terminal_flow": "資源が使えない",
+      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行っていない。使えない資源のファイルの名前と理由は標準エラーに出ている。標準出力には何も出ていない。終了コード 2 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "資源が使えない-1",
+        "資源が使えない-2"
+      ],
+      "steps": [
+        "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "システムは VALIDATES THAT 既定の言語である英語の資源のファイルがある。",
+        "CONDITION: NOT 既定の言語である英語の資源のファイルがある",
+        "システムは利用者に使えない資源のファイルの名前と理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P026",
+      "terminal": "abort",
+      "terminal_flow": "資源が使えない",
+      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行っていない。使えない資源のファイルの名前と理由は標準エラーに出ている。標準出力には何も出ていない。終了コード 2 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "資源が使えない-1",
+        "資源が使えない-2"
+      ],
+      "steps": [
+        "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "システムは VALIDATES THAT 正の言語である日本語の資源に文言が1つ以上ある。",
+        "CONDITION: NOT 正の言語である日本語の資源に文言が1つ以上ある",
+        "システムは利用者に使えない資源のファイルの名前と理由を応答する。",
+        "ABORT"
       ]
     },
     {
       "id": "P027",
       "terminal": "abort",
-      "terminal_flow": "資源が欠けている",
-      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行わない。欠けている資源のファイルの名前が出力されている。",
+      "terminal_flow": "資源が使えない",
+      "postcondition": "システムは画面に出す文言の言語を1つも決めていない。システムは利用者が要求したコマンドの処理を1つも行っていない。使えない資源のファイルの名前と理由は標準エラーに出ている。標準出力には何も出ていない。終了コード 2 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
-        "資源が欠けている-1",
-        "資源が欠けている-2"
+        "資源が使えない-1",
+        "資源が使えない-2"
       ],
       "steps": [
         "利用者はシステムに continuo のいずれかのコマンドの実行を要求する。",
-        "システムは VALIDATES THAT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある。",
-        "CONDITION: NOT 埋め込んだ資源に正の言語である日本語のファイルと既定の言語である英語のファイルがある",
-        "システムは利用者に欠けている資源のファイルの名前を応答する。",
+        "システムは VALIDATES THAT 埋め込んだ資源のファイルを全部読み取れる。",
+        "CONDITION: NOT 埋め込んだ資源のファイルを全部読み取れる",
+        "システムは利用者に使えない資源のファイルの名前と理由を応答する。",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 30,
-    "nodes_covered": 30,
-    "edges_total": 35,
-    "edges_covered": 35
+    "nodes_total": 27,
+    "nodes_covered": 27,
+    "edges_total": 34,
+    "edges_covered": 34
   }
 }

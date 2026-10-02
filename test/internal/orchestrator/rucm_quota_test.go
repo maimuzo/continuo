@@ -1,8 +1,3 @@
-// {"RUCM-CFG-SHA256": "1be3b7179fbbfa3a4a5ce3f47b42439a2d8d28a0c84c4d69d4b1059b827bda40", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
-//
-// **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
-// **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
-//
 // **この2つは症状が似ていて、区別を誤ると被害が正反対になる。**
 // 枠待ちを打ち切りと誤れば、待てば再開する run を捨てる。
 // 打ち切りを枠待ちと誤れば、止まった run を永久に待ち続ける。
@@ -17,8 +12,6 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P007"}
-//
 // TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない は、代替フロー「応答のあるrun」の前提を検査する。
 //
 // **枠待ちの条件は2つある**（設計 3-27）。枠が100%であることと、
@@ -53,47 +46,5 @@ func TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない(t *t
 
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentWait); got != 0 {
 		t.Errorf("枠を見ない設定なのに枠明けを待っている: agent.wait を %d 回送った", got)
-	}
-}
-
-// {"RUCM-PATH": "P011"}
-//
-// TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る は、代替フロー「枠を読めない」を検査する。
-//
-// **枠を読めないときに「枠待ちかもしれない」と待ち続けると、止まった run を永久に抱える。**
-// 読めないなら枠の判定は諦め、通常の打ち切りとして扱う。
-//
-// 目的: 使用率を読めない状態で hook も来なければ、`turn_timeout_ms` で打ち切ること。
-// 与える情報: 枠の判定を無効にした設定（`source: none`）と、hook を1件も送らない run。
-// 成功条件（RUCM の POSTCONDITION）: pane が閉じられ、**印は残り**、
-// Status は `running_state` のままであること（リトライで再開するため）。
-func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) {
-			// **hook が来なくなったら短い時間で打ち切る。**
-			cfg.Claude.TurnTimeoutMs = 1200
-		},
-	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
-	})
-
-	// **hook を1件も送らないまま巡回を回す。**
-	waitFor(t, 30*time.Second, "pane が閉じられる", func() bool {
-		fx.Orc.Tick(context.Background())
-		return fx.Herdr.CountMethod(herdr.MethodPaneClose) > 0
-	})
-
-	// **枠明けを待っていない**（枠を読めないので待つ根拠がない）。
-	if got := fx.Herdr.CountMethod(herdr.MethodAgentWait); got != 0 {
-		t.Errorf("枠を読めないのに枠明けを待っている: agent.wait を %d 回送った", got)
-	}
-	// **Status は running_state のまま。**リトライが残っているので人間へ渡さない。
-	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
-		t.Errorf("リトライが残っているのに Status を動かしている: %s", got)
 	}
 }

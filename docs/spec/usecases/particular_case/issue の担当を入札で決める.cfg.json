@@ -3,30 +3,57 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "eca7ca025548478bd979a6cffdc5f1528ab8f4af387f493a146c34b627035dc9"
+    "rucm_block_sha256": "d999b02f3189a430e54630898c3f78a30a0dc89aaf75c90f7582d82acaccfccd"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
     },
     "担当者が2人以上": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          4
+          3
         ]
       },
-      "postcondition": "担当者は1人も増えず、1人も減っていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。"
+      "postcondition": "担当者は1人も増えず、1人も減っていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。"
+    },
+    "投稿者を取れない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
+    },
+    "コメントの読み取りの上限": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が候補の先頭から見直す。"
+    },
+    "コメントを読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
     },
     "他人の担当": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          10
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。issue に released の印が先頭に付いたコメントが1件増えている。担当を外されたアカウントは、この branch へ push してはならないことを issue の上から読める。issue の Status は変わっていない。branch は残っている。"
+      "postcondition": "先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、issue に released の印が先頭に付いたコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。担当を外されたアカウントは、released のコメントがある issue の上から、この branch へ push してはならないことを読める。issue の Status は変わっていない。branch は残っている。"
     },
     "人間が付けた担当": {
       "rfs": {
@@ -35,7 +62,7 @@
           1
         ]
       },
-      "postcondition": "担当者は人間が付けたまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。"
+      "postcondition": "担当者は人間が付けたまま変わっていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。issue の Status は変わっていない。"
     },
     "期限内の担当": {
       "rfs": {
@@ -46,44 +73,78 @@
       },
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。"
     },
-    "枠を読めない": {
+    "担当を外せない": {
+      "rfs": {
+        "flow": "他人の担当",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
+    },
+    "外したあと入札できない": {
+      "rfs": {
+        "flow": "他人の担当",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、issue に released の印が先頭に付いたコメントが1件増えている。この機械は入札のコメントを1件も書いていない。issue の Status は変わっていない。入札できる機械が次の巡回で先頭の issue を拾う。"
+    },
+    "入札を書けない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          7
+          14
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。"
     },
-    "余裕値が0以下": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          11
-        ]
-      },
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
-    },
-    "入札に負けた": {
+    "締め切り前": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           16
         ]
       },
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。"
     },
-    "締め切り待ちの中断": {
-      "when": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
-      "branch_from": [
-        {
-          "flow": "BASIC FLOW",
-          "steps": [
-            14
-          ]
-        }
-      ],
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。"
+    "入札に負けた": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          18
+        ]
+      },
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。"
+    },
+    "担当者を書けない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          20
+        ]
+      },
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
+    },
+    "holdを書けない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          22
+        ]
+      },
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。"
+    },
+    "担当者を消し戻せない": {
+      "rfs": {
+        "flow": "holdを書けない",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。"
     }
   },
   "nodes": [
@@ -99,77 +160,77 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムはボードから dispatch_state の issue の一覧を取る。"
+      "statement": "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。"
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 3,
-      "statement": "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。"
-    },
-    {
-      "id": "BASIC FLOW-4",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 4,
+      "step": 3,
       "statement": "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。"
     },
     {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは保管している使用率とマージンから、入札できるかを判定する。"
+    },
+    {
       "id": "BASIC FLOW-5",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。"
+      "statement": "システムは gh からこの機械の投稿者のアカウント名を取る。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "IF 先頭の issue に担当者が1人もいない THEN"
+      "statement": "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。"
+      "statement": "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。"
+      "statement": "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。"
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。"
     },
     {
       "id": "BASIC FLOW-10",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。"
+      "statement": "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。"
+      "statement": "IF 先頭の issue に担当者が1人もいない THEN"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。"
+      "statement": "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN"
     },
     {
       "id": "BASIC FLOW-13",
@@ -180,66 +241,87 @@
     },
     {
       "id": "BASIC FLOW-14",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは bid_window_ms のあいだ待つ。"
-    },
-    {
-      "id": "BASIC FLOW-15",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 15,
-      "statement": "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。"
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。"
+      "statement": "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムはこの機械の投稿者を先頭の issue の担当者に加える。"
+      "statement": "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。"
     },
     {
       "id": "BASIC FLOW-18",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。"
+      "statement": "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。"
     },
     {
       "id": "BASIC FLOW-20",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは入札のコメントを1件も書かない。"
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムは hold のコメントを1件も書かない。"
+      "statement": "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。"
     },
     {
-      "id": "BASIC FLOW-23",
-      "type": "action",
+      "id": "BASIC FLOW-22",
+      "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 23,
-      "statement": "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。"
+      "step": 22,
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。"
     },
     {
       "id": "BASIC FLOW-24",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
+      "statement": "システムは入札のコメントを1件も書かない。"
+    },
+    {
+      "id": "BASIC FLOW-25",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 25,
+      "statement": "システムは hold のコメントを1件も書かない。"
+    },
+    {
+      "id": "BASIC FLOW-27",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 27,
       "statement": "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
+    },
+    {
+      "id": "BASIC FLOW-28",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 28,
+      "statement": "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
     },
     {
       "id": "担当者が2人以上-1",
@@ -250,15 +332,92 @@
     },
     {
       "id": "担当者が2人以上-2",
+      "type": "condition",
+      "flow": "担当者が2人以上",
+      "step": 2,
+      "statement": "IF 案内のコメントを書く条件が揃っている THEN"
+    },
+    {
+      "id": "担当者が2人以上-3",
       "type": "action",
       "flow": "担当者が2人以上",
+      "step": 3,
+      "statement": "システムは担当者を1人も付いていない状態にする案内のコメントを issue に1件書く。"
+    },
+    {
+      "id": "担当者が2人以上-5",
+      "type": "action",
+      "flow": "担当者が2人以上",
+      "step": 5,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "担当者が2人以上-6",
+      "type": "abort",
+      "flow": "担当者が2人以上",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "投稿者を取れない-1",
+      "type": "action",
+      "flow": "投稿者を取れない",
+      "step": 1,
+      "statement": "システムは gh の持ち主を取れないので着手しないことを WARN で記録に残す。"
+    },
+    {
+      "id": "投稿者を取れない-2",
+      "type": "action",
+      "flow": "投稿者を取れない",
       "step": 2,
       "statement": "システムは先頭の issue を着手の対象から外す。"
     },
     {
-      "id": "担当者が2人以上-3",
+      "id": "投稿者を取れない-3",
       "type": "abort",
-      "flow": "担当者が2人以上",
+      "flow": "投稿者を取れない",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コメントの読み取りの上限-1",
+      "type": "action",
+      "flow": "コメントの読み取りの上限",
+      "step": 1,
+      "statement": "システムはコメントの読み取りが巡回の上限に達したことを INFO で記録に残す。"
+    },
+    {
+      "id": "コメントの読み取りの上限-2",
+      "type": "action",
+      "flow": "コメントの読み取りの上限",
+      "step": 2,
+      "statement": "システムはこの巡回で残りの候補を1件も見ない。"
+    },
+    {
+      "id": "コメントの読み取りの上限-3",
+      "type": "abort",
+      "flow": "コメントの読み取りの上限",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コメントを読めない-1",
+      "type": "action",
+      "flow": "コメントを読めない",
+      "step": 1,
+      "statement": "システムはコメントを読めないので着手しないことを WARN で記録に残す。"
+    },
+    {
+      "id": "コメントを読めない-2",
+      "type": "action",
+      "flow": "コメントを読めない",
+      "step": 2,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "コメントを読めない-3",
+      "type": "abort",
+      "flow": "コメントを読めない",
       "step": 3,
       "statement": "ABORT"
     },
@@ -267,7 +426,7 @@
       "type": "condition",
       "flow": "他人の担当",
       "step": 1,
-      "statement": "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。"
+      "statement": "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。"
     },
     {
       "id": "他人の担当-2",
@@ -278,51 +437,86 @@
     },
     {
       "id": "他人の担当-3",
-      "type": "action",
+      "type": "condition",
       "flow": "他人の担当",
       "step": 3,
-      "statement": "システムは担当者を先頭の issue から外す。"
+      "statement": "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。"
     },
     {
       "id": "他人の担当-4",
       "type": "action",
       "flow": "他人の担当",
       "step": 4,
-      "statement": "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。"
+      "statement": "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。"
     },
     {
       "id": "他人の担当-5",
-      "type": "action",
+      "type": "condition",
       "flow": "他人の担当",
       "step": 5,
-      "statement": "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。"
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。"
     },
     {
       "id": "他人の担当-6",
-      "type": "resume",
+      "type": "action",
       "flow": "他人の担当",
       "step": 6,
-      "statement": "RESUME STEP 6"
+      "statement": "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。"
+    },
+    {
+      "id": "他人の担当-7",
+      "type": "action",
+      "flow": "他人の担当",
+      "step": 7,
+      "statement": "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。"
+    },
+    {
+      "id": "他人の担当-8",
+      "type": "condition",
+      "flow": "他人の担当",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。"
+    },
+    {
+      "id": "他人の担当-9",
+      "type": "resume",
+      "flow": "他人の担当",
+      "step": 9,
+      "statement": "RESUME STEP 12"
     },
     {
       "id": "人間が付けた担当-1",
       "type": "action",
       "flow": "人間が付けた担当",
       "step": 1,
-      "statement": "システムは hold の印が先頭に付いたコメントが1件も無いことを記録に残す。"
+      "statement": "システムは担当者を名指しする hold のコメントが1件も無いことと、担当者を外せば着手することを WARN で記録に残す。"
     },
     {
       "id": "人間が付けた担当-2",
-      "type": "action",
+      "type": "condition",
       "flow": "人間が付けた担当",
       "step": 2,
-      "statement": "システムは先頭の issue を着手の対象から外す。"
+      "statement": "IF 案内のコメントを書く条件が揃っている THEN"
     },
     {
       "id": "人間が付けた担当-3",
-      "type": "abort",
+      "type": "action",
       "flow": "人間が付けた担当",
       "step": 3,
+      "statement": "システムは担当者を外す案内のコメントを issue に1件書く。"
+    },
+    {
+      "id": "人間が付けた担当-5",
+      "type": "action",
+      "flow": "人間が付けた担当",
+      "step": 5,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "人間が付けた担当-6",
+      "type": "abort",
+      "flow": "人間が付けた担当",
+      "step": 6,
       "statement": "ABORT"
     },
     {
@@ -330,69 +524,132 @@
       "type": "action",
       "flow": "期限内の担当",
       "step": 1,
-      "statement": "システムは先頭の issue を着手の対象から外す。"
+      "statement": "システムはほかの機械が期限内で担当していることを DEBUG で記録に残す。"
     },
     {
       "id": "期限内の担当-2",
       "type": "action",
       "flow": "期限内の担当",
       "step": 2,
-      "statement": "システムは入札のコメントを1件も書かない。"
-    },
-    {
-      "id": "期限内の担当-3",
-      "type": "abort",
-      "flow": "期限内の担当",
-      "step": 3,
-      "statement": "ABORT"
-    },
-    {
-      "id": "枠を読めない-1",
-      "type": "action",
-      "flow": "枠を読めない",
-      "step": 1,
-      "statement": "システムは枠を読めなかった理由を記録に残す。"
-    },
-    {
-      "id": "枠を読めない-2",
-      "type": "action",
-      "flow": "枠を読めない",
-      "step": 2,
-      "statement": "システムは入札のコメントを1件も書かない。"
-    },
-    {
-      "id": "枠を読めない-3",
-      "type": "action",
-      "flow": "枠を読めない",
-      "step": 3,
       "statement": "システムは先頭の issue を着手の対象から外す。"
     },
     {
-      "id": "枠を読めない-4",
+      "id": "期限内の担当-3",
+      "type": "action",
+      "flow": "期限内の担当",
+      "step": 3,
+      "statement": "システムは入札のコメントを1件も書かない。"
+    },
+    {
+      "id": "期限内の担当-4",
       "type": "abort",
-      "flow": "枠を読めない",
+      "flow": "期限内の担当",
       "step": 4,
       "statement": "ABORT"
     },
     {
-      "id": "余裕値が0以下-1",
+      "id": "担当を外せない-1",
       "type": "action",
-      "flow": "余裕値が0以下",
+      "flow": "担当を外せない",
       "step": 1,
+      "statement": "システムは期限の切れた担当を外せないことを WARN で記録に残す。"
+    },
+    {
+      "id": "担当を外せない-2",
+      "type": "action",
+      "flow": "担当を外せない",
+      "step": 2,
+      "statement": "システムは released のコメントを1件も書かない。"
+    },
+    {
+      "id": "担当を外せない-3",
+      "type": "action",
+      "flow": "担当を外せない",
+      "step": 3,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "担当を外せない-4",
+      "type": "abort",
+      "flow": "担当を外せない",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "外したあと入札できない-1",
+      "type": "action",
+      "flow": "外したあと入札できない",
+      "step": 1,
+      "statement": "システムは入札しない理由を INFO で記録に残す。"
+    },
+    {
+      "id": "外したあと入札できない-2",
+      "type": "action",
+      "flow": "外したあと入札できない",
+      "step": 2,
       "statement": "システムは入札のコメントを1件も書かない。"
     },
     {
-      "id": "余裕値が0以下-2",
+      "id": "外したあと入札できない-3",
       "type": "action",
-      "flow": "余裕値が0以下",
+      "flow": "外したあと入札できない",
+      "step": 3,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "外したあと入札できない-4",
+      "type": "abort",
+      "flow": "外したあと入札できない",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "入札を書けない-1",
+      "type": "action",
+      "flow": "入札を書けない",
+      "step": 1,
+      "statement": "システムは入札のコメントを書けないことを WARN で記録に残す。"
+    },
+    {
+      "id": "入札を書けない-2",
+      "type": "action",
+      "flow": "入札を書けない",
       "step": 2,
       "statement": "システムは先頭の issue を着手の対象から外す。"
     },
     {
-      "id": "余裕値が0以下-3",
+      "id": "入札を書けない-3",
       "type": "abort",
-      "flow": "余裕値が0以下",
+      "flow": "入札を書けない",
       "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "締め切り前-1",
+      "type": "action",
+      "flow": "締め切り前",
+      "step": 1,
+      "statement": "システムは締め切りを待つことを DEBUG で記録に残す。"
+    },
+    {
+      "id": "締め切り前-2",
+      "type": "action",
+      "flow": "締め切り前",
+      "step": 2,
+      "statement": "システムはこの機械の投稿者を担当者に加えない。"
+    },
+    {
+      "id": "締め切り前-3",
+      "type": "action",
+      "flow": "締め切り前",
+      "step": 3,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "締め切り前-4",
+      "type": "abort",
+      "flow": "締め切り前",
+      "step": 4,
       "statement": "ABORT"
     },
     {
@@ -424,30 +681,100 @@
       "statement": "ABORT"
     },
     {
-      "id": "締め切り待ちの中断-1",
+      "id": "担当者を書けない-1",
       "type": "action",
-      "flow": "締め切り待ちの中断",
+      "flow": "担当者を書けない",
       "step": 1,
-      "statement": "システムは締め切りを待つのをやめる。"
+      "statement": "システムは入札に勝ったが担当者を書けないことを WARN で記録に残す。"
     },
     {
-      "id": "締め切り待ちの中断-2",
+      "id": "担当者を書けない-2",
       "type": "action",
-      "flow": "締め切り待ちの中断",
+      "flow": "担当者を書けない",
       "step": 2,
-      "statement": "システムはこの機械の投稿者を担当者に加えない。"
+      "statement": "システムは hold のコメントを1件も書かない。"
     },
     {
-      "id": "締め切り待ちの中断-3",
+      "id": "担当者を書けない-3",
       "type": "action",
-      "flow": "締め切り待ちの中断",
+      "flow": "担当者を書けない",
       "step": 3,
-      "statement": "システムは書き終えた入札のコメントを issue に残したまま終了する。"
+      "statement": "システムは先頭の issue を着手の対象から外す。"
     },
     {
-      "id": "締め切り待ちの中断-4",
+      "id": "担当者を書けない-4",
       "type": "abort",
-      "flow": "締め切り待ちの中断",
+      "flow": "担当者を書けない",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "holdを書けない-1",
+      "type": "action",
+      "flow": "holdを書けない",
+      "step": 1,
+      "statement": "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。"
+    },
+    {
+      "id": "holdを書けない-2",
+      "type": "action",
+      "flow": "holdを書けない",
+      "step": 2,
+      "statement": "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。"
+    },
+    {
+      "id": "holdを書けない-3",
+      "type": "condition",
+      "flow": "holdを書けない",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。"
+    },
+    {
+      "id": "holdを書けない-4",
+      "type": "action",
+      "flow": "holdを書けない",
+      "step": 4,
+      "statement": "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。"
+    },
+    {
+      "id": "holdを書けない-5",
+      "type": "action",
+      "flow": "holdを書けない",
+      "step": 5,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "holdを書けない-6",
+      "type": "abort",
+      "flow": "holdを書けない",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "担当者を消し戻せない-1",
+      "type": "action",
+      "flow": "担当者を消し戻せない",
+      "step": 1,
+      "statement": "システムは書いた担当者を消し戻せないことを WARN で記録に残す。"
+    },
+    {
+      "id": "担当者を消し戻せない-2",
+      "type": "action",
+      "flow": "担当者を消し戻せない",
+      "step": 2,
+      "statement": "システムは released のコメントを1件も書かない。"
+    },
+    {
+      "id": "担当者を消し戻せない-3",
+      "type": "action",
+      "flow": "担当者を消し戻せない",
+      "step": 3,
+      "statement": "システムは先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "担当者を消し戻せない-4",
+      "type": "abort",
+      "flow": "担当者を消し戻せない",
       "step": 4,
       "statement": "ABORT"
     }
@@ -466,55 +793,48 @@
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-4",
-      "to": "BASIC FLOW-5",
       "kind": "true",
       "condition": "先頭の issue の担当者が1人以下である"
     },
     {
-      "from": "BASIC FLOW-4",
+      "from": "BASIC FLOW-3",
       "to": "担当者が2人以上-1",
       "kind": "false",
       "condition": "NOT 先頭の issue の担当者が1人以下である"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-6",
-      "kind": "true",
-      "condition": "先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である"
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-5",
-      "to": "他人の担当-1",
-      "kind": "false",
-      "condition": "NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である"
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
       "kind": "true",
-      "condition": "先頭の issue に担当者が1人もいない"
+      "condition": "システムがこの機械の投稿者のアカウント名を持っている"
     },
     {
       "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-20",
+      "to": "投稿者を取れない-1",
       "kind": "false",
-      "condition": "NOT 先頭の issue に担当者が1人もいない"
+      "condition": "NOT システムがこの機械の投稿者のアカウント名を持っている"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
       "kind": "true",
-      "condition": "Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない"
+      "condition": "この巡回でコメントを読んだ issue の数が10件より少ない"
     },
     {
       "from": "BASIC FLOW-7",
-      "to": "枠を読めない-1",
+      "to": "コメントの読み取りの上限-1",
       "kind": "false",
-      "condition": "NOT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない"
+      "condition": "NOT この巡回でコメントを読んだ issue の数が10件より少ない"
     },
     {
       "from": "BASIC FLOW-8",
@@ -524,29 +844,50 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "GitHub Projects v2 が先頭の issue のコメントを応答する"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "コメントを読めない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が先頭の issue のコメントを応答する"
     },
     {
       "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "他人の担当-1",
+      "kind": "false",
+      "condition": "NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である"
     },
     {
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
       "kind": "true",
-      "condition": "5時間余裕値と1週間余裕値がどちらも 0 より大きい"
+      "condition": "先頭の issue に担当者が1人もいない"
     },
     {
       "from": "BASIC FLOW-11",
-      "to": "余裕値が0以下-1",
+      "to": "BASIC FLOW-24",
       "kind": "false",
-      "condition": "NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい"
+      "condition": "NOT 先頭の issue に担当者が1人もいない"
     },
     {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "今の回の入札にこの機械の投稿者の入札が1件も無い"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-16",
+      "kind": "false",
+      "condition": "NOT 今の回の入札にこの機械の投稿者の入札が1件も無い"
     },
     {
       "from": "BASIC FLOW-13",
@@ -555,31 +896,27 @@
     },
     {
       "from": "BASIC FLOW-14",
-      "to": "BASIC FLOW-15",
-      "kind": "seq"
+      "to": "BASIC FLOW-16",
+      "kind": "true",
+      "condition": "GitHub Projects v2 が入札のコメントを受け付ける"
     },
     {
       "from": "BASIC FLOW-14",
-      "to": "締め切り待ちの中断-1",
-      "kind": "global",
-      "condition": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合"
-    },
-    {
-      "from": "BASIC FLOW-15",
-      "to": "BASIC FLOW-16",
-      "kind": "seq"
+      "to": "入札を書けない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が入札のコメントを受け付ける"
     },
     {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
       "kind": "true",
-      "condition": "判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である"
+      "condition": "今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている"
     },
     {
       "from": "BASIC FLOW-16",
-      "to": "入札に負けた-1",
+      "to": "締め切り前-1",
       "kind": "false",
-      "condition": "NOT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である"
+      "condition": "NOT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている"
     },
     {
       "from": "BASIC FLOW-17",
@@ -588,22 +925,63 @@
     },
     {
       "from": "BASIC FLOW-18",
-      "to": "BASIC FLOW-23",
+      "to": "BASIC FLOW-19",
+      "kind": "true",
+      "condition": "締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "入札に負けた-1",
+      "kind": "false",
+      "condition": "NOT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-20",
       "to": "BASIC FLOW-21",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "GitHub Projects v2 がこの機械の投稿者を担当者に加える"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "担当者を書けない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 がこの機械の投稿者を担当者に加える"
     },
     {
       "from": "BASIC FLOW-21",
-      "to": "BASIC FLOW-23",
+      "to": "BASIC FLOW-22",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-23",
-      "to": "BASIC FLOW-24",
+      "from": "BASIC FLOW-22",
+      "to": "BASIC FLOW-27",
+      "kind": "true",
+      "condition": "GitHub Projects v2 が hold のコメントを受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "holdを書けない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が hold のコメントを受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-27",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-27",
+      "to": "BASIC FLOW-28",
       "kind": "seq"
     },
     {
@@ -614,19 +992,66 @@
     {
       "from": "担当者が2人以上-2",
       "to": "担当者が2人以上-3",
+      "kind": "true",
+      "condition": "案内のコメントを書く条件が揃っている"
+    },
+    {
+      "from": "担当者が2人以上-2",
+      "to": "担当者が2人以上-5",
+      "kind": "false",
+      "condition": "NOT 案内のコメントを書く条件が揃っている"
+    },
+    {
+      "from": "担当者が2人以上-3",
+      "to": "担当者が2人以上-5",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者が2人以上-5",
+      "to": "担当者が2人以上-6",
+      "kind": "seq"
+    },
+    {
+      "from": "投稿者を取れない-1",
+      "to": "投稿者を取れない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "投稿者を取れない-2",
+      "to": "投稿者を取れない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの読み取りの上限-1",
+      "to": "コメントの読み取りの上限-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの読み取りの上限-2",
+      "to": "コメントの読み取りの上限-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントを読めない-1",
+      "to": "コメントを読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントを読めない-2",
+      "to": "コメントを読めない-3",
       "kind": "seq"
     },
     {
       "from": "他人の担当-1",
       "to": "他人の担当-2",
       "kind": "true",
-      "condition": "先頭の issue に hold の印が先頭に付いたコメントが1件以上ある"
+      "condition": "先頭の issue に、担当者を名指しする hold のコメントが1件以上ある"
     },
     {
       "from": "他人の担当-1",
       "to": "人間が付けた担当-1",
       "kind": "false",
-      "condition": "NOT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある"
+      "condition": "NOT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある"
     },
     {
       "from": "他人の担当-2",
@@ -643,7 +1068,14 @@
     {
       "from": "他人の担当-3",
       "to": "他人の担当-4",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "候補の一覧が担当者のノード ID を持っている"
+    },
+    {
+      "from": "他人の担当-3",
+      "to": "担当を外せない-1",
+      "kind": "false",
+      "condition": "NOT 候補の一覧が担当者のノード ID を持っている"
     },
     {
       "from": "他人の担当-4",
@@ -653,11 +1085,40 @@
     {
       "from": "他人の担当-5",
       "to": "他人の担当-6",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "GitHub Projects v2 が担当者を先頭の issue から外す"
+    },
+    {
+      "from": "他人の担当-5",
+      "to": "担当を外せない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が担当者を先頭の issue から外す"
     },
     {
       "from": "他人の担当-6",
-      "to": "BASIC FLOW-6",
+      "to": "他人の担当-7",
+      "kind": "seq"
+    },
+    {
+      "from": "他人の担当-7",
+      "to": "他人の担当-8",
+      "kind": "seq"
+    },
+    {
+      "from": "他人の担当-8",
+      "to": "他人の担当-9",
+      "kind": "true",
+      "condition": "システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい"
+    },
+    {
+      "from": "他人の担当-8",
+      "to": "外したあと入札できない-1",
+      "kind": "false",
+      "condition": "NOT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい"
+    },
+    {
+      "from": "他人の担当-9",
+      "to": "BASIC FLOW-12",
       "kind": "resume"
     },
     {
@@ -668,6 +1129,23 @@
     {
       "from": "人間が付けた担当-2",
       "to": "人間が付けた担当-3",
+      "kind": "true",
+      "condition": "案内のコメントを書く条件が揃っている"
+    },
+    {
+      "from": "人間が付けた担当-2",
+      "to": "人間が付けた担当-5",
+      "kind": "false",
+      "condition": "NOT 案内のコメントを書く条件が揃っている"
+    },
+    {
+      "from": "人間が付けた担当-3",
+      "to": "人間が付けた担当-5",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が付けた担当-5",
+      "to": "人間が付けた担当-6",
       "kind": "seq"
     },
     {
@@ -681,28 +1159,63 @@
       "kind": "seq"
     },
     {
-      "from": "枠を読めない-1",
-      "to": "枠を読めない-2",
+      "from": "期限内の担当-3",
+      "to": "期限内の担当-4",
       "kind": "seq"
     },
     {
-      "from": "枠を読めない-2",
-      "to": "枠を読めない-3",
+      "from": "担当を外せない-1",
+      "to": "担当を外せない-2",
       "kind": "seq"
     },
     {
-      "from": "枠を読めない-3",
-      "to": "枠を読めない-4",
+      "from": "担当を外せない-2",
+      "to": "担当を外せない-3",
       "kind": "seq"
     },
     {
-      "from": "余裕値が0以下-1",
-      "to": "余裕値が0以下-2",
+      "from": "担当を外せない-3",
+      "to": "担当を外せない-4",
       "kind": "seq"
     },
     {
-      "from": "余裕値が0以下-2",
-      "to": "余裕値が0以下-3",
+      "from": "外したあと入札できない-1",
+      "to": "外したあと入札できない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "外したあと入札できない-2",
+      "to": "外したあと入札できない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "外したあと入札できない-3",
+      "to": "外したあと入札できない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "入札を書けない-1",
+      "to": "入札を書けない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "入札を書けない-2",
+      "to": "入札を書けない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "締め切り前-1",
+      "to": "締め切り前-2",
+      "kind": "seq"
+    },
+    {
+      "from": "締め切り前-2",
+      "to": "締め切り前-3",
+      "kind": "seq"
+    },
+    {
+      "from": "締め切り前-3",
+      "to": "締め切り前-4",
       "kind": "seq"
     },
     {
@@ -721,18 +1234,65 @@
       "kind": "seq"
     },
     {
-      "from": "締め切り待ちの中断-1",
-      "to": "締め切り待ちの中断-2",
+      "from": "担当者を書けない-1",
+      "to": "担当者を書けない-2",
       "kind": "seq"
     },
     {
-      "from": "締め切り待ちの中断-2",
-      "to": "締め切り待ちの中断-3",
+      "from": "担当者を書けない-2",
+      "to": "担当者を書けない-3",
       "kind": "seq"
     },
     {
-      "from": "締め切り待ちの中断-3",
-      "to": "締め切り待ちの中断-4",
+      "from": "担当者を書けない-3",
+      "to": "担当者を書けない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "holdを書けない-1",
+      "to": "holdを書けない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "holdを書けない-2",
+      "to": "holdを書けない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "holdを書けない-3",
+      "to": "holdを書けない-4",
+      "kind": "true",
+      "condition": "GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す"
+    },
+    {
+      "from": "holdを書けない-3",
+      "to": "担当者を消し戻せない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す"
+    },
+    {
+      "from": "holdを書けない-4",
+      "to": "holdを書けない-5",
+      "kind": "seq"
+    },
+    {
+      "from": "holdを書けない-5",
+      "to": "holdを書けない-6",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者を消し戻せない-1",
+      "to": "担当者を消し戻せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者を消し戻せない-2",
+      "to": "担当者を消し戻せない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者を消し戻せない-3",
+      "to": "担当者を消し戻せない-4",
       "kind": "seq"
     }
   ],
@@ -741,7 +1301,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -757,41 +1317,47 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24"
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
-        "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。",
-        "システムはこの機械の投稿者を先頭の issue の担当者に加える。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
         "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
-        "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。",
-        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
+        "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
       ]
     },
     {
       "id": "P002",
       "terminal": "abort",
-      "terminal_flow": "入札に負けた",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。",
+      "terminal_flow": "holdを書けない",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -807,33 +1373,47 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "入札に負けた-1",
-        "入札に負けた-2",
-        "入札に負けた-3",
-        "入札に負けた-4"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "holdを書けない-4",
+        "holdを書けない-5",
+        "holdを書けない-6"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
-        "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。",
-        "CONDITION: NOT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である",
-        "システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。",
-        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
@@ -841,8 +1421,8 @@
     {
       "id": "P003",
       "terminal": "abort",
-      "terminal_flow": "締め切り待ちの中断",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。",
+      "terminal_flow": "担当者を消し戻せない",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -858,38 +1438,59 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "締め切り待ちの中断-1",
-        "締め切り待ちの中断-2",
-        "締め切り待ちの中断-3",
-        "締め切り待ちの中断-4"
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "担当者を消し戻せない-1",
+        "担当者を消し戻せない-2",
+        "担当者を消し戻せない-3",
+        "担当者を消し戻せない-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
-        "システムは締め切りを待つのをやめる。",
-        "システムはこの機械の投稿者を担当者に加えない。",
-        "システムは書き終えた入札のコメントを issue に残したまま終了する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す",
+        "システムは書いた担当者を消し戻せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     },
     {
       "id": "P004",
       "terminal": "abort",
-      "terminal_flow": "余裕値が0以下",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "terminal_flow": "担当者を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -902,24 +1503,42 @@
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "余裕値が0以下-1",
-        "余裕値が0以下-2",
-        "余裕値が0以下-3"
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "担当者を書けない-1",
+        "担当者を書けない-2",
+        "担当者を書けない-3",
+        "担当者を書けない-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい",
-        "システムは入札のコメントを1件も書かない。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を担当者に加える",
+        "システムは入札に勝ったが担当者を書けないことを WARN で記録に残す。",
+        "システムは hold のコメントを1件も書かない。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
@@ -927,84 +1546,14 @@
     {
       "id": "P005",
       "terminal": "abort",
-      "terminal_flow": "枠を読めない",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "terminal_flow": "入札に負けた",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "枠を読めない-1",
-        "枠を読めない-2",
-        "枠を読めない-3",
-        "枠を読めない-4"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
-        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
-        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "CONDITION: NOT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない",
-        "システムは枠を読めなかった理由を記録に残す。",
-        "システムは入札のコメントを1件も書かない。",
-        "システムは先頭の issue を着手の対象から外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P006",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
-        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
-        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
-        "システムは入札のコメントを1件も書かない。",
-        "システムは hold のコメントを1件も書かない。",
-        "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。",
-        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
-      ]
-    },
-    {
-      "id": "P007",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
@@ -1014,71 +1563,9 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
-        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
-        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
-        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
-        "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。",
-        "システムはこの機械の投稿者を先頭の issue の担当者に加える。",
-        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
-        "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。",
-        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
-      ]
-    },
-    {
-      "id": "P008",
-      "terminal": "abort",
-      "terminal_flow": "入札に負けた",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
         "入札に負けた-1",
         "入札に負けた-2",
         "入札に負けた-3",
@@ -1086,29 +1573,23 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
-        "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。",
-        "CONDITION: NOT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "CONDITION: NOT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である",
         "システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。",
         "システムはこの機械の投稿者を担当者に加えない。",
         "システムは先頭の issue を着手の対象から外す。",
@@ -1116,22 +1597,16 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P006",
       "terminal": "abort",
-      "terminal_flow": "締め切り待ちの中断",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。",
+      "terminal_flow": "締め切り前",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
@@ -1141,88 +1616,256 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "締め切り待ちの中断-1",
-        "締め切り待ちの中断-2",
-        "締め切り待ちの中断-3",
-        "締め切り待ちの中断-4"
+        "BASIC FLOW-16",
+        "締め切り前-1",
+        "締め切り前-2",
+        "締め切り前-3",
+        "締め切り前-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
-        "システムは bid_window_ms のあいだ待つ。",
-        "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
-        "システムは締め切りを待つのをやめる。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "CONDITION: NOT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている",
+        "システムは締め切りを待つことを DEBUG で記録に残す。",
         "システムはこの機械の投稿者を担当者に加えない。",
-        "システムは書き終えた入札のコメントを issue に残したまま終了する。",
+        "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     },
     {
-      "id": "P010",
+      "id": "P007",
       "terminal": "abort",
-      "terminal_flow": "余裕値が0以下",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "terminal_flow": "入札を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "余裕値が0以下-1",
-        "余裕値が0以下-2",
-        "余裕値が0以下-3"
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "入札を書けない-1",
+        "入札を書けない-2",
+        "入札を書けない-3"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
-        "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
-        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい",
-        "システムは入札のコメントを1件も書かない。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が入札のコメントを受け付ける",
+        "システムは入札のコメントを書けないことを WARN で記録に残す。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
+        "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "holdを書けない",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "holdを書けない-4",
+        "holdを書けない-5",
+        "holdを書けない-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "担当者を消し戻せない",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "担当者を消し戻せない-1",
+        "担当者を消し戻せない-2",
+        "担当者を消し戻せない-3",
+        "担当者を消し戻せない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す",
+        "システムは書いた担当者を消し戻せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
@@ -1230,95 +1873,1292 @@
     {
       "id": "P011",
       "terminal": "abort",
-      "terminal_flow": "枠を読めない",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "terminal_flow": "担当者を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "枠を読めない-1",
-        "枠を読めない-2",
-        "枠を読めない-3",
-        "枠を読めない-4"
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "担当者を書けない-1",
+        "担当者を書けない-2",
+        "担当者を書けない-3",
+        "担当者を書けない-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない。",
-        "CONDITION: NOT Claude の usage API か Claude Code のステータスラインから最後に使用率を受けてから新しさの幅を過ぎておらず、保管している枠のどれもリセット時刻を過ぎていない",
-        "システムは枠を読めなかった理由を記録に残す。",
-        "システムは入札のコメントを1件も書かない。",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を担当者に加える",
+        "システムは入札に勝ったが担当者を書けないことを WARN で記録に残す。",
+        "システムは hold のコメントを1件も書かない。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     },
     {
       "id": "P012",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "terminal": "abort",
+      "terminal_flow": "入札に負けた",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "入札に負けた-1",
+        "入札に負けた-2",
+        "入札に負けた-3",
+        "入札に負けた-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "CONDITION: NOT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である",
+        "システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "締め切り前",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "締め切り前-1",
+        "締め切り前-2",
+        "締め切り前-3",
+        "締め切り前-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "CONDITION: NOT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている",
+        "システムは締め切りを待つことを DEBUG で記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
+        "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "他人の担当-1",
         "他人の担当-2",
         "他人の担当-3",
         "他人の担当-4",
         "他人の担当-5",
         "他人の担当-6",
-        "BASIC FLOW-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24"
+        "BASIC FLOW-22",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
         "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
-        "システムは入札のコメントを1件も書かない。",
-        "システムは hold のコメントを1件も書かない。",
-        "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。",
-        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
+        "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
       ]
     },
     {
-      "id": "P013",
+      "id": "P016",
+      "terminal": "abort",
+      "terminal_flow": "holdを書けない",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "holdを書けない-4",
+        "holdを書けない-5",
+        "holdを書けない-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P017",
+      "terminal": "abort",
+      "terminal_flow": "担当者を消し戻せない",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "担当者を消し戻せない-1",
+        "担当者を消し戻せない-2",
+        "担当者を消し戻せない-3",
+        "担当者を消し戻せない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す",
+        "システムは書いた担当者を消し戻せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P018",
+      "terminal": "abort",
+      "terminal_flow": "担当者を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "担当者を書けない-1",
+        "担当者を書けない-2",
+        "担当者を書けない-3",
+        "担当者を書けない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を担当者に加える",
+        "システムは入札に勝ったが担当者を書けないことを WARN で記録に残す。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P019",
+      "terminal": "abort",
+      "terminal_flow": "入札に負けた",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "入札に負けた-1",
+        "入札に負けた-2",
+        "入札に負けた-3",
+        "入札に負けた-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "CONDITION: NOT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である",
+        "システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P020",
+      "terminal": "abort",
+      "terminal_flow": "締め切り前",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-16",
+        "締め切り前-1",
+        "締め切り前-2",
+        "締め切り前-3",
+        "締め切り前-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "CONDITION: NOT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている",
+        "システムは締め切りを待つことを DEBUG で記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P021",
+      "terminal": "abort",
+      "terminal_flow": "入札を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "入札を書けない-1",
+        "入札を書けない-2",
+        "入札を書けない-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が入札のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が入札のコメントを受け付ける",
+        "システムは入札のコメントを書けないことを WARN で記録に残す。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P022",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
+        "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
+      ]
+    },
+    {
+      "id": "P023",
+      "terminal": "abort",
+      "terminal_flow": "holdを書けない",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "holdを書けない-4",
+        "holdを書けない-5",
+        "holdを書けない-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P024",
+      "terminal": "abort",
+      "terminal_flow": "担当者を消し戻せない",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "holdを書けない-1",
+        "holdを書けない-2",
+        "holdを書けない-3",
+        "担当者を消し戻せない-1",
+        "担当者を消し戻せない-2",
+        "担当者を消し戻せない-3",
+        "担当者を消し戻せない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。",
+        "システムは VALIDATES THAT GitHub Projects v2 が hold のコメントを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が hold のコメントを受け付ける",
+        "システムは hold のコメントを書けないので着手を見送ることを WARN で記録に残す。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を先頭の issue の担当者から外す",
+        "システムは書いた担当者を消し戻せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P025",
+      "terminal": "abort",
+      "terminal_flow": "担当者を書けない",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "担当者を書けない-1",
+        "担当者を書けない-2",
+        "担当者を書けない-3",
+        "担当者を書けない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者に加えることを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 がこの機械の投稿者を担当者に加える。",
+        "CONDITION: NOT GitHub Projects v2 がこの機械の投稿者を担当者に加える",
+        "システムは入札に勝ったが担当者を書けないことを WARN で記録に残す。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P026",
+      "terminal": "abort",
+      "terminal_flow": "入札に負けた",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "入札に負けた-1",
+        "入札に負けた-2",
+        "入札に負けた-3",
+        "入札に負けた-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "システムは今の回の入札のうち、締め切りまでに届いた入札を比べる。",
+        "システムは VALIDATES THAT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である。",
+        "CONDITION: NOT 締め切りまでに届いた入札のうち、判定スコアがいちばん大きく、同点の中でいちばん先に投稿された入札が、この機械の投稿者の入札である",
+        "システムは判定スコアがいちばん大きい入札を書いたアカウント名を記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P027",
+      "terminal": "abort",
+      "terminal_flow": "締め切り前",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "他人の担当-9",
+        "BASIC FLOW-12",
+        "BASIC FLOW-16",
+        "締め切り前-1",
+        "締め切り前-2",
+        "締め切り前-3",
+        "締め切り前-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "RESUME STEP 12",
+        "IF 今の回の入札にこの機械の投稿者の入札が1件も無い THEN",
+        "CONDITION: NOT 今の回の入札にこの機械の投稿者の入札が1件も無い",
+        "システムは VALIDATES THAT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている。",
+        "CONDITION: NOT 今の回でいちばん古い入札の投稿の時刻から bid_window_ms 以上たっている",
+        "システムは締め切りを待つことを DEBUG で記録に残す。",
+        "システムはこの機械の投稿者を担当者に加えない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P028",
+      "terminal": "abort",
+      "terminal_flow": "外したあと入札できない",
+      "postcondition": "先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、issue に released の印が先頭に付いたコメントが1件増えている。この機械は入札のコメントを1件も書いていない。issue の Status は変わっていない。入札できる機械が次の巡回で先頭の issue を拾う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "他人の担当-6",
+        "他人の担当-7",
+        "他人の担当-8",
+        "外したあと入札できない-1",
+        "外したあと入札できない-2",
+        "外したあと入札できない-3",
+        "外したあと入札できない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
+        "システムは GitHub Projects v2 に、外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは VALIDATES THAT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "CONDITION: NOT システムが入札に使ってよい使用率を持っていて、5時間余裕値と1週間余裕値がどちらも 0 より大きい",
+        "システムは入札しない理由を INFO で記録に残す。",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P029",
+      "terminal": "abort",
+      "terminal_flow": "担当を外せない",
+      "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "他人の担当-4",
+        "他人の担当-5",
+        "担当を外せない-1",
+        "担当を外せない-2",
+        "担当を外せない-3",
+        "担当を外せない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "システムは GitHub Projects v2 に担当者を先頭の issue から外すことを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が担当者を先頭の issue から外す。",
+        "CONDITION: NOT GitHub Projects v2 が担当者を先頭の issue から外す",
+        "システムは期限の切れた担当を外せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P030",
+      "terminal": "abort",
+      "terminal_flow": "担当を外せない",
+      "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "他人の担当-2",
+        "他人の担当-3",
+        "担当を外せない-1",
+        "担当を外せない-2",
+        "担当を外せない-3",
+        "担当を外せない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 候補の一覧が担当者のノード ID を持っている。",
+        "CONDITION: NOT 候補の一覧が担当者のノード ID を持っている",
+        "システムは期限の切れた担当を外せないことを WARN で記録に残す。",
+        "システムは released のコメントを1件も書かない。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "期限内の担当",
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
@@ -1328,87 +3168,279 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "他人の担当-1",
         "他人の担当-2",
         "期限内の担当-1",
         "期限内の担当-2",
-        "期限内の担当-3"
+        "期限内の担当-3",
+        "期限内の担当-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "CONDITION: NOT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている",
+        "システムはほかの機械が期限内で担当していることを DEBUG で記録に残す。",
         "システムは先頭の issue を着手の対象から外す。",
         "システムは入札のコメントを1件も書かない。",
         "ABORT"
       ]
     },
     {
-      "id": "P014",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "人間が付けた担当",
-      "postcondition": "担当者は人間が付けたまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
+      "postcondition": "担当者は人間が付けたまま変わっていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "他人の担当-1",
         "人間が付けた担当-1",
         "人間が付けた担当-2",
-        "人間が付けた担当-3"
+        "人間が付けた担当-3",
+        "人間が付けた担当-5",
+        "人間が付けた担当-6"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "CONDITION: NOT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある",
-        "システムは hold の印が先頭に付いたコメントが1件も無いことを記録に残す。",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "CONDITION: NOT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある",
+        "システムは担当者を名指しする hold のコメントが1件も無いことと、担当者を外せば着手することを WARN で記録に残す。",
+        "IF 案内のコメントを書く条件が揃っている THEN",
+        "システムは担当者を外す案内のコメントを issue に1件書く。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     },
     {
-      "id": "P015",
+      "id": "P033",
       "terminal": "abort",
-      "terminal_flow": "担当者が2人以上",
-      "postcondition": "担当者は1人も増えず、1人も減っていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
+      "terminal_flow": "人間が付けた担当",
+      "postcondition": "担当者は人間が付けたまま変わっていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "担当者が2人以上-1",
-        "担当者が2人以上-2",
-        "担当者が2人以上-3"
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "他人の担当-1",
+        "人間が付けた担当-1",
+        "人間が付けた担当-2",
+        "人間が付けた担当-5",
+        "人間が付けた担当-6"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
+        "システムは VALIDATES THAT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある。",
+        "CONDITION: NOT 先頭の issue に、担当者を名指しする hold のコメントが1件以上ある",
+        "システムは担当者を名指しする hold のコメントが1件も無いことと、担当者を外せば着手することを WARN で記録に残す。",
+        "IF 案内のコメントを書く条件が揃っている THEN",
+        "CONDITION: NOT 案内のコメントを書く条件が揃っている",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P034",
+      "terminal": "abort",
+      "terminal_flow": "コメントを読めない",
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "コメントを読めない-1",
+        "コメントを読めない-2",
+        "コメントを読めない-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "CONDITION: NOT GitHub Projects v2 が先頭の issue のコメントを応答する",
+        "システムはコメントを読めないので着手しないことを WARN で記録に残す。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P035",
+      "terminal": "abort",
+      "terminal_flow": "コメントの読み取りの上限",
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が候補の先頭から見直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "コメントの読み取りの上限-1",
+        "コメントの読み取りの上限-2",
+        "コメントの読み取りの上限-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "CONDITION: NOT この巡回でコメントを読んだ issue の数が10件より少ない",
+        "システムはコメントの読み取りが巡回の上限に達したことを INFO で記録に残す。",
+        "システムはこの巡回で残りの候補を1件も見ない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P036",
+      "terminal": "abort",
+      "terminal_flow": "投稿者を取れない",
+      "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "投稿者を取れない-1",
+        "投稿者を取れない-2",
+        "投稿者を取れない-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "CONDITION: NOT システムがこの機械の投稿者のアカウント名を持っている",
+        "システムは gh の持ち主を取れないので着手しないことを WARN で記録に残す。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P037",
+      "terminal": "abort",
+      "terminal_flow": "担当者が2人以上",
+      "postcondition": "担当者は1人も増えず、1人も減っていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "担当者が2人以上-1",
+        "担当者が2人以上-2",
+        "担当者が2人以上-3",
+        "担当者が2人以上-5",
+        "担当者が2人以上-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
         "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
         "CONDITION: NOT 先頭の issue の担当者が1人以下である",
         "システムは担当者が2人以上いることを WARN で記録に残す。",
+        "IF 案内のコメントを書く条件が揃っている THEN",
+        "システムは担当者を1人も付いていない状態にする案内のコメントを issue に1件書く。",
+        "システムは先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P038",
+      "terminal": "abort",
+      "terminal_flow": "担当者が2人以上",
+      "postcondition": "担当者は1人も増えず、1人も減っていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "担当者が2人以上-1",
+        "担当者が2人以上-2",
+        "担当者が2人以上-5",
+        "担当者が2人以上-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "CONDITION: NOT 先頭の issue の担当者が1人以下である",
+        "システムは担当者が2人以上いることを WARN で記録に残す。",
+        "IF 案内のコメントを書く条件が揃っている THEN",
+        "CONDITION: NOT 案内のコメントを書く条件が揃っている",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 52,
-    "nodes_covered": 52,
-    "edges_total": 53,
-    "edges_covered": 53
+    "nodes_total": 90,
+    "nodes_covered": 90,
+    "edges_total": 95,
+    "edges_covered": 95
   }
 }

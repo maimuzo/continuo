@@ -189,7 +189,7 @@ func Test_worktreeとbranchを片付ける_P006_baseが分からなければ消�
 // {"RUCM-PATH": "P002"}
 //
 // 目的: worktree の実体を消し切れなかったら、branch も設定ファイルも消さずに止まることを
-// 確認する（RUCM のステップ12。実体が残ったまま先へ進むと、中身のある worktree だけが
+// 確認する（RUCM の代替フロー「消せないworktree」。実体が残ったまま先へ進むと、中身のある worktree だけが
 // 取り残される）。
 // 与える情報: 書き込みを落とした worktree のディレクトリ（`os.RemoveAll` が必ず失敗する）。
 // 成功条件: Cleanup がエラーを返し、worktree が残り、branch と issue ごとの設定ファイルが
@@ -311,7 +311,7 @@ func Test_worktreeとbranchを片付ける_P013_on_statesに入った時点で�
 // {"RUCM-PATH": "P004"}
 //
 // 目的: herdr が別のパスを開いている workspace を答えたら、何も消さないことを確認する
-// （設計 3-9 の段3。検算の答えが食い違ったら止まる。RUCM のステップ9 で消す宛先を
+// （設計 3-9 の段3。検算の答えが食い違ったら止まる。RUCM の代替フロー「宛先が定まらない」で、消す宛先を
 // 確定できないときの経路であり、before_remove も実行しない）。
 // 与える情報: 常に別のパスを worktree として答えるテスト用herdr mock。
 // 成功条件: Cleanup がエラーになり、worktree.remove を1度も送らず、worktree が残ること。
@@ -380,7 +380,7 @@ func Test_worktreeとbranchを片付ける_P016_壊れた身元ファイルは�
 // {"RUCM-PATH": "P017"}
 //
 // 目的: 置き場所そのものを読めなければ走査が失敗し、**どの worktree にも触らない**ことを
-// 確認する（RUCM のステップ2。材料を取れない巡回では何も決めない）。
+// 確認する（RUCM の代替フロー「材料を取れない」。材料を取れない巡回では何も決めない）。
 // 与える情報: 読み取りの permission を落とした置き場所。
 // 成功条件: Scan がエラーを返し、結果が0件で、置き場所の中身が消えていないこと。
 func Test_worktreeとbranchを片付ける_P017_置き場所を読めなければ走査が失敗する(t *testing.T) {

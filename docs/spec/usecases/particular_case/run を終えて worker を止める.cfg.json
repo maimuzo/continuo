@@ -1,0 +1,957 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "run を終えて worker を止める",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/run を終えて worker を止める.rucm.md",
+    "rucm_block_sha256": "1931363b46315ec41e0f24683596d61963186a7fbdc6ed985701e52dbbcba8eb"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "issue にエージェントが今回の run で書いたコメントが1件以上ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree と branch は残っている。"
+    },
+    "確かめないrun": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。"
+    },
+    "コメントの取り戻し": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。システムは issue の Status を書き直していない。herdr の pane は閉じている。Claude Code を閉じた記録は、取り戻しのあとで pane を閉じたときの1件だけである。"
+    },
+    "復元の断念": {
+      "rfs": {
+        "flow": "コメントの取り戻し",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      "postcondition": "issue にエージェントが書いたコメントがない。システムは issue の Status を書き直していない。issue に人間へ引き渡す通知のコメントは増えていない。システムは Claude Code に本文を1文字も送っていない。印は外れている。worktree は残っている。pane を1つに決められずに復元をやめた場合は、開き直した workspace の pane は開いたまま残る。"
+    },
+    "取り戻しの復帰の失敗": {
+      "rfs": {
+        "flow": "コメントの取り戻し",
+        "steps": [
+          4,
+          6
+        ]
+      },
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。システムは Claude Code に本文を1文字も送っていない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
+    },
+    "コメントの取り戻しの失敗": {
+      "rfs": {
+        "flow": "コメントの取り戻し",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "確かめないrun-1",
+      "type": "action",
+      "flow": "確かめないrun",
+      "step": 1,
+      "statement": "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "確かめないrun-2",
+      "type": "action",
+      "flow": "確かめないrun",
+      "step": 2,
+      "statement": "システムは、pane を引き終えていれば、herdr の pane を閉じる。"
+    },
+    {
+      "id": "確かめないrun-3",
+      "type": "action",
+      "flow": "確かめないrun",
+      "step": 3,
+      "statement": "システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "確かめないrun-4",
+      "type": "action",
+      "flow": "確かめないrun",
+      "step": 4,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "確かめないrun-5",
+      "type": "abort",
+      "flow": "確かめないrun",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コメントの取り戻し-1",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 1,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "コメントの取り戻し-2",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 2,
+      "statement": "システムは Claude Code を閉じた記録を書かずに保留する。"
+    },
+    {
+      "id": "コメントの取り戻し-3",
+      "type": "condition",
+      "flow": "コメントの取り戻し",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。"
+    },
+    {
+      "id": "コメントの取り戻し-4",
+      "type": "condition",
+      "flow": "コメントの取り戻し",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。"
+    },
+    {
+      "id": "コメントの取り戻し-5",
+      "type": "condition",
+      "flow": "コメントの取り戻し",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる。"
+    },
+    {
+      "id": "コメントの取り戻し-6",
+      "type": "condition",
+      "flow": "コメントの取り戻し",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる。"
+    },
+    {
+      "id": "コメントの取り戻し-7",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 7,
+      "statement": "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。"
+    },
+    {
+      "id": "コメントの取り戻し-8",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 8,
+      "statement": "システムは issue のコメントを読み直す。"
+    },
+    {
+      "id": "コメントの取り戻し-9",
+      "type": "condition",
+      "flow": "コメントの取り戻し",
+      "step": 9,
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+    },
+    {
+      "id": "コメントの取り戻し-10",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 10,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "コメントの取り戻し-11",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 11,
+      "statement": "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "コメントの取り戻し-12",
+      "type": "action",
+      "flow": "コメントの取り戻し",
+      "step": 12,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "コメントの取り戻し-13",
+      "type": "resume",
+      "flow": "コメントの取り戻し",
+      "step": 13,
+      "statement": "RESUME STEP 7"
+    },
+    {
+      "id": "復元の断念-1",
+      "type": "action",
+      "flow": "復元の断念",
+      "step": 1,
+      "statement": "システムは復元をやめる理由を記録に残す。"
+    },
+    {
+      "id": "復元の断念-2",
+      "type": "action",
+      "flow": "復元の断念",
+      "step": 2,
+      "statement": "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "復元の断念-3",
+      "type": "action",
+      "flow": "復元の断念",
+      "step": 3,
+      "statement": "システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる。"
+    },
+    {
+      "id": "復元の断念-4",
+      "type": "action",
+      "flow": "復元の断念",
+      "step": 4,
+      "statement": "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "復元の断念-5",
+      "type": "action",
+      "flow": "復元の断念",
+      "step": 5,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "復元の断念-6",
+      "type": "abort",
+      "flow": "復元の断念",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-1",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 1,
+      "statement": "システムは復帰できなかった理由を記録に残す。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-2",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 2,
+      "statement": "システムは、開き直した pane があれば、herdr の pane を閉じる。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-3",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 3,
+      "statement": "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-4",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 4,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-5",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 5,
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-6",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 6,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-7",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 7,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-8",
+      "type": "abort",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 8,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-1",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 1,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-2",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 2,
+      "statement": "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-3",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 3,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-4",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 4,
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-5",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 5,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-6",
+      "type": "action",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 6,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-7",
+      "type": "abort",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 7,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "確かめないrun-1",
+      "kind": "false",
+      "condition": "NOT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "コメントの取り戻し-1",
+      "kind": "false",
+      "condition": "NOT issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "確かめないrun-1",
+      "to": "確かめないrun-2",
+      "kind": "seq"
+    },
+    {
+      "from": "確かめないrun-2",
+      "to": "確かめないrun-3",
+      "kind": "seq"
+    },
+    {
+      "from": "確かめないrun-3",
+      "to": "確かめないrun-4",
+      "kind": "seq"
+    },
+    {
+      "from": "確かめないrun-4",
+      "to": "確かめないrun-5",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-1",
+      "to": "コメントの取り戻し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-2",
+      "to": "コメントの取り戻し-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-3",
+      "to": "コメントの取り戻し-4",
+      "kind": "true",
+      "condition": "run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる"
+    },
+    {
+      "from": "コメントの取り戻し-3",
+      "to": "復元の断念-1",
+      "kind": "false",
+      "condition": "NOT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる"
+    },
+    {
+      "from": "コメントの取り戻し-4",
+      "to": "コメントの取り戻し-5",
+      "kind": "true",
+      "condition": "復帰に使うセッション UUID の会話の記録が在る"
+    },
+    {
+      "from": "コメントの取り戻し-4",
+      "to": "取り戻しの復帰の失敗-1",
+      "kind": "false",
+      "condition": "NOT 復帰に使うセッション UUID の会話の記録が在る"
+    },
+    {
+      "from": "コメントの取り戻し-5",
+      "to": "コメントの取り戻し-6",
+      "kind": "true",
+      "condition": "worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる"
+    },
+    {
+      "from": "コメントの取り戻し-5",
+      "to": "復元の断念-1",
+      "kind": "false",
+      "condition": "NOT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる"
+    },
+    {
+      "from": "コメントの取り戻し-6",
+      "to": "コメントの取り戻し-7",
+      "kind": "true",
+      "condition": "pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる"
+    },
+    {
+      "from": "コメントの取り戻し-6",
+      "to": "取り戻しの復帰の失敗-1",
+      "kind": "false",
+      "condition": "NOT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる"
+    },
+    {
+      "from": "コメントの取り戻し-7",
+      "to": "コメントの取り戻し-8",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-8",
+      "to": "コメントの取り戻し-9",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-9",
+      "to": "コメントの取り戻し-10",
+      "kind": "true",
+      "condition": "issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "コメントの取り戻し-9",
+      "to": "コメントの取り戻しの失敗-1",
+      "kind": "false",
+      "condition": "NOT issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "コメントの取り戻し-10",
+      "to": "コメントの取り戻し-11",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-11",
+      "to": "コメントの取り戻し-12",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-12",
+      "to": "コメントの取り戻し-13",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-13",
+      "to": "BASIC FLOW-7",
+      "kind": "resume"
+    },
+    {
+      "from": "復元の断念-1",
+      "to": "復元の断念-2",
+      "kind": "seq"
+    },
+    {
+      "from": "復元の断念-2",
+      "to": "復元の断念-3",
+      "kind": "seq"
+    },
+    {
+      "from": "復元の断念-3",
+      "to": "復元の断念-4",
+      "kind": "seq"
+    },
+    {
+      "from": "復元の断念-4",
+      "to": "復元の断念-5",
+      "kind": "seq"
+    },
+    {
+      "from": "復元の断念-5",
+      "to": "復元の断念-6",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-1",
+      "to": "取り戻しの復帰の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-2",
+      "to": "取り戻しの復帰の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-3",
+      "to": "取り戻しの復帰の失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-4",
+      "to": "取り戻しの復帰の失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-5",
+      "to": "取り戻しの復帰の失敗-6",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-6",
+      "to": "取り戻しの復帰の失敗-7",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-7",
+      "to": "取り戻しの復帰の失敗-8",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-1",
+      "to": "コメントの取り戻しの失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-2",
+      "to": "コメントの取り戻しの失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-3",
+      "to": "コメントの取り戻しの失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-4",
+      "to": "コメントの取り戻しの失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-5",
+      "to": "コメントの取り戻しの失敗-6",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-6",
+      "to": "コメントの取り戻しの失敗-7",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue にエージェントが今回の run で書いたコメントが1件以上ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree と branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue にエージェントが今回の run で書いたコメントが1件以上ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree と branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
+        "コメントの取り戻し-9",
+        "コメントの取り戻し-10",
+        "コメントの取り戻し-11",
+        "コメントの取り戻し-12",
+        "コメントの取り戻し-13",
+        "BASIC FLOW-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。",
+        "システムは VALIDATES THAT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "システムは herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "RESUME STEP 7",
+        "システムは印を外す。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "コメントの取り戻しの失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
+        "コメントの取り戻し-9",
+        "コメントの取り戻しの失敗-1",
+        "コメントの取り戻しの失敗-2",
+        "コメントの取り戻しの失敗-3",
+        "コメントの取り戻しの失敗-4",
+        "コメントの取り戻しの失敗-5",
+        "コメントの取り戻しの失敗-6",
+        "コメントの取り戻しの失敗-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。",
+        "システムは VALIDATES THAT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "取り戻しの復帰の失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。システムは Claude Code に本文を1文字も送っていない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "取り戻しの復帰の失敗-1",
+        "取り戻しの復帰の失敗-2",
+        "取り戻しの復帰の失敗-3",
+        "取り戻しの復帰の失敗-4",
+        "取り戻しの復帰の失敗-5",
+        "取り戻しの復帰の失敗-6",
+        "取り戻しの復帰の失敗-7",
+        "取り戻しの復帰の失敗-8"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。",
+        "システムは VALIDATES THAT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる。",
+        "CONDITION: NOT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になり、かつ interactive_ready が真になる",
+        "システムは復帰できなかった理由を記録に残す。",
+        "システムは、開き直した pane があれば、herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "復元の断念",
+      "postcondition": "issue にエージェントが書いたコメントがない。システムは issue の Status を書き直していない。issue に人間へ引き渡す通知のコメントは増えていない。システムは Claude Code に本文を1文字も送っていない。印は外れている。worktree は残っている。pane を1つに決められずに復元をやめた場合は、開き直した workspace の pane は開いたまま残る。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "復元の断念-1",
+        "復元の断念-2",
+        "復元の断念-3",
+        "復元の断念-4",
+        "復元の断念-5",
+        "復元の断念-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。",
+        "システムは VALIDATES THAT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる。",
+        "CONDITION: NOT worktree を workspace として開き直せ、pane を1つ引け、かつ agent 名を決められる",
+        "システムは復元をやめる理由を記録に残す。",
+        "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。",
+        "システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "取り戻しの復帰の失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。システムは Claude Code に本文を1文字も送っていない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "取り戻しの復帰の失敗-1",
+        "取り戻しの復帰の失敗-2",
+        "取り戻しの復帰の失敗-3",
+        "取り戻しの復帰の失敗-4",
+        "取り戻しの復帰の失敗-5",
+        "取り戻しの復帰の失敗-6",
+        "取り戻しの復帰の失敗-7",
+        "取り戻しの復帰の失敗-8"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "システムは VALIDATES THAT 復帰に使うセッション UUID の会話の記録が在る。",
+        "CONDITION: NOT 復帰に使うセッション UUID の会話の記録が在る",
+        "システムは復帰できなかった理由を記録に残す。",
+        "システムは、開き直した pane があれば、herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "復元の断念",
+      "postcondition": "issue にエージェントが書いたコメントがない。システムは issue の Status を書き直していない。issue に人間へ引き渡す通知のコメントは増えていない。システムは Claude Code に本文を1文字も送っていない。印は外れている。worktree は残っている。pane を1つに決められずに復元をやめた場合は、開き直した workspace の pane は開いたまま残る。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "復元の断念-1",
+        "復元の断念-2",
+        "復元の断念-3",
+        "復元の断念-4",
+        "復元の断念-5",
+        "復元の断念-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を書かずに保留する。",
+        "システムは VALIDATES THAT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる。",
+        "CONDITION: NOT run が worktree のパスを持ち、身元ファイルから設定ファイルのパスを読め、かつ復帰に使うセッション UUID が決まる",
+        "システムは復元をやめる理由を記録に残す。",
+        "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。",
+        "システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる。",
+        "システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "確かめないrun",
+      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "確かめないrun-1",
+        "確かめないrun-2",
+        "確かめないrun-3",
+        "確かめないrun-4",
+        "確かめないrun-5"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
+        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "CONDITION: NOT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない",
+        "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。",
+        "システムは、pane を引き終えていれば、herdr の pane を閉じる。",
+        "システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 46,
+    "nodes_covered": 46,
+    "edges_total": 48,
+    "edges_covered": 48
+  }
+}

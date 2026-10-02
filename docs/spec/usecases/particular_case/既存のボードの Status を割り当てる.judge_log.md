@@ -1,72 +1,54 @@
 # 判断ログ: 既存のボードの Status を割り当てる
 
-- 対象: docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md
-- 作成日 / 作成モデル: 2026-08-20 / Claude Opus 5 (1M context)
-- 参照した根拠資料: docs/plans/continuo_design.md#3-6、docs/plans/continuo_design.md#3-32、docs/plans/continuo_design.md#3-34、docs/plans/continuo_design.md#4-1、docs/plans/continuo_design.md#5-1、docs/plans/continuo_design.md#5-2、docs/trying_it_out.md、internal/scaffold/scaffold.go、internal/scaffold/update.go、internal/scaffold/fill.go、internal/scaffold/detect.go、internal/scaffold/template.go、internal/doctor/checks.go、CLAUDE.md
+- 対象: `docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md`
+- 作成日 / 作成モデル: 2026-08-20 / Claude Opus 5 (1M context)。2026-10-02 に Claude Opus 5.5 が、いまの実装（`continuo setup`）から起こし直した
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-32 / 3-34 / 3-83）、`docs/trying_it_out.md`（段4）、`internal/cli/cli.go`、`internal/setup/setup.go`、`internal/setup/assign.go`、`internal/setup/board.go`、`internal/scaffold/update.go`、`internal/scaffold/fill.go`、`internal/scaffold/scaffold.go`、`internal/i18n/messages/ja.json`
 
 ## 判断一覧
 
 | # | 判断対象 | 決定した値 | 合理的決定根拠 | 出典 | 自信 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | USE CASE NAME | 既存のボードの Status を割り当てる | 依頼で指定された名前をそのまま使う。動詞で終わる名詞句の規則を満たす | 依頼文 | 100% |
-| 2 | 配置先ディレクトリ | particular_case | 単一目的・単一操作の単位である。他ユースケースを跨がない | 依頼文 | 100% |
-| 3 | BRIEF DESCRIPTION | 実行・選択肢の列挙・5役割の逐次選択・既にある WORKFLOW.md の7行の書き換えの4文 | 基本フローの骨格を4文に落とした。単文のみ（R12）を守るため文を分けた | - | 90% |
-| 4 | PRECONDITION | gh のログイン済み、ボードが1枚ある、Status が single-select である | doctor が `gh auth status` の scope に `project` を求め、Bootstrap が single-select の Status フィールドを解決する。この3つが無いと選択肢を1件も読めない | docs/plans/continuo_design.md#3-32、internal/doctor/checks.go の `checkGHAuth` と `checkBoard` | 90% |
-| 5 | PRIMARY ACTOR | 利用者 | ボードを既に持っている人が自分で実行するコマンドである。continuo の常駐プロセスは関与しない | 依頼文 | 95% |
-| 6 | SECONDARY ACTORS | GitHub Projects v2 | 選択肢の一覧はボードから取る。システムが外部に依存する唯一の相手である | docs/plans/continuo_design.md#3-34 | 90% |
-| 7 | DEPENDENCY | なし | 他の particular_case を取り込まない。`continuo doctor` は別の独立したコマンドであり、この操作の途中では呼ばない | docs/plans/continuo_design.md#3-32 | 85% |
-| 8 | GENERALIZATION | なし | 汎化元・汎化先にあたるユースケースが存在しない | - | 90% |
-| 9 | 実行するコマンド | `continuo setup` | **人間が決めた。**Status 割り当ての対話は独立したサブコマンドにする。`continuo init --assign-status` にはしない。理由は「対話するコマンドを1つに独立させ、`init` が自動化から叩ける状態を保つため」である。実装の都合で決めてはならない | 人間の決定（2026-08-20） | 100% |
-| 10 | 設計の「対話で選ばせない」との整合 | 標準入力を握るのは `continuo setup` だけである。`continuo init` は対話しない | 設計が `init` の対話を禁じた理由は「標準入力を握ると `continuo init` を自動で叩く経路が止まる」ことである。対話を別のコマンドへ切り出せば、`init` は標準入力を1度も握らない | docs/plans/continuo_design.md#3-32、人間の決定（2026-08-20） | 100% |
-| 11 | 役割の説明を先に出す方針 | ステップ8で役割の説明を応答してからステップ9で番号を受ける | 初見の利用者はどの Status がどの役割か知らない。Status 名を先に見せると、名前の似た選択肢を役割の意味と無関係に選ぶ | 依頼文 | 95% |
-| 12 | 画面に出す説明の文面 | 「continuo はここから issue を取ります」等の5文 | 設計の状態遷移表にある「誰が・いつ・何をするか」を1文へ写した。Status 名ではなく continuo の振る舞いで説明する | docs/plans/continuo_design.md#4-1 | 85% |
-| 13 | 選ばせ方 | 既存の選択肢を番号付きで並べ、番号を受ける | 選択肢名は空白を含みうる（`Ice Box` / `In Progress`）ので、名前の打ち込みは打ち間違いと大文字小文字の揺れを生む | docs/plans/continuo_design.md#3-34 | 90% |
-| 14 | 尋ねる順序 | 着手待ち、作業中、レビュー待ち、保留、完了 | issue が実際に通る順である。ボード上の並びと同じ順に尋ねると、利用者が一覧を上から順に消化できる | docs/plans/continuo_design.md#4-1 | 85% |
-| 15 | 5つの役割と設定キーの対応 | 着手待ちは `dispatch_state`、作業中は `running_state`、レビュー待ちは `status_signal_map.review`、保留は `failure_state` と `status_signal_map.blocked`、完了は `terminal_states` | 設定の各キーのコメントが役割と1対1に対応している。`active_states` は `dispatch_state` と `running_state` を必ず含める規則があるので、この2つから機械的に組み立てる | docs/plans/continuo_design.md#5-2、internal/scaffold/template.go | 90% |
-| 16 | ステップ分割方針 | 検証・応答・入力・状態変更をそれぞれ独立したステップにする | 1文1動作（R4）と、代替フローの分岐元が条件ステップであること（E021）を両立させるため。応答と入力受付を1ステップに畳むと、分岐点が指せなくなる | rucm 文法リファレンスの R4 と E021 | 90% |
-| 17 | ステップ2の VALIDATES THAT | WORKFLOW.md がある | `continuo setup` は既にある WORKFLOW.md の7行だけを書き換えるので、対象のファイルが無ければ1歩も進めない。雛形を置くのは `continuo init` の仕事であり、2つのコマンドが同じファイルを作れると、どちらが正かが決まらない | internal/scaffold/update.go の `CheckUpdatable` と `ErrNotFound`、docs/trying_it_out.md の段3と段4 | 95% |
-| 18 | 検証の順序（先にファイル、後にボード） | ステップ2でファイル、ステップ4でボード | ボードの読み取りは GitHub への往復とレートリミットを消費する。どうせ止まる実行で、先に外部を叩く理由が無い | docs/plans/continuo_design.md#3-31 | 85% |
-| 19 | ステップ3（owner とボード番号の取得） | gh から引く。1ステップにまとめる | `continuo init` が既に `gh api user` と `gh project list` で両方を引いている。`continuo setup` でも同じ検出をそのまま使う | internal/scaffold/detect.go の `Detect`、`detectOwner`、`detectProject` | 90% |
-| 20 | ステップ4の VALIDATES THAT | ボードの Status フィールドの選択肢を読み取れる | doctor の「ボードを読めるか」と同じ検査である。ここが通らないと選択肢を1件も並べられず、対話に入る意味が無い | docs/plans/continuo_design.md#3-32、internal/doctor/checks.go の `checkBoard` | 90% |
-| 21 | ステップ5の VALIDATES THAT | 読み取った選択肢が5個以上ある | 5つの役割それぞれに別の選択肢を割り当てる（判断25）ので、選択肢が5個未満なら対話は必ず途中で行き止まる。尋ねる前に止めれば、利用者は無駄な入力をしない | 判断25と同じ根拠 | 65% |
-| 22 | DO と UNTIL を使う理由 | 同じ問い方を5回繰り返すため | 5つの役割で問い方と検証がまったく同じである。5回展開するとステップが5倍になり、代替フローの RFS も5組必要になる | rucm 文法リファレンスの R23 | 90% |
-| 23 | ステップ10の VALIDATES THAT | 番号が一覧の範囲内である | 番号入力は範囲外の数値と数値以外の両方を受け取りうる。受け付けない入力で対話全体を打ち切ると、それまでの回答が失われる | - | 85% |
-| 24 | ステップ11の VALIDATES THAT（番号が 0 でない） | 番号 `0` を「この役割に使える選択肢がボードに無い」の入力にする | 役割に対応する選択肢が無い場合の逃げ道が要る。一覧の番号は1から振るので、`0` は既存の選択肢と衝突しない | - | 60% |
-| 25 | ステップ12の VALIDATES THAT（二重割り当て） | 同じ選択肢を2つの役割へ割り当てさせない。拒否して同じ役割を尋ね直す | 役割が重なると continuo が壊れる。着手待ちと完了が同じなら、取った直後の issue の worktree を片付ける。着手待ちと作業中が同じなら、書き込んだ Status がそのまま次の候補になり同じ issue を取り続ける | docs/plans/continuo_design.md#3-9、docs/plans/continuo_design.md#4-1 | 85% |
-| 26 | 二重割り当てのときに打ち切らない理由 | RESUME STEP 8 で同じ役割を尋ね直す | 打ち間違いは利用者が即座に直せる。打ち切ると、それまでの回答をすべて入れ直させることになる | - | 90% |
-| 27 | 該当する選択肢が無いときに ABORT する理由 | 対話を打ち切り、GitHub の画面で選択肢を足すよう案内する | 5つの役割はどれも continuo の動作に必要で、欠けたまま書いた WORKFLOW.md は起動時の検証で落ちる。選択肢を API で足すことは禁じられている（`updateProjectV2Field` は全件置き換えとして扱われ、設定済みの Status が全部消える）ので、システム側で補うこともできない | CLAUDE.md、docs/plans/continuo_design.md#4-1、docs/plans/continuo_design.md#3-34 | 85% |
-| 28 | 選択肢を足す案内に「API で足すと Status が全部消える」を含める | 含める（`選択肢が足りない` と `該当する選択肢が無い` の両フロー） | この警告が無いと、利用者は `gh project field-create` や API で足そうとする。本番のボードでは設定済みの Status が全部 `null` に落ちる | CLAUDE.md、docs/plans/continuo_design.md#4-1 | 90% |
-| 29 | ステップ17（書き換え）を1ステップにする | 同じディレクトリの一時ファイルへ全文を書き、`os.Rename` で置き換える | 書き換えを不可分にする。途中で落ちても、半分書かれた WORKFLOW.md を残さない | internal/scaffold/update.go の `UpdateStatuses` と internal/atomicfile の `Write` | 90% |
-| 30 | BASIC FLOW の POSTCONDITION | 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の7つのキー以外の行は変わっていない。ボードの選択肢と item の Status は変わっていない | 守るものが2つある。1つはボードを1文字も書き換えないこと、もう1つは利用者が手で直した行を消さないことである。どちらも事後条件に書かないとテストで確かめられない | CLAUDE.md、docs/plans/continuo_design.md#3-34、docs/trying_it_out.md の段3 | 95% |
-| 31 | フロー `WORKFLOW.mdが無い` | RFS BASIC FLOW 2。`continuo init` を先に実行する案内を応答して ABORT。終了コード 1 | 手順書は段3 で `continuo init` に WORKFLOW.md を作らせ、段4 で `continuo setup` を叩かせる。順序を飛ばした利用者に、次に叩くコマンドを名指しで返す | docs/trying_it_out.md の段3と段4、internal/scaffold/update.go の `ErrNotFound` | 95% |
-| 32 | フロー `WORKFLOW.mdが無い` の POSTCONDITION | WORKFLOW.md は作られていない。役割の割り当てを1つも尋ねていない。終了コードは 1 | 「作られていない」を書くのは、setup が雛形を作らないこと（判断17）をテストで確かめるためである。「尋ねていない」は検証の順序（判断18）の確認である | - | 90% |
-| 33 | フロー `ボードを読めない` | RFS BASIC FLOW 4。理由と直し方を応答して ABORT | doctor が落ち方ごとに記号と文言を分けている。同じ理由の分類をこのコマンドでも使う | docs/plans/continuo_design.md#3-32、internal/doctor/checks.go の `boardFailure` | 85% |
-| 34 | 読めない理由と案内の対応 | 候補が複数なら `--project`、owner を引けないなら `--owner`、scope 不足なら `gh auth login -s project`、レートリミットなら時間をおく | `Detect` が候補複数のときは選ばせずに `--project` での再実行を案内する既存の挙動に合わせた | internal/scaffold/detect.go、docs/plans/continuo_design.md#3-32 | 80% |
-| 35 | Status フィールドが見つからないときの案内 | `--status-field <名前>` でフィールド名を渡す | このコマンドは WORKFLOW.md の front matter を読み込まない。`continuo init` の直後は `tracker.provider.owner` がプレースホルダのままでも起こりうるので、設定の読み込みに成功することを前提にできない。フィールド名は引数で受ける | docs/plans/continuo_design.md#3-34、internal/config/placeholder.go の `validatePlaceholders` | 70% |
-| 36 | フロー `ボードを読めない` の POSTCONDITION | WORKFLOW.md は変わっていない。役割の割り当てを1つも尋ねていない。終了コードは 1 | 対話に入る前に落ちるので、書き換えも入力も残らない | - | 90% |
-| 37 | フロー `選択肢が足りない` | RFS BASIC FLOW 5。手順を応答して ABORT | 判断21と同じ。組み込みの Status は `Todo` / `In Progress` / `Done` の3つで始まるので、新しいボードでは実際に起こる | docs/plans/continuo_design.md#3-34 | 80% |
-| 38 | フロー `選択肢が足りない` の POSTCONDITION | WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。役割の割り当てを1つも尋ねていない。終了コードは 1 | 足りないと言うだけで、システムが選択肢を足さないことを明示する | CLAUDE.md | 90% |
-| 39 | フロー `番号が範囲外` | RFS BASIC FLOW 10。範囲を応答して RESUME STEP 8 | 打ち間違いで対話全体を捨てさせない。復帰先を8にすると、同じ役割の説明からやり直す | - | 85% |
-| 40 | フロー `番号が範囲外` の POSTCONDITION | 割り当ては増えていない。同じ役割の番号をもう一度待っている | 不正な入力で内部状態が進まないことを、テストで確かめられる形にした | - | 85% |
-| 41 | フロー `該当する選択肢が無い` | RFS BASIC FLOW 11。手順と警告を応答して ABORT | 判断27と同じ | CLAUDE.md、docs/plans/continuo_design.md#4-1 | 85% |
-| 42 | フロー `該当する選択肢が無い` の POSTCONDITION | WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。それまでに選んだ番号は保存されていない。終了コードは 1 | 途中まで選んだ結果を保存すると、次回の実行が「どこまで決まっているか」を持ち越すことになり、状態の置き場所を1つ増やす。設計は状態を永続化しない方針である | docs/plans/continuo_design.md#3-4 | 80% |
-| 43 | フロー `二重割り当て` | RFS BASIC FLOW 12。割り当て済みの役割の名前を応答して RESUME STEP 8 | どの役割と衝突したかを出さないと、利用者はどれを選び直せばよいか分からない | - | 85% |
-| 44 | フロー `二重割り当て` の POSTCONDITION | 割り当ては増えていない。1つの選択肢は1つの役割だけに割り当てられている。同じ役割の番号をもう一度待っている | 判断25の不変条件を、この代替フローを通っても壊さないことの表明である | - | 85% |
-| 45 | フロー `中断` の WHEN | 利用者が Ctrl+C を入力した場合 | 対話中に利用者が抜ける手段は端末の割り込みである。依頼で明示された条件をそのまま使う | 依頼文 | 95% |
-| 46 | フロー `中断` の BRANCH FROM | BASIC FLOW 15（割り当ての一覧を応答するステップ） | 最悪のタイミングを1点選ぶ規則に従った。15 は5つの回答をすべて集め終えた直後であり、利用者の入力が最大量失われる点である。同時に、唯一の副作用である WORKFLOW.md の書き換え（17）の前でもある。書き換えより前に置いたのは、書き換えが不可分であり（判断29）、途中で割り込んでも部分ファイルが残らないためである | rucm 文法リファレンスの BRANCH FROM 選定基準、internal/scaffold/update.go の `UpdateStatuses` | 80% |
-| 47 | フロー `中断` の POSTCONDITION | WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。ボードの選択肢と item の Status は変わっていない | 中断しても外部にも手元にも痕跡を残さないことを明示する。ボードを触らないことは他フローと同じく必ず書く | CLAUDE.md | 90% |
-| 48 | 代替フローに ABORT と RESUME STEP のどちらを使うか | 入力の打ち間違いは RESUME STEP、前提が欠けているものは ABORT | 利用者が同じ画面で直せるものは尋ね直し、GitHub の画面での作業やコマンドの引数が要るものは打ち切る、という基準で揃えた | - | 85% |
-| 49 | mermaid フローチャート | 基本フロー18ステップと8本の代替フローを subgraph で分けて表現する | 代替フローの復帰先（RESUME STEP 8）と打ち切りを線で追えるようにした。rucm ブロックの分岐をすべて写している | rucm 文法リファレンスのファイル規約 | 90% |
-| 50 | mermaid シーケンス図 | 利用者、システム、GitHub Projects v2 の3者。5回の loop と alt で分岐を表現する | 副アクターへの要求（選択肢の取得）と、対話が5回繰り返されることを図の上で見せるため | rucm 文法リファレンスのファイル規約 | 90% |
-| 51 | 書き換える範囲 | front matter の7つのキーの行だけ。他の行・空行・並び順・インデント・行の右側のコメントは1文字も変えない | 手順書は段3 で「要らない行は WORKFLOW.md から消してください」と人間に編集させてから段4 を叩かせる。雛形で丸ごと書き直すと、その編集（`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行）が全部消える | docs/trying_it_out.md の段3と段4、internal/scaffold/fill.go の `statusKeys` と `applyStatuses` | 95% |
-| 52 | `--force` を残すかどうか | 消す | 書き換えるのが7行だけになったので、上書きから守るものが無い。何も守らないフラグを残すと、まだ何かを守っているように読める | internal/scaffold/update.go、cmd/continuo/main.go の `runSetup` | 90% |
-| 53 | owner とボードの番号の扱い | ボードを読むためだけに使い、WORKFLOW.md には書かない | 書くのは `continuo init` である。setup が引き直した値で書くと、利用者が手で直した owner / project_number を上書きする | cmd/continuo/main.go の `runSetup`、internal/scaffold/detect.go の `Detect` | 85% |
-| 54 | 対象の行の探し方 | front matter の中だけを、キーのパスを行頭のインデントで辿って探す | 本文には `CONTINUO-STATUS: review` のような似た形の行がある。範囲を切らないと本文を書き換える。入れ子のキー（`status_signal_map` の下の `review`）を、別の場所にある同じ名前のキーと取り違えないためでもある | internal/scaffold/fill.go の `frontMatterRange` と `findKeyLine` | 90% |
-| 55 | ステップ16の VALIDATES THAT（書き換える対象のキーがある） | 7つのキーのどれかが WORKFLOW.md から消えていたら、書き換えずに打ち切る | 黙って何もしないと、割り当てを書いたつもりで巡回が始まり、無言で「対象0件」を返し続ける。どのキーが消えているかを名指しすれば、利用者はその行だけ書き戻せる | internal/scaffold/update.go の `ErrKeysNotFound`、docs/plans/continuo_design.md#3-6 | 85% |
-| 56 | フロー `書き換える対象のキーが無い` の POSTCONDITION | WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 | 書き換えを始める前に落とすので、7行のうち一部だけが書き換わった WORKFLOW.md を残さない | internal/scaffold/update.go の `UpdateStatuses` | 90% |
-| 57 | 画面に出すのを役割の呼び名から設定のキー名へ変えたこと | `dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?` の形で尋ねる。「着手待ち」などの呼び名は使わない | 呼び名では、答えたあとに WORKFLOW.md のどの行が変わったのかを利用者が追えない。**キー名なら自分で確かめられる。**呼び名を併記しないのは、同じものに名前が2つできるとどちらか一方しか知らない読み手が別物と受け取るため | 利用者の指定（2026-08-20）、internal/setup/setup.go の `roleConfigKeys` | 100% |
-| 58 | ステップ17 と18 に分けたこと | 「全文を組み立てる」と「組み立てた全文の front matter を読み直せる」を別のステップにした | **書く前に自分の組み立てを読み直すのが要点である。**1ステップにまとめると、読み直しがいつ起きるのか（書く前か後か）が記述から決まらない | `internal/scaffold/update.go` の `UpdateStatuses`（`atomicfile.Write` を呼ぶ直前） | 95% |
-| 59 | ステップ18 の条件に「元の front matter が読めないか」を入れたこと | 元から読めなかった WORKFLOW.md では読み直しの検査を通す | **setup が壊したものではない。**ここで止めると、front matter が壊れた WORKFLOW.md のStatus の割り当てを直す手立てが無くなる | `internal/scaffold/update.go` の `if config.CheckFrontMatterSyntax(string(raw)) == nil` の入れ子 | 95% |
-| 60 | フロー `書き換えると読めなくなる` を足したこと | SPECIFIC ALTERNATIVE FLOW。RFS BASIC FLOW 18。事後条件は「WORKFLOW.md は変わっていない」 | **読めなくする書き換えを「書き換えました」と報告しないための最後の関門である。**報告だけが成功して continuo が一切起動しない状態は、利用者から見て原因を辿れない | `internal/scaffold/update.go` の `ErrWouldBreakConfig` | 95% |
-| 61 | `書き換える対象のキーが無い` と別のフローにしたこと | 別フローにした | **利用者にさせることが違う。**キーが無い側はキーを書き戻させ、こちら側は組み立てが壊れた理由を見せる。事後条件は同じだが、応答の内容が違うので BOUNDED にまとめない | `internal/scaffold/update.go` の `ErrKeysNotRewritable` と `ErrWouldBreakConfig` | 85% |
-| 62 | CRLF の扱いをステップにしなかったこと | 行末の CR を落として判定し、書き戻すときは付け直す。ステップは足さない | **分岐ではない。**CRLF でも LF でも通る経路は1本であり、結果も同じである。ステップにすると、通らない枝がテストパスとして増える | `internal/scaffold/fill.go` の `trimEOL` と `rewriteValue` | 85% |
+| 1 | USE CASE NAME | 既存のボードの Status を割り当てる | 依頼で指定された名前をそのまま使う。実装は `runSetup` のコメントでこの記述の名前を引いている | `internal/cli/cli.go` の `runSetup` | 100% |
+| 2 | 配置先ディレクトリ | `particular_case/` | 1つのコマンドの1回の実行である | `internal/cli/cli.go` の `runSetup` | 100% |
+| 3 | 「ボード」と「カンバン」 | 記述の中では「ボード」に統一する | 実装と設計は「カンバン」と呼ぶ。記述の名前と、引いている記述（`設定に書く値を gh から引く`）は「ボード」を使う。同じ記述の中で2つの語を混ぜない（R9）。食い違いは本文の冒頭に断ってある | `internal/setup/setup.go` のパッケージコメント | 80% |
+| 4 | PRECONDITION | 利用者は continuo の実行ファイルを実行できる | 前の版は「gh のログイン済み」「ボードを1枚持っている」「WORKFLOW.md がある」を事前条件にしていた。実装はどれも実行の中で確かめ、満たさなければ理由を出して止まる。事前条件に置くと、止まる経路が記述から消える | `internal/cli/cli.go` の `runSetup` / `checkDetectionForSetup` | 95% |
+| 5 | SECONDARY ACTORS | gh | 実装が外へ出すのは gh の実行だけである。前の版の「GitHub Projects v2」は、実装が直接は叩かない | `internal/setup/board.go` の `FetchStatusField`、`internal/scaffold/detect.go` の `RunGH` | 95% |
+| 6 | DEPENDENCY | INCLUDE USE CASE 設定に書く値を gh から引く | 実装は フラグ → WORKFLOW.md の値 → `scaffold.Detect` の順に値を決める。`Detect` の中身は別の記述に在る。1段にまとめた前の版は、決まらないときに止まる経路を持たなかった | `internal/cli/cli.go` の `runSetup` | 95% |
+| 7 | 基本フロー 2・3 | 使い方の表示と引数の誤りを、ファイルの検査より前に置く | `fs.Parse` と引数の値の検査は `scaffold.CheckUpdatable` より前に在る。`--help` は 0、それ以外の誤りは 2 を返す。使い方は `fs.SetOutput(stderr)` により標準エラーへ出る（2026-10-02 に実測。標準出力は 0 バイト） | `internal/cli/cli.go` の `runSetup` / `parseErrorExitCode` | 100% |
+| 8 | 引数指定エラーを1本にまとめたこと | 知らないフラグ・`--owner` の形・`--project` が0以下・`--status-field` が空・位置引数が2個以上を1本にする | 終わり方（標準エラー、終了コード 2、何も読まない）が同じである。違うのは文言だけである | `internal/cli/cli.go` の `runSetup` | 90% |
+| 9 | 基本フロー 4〜8 の順番 | パスが在る → ディレクトリである → symlink でない → 通常のファイルが在る → 読める | `resolveTarget` がパスとディレクトリを見て、`statTarget` が `os.Lstat` の結果を 無い → symlink → 通常のファイルでない の順に見て、`CheckUpdatable` が読み込む。「無い」と「symlink」は同時に起きないので、symlink を先に書いても実装と食い違わない。先例（`設定ファイルを作る`）と同じ順にした | `internal/scaffold/scaffold.go` の `resolveTarget`、`internal/scaffold/update.go` の `statTarget` / `CheckUpdatable` | 90% |
+| 10 | `WORKFLOWmdが無い` に通常のファイルでない場合を含めること | 含める | `statTarget` は通常のファイルでないものを `ErrNotFound` で包んで返す。`printScaffoldError` は同じ文言（無い）と同じ案内（`continuo init`）を出す（2026-10-02 に実測。WORKFLOW.md という名前のディレクトリで確かめた） | `internal/scaffold/update.go` の `statTarget`、`internal/cli/cli.go` の `printScaffoldError` | 95% |
+| 11 | `WORKFLOWmdを読めない` | 読み込みの失敗と、状態を調べられない失敗を1本にする | どれも `printScaffoldError` の `default` へ落ち、同じ文言の頭（書き換えられない）と理由を標準エラーへ出して 1 を返す | `internal/cli/cli.go` の `printScaffoldError` | 90% |
+| 12 | 基本フロー 9・10 を対話より前に置いたこと | 対話の前に検査する | `CheckUpdatable` が、尋ねる前にキーの有無と値の形を見る。前の版は、対話のあとの検査（段16）として書いていた | `internal/scaffold/update.go` の `CheckUpdatable` | 100% |
+| 13 | 基本フロー 9 と 10 を分けたこと | 「キーが無い」と「値がキーの行に無い」を別の検査にする | 実装は無いキーを先に見て止め、次に値の形を見る。文言も違う（前者は1行、後者は理由と直し方の2行） | `internal/scaffold/update.go` の `CheckUpdatable`、`internal/cli/cli.go` の `printScaffoldError` | 95% |
+| 14 | 「必ず書き換える8つのキー」 | 9つのうち `tracker.direct_chat_state` を除いた8つ | `statusKeys` は9つで、`optional` が真なのは `tracker.direct_chat_state` だけである。無くても止めない。front matter を切り出せない場合は、8つ全部を無いものとして返す（2026-10-02 に実測） | `internal/scaffold/fill.go` の `statusKeys` / `applyStatuses` / `requiredStatusKeyNames` | 100% |
+| 15 | 基本フロー 12（言語を決める）を分岐にしないこと | 素の段にする。設定を読めないときの警告は本文に書く | 読めても読めなくても先へ進む。分岐にすると、後ろの経路が全部2倍になる。言語の決め方は `画面に出す文言の言語を決める` の記述が持つ | `internal/cli/cli.go` の `runSetup` | 85% |
+| 16 | 基本フロー 11・13 | WORKFLOW.md の値を読み、引数の値を優先する | `CheckUpdatable` が owner と番号を拾って返す。`runSetup` はフラグが空のときだけ WORKFLOW.md の値を使う。プレースホルダは拾わない | `internal/scaffold/update.go` の `readProviderValues`、`internal/cli/cli.go` の `runSetup` | 95% |
+| 17 | 基本フロー 15・16 | owner の検査を先、ボードの番号の検査をあとにする | `checkDetectionForSetup` の順である。番号が決まらないときは候補の一覧も出す。どちらも標準エラー、終了コード 1 | `internal/cli/cli.go` の `checkDetectionForSetup` | 100% |
+| 18 | `ボードの番号が決まらない` の POSTCONDITION | 「ボードを選ばせる問い合わせを出していない」と書く | 実装は候補を並べるだけで、選ばせない。対話するのは役割の割り当てだけである | `internal/cli/cli.go` の `checkDetectionForSetup` | 95% |
+| 19 | 基本フロー 17 | 選択肢を読むボードを標準出力へ出す | WORKFLOW.md の値と gh から引いた値が食い違っても、利用者がその場で気づけるように出している。前の版には無かった | `internal/cli/cli.go` の `runSetup` | 100% |
+| 20 | 基本フロー 19 を1つの検証にしたこと | 「選択肢を読み取れる」の1つ。直し方の違いは本文の表に書く | gh の失敗・応答を読めない・フィールドが無い・single-select でない は、どれも理由1行と直し方1行を標準エラーへ出して 1 を返す。直し方は4通りである | `internal/cli/cli.go` の `runSetup`、`internal/setup/board.go` の `FetchStatusField` / `classifyGHError` | 90% |
+| 21 | 基本フロー 20 | 5個以上 | 数えるのは `RequiredRoleCount`（5）である。6つ目の役割は飛ばせるので、選択肢がちょうど5個でも対話に入る | `internal/setup/assign.go` の `Assign`、`internal/setup/setup.go` の `RequiredRoleCount` | 100% |
+| 22 | `選択肢が足りない` と `該当する選択肢が無い` の出力先 | 標準出力 | `Assign` は理由を `Out`（`runSetup` が渡す標準出力）へ出し終える。`runSetup` は何も足さずに 1 を返す | `internal/setup/assign.go` の `Assign`、`internal/cli/cli.go` の `runSetup` | 100% |
+| 23 | 役割の数 | 6つ。6つ目（`direct_chat_state`）は番号 0 で飛ばせる | `RoleCount` は 6 で、`IsOptional` が真なのは `RoleDirectChat` だけである。前の版と図は5つだった | `internal/setup/setup.go` の `RoleCount` / `IsOptional` / `roleOrder` | 100% |
+| 24 | DO と UNTIL | 同じ問い方を6回繰り返す。抜ける条件は「6つの役割すべてを尋ね終えている」 | 実装は `roleOrder` を順に回る。飛ばした役割には割り当てが無いので、「すべてに割り当てられている」は条件にならない | `internal/setup/assign.go` の `Assign` | 95% |
+| 25 | 基本フロー 26〜30 の順番 | 長さ → 整数として読める → 範囲 → 0 → 重複 | `Assign` の中の順である。長すぎる1行は `reader.read` が返した時点で扱う | `internal/setup/assign.go` の `Assign` | 100% |
+| 26 | 尋ね直す4本の戻り先 | `RESUME STEP 24`（同じ役割の説明から） | 実装は `continue` で、同じ役割の問いをもう一度出す。CFG では cycle になる | `internal/setup/assign.go` の `Assign` | 100% |
+| 27 | `長すぎる1行` と `番号として読めない入力` を `番号が範囲外` から分けたこと | 3本にする | 文言が違う。長すぎる1行は改行まで読み捨てる。前の版は「番号が一覧の範囲内である」の1つにまとめていた | `internal/setup/assign.go` の `Assign` / `readLimitedLine` / `parseNumber` | 90% |
+| 28 | `飛ばせる役割を飛ばす` の戻り先 | `RESUME STEP 34`（割り当ての一覧を応答する段） | 飛ばせる役割は最後に尋ねる6つ目だけである。飛ばしたあとに実装が次に行うのは `writeSummary` である。UNTIL の段へ戻すと、「飛ばしたあとに次の役割を尋ねる」という実装が通れない経路が CFG に出る | `internal/setup/setup.go` の `roleOrder`、`internal/setup/assign.go` の `Assign` | 90% |
+| 29 | `該当する選択肢が無い` の分岐元 | `飛ばせる役割を飛ばす` の段1 | 番号が 0 で、役割が飛ばせない場合である。実装は 0 を見てから役割が飛ばせるかを見る | `internal/setup/assign.go` の `Assign` | 95% |
+| 30 | `中断` の分岐元と WHEN | `BRANCH FROM BASIC FLOW 25`。番号を待つシステムに Ctrl+C を入力した場合 | 実装が取り消しを見るのは `lineReader` の `read` の中だけである。前の版の分岐元（割り当ての一覧を応答した直後）では、実装は中断しない。書き換えは最後まで進む | `internal/setup/assign.go` の `lineReader` の `read`、`internal/cli/cli.go` の `runSetup` | 95% |
+| 31 | `入力の終わり` と `入力の読み取り失敗` | 任意時点の代替フローとして足す。分岐元は `中断` と同じ段25 | 番号を待つあいだに起きる出来事で、どの役割の問いでも起きる。実装は3つで文言を変え、どれも標準出力へ出して 1 を返す | `internal/setup/assign.go` の `Assign` | 90% |
+| 32 | 中断の3本の終了コード | 1 | `Assign` がエラーを返すと、`runSetup` は 1 を返す。前の版には終了コードが無かった | `internal/cli/cli.go` の `runSetup` | 100% |
+| 33 | 基本フロー 35（書き換える直前の検査） | 1つの検証にまとめる | `UpdateStatuses` は WORKFLOW.md を読み直し、`CheckUpdatable` と同じ検査をもう一度行う。対話のあいだにファイルが変わった場合だけ止まる。検査ごとに分けると、対話の前の7本と同じ代替フローがもう7本要る | `internal/scaffold/update.go` の `UpdateStatuses` | 85% |
+| 34 | 基本フロー 37 の条件 | 元の front matter が読めないか、組み立てた全文を読み直せる | 元から読めなかった WORKFLOW.md では、読み直しの検査を通す。setup が壊したものではない | `internal/scaffold/update.go` の `UpdateStatuses` | 95% |
+| 35 | `書き換えると読めなくなる` の段 | 理由と「1文字も書いていない」の2つ。直し方の案内は書かない | 実装の文言は1行で、理由と「WORKFLOW.md には1文字も書いていません」だけである。前の版の「手で直すか continuo init で作り直す案内」は実装に無い | `internal/cli/cli.go` の `printScaffoldError`、`internal/i18n/messages/ja.json` の `cli.setup.err_would_break_config` | 100% |
+| 36 | `書き込みの失敗` | 足す。標準エラー、終了コード 1 | `atomicfile.Write` の失敗は `printScaffoldError` の `default` へ落ちる。一時ファイルへ書いてから差し替えるので、元の WORKFLOW.md は残る | `internal/scaffold/update.go` の `UpdateStatuses` | 90% |
+| 37 | `direct_chat_stateの行が無い` を代替フローにしたこと | 基本フロー 40 の検証から分け、`ABORT` で終える。終了コード 0 | 正常に終わるが、基本フローへ戻る段が無い。書き換えたキーの一覧も違う（8つ。書けなかったキーを一覧へ混ぜない）。基本フローの末尾に IF を置くと、偽の枝の先に段が無く、CFG に経路が出ない | `internal/cli/cli.go` の `runSetup`、`internal/scaffold/fill.go` の `applyStatuses` / `StatusKeyLine` | 90% |
+| 38 | 基本フロー 40 の位置 | 差し替えのあと、パスの応答の前 | 行が無いことは全文を組み立てるときに決まるが、利用者に見える違いは応答の段からである。書き換えの失敗の経路と掛け合わせないために、差し替えのあとへ置いた | `internal/scaffold/update.go` の `UpdateStatuses` | 80% |
+| 39 | 基本フローの POSTCONDITION | owner と project_number の行が変わっていないことを書く | `Detect` が引き直した値で上書きしない。書き換えるのは `statusKeys` の行だけである | `internal/cli/cli.go` の `runSetup`、`internal/scaffold/fill.go` の `statusKeys` | 95% |
+| 40 | 飛ばした役割の書き方 | `tracker.direct_chat_state` の行に空文字を書く | 行に触らないと雛形の既定の値が残る。実装は飛ばしたときに `""` を書く | `internal/scaffold/fill.go` の `statusKeys` | 100% |
+| 41 | 書き込みを1つの段にしたこと | 「WORKFLOW.md を組み立てた全文で差し替える」 | 同じディレクトリの一時ファイルへ書いてから差し替える。途中で落ちても半分書かれたファイルは残らない | `internal/scaffold/update.go` の `UpdateStatuses` | 95% |
+| 42 | 対話の前の Ctrl+C と、対話のあとの Ctrl+C | 代替フローにしない。本文に書く | 対話の前は Go の既定の動作でプロセスが終わる（応答は無い）。対話のあとは `signal.NotifyContext` が受け取るだけで、誰も見ない。どちらも WORKFLOW.md の状態を変えない | `internal/cli/cli.go` の `runSetup` | 80% |
+| 43 | 経路の数 | 32本（前の版は11本） | 対話より前の止まり方（引数・ファイル・値）を12本、番号待ちの出来事を5本、書き込みのあとを2本足した。飛ばす経路は書き換えの結末5通りと掛け合わさる（5本）。飛ばした場合は書く値と貼る1行が変わるので、掛け合わせた経路には違いが在る | `docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json` | 85% |
+| 44 | 根拠資料の設計 3-34 の見出し | 「3-34. カンバンは既存のものに合わせる」と書いた | 前は「3-34. Status の選択肢が揃っていないカンバンの扱い」と書いていたが、設計文書にその見出しは無い。3-34 の見出しは「カンバンは既存のものに合わせる」で、足りない選択肢を画面から足すことはその節の中に書いてある | `docs/plans/continuo_design.md`（3-34） | 95% |

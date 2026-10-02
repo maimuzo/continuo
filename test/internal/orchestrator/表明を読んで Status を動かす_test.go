@@ -1,24 +1,26 @@
-// {"RUCM-CFG-SHA256": "d24d3bbfa0a4976ed20f7baf334b19f9bfbb12308203b4065437d6f333120478", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "94d2247e4dd52db02c25ee6ec4d9ff724bc55cf214b32e213d8dfa8b3be0bfba", "SOURCE": "docs/spec/usecases/particular_case/表明を読んで Status を動かす.cfg.json"}
 //
-// **RUCM から生成したテストである。**「人間に判断を渡す」の代替フローのうち、
-// **continuo が Status を書いてはならない2つの経路**を検査する。
+// **ユースケース記述「表明を読んで Status を動かす」の経路に対応づけたテストである。**
+// 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
+// **経路の全部には書かない。**同じ経路を別の観点で確かめるテストは、同じ番号を持つ。
 //
-// **どちらも「書かない」ことが仕様である。**書いてしまうと、
-// 人間やエージェントが動かした Status を continuo が巻き戻すことになる。
+// **このファイルには、経路に対応するテストだけを置く。**経路に対応しないテストと補助関数は、
+// 同じディレクトリの別のファイルに在る。
 package orchestrator_test
 
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P006"}
 //
-// TestRUCMHandoff_P012_知らない表明ではStatusを動かさない は、段3 の代替フロー「知らない表明」を検査する。
+// Test_表明を読んでStatusを動かす_P006_知らない表明ではStatusを動かさない は、代替フロー「知らない表明」を検査する。
 //
 // **エージェントは `status_signal_map` に無い値を書くことがある**（綴り違い、勝手な造語）。
 // **それを黙って無視すると、人間は「なぜ動かないのか」を知る手がかりを持たない。**
@@ -28,7 +30,7 @@ import (
 // 与える情報: `CONTINUO-STATUS: よくわからない値` を含む transcript。
 // 成功条件（RUCM の POSTCONDITION）: Status は `running_state` のまま。
 // **pane も閉じない**（turn はまだ続いているため）。
-func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *testing.T) {
+func Test_表明を読んでStatusを動かす_P006_知らない表明ではStatusを動かさない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
@@ -66,9 +68,9 @@ func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *te
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P004"}
 //
-// TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない は、段5 の代替フロー「完了済みのissue」を検査する。
+// Test_表明を読んでStatusを動かす_P004_完了済みのissueにはStatusを書かない は、代替フロー「書いてはいけないStatus」を検査する。
 //
 // **エージェントは `gh` で自分の issue の Status を動かせる。**
 // **turn の途中で人間が `Done` へ動かすこともある。**
@@ -78,7 +80,7 @@ func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *te
 // 与える情報: turn の途中で `Done` へ動かされた issue と、`review` の表明。
 // 成功条件（RUCM の POSTCONDITION）: Status は `Done` のまま。
 // **continuo は巻き戻していない。**pane は閉じる（run は終わったため）。
-func TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない(t *testing.T) {
+func Test_表明を読んでStatusを動かす_P004_完了済みのissueにはStatusを書かない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
@@ -113,49 +115,64 @@ func TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない(t *tes
 	}
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P007"}
 //
-// TestRUCMHandoff_P001_reviewの表明で遷移先へ書いて片付ける は、基本フローを検査する。
+// Test_表明を読んでStatusを動かす_P007_表明が無かった次のturnで促す は、設計 3-25 の第3層を確かめる。
 //
-// 目的: `review` の表明を受けたら、対応する Status へ書き、pane を閉じて印を外すこと。
-// 与える情報: `CONTINUO-STATUS: review` を含む transcript と、エージェントのコメント。
-// 成功条件（RUCM の POSTCONDITION）: Status が `In Review` になり、
-// pane が閉じ、印が外れること。**worktree は残る。**
-func TestRUCMHandoff_P001_reviewの表明で遷移先へ書いて片付ける(t *testing.T) {
+// 目的: 「表明せずに終わったら、次の turn の継続の指示で促す（hook から差し戻す仕組みは
+// 採らない）」を守っていることを示す。
+// 与える情報: 1回目の turn では表明を書かず、2回目で `review` を書く transcript。
+// 成功条件: 2回目のプロンプトに促しの1文が入り、1回目の本文（テンプレート）は送り直さない。
+func Test_表明を読んでStatusを動かす_P007_表明が無かった次のturnで促す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
-	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
-	// **遅い機械では準備が終わる前に run を諦めてしまう。**
-	releasePrompt := blockFirstPrompt(t, fx)
+
+	transcriptDir := t.TempDir()
+	noSignal := writeTranscript(t, transcriptDir, "no-signal.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "作業を進めています。", false),
+	})
+	withSignal := writeTranscript(t, transcriptDir, "with-signal.jsonl", []any{
+		typedUserLine("p2", "続けてください"),
+		assistantLine("req2", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	var mu sync.Mutex
+	var texts []string
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		text, _ := params["text"].(string)
+		texts = append(texts, text)
+		n := len(texts)
+		mu.Unlock()
+
+		path := noSignal
+		if n >= 2 {
+			path = withSignal
+			fx.Tracker.SetState("PVTI_item188", "Done")
+			fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+		}
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
 
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
-	})
-
-	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
-	transcriptDir := t.TempDir()
-	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
-		typedUserLine("p1", "実装してください"),
-		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: review", false),
-	})
-	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
-	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
-	releasePrompt()
-
-	waitFor(t, 20*time.Second, "run が印から外れる", func() bool {
+	waitFor(t, 20*time.Second, "run が終わる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 
-	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Review" {
-		t.Errorf("review の表明で遷移先へ書いていない: %s", got)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(texts) < 2 {
+		t.Fatalf("2回目の turn が送られていない: %d 回", len(texts))
 	}
-	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got == 0 {
-		t.Error("run が終わったのに pane を閉じていない")
+	if !strings.Contains(texts[1], "のままです") {
+		t.Fatalf("表明を促す1文が2回目のプロンプトに入っていない: %q", texts[1])
 	}
-	// **worktree は残す**（人間が成果を見るため）。
-	if !strings.Contains(strings.Join(fx.Herdr.Methods(), ","), herdr.MethodPaneClose) {
-		t.Error("pane を閉じた記録が無い")
+	if strings.Contains(texts[1], "gh issue view") {
+		t.Fatalf("2回目に1回目の本文を送り直している（設計 5-4 / SPEC.md 7.1 に反する）: %q", texts[1])
 	}
 }

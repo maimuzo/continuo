@@ -1,0 +1,55 @@
+{
+ "rucm": "branch を始末する",
+ "cfg": "docs/spec/usecases/particular_case/branch を始末する.cfg.json",
+ "header": "// **ユースケース記述「branch を始末する」の経路に対応づけたテストである。**\n// 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。\n// **経路の全部には書かない。**同じ経路を別の観点で確かめるテストは、同じ番号を持つ。\n// テストは `Manager.Cleanup` を直に呼ぶので、巡回が片付けの対象を選ぶ段は通らない。\n//\n// **このファイルには、経路に対応するテストだけを置く。**経路に対応しないテストと補助関数は、\n// 同じディレクトリの別のファイルに在る。",
+ "moves": [
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_実在しないbranchを残ったものとして数えない",
+   "test/internal/workspace",
+   "P001"
+  ],
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_実在しないbranchはdeleteBranchが偽でも残ったものに数えない",
+   "test/internal/workspace",
+   "P001"
+  ],
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_deleteBranchが偽ならbranchを残して残ったものに積む",
+   "test/internal/workspace",
+   "P002"
+  ],
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_実在するbranchを消せなければ理由を返す",
+   "test/internal/workspace",
+   "P003"
+  ],
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_身元ファイルのbranchが書き換えられていても他のbranchを消さない",
+   "test/internal/workspace",
+   "P003"
+  ],
+  [
+   "test/internal/workspace/cleanup_test.go",
+   "TestCleanup_worktreeの現物と一致しないbranchは消さない",
+   "test/internal/workspace",
+   "P003"
+  ],
+  [
+   "test/internal/workspace/brokenref_test.go",
+   "TestCleanup_壊れたrefのbranchも片付ける",
+   "test/internal/workspace",
+   "P005"
+  ],
+  [
+   "test/internal/workspace/brokenref_test.go",
+   "TestCleanup_壊れたrefを消したことを画面に出す",
+   "test/internal/workspace",
+   "P005"
+  ]
+ ]
+}

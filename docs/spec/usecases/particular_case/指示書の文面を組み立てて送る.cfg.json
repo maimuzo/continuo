@@ -1,0 +1,601 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "指示書の文面を組み立てて送る",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md",
+    "rucm_block_sha256": "2ec6a1cbef0d73bef35d2f00ff06dc195cc8f8a7fa685e0d444d55379b53c282"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。"
+    },
+    "変数を展開できない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+    },
+    "relayを試みない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "文面の末尾に人間のコメントの節は無い。システムは GitHub に issue のコメントを要求していない。"
+    },
+    "付けるコメントが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "文面の末尾に人間のコメントの節は無い。システムは run を失敗にしていない。"
+    },
+    "送信を受け付けられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issue を1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは展開した断片を空行1つで継ぎ合わせる。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT relay を試みる条件を満たしている。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは GitHub に issue のコメントを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは選んだコメントを文面の末尾に節として付ける。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは run の turn 数を1つ増やす。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムはエージェントの turn の終わりを待ち始める。"
+    },
+    {
+      "id": "変数を展開できない-1",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 1,
+      "statement": "システムはカンバンの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "変数を展開できない-2",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 2,
+      "statement": "システムは issue の失敗を1回数える。"
+    },
+    {
+      "id": "変数を展開できない-3",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 3,
+      "statement": "システムは issue にテンプレートの直し方を1件コメントする。"
+    },
+    {
+      "id": "変数を展開できない-4",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 4,
+      "statement": "システムは、この run が turn を1回以上送っていれば、issue にこの run が書いたコメントがあるかを確かめる。"
+    },
+    {
+      "id": "変数を展開できない-5",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 5,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "変数を展開できない-6",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 6,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "変数を展開できない-7",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 7,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "変数を展開できない-8",
+      "type": "action",
+      "flow": "変数を展開できない",
+      "step": 8,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "変数を展開できない-9",
+      "type": "abort",
+      "flow": "変数を展開できない",
+      "step": 9,
+      "statement": "ABORT"
+    },
+    {
+      "id": "relayを試みない-1",
+      "type": "action",
+      "flow": "relayを試みない",
+      "step": 1,
+      "statement": "システムは issue のコメントを読まない。"
+    },
+    {
+      "id": "relayを試みない-2",
+      "type": "resume",
+      "flow": "relayを試みない",
+      "step": 2,
+      "statement": "RESUME STEP 8"
+    },
+    {
+      "id": "付けるコメントが無い-1",
+      "type": "action",
+      "flow": "付けるコメントが無い",
+      "step": 1,
+      "statement": "システムは文面に節を付けない。"
+    },
+    {
+      "id": "付けるコメントが無い-2",
+      "type": "resume",
+      "flow": "付けるコメントが無い",
+      "step": 2,
+      "statement": "RESUME STEP 8"
+    },
+    {
+      "id": "送信を受け付けられない-1",
+      "type": "action",
+      "flow": "送信を受け付けられない",
+      "step": 1,
+      "statement": "システムは送信の結果を turn ループへ返す。"
+    },
+    {
+      "id": "送信を受け付けられない-2",
+      "type": "abort",
+      "flow": "送信を受け付けられない",
+      "step": 2,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "変数を展開できない-1",
+      "kind": "false",
+      "condition": "NOT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "relay を試みる条件を満たしている"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "relayを試みない-1",
+      "kind": "false",
+      "condition": "NOT relay を試みる条件を満たしている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "いちばん新しい閉じた記録より後に、渡してよいコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "付けるコメントが無い-1",
+      "kind": "false",
+      "condition": "NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "true",
+      "condition": "herdr がエージェントへの文面の送信を受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "送信を受け付けられない-1",
+      "kind": "false",
+      "condition": "NOT herdr がエージェントへの文面の送信を受け付ける"
+    },
+    {
+      "from": "変数を展開できない-1",
+      "to": "変数を展開できない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-2",
+      "to": "変数を展開できない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-3",
+      "to": "変数を展開できない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-4",
+      "to": "変数を展開できない-5",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-5",
+      "to": "変数を展開できない-6",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-6",
+      "to": "変数を展開できない-7",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-7",
+      "to": "変数を展開できない-8",
+      "kind": "seq"
+    },
+    {
+      "from": "変数を展開できない-8",
+      "to": "変数を展開できない-9",
+      "kind": "seq"
+    },
+    {
+      "from": "relayを試みない-1",
+      "to": "relayを試みない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "relayを試みない-2",
+      "to": "BASIC FLOW-8",
+      "kind": "resume"
+    },
+    {
+      "from": "付けるコメントが無い-1",
+      "to": "付けるコメントが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "付けるコメントが無い-2",
+      "to": "BASIC FLOW-8",
+      "kind": "resume"
+    },
+    {
+      "from": "送信を受け付けられない-1",
+      "to": "送信を受け付けられない-2",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issue を1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
+        "RESUME STEP 8",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issue を1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
+        "RESUME STEP 8",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "relayを試みない-1",
+        "relayを試みない-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "CONDITION: NOT relay を試みる条件を満たしている",
+        "システムは issue のコメントを読まない。",
+        "RESUME STEP 8",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issue を1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "relayを試みない-1",
+        "relayを試みない-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "CONDITION: NOT relay を試みる条件を満たしている",
+        "システムは issue のコメントを読まない。",
+        "RESUME STEP 8",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "変数を展開できない",
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "変数を展開できない-1",
+        "変数を展開できない-2",
+        "変数を展開できない-3",
+        "変数を展開できない-4",
+        "変数を展開できない-5",
+        "変数を展開できない-6",
+        "変数を展開できない-7",
+        "変数を展開できない-8",
+        "変数を展開できない-9"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "CONDITION: NOT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる",
+        "システムはカンバンの issue の Status に failure_state の選択肢を書く。",
+        "システムは issue の失敗を1回数える。",
+        "システムは issue にテンプレートの直し方を1件コメントする。",
+        "システムは、この run が turn を1回以上送っていれば、issue にこの run が書いたコメントがあるかを確かめる。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 25,
+    "nodes_covered": 25,
+    "edges_total": 26,
+    "edges_covered": 26
+  }
+}

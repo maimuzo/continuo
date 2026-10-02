@@ -3,21 +3,21 @@
   "usecase_name": "本家のリポジトリへ PR を出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md",
-    "rucm_block_sha256": "4501e3fb4a51e01a397ec4287e05bf784826a848db7e79d34294f9000ac1062c"
+    "rucm_block_sha256": "17ab7168b158493255914796d6ea898c198eb05aff3d1fc44b790f7865812b94"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。worktree は消えている。issue の branch は消えている。コードのリポジトリの clone は worktree の外に残っている。"
+      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。issue に Status を動かした記録のコメントが2件と Claude Code を閉じた記録のコメントが1件増えている。worktree と issue の branch と worktree の外の設定ファイルの扱いは、worktree と branch を片付ける の事後条件のとおりである。コードのリポジトリの clone は worktree の外に残っている。"
     },
     "既定branchが分からない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          3
+          5
         ]
       },
-      "postcondition": "worktree は作られていない。issue の Status は着手待ちのままである。base を決められないことが利用者に届いている。"
+      "postcondition": "worktree は作られていない。エージェントは起動していない。issue の Status は failure_state である。base を決められないことを書いた引き渡しの通知が issue に1件ある。先頭の issue の担当者は変わっていない。"
     },
     "公開のリポジトリ": {
       "rfs": {
@@ -32,37 +32,19 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          20
+          22
         ]
       },
-      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue は打ち切られている。"
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は作り直されずに残っている。issue の Status は running_state のままである。issue に Claude Code を閉じた記録のコメントが1件増えている。やり直しの着手は Status を動かした記録のコメントを増やしていない。リトライの回数が1つ増えている。システムは同じ worktree で、設定ファイルを作る段から着手をやり直す。"
     },
-    "身元ファイル以外の変更が残っている": {
+    "リトライを使い切った": {
       "rfs": {
-        "flow": "BASIC FLOW",
+        "flow": "作業ディレクトリがworktreeの外",
         "steps": [
-          24
+          5
         ]
       },
-      "postcondition": "worktree は残っている。issue の branch は残っている。片付けを見送った理由が issue に書かれている。"
-    },
-    "リモート追跡refに載っていない": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          25
-        ]
-      },
-      "postcondition": "worktree の branch は base と差分を持たない。worktree は残っている。"
-    },
-    "baseと差分がある": {
-      "rfs": {
-        "flow": "リモート追跡refに載っていない",
-        "steps": [
-          1
-        ]
-      },
-      "postcondition": "worktree は残っている。issue の branch は残っている。push していない成果は worktree に残っている。"
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue の Status は failure_state である。turn の終わりを検知できなかったことを書いた引き渡しの通知が issue に1件ある。issue に Claude Code を閉じた記録のコメントが1件増えている。"
     },
     "本家のPRを出せない": {
       "when": "エージェントが本家のリポジトリへ PR を出せない場合",
@@ -70,7 +52,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            15
+            17
           ]
         }
       ],
@@ -94,38 +76,38 @@
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。"
+      "statement": "システムはカンバンの issue の Status に running_state を書く。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。"
+      "statement": "システムは Status を動かした記録を issue に1件コメントする。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは worktree の中に身元ファイルを置く。"
+      "statement": "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムは身元ファイルの名前を worktree の除外の一覧に加える。"
+      "statement": "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは VALIDATES THAT issue のリポジトリが非公開である。"
+      "statement": "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。"
     },
     {
       "id": "BASIC FLOW-8",
@@ -139,133 +121,148 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムはエージェントを worktree で起動する。"
+      "statement": "システムは worktree の中に身元ファイルを置く。"
     },
     {
       "id": "BASIC FLOW-10",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。"
+      "statement": "システムは身元ファイルの名前を worktree の除外の一覧に加える。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。"
+      "statement": "システムはエージェントを worktree で起動する。"
     },
     {
       "id": "BASIC FLOW-12",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "エージェントは worktree の外にコードのリポジトリの clone を用意する。"
+      "statement": "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "エージェントは clone の中でコードを直す。"
+      "statement": "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "エージェントは clone の commit を fork の origin へ push する。"
+      "statement": "エージェントは worktree の外にコードのリポジトリの clone を用意する。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "エージェントは本家のリポジトリへ PR を出す。"
+      "statement": "エージェントは clone の中でコードを直す。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "エージェントは本家の PR のレビューを読む。"
+      "statement": "エージェントは clone の commit を fork の origin へ push する。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "エージェントは clone の中でレビューの指摘を直す。"
+      "statement": "エージェントは本家のリポジトリへ PR を出す。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "エージェントは直した commit を fork の origin へ push する。"
+      "statement": "エージェントは本家の PR のレビューを読む。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
+      "statement": "エージェントは clone の中でレビューの指摘を直す。"
     },
     {
       "id": "BASIC FLOW-20",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。"
+      "statement": "エージェントは直した commit を fork の origin へ push する。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムはエージェントの会話の記録から review の表明を読む。"
+      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
     },
     {
       "id": "BASIC FLOW-22",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "システムはカンバンの issue の Status に In Review を書く。"
+      "statement": "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。"
     },
     {
       "id": "BASIC FLOW-23",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "利用者はカンバンの issue の Status を Done へ動かす。"
+      "statement": "システムはエージェントの会話の記録から review の表明を読む。"
     },
     {
       "id": "BASIC FLOW-24",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。"
+      "statement": "システムはカンバンの issue の Status に In Review を書く。"
     },
     {
       "id": "BASIC FLOW-25",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。"
+      "statement": "システムは Status を動かした記録を issue に1件コメントする。"
     },
     {
       "id": "BASIC FLOW-26",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムは worktree を消す。"
+      "statement": "システムはエージェントの pane を閉じる。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムは issue の branch を消す。"
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "BASIC FLOW-28",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 28,
+      "statement": "利用者はカンバンの issue の Status を Done へ動かす。"
+    },
+    {
+      "id": "BASIC FLOW-29",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 29,
+      "statement": "INCLUDE USE CASE worktree と branch を片付ける",
+      "include": "worktree と branch を片付ける"
     },
     {
       "id": "既定branchが分からない-1",
@@ -279,20 +276,27 @@
       "type": "action",
       "flow": "既定branchが分からない",
       "step": 2,
-      "statement": "システムは先頭の issue を飛ばす。"
+      "statement": "システムはカンバンの issue の Status に failure_state を書く。"
     },
     {
       "id": "既定branchが分からない-3",
       "type": "action",
       "flow": "既定branchが分からない",
       "step": 3,
-      "statement": "システムは利用者に base を決められないことを知らせる。"
+      "statement": "システムは issue に base を決められないことを書いた引き渡しの通知を1件投稿する。"
     },
     {
       "id": "既定branchが分からない-4",
-      "type": "abort",
+      "type": "action",
       "flow": "既定branchが分からない",
       "step": 4,
+      "statement": "システムは先頭の issue を実行中の一覧から外す。"
+    },
+    {
+      "id": "既定branchが分からない-5",
+      "type": "abort",
+      "flow": "既定branchが分からない",
+      "step": 5,
       "statement": "ABORT"
     },
     {
@@ -321,104 +325,132 @@
       "type": "action",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 2,
-      "statement": "システムは turn の終わりを検知しない。"
+      "statement": "システムは Stop hook を捨てたことを WARN で記録に残す。"
     },
     {
       "id": "作業ディレクトリがworktreeの外-3",
       "type": "action",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 3,
-      "statement": "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。"
+      "statement": "システムは herdr からエージェントが待機になった知らせを受ける。"
     },
     {
       "id": "作業ディレクトリがworktreeの外-4",
       "type": "action",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 4,
-      "statement": "システムはエージェントを止める。"
+      "statement": "システムは settle_ms のあいだ Stop hook を待つ。"
     },
     {
       "id": "作業ディレクトリがworktreeの外-5",
-      "type": "action",
+      "type": "condition",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 5,
-      "statement": "システムは issue に打ち切った理由をコメントする。"
+      "statement": "システムは VALIDATES THAT リトライの回数が agent.max_retries より小さい。"
     },
     {
       "id": "作業ディレクトリがworktreeの外-6",
-      "type": "abort",
+      "type": "action",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 6,
-      "statement": "ABORT"
+      "statement": "システムはエージェントの pane を閉じる。"
     },
     {
-      "id": "身元ファイル以外の変更が残っている-1",
+      "id": "作業ディレクトリがworktreeの外-7",
       "type": "action",
-      "flow": "身元ファイル以外の変更が残っている",
-      "step": 1,
-      "statement": "システムは worktree を消さない。"
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 7,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
     },
     {
-      "id": "身元ファイル以外の変更が残っている-2",
+      "id": "作業ディレクトリがworktreeの外-8",
       "type": "action",
-      "flow": "身元ファイル以外の変更が残っている",
-      "step": 2,
-      "statement": "システムは issue の branch を消さない。"
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 8,
+      "statement": "システムはリトライの回数を1つ増やす。"
     },
     {
-      "id": "身元ファイル以外の変更が残っている-3",
+      "id": "作業ディレクトリがworktreeの外-9",
       "type": "action",
-      "flow": "身元ファイル以外の変更が残っている",
-      "step": 3,
-      "statement": "システムは issue に片付けを見送った理由をコメントする。"
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 9,
+      "statement": "システムはバックオフが明けるまで待つ。"
     },
     {
-      "id": "身元ファイル以外の変更が残っている-4",
-      "type": "abort",
-      "flow": "身元ファイル以外の変更が残っている",
-      "step": 4,
-      "statement": "ABORT"
+      "id": "作業ディレクトリがworktreeの外-10",
+      "type": "action",
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 10,
+      "statement": "システムは着手の直前の検査をやり直す。"
     },
     {
-      "id": "リモート追跡refに載っていない-1",
-      "type": "condition",
-      "flow": "リモート追跡refに載っていない",
-      "step": 1,
-      "statement": "システムは VALIDATES THAT worktree の branch が base と差分を持たない。"
+      "id": "作業ディレクトリがworktreeの外-11",
+      "type": "action",
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 11,
+      "statement": "システムはカンバンの issue の Status が running_state のままであることを、issue を取り直して確かめる。"
     },
     {
-      "id": "リモート追跡refに載っていない-2",
+      "id": "作業ディレクトリがworktreeの外-12",
+      "type": "action",
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 12,
+      "statement": "システムは既にある worktree を、作り直さずに再利用する。"
+    },
+    {
+      "id": "作業ディレクトリがworktreeの外-13",
       "type": "resume",
-      "flow": "リモート追跡refに載っていない",
-      "step": 2,
-      "statement": "RESUME STEP 26"
+      "flow": "作業ディレクトリがworktreeの外",
+      "step": 13,
+      "statement": "RESUME STEP 7"
     },
     {
-      "id": "baseと差分がある-1",
+      "id": "リトライを使い切った-1",
       "type": "action",
-      "flow": "baseと差分がある",
+      "flow": "リトライを使い切った",
       "step": 1,
-      "statement": "システムは worktree を消さない。"
+      "statement": "システムはカンバンの issue の Status に failure_state を書く。"
     },
     {
-      "id": "baseと差分がある-2",
+      "id": "リトライを使い切った-2",
       "type": "action",
-      "flow": "baseと差分がある",
+      "flow": "リトライを使い切った",
       "step": 2,
-      "statement": "システムは issue の branch を消さない。"
+      "statement": "システムは issue に turn の終わりを検知できなかったことを書いた引き渡しの通知を1件投稿する。"
     },
     {
-      "id": "baseと差分がある-3",
+      "id": "リトライを使い切った-3",
       "type": "action",
-      "flow": "baseと差分がある",
+      "flow": "リトライを使い切った",
       "step": 3,
-      "statement": "システムは issue に push していない成果があることをコメントする。"
+      "statement": "システムは issue に今回の run が書いたコメントがあるかを確かめる。"
     },
     {
-      "id": "baseと差分がある-4",
-      "type": "abort",
-      "flow": "baseと差分がある",
+      "id": "リトライを使い切った-4",
+      "type": "action",
+      "flow": "リトライを使い切った",
       "step": 4,
+      "statement": "システムはエージェントの pane を閉じる。"
+    },
+    {
+      "id": "リトライを使い切った-5",
+      "type": "action",
+      "flow": "リトライを使い切った",
+      "step": 5,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "リトライを使い切った-6",
+      "type": "action",
+      "flow": "リトライを使い切った",
+      "step": 6,
+      "statement": "システムは先頭の issue を実行中の一覧から外す。"
+    },
+    {
+      "id": "リトライを使い切った-7",
+      "type": "abort",
+      "flow": "リトライを使い切った",
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -437,9 +469,16 @@
     },
     {
       "id": "本家のPRを出せない-3",
-      "type": "abort",
+      "type": "action",
       "flow": "本家のPRを出せない",
       "step": 3,
+      "statement": "システムはエージェントの pane を閉じる。"
+    },
+    {
+      "id": "本家のPRを出せない-4",
+      "type": "abort",
+      "flow": "本家のPRを出せない",
+      "step": 4,
       "statement": "ABORT"
     }
   ],
@@ -457,14 +496,7 @@
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
-      "kind": "true",
-      "condition": "先頭の issue が issue のリポジトリの既定 branch の名前を持っている"
-    },
-    {
-      "from": "BASIC FLOW-3",
-      "to": "既定branchが分からない-1",
-      "kind": "false",
-      "condition": "NOT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-4",
@@ -474,7 +506,14 @@
     {
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "先頭の issue が issue のリポジトリの既定 branch の名前を持っている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "既定branchが分からない-1",
+      "kind": "false",
+      "condition": "NOT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている"
     },
     {
       "from": "BASIC FLOW-6",
@@ -485,13 +524,13 @@
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
       "kind": "true",
-      "condition": "issue のリポジトリが非公開である"
+      "condition": "システムが issue のリポジトリを非公開だと分かっている"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "公開のリポジトリ-1",
       "kind": "false",
-      "condition": "NOT issue のリポジトリが非公開である"
+      "condition": "NOT システムが issue のリポジトリを非公開だと分かっている"
     },
     {
       "from": "BASIC FLOW-8",
@@ -534,12 +573,6 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-15",
-      "to": "本家のPRを出せない-1",
-      "kind": "global",
-      "condition": "エージェントが本家のリポジトリへ PR を出せない場合"
-    },
-    {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
       "kind": "seq"
@@ -548,6 +581,12 @@
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "本家のPRを出せない-1",
+      "kind": "global",
+      "condition": "エージェントが本家のリポジトリへ PR を出せない場合"
     },
     {
       "from": "BASIC FLOW-18",
@@ -562,14 +601,7 @@
     {
       "from": "BASIC FLOW-20",
       "to": "BASIC FLOW-21",
-      "kind": "true",
-      "condition": "Stop hook の cwd が worktree の外だと分かっていない"
-    },
-    {
-      "from": "BASIC FLOW-20",
-      "to": "作業ディレクトリがworktreeの外-1",
-      "kind": "false",
-      "condition": "NOT Stop hook の cwd が worktree の外だと分かっていない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-21",
@@ -579,7 +611,14 @@
     {
       "from": "BASIC FLOW-22",
       "to": "BASIC FLOW-23",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "Stop hook の cwd が worktree の外だと分かっていない"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "作業ディレクトリがworktreeの外-1",
+      "kind": "false",
+      "condition": "NOT Stop hook の cwd が worktree の外だと分かっていない"
     },
     {
       "from": "BASIC FLOW-23",
@@ -589,30 +628,26 @@
     {
       "from": "BASIC FLOW-24",
       "to": "BASIC FLOW-25",
-      "kind": "true",
-      "condition": "worktree に身元ファイル以外の変更が残っていない"
-    },
-    {
-      "from": "BASIC FLOW-24",
-      "to": "身元ファイル以外の変更が残っている-1",
-      "kind": "false",
-      "condition": "NOT worktree に身元ファイル以外の変更が残っていない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-25",
       "to": "BASIC FLOW-26",
-      "kind": "true",
-      "condition": "worktree の HEAD がリモート追跡 ref のどれかに載っている"
-    },
-    {
-      "from": "BASIC FLOW-25",
-      "to": "リモート追跡refに載っていない-1",
-      "kind": "false",
-      "condition": "NOT worktree の HEAD がリモート追跡 ref のどれかに載っている"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-26",
       "to": "BASIC FLOW-27",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-27",
+      "to": "BASIC FLOW-28",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
       "kind": "seq"
     },
     {
@@ -628,6 +663,11 @@
     {
       "from": "既定branchが分からない-3",
       "to": "既定branchが分からない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "既定branchが分からない-4",
+      "to": "既定branchが分からない-5",
       "kind": "seq"
     },
     {
@@ -663,53 +703,83 @@
     {
       "from": "作業ディレクトリがworktreeの外-5",
       "to": "作業ディレクトリがworktreeの外-6",
-      "kind": "seq"
-    },
-    {
-      "from": "身元ファイル以外の変更が残っている-1",
-      "to": "身元ファイル以外の変更が残っている-2",
-      "kind": "seq"
-    },
-    {
-      "from": "身元ファイル以外の変更が残っている-2",
-      "to": "身元ファイル以外の変更が残っている-3",
-      "kind": "seq"
-    },
-    {
-      "from": "身元ファイル以外の変更が残っている-3",
-      "to": "身元ファイル以外の変更が残っている-4",
-      "kind": "seq"
-    },
-    {
-      "from": "リモート追跡refに載っていない-1",
-      "to": "リモート追跡refに載っていない-2",
       "kind": "true",
-      "condition": "worktree の branch が base と差分を持たない"
+      "condition": "リトライの回数が agent.max_retries より小さい"
     },
     {
-      "from": "リモート追跡refに載っていない-1",
-      "to": "baseと差分がある-1",
+      "from": "作業ディレクトリがworktreeの外-5",
+      "to": "リトライを使い切った-1",
       "kind": "false",
-      "condition": "NOT worktree の branch が base と差分を持たない"
+      "condition": "NOT リトライの回数が agent.max_retries より小さい"
     },
     {
-      "from": "リモート追跡refに載っていない-2",
-      "to": "BASIC FLOW-26",
+      "from": "作業ディレクトリがworktreeの外-6",
+      "to": "作業ディレクトリがworktreeの外-7",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-7",
+      "to": "作業ディレクトリがworktreeの外-8",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-8",
+      "to": "作業ディレクトリがworktreeの外-9",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-9",
+      "to": "作業ディレクトリがworktreeの外-10",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-10",
+      "to": "作業ディレクトリがworktreeの外-11",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-11",
+      "to": "作業ディレクトリがworktreeの外-12",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-12",
+      "to": "作業ディレクトリがworktreeの外-13",
+      "kind": "seq"
+    },
+    {
+      "from": "作業ディレクトリがworktreeの外-13",
+      "to": "BASIC FLOW-7",
       "kind": "resume"
     },
     {
-      "from": "baseと差分がある-1",
-      "to": "baseと差分がある-2",
+      "from": "リトライを使い切った-1",
+      "to": "リトライを使い切った-2",
       "kind": "seq"
     },
     {
-      "from": "baseと差分がある-2",
-      "to": "baseと差分がある-3",
+      "from": "リトライを使い切った-2",
+      "to": "リトライを使い切った-3",
       "kind": "seq"
     },
     {
-      "from": "baseと差分がある-3",
-      "to": "baseと差分がある-4",
+      "from": "リトライを使い切った-3",
+      "to": "リトライを使い切った-4",
+      "kind": "seq"
+    },
+    {
+      "from": "リトライを使い切った-4",
+      "to": "リトライを使い切った-5",
+      "kind": "seq"
+    },
+    {
+      "from": "リトライを使い切った-5",
+      "to": "リトライを使い切った-6",
+      "kind": "seq"
+    },
+    {
+      "from": "リトライを使い切った-6",
+      "to": "リトライを使い切った-7",
       "kind": "seq"
     },
     {
@@ -721,6 +791,11 @@
       "from": "本家のPRを出せない-2",
       "to": "本家のPRを出せない-3",
       "kind": "seq"
+    },
+    {
+      "from": "本家のPRを出せない-3",
+      "to": "本家のPRを出せない-4",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -728,7 +803,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。worktree は消えている。issue の branch は消えている。コードのリポジトリの clone は worktree の外に残っている。",
+      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。issue に Status を動かした記録のコメントが2件と Claude Code を閉じた記録のコメントが1件増えている。worktree と issue の branch と worktree の外の設定ファイルの扱いは、worktree と branch を片付ける の事後条件のとおりである。コードのリポジトリの clone は worktree の外に残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -756,17 +831,21 @@
         "BASIC FLOW-24",
         "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27"
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -781,18 +860,18 @@
         "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "システムは worktree を消す。",
-        "システムは issue の branch を消す。"
+        "INCLUDE USE CASE worktree と branch を片付ける"
       ]
     },
     {
       "id": "P002",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。worktree は消えている。issue の branch は消えている。コードのリポジトリの clone は worktree の外に残っている。",
+      "terminal": "cycle",
+      "terminal_flow": "作業ディレクトリがworktreeの外",
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は作り直されずに残っている。issue の Status は running_state のままである。issue に Claude Code を閉じた記録のコメントが1件増えている。やり直しの着手は Status を動かした記録のコメントを増やしていない。リトライの回数が1つ増えている。システムは同じ worktree で、設定ファイルを作る段から着手をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -816,23 +895,32 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25",
-        "リモート追跡refに載っていない-1",
-        "リモート追跡refに載っていない-2",
-        "BASIC FLOW-26",
-        "BASIC FLOW-27"
+        "作業ディレクトリがworktreeの外-1",
+        "作業ディレクトリがworktreeの外-2",
+        "作業ディレクトリがworktreeの外-3",
+        "作業ディレクトリがworktreeの外-4",
+        "作業ディレクトリがworktreeの外-5",
+        "作業ディレクトリがworktreeの外-6",
+        "作業ディレクトリがworktreeの外-7",
+        "作業ディレクトリがworktreeの外-8",
+        "作業ディレクトリがworktreeの外-9",
+        "作業ディレクトリがworktreeの外-10",
+        "作業ディレクトリがworktreeの外-11",
+        "作業ディレクトリがworktreeの外-12",
+        "作業ディレクトリがworktreeの外-13",
+        "BASIC FLOW-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -845,23 +933,28 @@
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "CONDITION: NOT worktree の HEAD がリモート追跡 ref のどれかに載っている",
-        "システムは VALIDATES THAT worktree の branch が base と差分を持たない。",
-        "RESUME STEP 26",
-        "システムは worktree を消す。",
-        "システムは issue の branch を消す。"
+        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
+        "システムは Stop hook を捨てる。",
+        "システムは Stop hook を捨てたことを WARN で記録に残す。",
+        "システムは herdr からエージェントが待機になった知らせを受ける。",
+        "システムは settle_ms のあいだ Stop hook を待つ。",
+        "システムは VALIDATES THAT リトライの回数が agent.max_retries より小さい。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフが明けるまで待つ。",
+        "システムは着手の直前の検査をやり直す。",
+        "システムはカンバンの issue の Status が running_state のままであることを、issue を取り直して確かめる。",
+        "システムは既にある worktree を、作り直さずに再利用する。",
+        "RESUME STEP 7",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。"
       ]
     },
     {
       "id": "P003",
       "terminal": "abort",
-      "terminal_flow": "baseと差分がある",
-      "postcondition": "worktree は残っている。issue の branch は残っている。push していない成果は worktree に残っている。",
+      "terminal_flow": "リトライを使い切った",
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue の Status は failure_state である。turn の終わりを検知できなかったことを書いた引き渡しの通知が issue に1件ある。issue に Claude Code を閉じた記録のコメントが1件増えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -885,24 +978,30 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25",
-        "リモート追跡refに載っていない-1",
-        "baseと差分がある-1",
-        "baseと差分がある-2",
-        "baseと差分がある-3",
-        "baseと差分がある-4"
+        "作業ディレクトリがworktreeの外-1",
+        "作業ディレクトリがworktreeの外-2",
+        "作業ディレクトリがworktreeの外-3",
+        "作業ディレクトリがworktreeの外-4",
+        "作業ディレクトリがworktreeの外-5",
+        "リトライを使い切った-1",
+        "リトライを使い切った-2",
+        "リトライを使い切った-3",
+        "リトライを使い切った-4",
+        "リトライを使い切った-5",
+        "リトライを使い切った-6",
+        "リトライを使い切った-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -915,25 +1014,27 @@
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "CONDITION: NOT worktree の HEAD がリモート追跡 ref のどれかに載っている",
-        "システムは VALIDATES THAT worktree の branch が base と差分を持たない。",
-        "CONDITION: NOT worktree の branch が base と差分を持たない",
-        "システムは worktree を消さない。",
-        "システムは issue の branch を消さない。",
-        "システムは issue に push していない成果があることをコメントする。",
+        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
+        "システムは Stop hook を捨てる。",
+        "システムは Stop hook を捨てたことを WARN で記録に残す。",
+        "システムは herdr からエージェントが待機になった知らせを受ける。",
+        "システムは settle_ms のあいだ Stop hook を待つ。",
+        "システムは VALIDATES THAT リトライの回数が agent.max_retries より小さい。",
+        "CONDITION: NOT リトライの回数が agent.max_retries より小さい",
+        "システムはカンバンの issue の Status に failure_state を書く。",
+        "システムは issue に turn の終わりを検知できなかったことを書いた引き渡しの通知を1件投稿する。",
+        "システムは issue に今回の run が書いたコメントがあるかを確かめる。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは先頭の issue を実行中の一覧から外す。",
         "ABORT"
       ]
     },
     {
       "id": "P004",
       "terminal": "abort",
-      "terminal_flow": "身元ファイル以外の変更が残っている",
-      "postcondition": "worktree は残っている。issue の branch は残っている。片付けを見送った理由が issue に書かれている。",
+      "terminal_flow": "本家のPRを出せない",
+      "postcondition": "本家のリポジトリに PR は無い。fork の origin に push した branch がある。issue の Status は Blocked である。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -952,27 +1053,22 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "身元ファイル以外の変更が残っている-1",
-        "身元ファイル以外の変更が残っている-2",
-        "身元ファイル以外の変更が残っている-3",
-        "身元ファイル以外の変更が残っている-4"
+        "本家のPRを出せない-1",
+        "本家のPRを出せない-2",
+        "本家のPRを出せない-3",
+        "本家のPRを出せない-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -980,27 +1076,18 @@
         "エージェントは clone の中でコードを直す。",
         "エージェントは clone の commit を fork の origin へ push する。",
         "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "CONDITION: NOT worktree に身元ファイル以外の変更が残っていない",
-        "システムは worktree を消さない。",
-        "システムは issue の branch を消さない。",
-        "システムは issue に片付けを見送った理由をコメントする。",
+        "CONDITION: エージェントが本家のリポジトリへ PR を出せない場合",
+        "エージェントはシステムに blocked の表明を返す。",
+        "システムはカンバンの issue の Status に Blocked を書く。",
+        "システムはエージェントの pane を閉じる。",
         "ABORT"
       ]
     },
     {
       "id": "P005",
-      "terminal": "abort",
-      "terminal_flow": "作業ディレクトリがworktreeの外",
-      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue は打ち切られている。",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。issue に Status を動かした記録のコメントが2件と Claude Code を閉じた記録のコメントが1件増えている。worktree と issue の branch と worktree の外の設定ファイルの扱いは、worktree と branch を片付ける の事後条件のとおりである。コードのリポジトリの clone は worktree の外に残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1009,7 +1096,8 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-8",
+        "公開のリポジトリ-1",
+        "公開のリポジトリ-2",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
@@ -1022,22 +1110,107 @@
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
+        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
+        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "CONDITION: NOT システムが issue のリポジトリを非公開だと分かっている",
+        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
+        "RESUME STEP 9",
+        "システムは worktree の中に身元ファイルを置く。",
+        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
+        "システムはエージェントを worktree で起動する。",
+        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
+        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
+        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
+        "エージェントは clone の中でコードを直す。",
+        "エージェントは clone の commit を fork の origin へ push する。",
+        "エージェントは本家のリポジトリへ PR を出す。",
+        "エージェントは本家の PR のレビューを読む。",
+        "エージェントは clone の中でレビューの指摘を直す。",
+        "エージェントは直した commit を fork の origin へ push する。",
+        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
+        "システムはエージェントの会話の記録から review の表明を読む。",
+        "システムはカンバンの issue の Status に In Review を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "利用者はカンバンの issue の Status を Done へ動かす。",
+        "INCLUDE USE CASE worktree と branch を片付ける"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "作業ディレクトリがworktreeの外",
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は作り直されずに残っている。issue の Status は running_state のままである。issue に Claude Code を閉じた記録のコメントが1件増えている。やり直しの着手は Status を動かした記録のコメントを増やしていない。リトライの回数が1つ増えている。システムは同じ worktree で、設定ファイルを作る段から着手をやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "公開のリポジトリ-1",
+        "公開のリポジトリ-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "作業ディレクトリがworktreeの外-1",
         "作業ディレクトリがworktreeの外-2",
         "作業ディレクトリがworktreeの外-3",
         "作業ディレクトリがworktreeの外-4",
         "作業ディレクトリがworktreeの外-5",
-        "作業ディレクトリがworktreeの外-6"
+        "作業ディレクトリがworktreeの外-6",
+        "作業ディレクトリがworktreeの外-7",
+        "作業ディレクトリがworktreeの外-8",
+        "作業ディレクトリがworktreeの外-9",
+        "作業ディレクトリがworktreeの外-10",
+        "作業ディレクトリがworktreeの外-11",
+        "作業ディレクトリがworktreeの外-12",
+        "作業ディレクトリがworktreeの外-13",
+        "BASIC FLOW-7"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "CONDITION: NOT システムが issue のリポジトリを非公開だと分かっている",
+        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
+        "RESUME STEP 9",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -1052,15 +1225,106 @@
         "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
         "システムは Stop hook を捨てる。",
-        "システムは turn の終わりを検知しない。",
-        "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。",
-        "システムはエージェントを止める。",
-        "システムは issue に打ち切った理由をコメントする。",
+        "システムは Stop hook を捨てたことを WARN で記録に残す。",
+        "システムは herdr からエージェントが待機になった知らせを受ける。",
+        "システムは settle_ms のあいだ Stop hook を待つ。",
+        "システムは VALIDATES THAT リトライの回数が agent.max_retries より小さい。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフが明けるまで待つ。",
+        "システムは着手の直前の検査をやり直す。",
+        "システムはカンバンの issue の Status が running_state のままであることを、issue を取り直して確かめる。",
+        "システムは既にある worktree を、作り直さずに再利用する。",
+        "RESUME STEP 7",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "リトライを使い切った",
+      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue の Status は failure_state である。turn の終わりを検知できなかったことを書いた引き渡しの通知が issue に1件ある。issue に Claude Code を閉じた記録のコメントが1件増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "公開のリポジトリ-1",
+        "公開のリポジトリ-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "作業ディレクトリがworktreeの外-1",
+        "作業ディレクトリがworktreeの外-2",
+        "作業ディレクトリがworktreeの外-3",
+        "作業ディレクトリがworktreeの外-4",
+        "作業ディレクトリがworktreeの外-5",
+        "リトライを使い切った-1",
+        "リトライを使い切った-2",
+        "リトライを使い切った-3",
+        "リトライを使い切った-4",
+        "リトライを使い切った-5",
+        "リトライを使い切った-6",
+        "リトライを使い切った-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
+        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
+        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "CONDITION: NOT システムが issue のリポジトリを非公開だと分かっている",
+        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
+        "RESUME STEP 9",
+        "システムは worktree の中に身元ファイルを置く。",
+        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
+        "システムはエージェントを worktree で起動する。",
+        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
+        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
+        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
+        "エージェントは clone の中でコードを直す。",
+        "エージェントは clone の commit を fork の origin へ push する。",
+        "エージェントは本家のリポジトリへ PR を出す。",
+        "エージェントは本家の PR のレビューを読む。",
+        "エージェントは clone の中でレビューの指摘を直す。",
+        "エージェントは直した commit を fork の origin へ push する。",
+        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
+        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
+        "システムは Stop hook を捨てる。",
+        "システムは Stop hook を捨てたことを WARN で記録に残す。",
+        "システムは herdr からエージェントが待機になった知らせを受ける。",
+        "システムは settle_ms のあいだ Stop hook を待つ。",
+        "システムは VALIDATES THAT リトライの回数が agent.max_retries より小さい。",
+        "CONDITION: NOT リトライの回数が agent.max_retries より小さい",
+        "システムはカンバンの issue の Status に failure_state を書く。",
+        "システムは issue に turn の終わりを検知できなかったことを書いた引き渡しの通知を1件投稿する。",
+        "システムは issue に今回の run が書いたコメントがあるかを確かめる。",
+        "システムはエージェントの pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは先頭の issue を実行中の一覧から外す。",
         "ABORT"
       ]
     },
     {
-      "id": "P006",
+      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "本家のPRを出せない",
       "postcondition": "本家のリポジトリに PR は無い。fork の origin に push した branch がある。issue の Status は Blocked である。worktree は残っている。",
@@ -1072,7 +1336,8 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-8",
+        "公開のリポジトリ-1",
+        "公開のリポジトリ-2",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
@@ -1080,19 +1345,26 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "本家のPRを出せない-1",
         "本家のPRを出せない-2",
-        "本家のPRを出せない-3"
+        "本家のPRを出せない-3",
+        "本家のPRを出せない-4"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
+        "システムは VALIDATES THAT システムが issue のリポジトリを非公開だと分かっている。",
+        "CONDITION: NOT システムが issue のリポジトリを非公開だと分かっている",
+        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
+        "RESUME STEP 9",
         "システムは worktree の中に身元ファイルを置く。",
         "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "システムは判定の hook を持たない設定ファイルを worktree の外に作る。",
         "システムはエージェントを worktree で起動する。",
         "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
         "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
@@ -1103,439 +1375,46 @@
         "CONDITION: エージェントが本家のリポジトリへ PR を出せない場合",
         "エージェントはシステムに blocked の表明を返す。",
         "システムはカンバンの issue の Status に Blocked を書く。",
+        "システムはエージェントの pane を閉じる。",
         "ABORT"
-      ]
-    },
-    {
-      "id": "P007",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。worktree は消えている。issue の branch は消えている。コードのリポジトリの clone は worktree の外に残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25",
-        "BASIC FLOW-26",
-        "BASIC FLOW-27"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "システムは worktree を消す。",
-        "システムは issue の branch を消す。"
-      ]
-    },
-    {
-      "id": "P008",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "本家のリポジトリに PR がある。fork の origin に push した branch がある。issue の Status は Done である。worktree は消えている。issue の branch は消えている。コードのリポジトリの clone は worktree の外に残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25",
-        "リモート追跡refに載っていない-1",
-        "リモート追跡refに載っていない-2",
-        "BASIC FLOW-26",
-        "BASIC FLOW-27"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "CONDITION: NOT worktree の HEAD がリモート追跡 ref のどれかに載っている",
-        "システムは VALIDATES THAT worktree の branch が base と差分を持たない。",
-        "RESUME STEP 26",
-        "システムは worktree を消す。",
-        "システムは issue の branch を消す。"
       ]
     },
     {
       "id": "P009",
       "terminal": "abort",
-      "terminal_flow": "baseと差分がある",
-      "postcondition": "worktree は残っている。issue の branch は残っている。push していない成果は worktree に残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25",
-        "リモート追跡refに載っていない-1",
-        "baseと差分がある-1",
-        "baseと差分がある-2",
-        "baseと差分がある-3",
-        "baseと差分がある-4"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "システムは VALIDATES THAT worktree の HEAD がリモート追跡 ref のどれかに載っている。",
-        "CONDITION: NOT worktree の HEAD がリモート追跡 ref のどれかに載っている",
-        "システムは VALIDATES THAT worktree の branch が base と差分を持たない。",
-        "CONDITION: NOT worktree の branch が base と差分を持たない",
-        "システムは worktree を消さない。",
-        "システムは issue の branch を消さない。",
-        "システムは issue に push していない成果があることをコメントする。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P010",
-      "terminal": "abort",
-      "terminal_flow": "身元ファイル以外の変更が残っている",
-      "postcondition": "worktree は残っている。issue の branch は残っている。片付けを見送った理由が issue に書かれている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "身元ファイル以外の変更が残っている-1",
-        "身元ファイル以外の変更が残っている-2",
-        "身元ファイル以外の変更が残っている-3",
-        "身元ファイル以外の変更が残っている-4"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "システムはエージェントの会話の記録から review の表明を読む。",
-        "システムはカンバンの issue の Status に In Review を書く。",
-        "利用者はカンバンの issue の Status を Done へ動かす。",
-        "システムは VALIDATES THAT worktree に身元ファイル以外の変更が残っていない。",
-        "CONDITION: NOT worktree に身元ファイル以外の変更が残っていない",
-        "システムは worktree を消さない。",
-        "システムは issue の branch を消さない。",
-        "システムは issue に片付けを見送った理由をコメントする。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P011",
-      "terminal": "abort",
-      "terminal_flow": "作業ディレクトリがworktreeの外",
-      "postcondition": "本家のリポジトリの PR は残っている。fork の origin の branch は残っている。worktree は残っている。issue は打ち切られている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "作業ディレクトリがworktreeの外-1",
-        "作業ディレクトリがworktreeの外-2",
-        "作業ディレクトリがworktreeの外-3",
-        "作業ディレクトリがworktreeの外-4",
-        "作業ディレクトリがworktreeの外-5",
-        "作業ディレクトリがworktreeの外-6"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "エージェントは本家の PR のレビューを読む。",
-        "エージェントは clone の中でレビューの指摘を直す。",
-        "エージェントは直した commit を fork の origin へ push する。",
-        "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
-        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
-        "システムは Stop hook を捨てる。",
-        "システムは turn の終わりを検知しない。",
-        "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。",
-        "システムはエージェントを止める。",
-        "システムは issue に打ち切った理由をコメントする。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P012",
-      "terminal": "abort",
-      "terminal_flow": "本家のPRを出せない",
-      "postcondition": "本家のリポジトリに PR は無い。fork の origin に push した branch がある。issue の Status は Blocked である。worktree は残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "公開のリポジトリ-1",
-        "公開のリポジトリ-2",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "本家のPRを出せない-1",
-        "本家のPRを出せない-2",
-        "本家のPRを出せない-3"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはカンバンから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
-        "システムは issue のリポジトリの clone に既定 branch を base にした worktree を作る。",
-        "システムは worktree の中に身元ファイルを置く。",
-        "システムは身元ファイルの名前を worktree の除外の一覧に加える。",
-        "システムは VALIDATES THAT issue のリポジトリが非公開である。",
-        "CONDITION: NOT issue のリポジトリが非公開である",
-        "システムは判定の hook を持つ設定ファイルを worktree の外に作る。",
-        "RESUME STEP 9",
-        "システムはエージェントを worktree で起動する。",
-        "システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。",
-        "エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。",
-        "エージェントは worktree の外にコードのリポジトリの clone を用意する。",
-        "エージェントは clone の中でコードを直す。",
-        "エージェントは clone の commit を fork の origin へ push する。",
-        "エージェントは本家のリポジトリへ PR を出す。",
-        "CONDITION: エージェントが本家のリポジトリへ PR を出せない場合",
-        "エージェントはシステムに blocked の表明を返す。",
-        "システムはカンバンの issue の Status に Blocked を書く。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P013",
-      "terminal": "abort",
       "terminal_flow": "既定branchが分からない",
-      "postcondition": "worktree は作られていない。issue の Status は着手待ちのままである。base を決められないことが利用者に届いている。",
+      "postcondition": "worktree は作られていない。エージェントは起動していない。issue の Status は failure_state である。base を決められないことを書いた引き渡しの通知が issue に1件ある。先頭の issue の担当者は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
         "既定branchが分からない-1",
         "既定branchが分からない-2",
         "既定branchが分からない-3",
-        "既定branchが分からない-4"
+        "既定branchが分からない-4",
+        "既定branchが分からない-5"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはカンバンから active_states の issue の一覧を取る。",
+        "システムはカンバンの issue の Status に running_state を書く。",
+        "システムは Status を動かした記録を issue に1件コメントする。",
         "システムは VALIDATES THAT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている。",
         "CONDITION: NOT 先頭の issue が issue のリポジトリの既定 branch の名前を持っている",
         "システムは worktree を作らない。",
-        "システムは先頭の issue を飛ばす。",
-        "システムは利用者に base を決められないことを知らせる。",
+        "システムはカンバンの issue の Status に failure_state を書く。",
+        "システムは issue に base を決められないことを書いた引き渡しの通知を1件投稿する。",
+        "システムは先頭の issue を実行中の一覧から外す。",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 52,
-    "nodes_covered": 52,
-    "edges_total": 53,
-    "edges_covered": 53
+    "nodes_total": 60,
+    "nodes_covered": 60,
+    "edges_total": 61,
+    "edges_covered": 61
   }
 }

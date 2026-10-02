@@ -2179,8 +2179,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// **締め切りと回の区切りは、ここを Mutate で書き換えたテストが見ている。**
 	// 既定のままだと締め切りの待ちも回の区切りも通らないので、**この2本を消してはならない。**
 	//
-	//	Test_issueの担当を入札で決める_P005_締め切りの前は担当者にならない                    締め切りを待つあいだは担当者にならないこと
-	//	Test_issueの担当を入札で決める_P005_古い入札が残っていても締め切りをまたいで担当者が決まる  巡回をまたいでも入札が増えず、締め切りの後に勝つこと
+	//	Test_issueの担当を入札で決める_P006_締め切りの前は担当者にならない                    締め切りを待つあいだは担当者にならないこと
+	//	Test_issueの担当を入札で決める_P006_古い入札が残っていても締め切りをまたいで担当者が決まる  巡回をまたいでも入札が増えず、締め切りの後に勝つこと
 	cfg.Tracker.Provider.Handoff.BidWindowMs = 0
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)
@@ -2593,7 +2593,7 @@ func assistantLine(requestID, text string, sidechain bool) any {
 // `Methods()` を読んでしまう。**
 //
 // 手元では間に合っていたが、**CI の `-race` で隙間が開いて落ちた**
-// （`TestTurn_blockedが返ったらescを送ってから人間へ渡す` が
+// （`Test_issueを1件処理する_P016_blockedが返ったらescを送ってから人間へ渡す` が
 // 「人間へ渡すときに worker を止めていない」で落ちた。設計 6-9）。
 //
 // **run が `o.runs` から外れるのは最後である**（`release`）。だからここが空になれば、

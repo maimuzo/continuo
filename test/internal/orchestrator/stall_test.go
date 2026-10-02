@@ -1,6 +1,3 @@
-// {"RUCM-CFG-SHA256": "fa391bbcb4b651ca671bae13429106ba02e7fe59d318604efbe3f5b973bbde0b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
 
 import (
@@ -63,67 +60,6 @@ func TestCheckStalls_workingの間は何時間かかっても打ち切らない(
 		}
 		if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
 			t.Fatalf("working の run の pane を閉じた: %v", ids)
-		}
-	})
-}
-
-// {"RUCM-PATH": "P016"}
-//
-// TestCheckStalls_止まったまま閾値を超えたら打ち切る は、打ち切りの条件を確かめる。
-//
-// 目的: **`agent_status` が `working` でないまま `claude.turn_timeout_ms` 経ったら打ち切る**
-// （issue #173。[docs/spec/turn_end_detect_mechanizm.md](../../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
-//
-// **`working` を打ち切ってはならない。**この検査は 2026-09-08 に前提を入れ替えた。
-// **それまでは「`working` でも `revision`（画面の版）が増えなければ打ち切る」を固定していた。**
-// **その版は画面を1バイトも見ておらず、continuo の pane では永久に動かない**
-// （実測で、働いている3つの pane が2分間ずっと `revision: 1` だった）。
-// **つまり、あの検査は「長いツール呼び出しの run を必ず殺す」ことを固定していた。**
-//
-// 与える情報: `agent_status` が `idle` のまま動かない run。
-// 成功条件: 最初に閾値をまたいだ巡回でリトライが1つ積まれ、pane が閉じられる。
-//
-// **実時間はゼロである。**
-func TestCheckStalls_止まったまま閾値を超えたら打ち切る(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		fx := newStubFixture(t, stubFixtureOptions{
-			AgentStatus: herdr.AgentStatusIdle,
-			Mutate: func(cfg *config.Config) {
-				cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
-			},
-		})
-		adoptRun(fx, 188)
-
-		// 閾値の手前では打ち切らない。
-		time.Sleep(stallTimeout - time.Second)
-		fx.Orc.Tick(context.Background())
-		synctest.Wait()
-
-		v, ok := viewOf(fx, "octocat/hello-world#188")
-		if !ok {
-			t.Fatalf("閾値の手前で run を印から外している")
-		}
-		if v.RetryCount != 0 {
-			t.Fatalf("閾値の手前で打ち切っている: retry_count = %d", v.RetryCount)
-		}
-
-		// 閾値をまたいだら打ち切る。**猶予を1回与えて待ち直してはならない。**
-		time.Sleep(2 * time.Second)
-		fx.Orc.Tick(context.Background())
-		synctest.Wait()
-
-		v, ok = viewOf(fx, "octocat/hello-world#188")
-		if !ok {
-			t.Fatalf("バックオフ中の run を印から外している（30秒後の巡回で即座に拾い直される）")
-		}
-		if v.RetryCount != 1 {
-			t.Fatalf("止まったまま閾値を超えたのにリトライを積んでいない: retry_count = %d", v.RetryCount)
-		}
-		if v.BackoffUntil.IsZero() {
-			t.Fatalf("バックオフの期限を入れていない")
-		}
-		if len(fx.Herdr.ClosedPanes()) == 0 {
-			t.Fatalf("stall で止めたのに pane を閉じていない（pane.close が唯一の手段である）")
 		}
 	})
 }

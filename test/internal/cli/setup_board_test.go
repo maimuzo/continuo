@@ -1,7 +1,3 @@
-// {"RUCM-CFG-SHA256": "69e4366093e68d8bbfd1a1bd7c3eb52f551d143e7b66a671893845866120c69f", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
-//
-// **`continuo setup` がどのカンバンを読むかを決める経路の検査である。**
-//
 // **WORKFLOW.md に答えが書いてあるのに `--project` を要求してはならない**（設計 6-2）。
 // さらに悪い場合として、ログイン名のカンバンがちょうど1件だけあると、
 // **WORKFLOW.md に書かれたカンバンではない別のカンバンの Status を読み、その名前を書き込む。**
@@ -13,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/cli"
@@ -63,39 +58,4 @@ func writeWorkflowWith(t *testing.T, owner string, number int) string {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
 	return dir
-}
-
-// TestRunSetup_WORKFLOWmdに書かれたカンバンを使う は、**書いてあるのに聞き直す**のを落とす。
-//
-// 目的: フラグが無いとき、WORKFLOW.md の owner とカンバンの番号を検出へ渡すこと。
-// 与える情報: `owner: octocat` / `project_number: 42` を書いた WORKFLOW.md。
-// 成功条件: 検出がその2つを受け取り、使うカンバンが画面に出ること。
-func TestRunSetup_WORKFLOWmdに書かれたカンバンを使う(t *testing.T) {
-	var got scaffold.DetectOptions
-	dir := writeWorkflowWith(t, "octocat", 42)
-
-	_, stdout, _ := runCLIWith(recordingDetect(&got), []string{"setup", dir}, "")
-
-	if got.Owner != "octocat" || got.ProjectNumber != 42 {
-		t.Fatalf("WORKFLOW.md に書かれたカンバンを使っていない: %+v", got)
-	}
-	if !strings.Contains(stdout, "42") {
-		t.Errorf("どのカンバンを読むかが画面に出ていない:\n%s", stdout)
-	}
-}
-
-// TestRunSetup_フラグはWORKFLOWmdより強い は、明示した指定が勝つことを確かめる。
-//
-// 目的: `--owner` と `--project` を渡したとき、WORKFLOW.md の値ではなくフラグを使うこと。
-// 与える情報: `owner: octocat` / `project_number: 42` を書いた WORKFLOW.md と、別の値のフラグ。
-// 成功条件: 検出がフラグの値を受け取ること。
-func TestRunSetup_フラグはWORKFLOWmdより強い(t *testing.T) {
-	var got scaffold.DetectOptions
-	dir := writeWorkflowWith(t, "octocat", 42)
-
-	runCLIWith(recordingDetect(&got), []string{"setup", "--owner", "acme", "--project", "7", dir}, "")
-
-	if got.Owner != "acme" || got.ProjectNumber != 7 {
-		t.Fatalf("フラグの指定が使われていない: %+v", got)
-	}
 }

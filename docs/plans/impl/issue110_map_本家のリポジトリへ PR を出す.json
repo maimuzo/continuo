@@ -1,0 +1,49 @@
+{
+ "rucm": "本家のリポジトリへ PR を出す",
+ "cfg": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json",
+ "header": "// **ユースケース記述「本家のリポジトリへ PR を出す」の経路に対応づけたテストである。**\n// 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。\n// **経路の全部には書かない。**同じ経路を別の観点で確かめるテストは、同じ番号を持つ。\n//\n// **このファイルには、経路に対応するテストだけを置く。**経路に対応しないテストと補助関数は、\n// 同じディレクトリの別のファイルに在る。",
+ "moves": [
+  [
+   "test/internal/workspace/upstream_pr_test.go",
+   "TestUpstreamPR_成果がworktreeの外にあっても片付けが通る",
+   "test/internal/workspace",
+   "P001"
+  ],
+  [
+   "test/internal/workspace/upstream_pr_test.go",
+   "TestUpstreamPR_リモート追跡refが無くてもbaseと差分が無ければ片付く",
+   "test/internal/workspace",
+   "P002"
+  ],
+  [
+   "test/internal/workspace/upstream_pr_test.go",
+   "TestUpstreamPR_worktreeの中にpushしていないcommitがあれば片付けない",
+   "test/internal/workspace",
+   "P003"
+  ],
+  [
+   "test/internal/workspace/upstream_pr_test.go",
+   "TestUpstreamPR_身元ファイルだけなら変更として数えない",
+   "test/internal/workspace",
+   "P006"
+  ],
+  [
+   "test/internal/workspace/prepare_test.go",
+   "TestPrepare_baseもdefault_branchも無ければ失敗させる",
+   "test/internal/workspace",
+   "P019"
+  ],
+  [
+   "test/internal/orchestrator/tool_gate_test.go",
+   "TestToolGate_公開かどうかで判定を掛けるかが決まる",
+   "test/internal/orchestrator",
+   "P001"
+  ],
+  [
+   "test/internal/orchestrator/tool_gate_test.go",
+   "TestToolGate_公開リポジトリのissueには判定のhookを足す",
+   "test/internal/orchestrator",
+   "P010"
+  ]
+ ]
+}

@@ -1,11 +1,7 @@
-// {"RUCM-CFG-SHA256": "fa391bbcb4b651ca671bae13429106ba02e7fe59d318604efbe3f5b973bbde0b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -150,55 +146,4 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	if v.RetryCount != 1 {
 		t.Fatalf("1回の stall で2回諦めている: retry_count = %d", v.RetryCount)
 	}
-}
-
-// {"RUCM-PATH": "P002"}
-//
-// TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる は、
-// 設計 3-25 の「いつ走らせるか」の表を確かめる。
-//
-// 目的: 「`max_dispatch_turns` に達した / stall で打ち切った → **走らせる。worker を止める前に
-// 確認する**」を示す。**確かめないと、その run の成果が issue に何も残らない。**
-//
-// 与える情報: `agent.max_retries` が 0 の設定で stall した run（1回目の stall で
-// リトライを使い切り、人間へ渡す分岐に入る）。コメントは1件も付いていない。
-// 成功条件:
-//   - セッションの復元（`agent.start --resume`）が走る
-//   - それでも書かれないので Status が `failure_state` へ落ちる
-func TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる(t *testing.T) {
-	clock := newTestClock()
-	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
-		Mutate: func(cfg *config.Config) {
-			cfg.Claude.TurnTimeoutMs = 1000
-			cfg.Agent.MaxRetries = 0
-			cfg.Tracker.VerifyStatesEvery = 0
-		},
-	})
-	blockFirstPrompt(t, fx)
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
-	})
-
-	clock.Advance(5 * time.Second)
-	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 20*time.Second, "打ち切りの前にセッションの復元が走る", func() bool {
-		for _, r := range fx.Herdr.Requests() {
-			if r.Method != herdr.MethodAgentStart {
-				continue
-			}
-			args, _ := r.Params["args"].([]any)
-			if strings.Contains(joinAny(args), "--resume") {
-				return true
-			}
-		}
-		return false
-	})
-	waitFor(t, 20*time.Second, "Status が failure_state へ落ちる", func() bool {
-		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
-	})
 }
