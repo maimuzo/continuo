@@ -45,11 +45,11 @@ POSTCONDITION: issue にエージェントが今回の run で書いたコメン
 SPECIFIC ALTERNATIVE FLOW 確かめないrun:
 RFS BASIC FLOW 2
 1. システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。
-2. システムは、pane を引き終えていれば、herdr の pane を閉じる。
+2. システムは、pane を控えていれば、herdr の pane を閉じる。
 3. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。
+POSTCONDITION: システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。着手の途中で失敗した run では、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
 RFS BASIC FLOW 3
@@ -71,12 +71,14 @@ POSTCONDITION: issue にエージェントが書いたコメントが1件以上�
 BOUNDED ALTERNATIVE FLOW 復元の断念:
 RFS コメントの取り戻し 3,5
 1. システムは復元をやめる理由を記録に残す。
-2. システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。
-3. システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる。
-4. システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。
-5. システムは印を外す。
-6. ABORT
-POSTCONDITION: issue にエージェントが書いたコメントがない。システムは issue の Status を書き直していない。issue に人間へ引き渡す通知のコメントは増えていない。システムは Claude Code に本文を1文字も送っていない。印は外れている。worktree は残っている。pane を1つに決められずに復元をやめた場合は、開き直した workspace の pane は開いたまま残る。
+2. システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる。
+3. システムは保留していた Claude Code を閉じた記録を issue に1件コメントする。
+4. システムはボードの issue の Status に failure_state の選択肢を書く。
+5. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
+6. システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。
+7. システムは印を外す。
+8. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。システムは Claude Code に本文を1文字も送っていない。印は外れている。worktree は残っている。pane を1つに決められずに復元をやめた場合は、開き直した workspace の pane は開いたまま残る。
 
 BOUNDED ALTERNATIVE FLOW 取り戻しの復帰の失敗:
 RFS コメントの取り戻し 4,6
@@ -128,8 +130,8 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 | 閉じようとした pane が既に無かった | 閉じたものとして扱い、閉じた記録を書く | `stopWorker`、`paneAlreadyGone` |
 | relay が無効である。issue が draft issue である。担当者がほかのアカウント1人である | 閉じた記録を書かない | `recordWorkerClosed` |
 | issue のコメントを読めなかった | 書かれていないものとして扱い、`コメントの取り戻し` へ進む | `hasRunComment` |
-| 人間へ渡す2本のフロー（`取り戻しの復帰の失敗`・`コメントの取り戻しの失敗`）の「failure_state を書く」で、取り直した Status が `terminal_states` か `tracker.direct_chat_state` に入っている | Status を書かない。引き渡しの通知からあとの段はそのまま続く（`完了` で終える run の成果の報告が無かった場合がこれである） | `failCommentRecovery`、`protectedStates` |
-| 同じ2本のフローの「failure_state を書く」で、Status が既に `failure_state` である（打ち切りや上限で先に落としてある） | 書き込みを省く | `UpdateStatus` |
+| 人間へ渡す3本のフロー（`復元の断念`・`取り戻しの復帰の失敗`・`コメントの取り戻しの失敗`）の「failure_state を書く」で、取り直した Status が `terminal_states` か `tracker.direct_chat_state` に入っている | Status を書かない。引き渡しの通知からあとの段はそのまま続く（`完了` で終える run の成果の報告が無かった場合がこれである） | `failCommentRecovery`、`protectedStates` |
+| 同じ3本のフローの「failure_state を書く」で、Status が既に `failure_state` である（打ち切りや上限で先に落としてある） | 書き込みを省く | `UpdateStatus` |
 | コメントに印は付いているが、投稿者が gh の持ち主と違う | 警告を記録に残し、エージェントが書いたものとして数えない | `hasRunComment` |
 | 途中経過の報告と計画のコメントしか無い | 成果のコメントとして数えない | `hasRunComment` |
 | 記録を要求する指示を herdr へ送れなかった | 警告を記録に残して、コメントを読み直す段へ進む | `ensureAgentComment` |
@@ -164,6 +166,20 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 
 だから、前の着手で turn を送った run がバックオフ明けの着手の途中で落ちた場合は、コメントを確かめる。
 
+**着手の途中で失敗した run の pane は、システムが新しく開いたものだけを閉じる。**着手は、`worktree.open` が pane を新しく開いた時点で、
+その pane の ID を run に控える（`internal/orchestrator/dispatch.go` の `startRunFromWorktree`）。そのあと `agent.start` までに失敗すると
+（`after_create`・設定ファイル・セッション UUID の採番・身元ファイル・`before_run`・pane を引く・pane の label）、`確かめないrun` の「pane を閉じる」の段が、その pane を閉じる。
+次の場合は、pane が残る。
+
+| pane が残る場合 | 理由 |
+| --- | --- |
+| `herdr.worktree.create_via_herdr` が false である | `Prepare` が pane の ID を返さないので、控えるものが無い |
+| `Prepare` 自身が `worktree.open` のあとで失敗した（開いたものが別のパスだった、など） | `Prepare` がエラーで戻るので、run は pane の ID を受け取らない |
+| workspace が既に開いていた（`worktree.open` が `already_open` を返した） | 人間が開いた pane でありうるので、控えない |
+| システムが開かせたリポジトリの親 workspace | 身元ファイルへ控える前に落ちると、片付けが閉じる相手を知らない |
+
+**閉じるのは pane である。**その pane を閉じたときに herdr が workspace ごと畳むかどうかは、herdr の版によるので、この記述は「pane を閉じる」とだけ書く。
+
 **`確かめないrun` でも、片付けへ進むことがある。**`finishRunClaimed` は、コメントを確かめなかった run についても、
 pane を閉じたあとに Status を取り直し、`cleanup.on_states` に入っていれば片付ける
 （draft issue の run と、direct chat から `terminal_states` へ直接抜けた run）。事後条件の worktree に条件を付けてあるのは、そのためである。
@@ -179,7 +195,7 @@ pane を閉じたあとに Status を取り直し、`cleanup.on_states` に入�
 
 **同じ原因で助からない。**着手の `復帰の失敗` を起こすのは「`~/.claude/projects/` の
 セッションが消えている」ことであり、**取り戻しは同じセッションへ戻ろうとする。**
-`internal/orchestrator/comment.go` の `ensureAgentComment` は、次の4つのどれでも人間へ渡す。
+`internal/orchestrator/comment.go` の `ensureAgentComment` は、次の4つのどれでも人間へ渡す（復元の材料が足りないときも人間へ渡すが、そちらは下の `復元の断念` に書く）。
 
 | 何が起きたか | 分岐元の段 | 呼ぶ関数 |
 | --- | --- | --- |
@@ -203,26 +219,41 @@ pane を閉じたあとに Status を取り直し、`cleanup.on_states` に入�
 **打ち切りから来た場合は、この経路が通知を書き足さない。**リトライが尽きた run は
 `abandonRunClaimed` が打ち切りの理由で通知の枠を取ってから、この記述へ入る。
 **枠は1件しか無いので、`postHandoffComment` は2件目を投稿せずにログへ落とす。**
-だから2本の失敗のフローの段は「まだ1件も書いていなければ」と条件を付けてあり、
+だから3本の失敗のフローの段は「まだ1件も書いていなければ」と条件を付けてあり、
 事後条件も「1件だけある」と書いてある。**この並びを崩すと、stall で打ち切った本当の理由が
 issue に1文字も残らない**（`test/internal/orchestrator/issue を1件処理する_test.go` の
 `Test_issueを1件処理する_P014_打ち切りのときissueに残る理由が本当の理由である` がそれを確かめている）。
 
-## 復元をあきらめる経路は、人間へ渡さない
+## 復元をあきらめる経路も、人間へ渡す
 
-**言いたいこと。**復元の材料が足りないときは、`failure_state` へ落とし直さずに、後始末を続ける（代替フロー `復元の断念`）。
-`ensureAgentComment` は警告を1行出して戻り、呼び出し側が `after_run` を実行して印を外す。**Status は書き直さず、通知も書かない。**
+**言いたいこと。**復元の材料が足りないときも、黙って後始末へ進まず、`failure_state` へ落として人間へ渡す（代替フロー `復元の断念`）。
+`ensureAgentComment` は警告を1行出し、`failCommentRecovery` を呼んでから戻る。呼び出し側が `after_run` を実行して印を外す。
+
+**黙って進むと、成果の報告が1件も無い issue が `In Review` に並ぶ。**エージェントが `review` を表明して終わった run では、
+この記述より前に `failure_state` も引き渡しの通知も書かれていないので、書かれていないことが誰にも伝わらない。
 
 | 分岐元の段 | 何が起きたか | pane |
 | --- | --- | --- |
 | 身元ファイルを読めるかを見る | run が worktree のパスを持っていない | 開き直していない |
 | 身元ファイルを読めるかを見る | 身元ファイルを読めない。設定ファイルのパスが空である。復帰に使うセッション UUID が run にも身元ファイルにも無い | 開き直していない |
 | workspace を開き直せるかを見る | `Prepare` が失敗した | 開き直していない |
-| workspace を開き直せるかを見る | workspace の pane が1つでない。`pane.list` が失敗した | **開き直した pane は閉じない**（run が pane の ID を控える前に戻る） |
-| workspace を開き直せるかを見る | agent 名を決められない | 引き終えた pane を、呼び出し側の `stopWorker` が閉じる |
+| workspace を開き直せるかを見る | workspace の pane が1つでない。`pane.list` が失敗した | **開き直した pane は閉じない**（run が pane の ID を控える前に戻るので、閉じる相手を知らない） |
+| workspace を開き直せるかを見る | agent 名を決められない | 引き終えた pane を、`failCommentRecovery` の `stopWorker` が閉じる |
+
+**引き渡しの通知の【よくある原因】の行は、入口ごとに違う文である**（`ensureAgentComment` が `failCommentRecovery` へ渡す）。
+どの入口でも、エージェントには本文を1文字も送っていない。
+
+**`取り戻しの復帰の失敗` と違うのは、`after_run` の段に条件が付くことだけである。**worktree のパスを持っていない run では `after_run` を実行しない。
 
 **保留していた閉じた記録は、閉じる pane が無くても書く**（`stopWorker` が `settleClosedRecord` を呼ぶ）。
 最初の閉じ方で止めた Claude Code はもう動いていないので、書かないと境目が前の run に残る。
+
+**continuo の終了の途中で失敗したとき（ctx が切れた）は、このフローを通らない。**`Prepare`・`resolvePane`・`resolveAgentName` の失敗が
+止められたことによるものなら、Status も通知も書かずに戻る（`stoppedWhileRecovering`。上の「後始末を途中でやめる分岐」の3行目）。
+
+**人間が動かした Status を書き直すことがある。**`failCommentRecovery` が書き込みを断るのは `terminal_states` と `tracker.direct_chat_state` だけである。
+設定に無い Status のまま猶予を過ぎて終える run（`finishRunUnknownState` から来る）では、人間が動かした Status が `failure_state` へ書き直されうる。
+`取り戻しの復帰の失敗`・`コメントの取り戻しの失敗` と同じ動きである。
 
 ## 「workspace として開き直す」の段
 
@@ -244,7 +275,7 @@ sequenceDiagram
     S->>S: コメントを確かめる run であることを検証する
     alt turn を1回も送っていない、draft issue である、または direct chat から直接抜けた
         S->>S: worktree のパスを持っていれば after_run を実行する
-        S->>H: pane を引き終えていれば pane の close を要求する
+        S->>H: pane を控えていれば pane の close を要求する
         Note over S: ABORT コメントを読まずに印を外す
     else コメントを確かめる run である
         S->>GH: issue のコメントの取得を要求する
@@ -254,9 +285,9 @@ sequenceDiagram
             S->>S: Claude Code を閉じた記録を書かずに保留する
             S->>S: worktree のパスと身元ファイルから、設定ファイルのパスと復帰に使うセッション UUID を読む
             alt 復元の材料が足りない
-                S->>S: after_run を実行する
                 S->>GH: 保留していた閉じた記録のコメントの投稿を要求する
-                Note over S: ABORT 復元をあきらめて印を外す。Status は書き直さない
+                S->>GH: Status への failure_state の書き込みと、成果を確かめてほしい通知の投稿を要求する
+                Note over S: ABORT 復元をあきらめる。worktree のパスを持っていれば after_run を実行して印を外す
             else 会話の記録が無い
                 S->>GH: 保留していた閉じた記録のコメントの投稿を要求する
                 S->>GH: Status への failure_state の書き込みと、成果を確かめてほしい通知の投稿を要求する
@@ -265,9 +296,10 @@ sequenceDiagram
                 S->>H: worktree とリポジトリ本体を渡した workspace の open を要求する
                 H-->>S: workspace と pane を応答する
                 alt workspace を開き直せない、pane が1つでない、または agent 名を決められない
-                    S->>S: after_run を実行する
+                    S->>H: 開き直した pane を引き終えていれば pane の close を要求する
                     S->>GH: 保留していた閉じた記録のコメントの投稿を要求する
-                    Note over S: ABORT 復元をあきらめて印を外す
+                    S->>GH: Status への failure_state の書き込みと、成果を確かめてほしい通知の投稿を要求する
+                    Note over S: ABORT 復元をあきらめる。after_run を実行して印を外す
                 end
                 S->>H: セッション UUID の復帰つきの起動を要求する
                 alt 復帰つきの起動が完了しない
@@ -314,7 +346,7 @@ flowchart TD
     BS6["6 システムは Claude Code を閉じた記録を issue に1件コメントする"]
     BS7["7 システムは印を外す"]
     A1S1["確かめないrun 1 システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する"]
-    A1S2["確かめないrun 2 システムは、pane を引き終えていれば、herdr の pane を閉じる"]
+    A1S2["確かめないrun 2 システムは、pane を控えていれば、herdr の pane を閉じる"]
     A1S3["確かめないrun 3 システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする"]
     A1S4["確かめないrun 4 システムは印を外す"]
     A1S5(["確かめないrun 5 ABORT"])
@@ -332,11 +364,13 @@ flowchart TD
     A2S12["コメントの取り戻し 12 システムは workspace_hooks の after_run を実行する"]
     A2S13["コメントの取り戻し 13 RESUME STEP 7"]
     A3S1["復元の断念 1 システムは復元をやめる理由を記録に残す"]
-    A3S2["復元の断念 2 システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する"]
-    A3S3["復元の断念 3 システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる"]
-    A3S4["復元の断念 4 システムは保留していた Claude Code を閉じた記録を issue に1件コメントする"]
-    A3S5["復元の断念 5 システムは印を外す"]
-    A3S6(["復元の断念 6 ABORT"])
+    A3S2["復元の断念 2 システムは、開き直した pane を引き終えていれば、herdr の pane を閉じる"]
+    A3S3["復元の断念 3 システムは保留していた Claude Code を閉じた記録を issue に1件コメントする"]
+    A3S4["復元の断念 4 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A3S5["復元の断念 5 システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする"]
+    A3S6["復元の断念 6 システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する"]
+    A3S7["復元の断念 7 システムは印を外す"]
+    A3S8(["復元の断念 8 ABORT"])
     A4S1["取り戻しの復帰の失敗 1 システムは復帰できなかった理由を記録に残す"]
     A4S2["取り戻しの復帰の失敗 2 システムは、開き直した pane があれば、herdr の pane を閉じる"]
     A4S3["取り戻しの復帰の失敗 3 システムは保留していた Claude Code を閉じた記録を issue に1件コメントする"]
@@ -387,6 +421,8 @@ flowchart TD
     A3S3 --> A3S4
     A3S4 --> A3S5
     A3S5 --> A3S6
+    A3S6 --> A3S7
+    A3S7 --> A3S8
     A4S1 --> A4S2
     A4S2 --> A4S3
     A4S3 --> A4S4

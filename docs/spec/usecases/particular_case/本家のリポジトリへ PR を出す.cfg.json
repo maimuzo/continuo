@@ -3,7 +3,7 @@
   "usecase_name": "本家のリポジトリへ PR を出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md",
-    "rucm_block_sha256": "1249de34b3fef49a631400f22ee9e69a38adca3352e80a2442ce37f467578c88"
+    "rucm_block_sha256": "fdc62a3b5f596c34c5941eb7d3fbe9a3170629195d56f1722bdb04a702b21ac6"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -62,7 +62,7 @@
           31
         ]
       },
-      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。システムは片付けを見送ったことを issue にコメントしていない。次の巡回が片付けをやり直す。"
+      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。失うものが残っていて見送った場合は、issue に片付けを見送った理由のコメントが1件ある。次の巡回が片付けをやり直し、コメントは重ねて書かない。"
     },
     "本家のPRを出せない": {
       "when": "エージェントが本家のリポジトリへ PR を出せない場合",
@@ -967,7 +967,7 @@
       "id": "P002",
       "terminal": "cycle",
       "terminal_flow": "片付けの見送り",
-      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。システムは片付けを見送ったことを issue にコメントしていない。次の巡回が片付けをやり直す。",
+      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。失うものが残っていて見送った場合は、issue に片付けを見送った理由のコメントが1件ある。次の巡回が片付けをやり直し、コメントは重ねて書かない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1410,7 +1410,7 @@
       "id": "P008",
       "terminal": "cycle",
       "terminal_flow": "片付けの見送り",
-      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。システムは片付けを見送ったことを issue にコメントしていない。次の巡回が片付けをやり直す。",
+      "postcondition": "worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。失うものが残っていて見送った場合は、issue に片付けを見送った理由のコメントが1件ある。次の巡回が片付けをやり直し、コメントは重ねて書かない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

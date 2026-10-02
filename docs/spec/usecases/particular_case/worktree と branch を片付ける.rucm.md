@@ -129,8 +129,10 @@ SPECIFIC ALTERNATIVE FLOW 失うものが残っている:
 RFS BASIC FLOW 13
 1. システムは worktree を消さない。
 2. システムは利用者に見送る理由をログで応答する。
-3. ABORT
-POSTCONDITION: worktree は残っている。branch は残っている。巡回は issue に片付けを見送った理由をコメントしていない。巡回は身元ファイルに片付けを見送った時刻を書いていない。次の巡回が同じ判定をもう一度行う。
+3. システムは、身元ファイルに片付けを見送った時刻が無く、起動してからこの worktree について見送りのコメントの投稿を試みていなければ、issue に片付けを見送った理由を1件コメントする。
+4. システムは、コメントの投稿に成功していれば、身元ファイルに片付けを見送った時刻を書く。
+5. ABORT
+POSTCONDITION: worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが増えるのは、巡回が投稿に成功した1回だけである。投稿に成功していれば、身元ファイルに片付けを見送った時刻が入っている。次の巡回が同じ判定をもう一度行い、見送る理由をもう一度ログに出すが、コメントは重ねて書かない。
 
 SPECIFIC ALTERNATIVE FLOW cloneが押さえられている:
 RFS BASIC FLOW 15
@@ -161,22 +163,42 @@ POSTCONDITION: worktree は消し切れずに残っている。branch は残っ�
 
 | 契機 | 実装の入口 | 渡す base | clone が押さえられているとき | 見送り・失敗を誰へ出すか |
 | --- | --- | --- | --- | --- |
-| **巡回**（この記述） | `internal/orchestrator/reconcile.go` の `reconcileWorktrees` | 渡さない（身元ファイルの `base` で補う） | **待たない。**何も消さずに次の巡回へ回す | ログだけ。**issue へコメントしない。身元ファイルへ時刻も書かない** |
+| **巡回**（この記述） | `internal/orchestrator/reconcile.go` の `reconcileWorktrees` | 渡さない（身元ファイルの `base` で補う） | **待たない。**何も消さずに次の巡回へ回す | ログと、issue へのコメント1件（投稿を試みるのは、起動してから worktree 1つにつき1回だけ） |
 | turn の終わり | `internal/orchestrator/lifecycle.go` の `finishRunClaimed` → `cleanupWorktree` → `cleanupPath` | run が持っている base | 待つ | ログと、issue へのコメント1件 |
 | 復元 | `internal/orchestrator/restore.go` の `cleanupInto` → `cleanupPath` | 渡さない | 待つ | ログと、issue へのコメント1件 |
 | 起動時の掃除 | `internal/orchestrator/sweep.go` の `sweepFinishedWorktrees` → `cleanupPath` | 渡さない | 待つ | ログと、issue へのコメント1件 |
 | `continuo abandon` | `internal/abandon/abandon.go` の `remove` | 渡さない | 待つ | 画面（標準出力と標準エラー）。ログは出ない |
 
-**`cleanupPath` を通る3つの契機だけが、見送りをコメントする。**`Cleanup` が返した `ShouldComment` が真（身元ファイルの `cleanup_deferred_at` がゼロ値）で、
+**`continuo abandon` のほかの4つの契機が、見送りをコメントする。**`Cleanup` が返した `ShouldComment` が真（身元ファイルの `cleanup_deferred_at` がゼロ値）で、
 issue のノード ID が分かるときに、「worktree を片付けずに残しました」のコメントを1件書く。**投稿に成功したあとで** `MarkCleanupDeferred` が身元ファイルへ時刻を書くので、2回目からは書かない。
+本文を組み立てて投稿し、時刻を書く部分は、`internal/orchestrator/lifecycle.go` の `postCleanupDeferred` の1か所に在り、巡回も `cleanupPath` もそこを通る。
 
-**巡回は `Cleanup` の戻り値の `ShouldComment` を見ない。**`reconcileWorktrees` は、エラーなら WARN、消せたら INFO を出すだけである。
-見送ったときは `Cleanup` 自身が WARN（`worktree を消さずに残しました`）を出すが、**これは巡回のたびに出る。**コメントも時刻も残らない。
+**巡回からの投稿は、やり直さない**（`internal/orchestrator/reconcile.go` の `noticeDeferredOnPatrol`）。投稿がエラーを返しても、書かれなかったとは限らないためである
+（設計 3-85 の「`addComment` は同じものを2回書くことがあるので、やり直さない」と同じ理由）。システムは「投稿を試みた worktree のパス」の集合をメモリに持ち、
+巡回は、パスが集合に無いときだけ投稿を試みる。成否に関わらず、試みた時点で集合へ入れる。run の終わりの `cleanupPath` が投稿した worktree も集合へ入るので、巡回から2件目は出ない。
+
+| 何が起きたか | 巡回がすること |
+| --- | --- |
+| 投稿に成功した | 身元ファイルへ時刻を書く。再起動のあとも、`ShouldComment` が偽になるので書かない |
+| 投稿に失敗した | WARN `片付けを見送った通知を投稿できませんでした` を1行出す。**その process のあいだ、巡回からはやり直さない。**時刻は書かない。次に試みるのは、その worktree に再着手したあとの見送りか、再起動のあとの最初の巡回か、起動時の掃除である |
+| 取り直した issue が、worktree の置き場所と違うリポジトリのものである | WARN を1行出して投稿しない。集合へ入れる（同じ WARN を巡回のたびに繰り返さない）。身元ファイルの `project_item_id` はエージェントが書き換えられるので、照らさないと無関係の issue にコメントが付く（`OwnerRepoOf`） |
+| issue が draft issue である | 投稿しない（コメントできない） |
+
+**集合から外すのは、次の2つのときだけである。**
+
+| いつ | 理由 |
+| --- | --- |
+| その worktree に着手したとき（`internal/orchestrator/dispatch.go` の `startRunFromWorktree`） | 再着手は新しい run である。着手は身元ファイルの見送った時刻も消すので（`MergeForReuse`）、やり直した issue の次の見送りでは、もう一度コメントが付く |
+| 巡回の走査に、そのパスが出てこなくなったとき（worktree が消えた） | 残すと、同じパスに作り直した worktree の見送りが黙ったままになる。実行中の run が握っている worktree は、走査に出てくるので外さない |
+
+**巡回は、投稿が終わるまで待つ**（`closedRecordWriteTimeout` の10秒の期限。待つのは worktree 1つにつき1回だけである）。
+
+**見送ったときの WARN（`Cleanup` 自身が出す `worktree を消さずに残しました`）は、直したあとも巡回のたびに出る。**1回にしたのは、issue へのコメントだけである。
 
 | 何が起きたか | 巡回が出すもの | `cleanupPath` を通る契機が出すもの |
 | --- | --- | --- |
 | `cleanup.enabled` が偽 | **何も出さない** | WARN `worktree を片付けずに残しました`（理由つき）。コメントは書かない |
-| 失うものが残っている | `Cleanup` の WARN `worktree を消さずに残しました`（毎巡回） | 同じ WARN に加えて WARN `worktree を片付けずに残しました`。**1回目だけ issue へコメントし、身元ファイルへ時刻を書く** |
+| 失うものが残っている | `Cleanup` の WARN `worktree を消さずに残しました`（毎巡回）。**起動してから1回だけ issue へのコメントを試み、成功したら身元ファイルへ時刻を書く** | 同じ WARN に加えて WARN `worktree を片付けずに残しました`。**1回目だけ issue へコメントし、身元ファイルへ時刻を書く** |
 | git が答えない（壊れた worktree） | 上の WARN の `next_steps` に、人間が次にすることが入る | 上に加えて WARN `壊れた worktree です。次にこれをしてください` を手順の数だけ出す |
 | `Cleanup` がエラーを返した | WARN `取り残された worktree を片付けられません` | WARN `worktree を片付けられません` |
 | clone が押さえられている | INFO。次の巡回へ回す | 起きない（押さえが外れるまで待つ） |
@@ -200,7 +222,7 @@ issue のノード ID が分かるときに、「worktree を片付けずに残�
 | ボードを取り直せない | その回は片付けを1つも行わない | WARN | `材料を取れない`（段5） |
 | 取り直した一覧に issue が無い | その worktree だけを飛ばす。**勝手に消さない** | 出さない | `見えないissue`（段6） |
 
-**見送りのコメントを issue へ書かない。**書く相手（issue）が分からない場合が混ざっており、次の巡回で材料が揃えば、そのまま片付けへ進める。
+**この表の場合は、見送りのコメントを issue へ書かない。**書く相手（issue）が分からない場合が混ざっており、次の巡回で材料が揃えば、そのまま片付けへ進める。
 
 **`Cleanup` も、封じ込め検査（段9）のすぐあとで身元ファイルを読み直す。**読めなければエラーを返して止まり、何も消さない。
 巡回では、走査のあとに身元ファイルが壊れたときにしか起きないので、この記述には段を置いていない。
@@ -382,7 +404,9 @@ flowchart TD
     A7S3(["リポジトリの食い違い 3 ABORT"])
     A8S1["失うものが残っている 1 システムは worktree を消さない"]
     A8S2["失うものが残っている 2 システムは利用者に見送る理由をログで応答する"]
-    A8S3(["失うものが残っている 3 ABORT"])
+    A8S3["失うものが残っている 3 システムは、身元ファイルに片付けを見送った時刻が無く、起動してからこの worktree について見送りのコメントの投稿を試みていなければ、issue に片付けを見送った理由を1件コメントする"]
+    A8S4["失うものが残っている 4 システムは、コメントの投稿に成功していれば、身元ファイルに片付けを見送った時刻を書く"]
+    A8S5(["失うものが残っている 5 ABORT"])
     A9S1["cloneが押さえられている 1 システムは worktree を消さない"]
     A9S2["cloneが押さえられている 2 システムは利用者に片付けを次の巡回へ回すことをログで応答する"]
     A9S3(["cloneが押さえられている 3 ABORT"])
@@ -454,6 +478,8 @@ flowchart TD
     A7S2 --> A7S3
     A8S1 --> A8S2
     A8S2 --> A8S3
+    A8S3 --> A8S4
+    A8S4 --> A8S5
     A9S1 --> A9S2
     A9S2 --> A9S3
     A10S1 --> A10S2
@@ -506,7 +532,9 @@ sequenceDiagram
             S->>G: push されていない成果の有無を要求する
             G-->>S: 成果の有無を応答する
             alt 見送る理由が1つでもある
-                Note over S: ABORT 理由をログに出す。巡回はコメントも時刻も書かない
+                Note over S: 理由をログに出す
+                S->>GH: 起動してから投稿を試みていなければ、見送った理由のコメントの投稿を要求する
+                Note over S: ABORT 投稿に成功していれば、身元ファイルに見送った時刻を書く
             else 見送る理由が無い
                 S->>G: branch の実在と worktree がチェックアウトしている branch を要求する
                 G-->>S: branch の現物を応答する

@@ -3,7 +3,7 @@
   "usecase_name": "continuo を入れる",
   "source": {
     "file": "docs/spec/usecases/particular_case/continuo を入れる.rucm.md",
-    "rucm_block_sha256": "74b0fceb857b5cffdc426a9150a202bb013a43c73ac40fd9d39e3aefd3ab614e"
+    "rucm_block_sha256": "ac539a7a65aa4dbf6135db3fafe846b2dfc5810efac640037911b8c86bfd76a3"
   },
   "root": "BASIC FLOW-1",
   "flows": {

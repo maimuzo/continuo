@@ -78,7 +78,7 @@ issue #110（ユースケース記述（RUCM）6本から、テストが1本も�
 
 - `cycle` 35本は全部正しい（`DO … UNTIL` の戻りだけ）。ABORT 5本と `RESUME STEP 7` / `RESUME STEP 14` も実装と一致。図も rucm ブロックと一致
 - 見出し語が2つ足りない: `未記入の項目`（`checkMissingKeys`）と `プロンプトの変数`（`checkPromptVariables`）。表は16行、実装は18個
-- 記述に無い分岐: `--missing-keys-patch`（検査をせず差分だけを出す。0 か 1）、cwd を引けない（標準エラー、1）、`--help`（0）、設定のパスを決められないときの警告（続行）
+- 記述に無い分岐: `--missing-keys-patch`（検査をせず差分だけを出す。0 か 1。このあと実装を直して 0 か 3）、cwd を引けない（標準エラー、1。このあと実装を直して 3）、`--help`（0）、設定のパスを決められないときの警告（続行）
 - `worktree の場所`: 書けたあと壊れた worktree を調べ、`on_broken_worktree` が `stop` なら `✗`。`clone`: `ghq` と `git` が PATH に無ければ `✗`。`clone` の期限切れは専用の扱いが無い
 - 段7「残りの見出し語の並びを決める」に当たる処理は無い（順はコードに固定）
 - 用語: 実装と設計は「カンバン」。記述は「ボード」
@@ -105,17 +105,17 @@ issue #110（ユースケース記述（RUCM）6本から、テストが1本も�
 - 出力先と、判断ログの「7つのキー」「`cmd/continuo/main.go` の `runSetup`」「front matter を読み込まない」が古い
 - `docs/trying_it_out.md` の段4 の「WORKFLOW.md から決めない」も古い（文書の側。記述ではない）
 
-## ボードを新規に用意する
+## ボードを新規に用意する（消した）
 
-- 手順の根拠が文書から消えている。`docs/trying_it_out.md` の段2 はいま「使うカンバンを確かめる（作らない）」。`gh project create` も `gh project field-create` も、`README.ja.md` と `docs/trying_it_out.md` に無い。設計 3-34 の道は「設定を縮める」と「選択肢を画面で足す」の2つ
-- `cycle` 1本（`ボード名重複` の `RESUME STEP 1`）は、検査の段ごと根拠が無い（判断ログ #15 が自信60% の設計判断と書いている）
-- BASIC FLOW 3・5〜13 と代替フロー（`gh未導入`・`ボード名重複`・`作成失敗`・`選択肢不足`・`中断`）に、文書の裏付けが無い
-- → この記述は、いまの文書の道（既定の3つに足りない選択肢を画面から足し、`continuo setup` で対応づける）へ書き直すか、消すかを決める必要がある
+- 記述の3ファイル（`.rucm.md`・`.cfg.json`・`.judge_log.md`）は消した（人間の決定。2026-10-02）
+- 理由: continuo にカンバンを作る機能は無く、この記述は continuo の動きを1つも書いていなかった。同じ手順（`gh project list` で番号を見る・`gh project field-list` で選択肢を見る・足りない選択肢を GitHub の画面から足す）は `docs/trying_it_out.md` の「段2. 使うカンバンを確かめる（作らない）」と `README.ja.md` の「必要なもの」に在る
+- 突き合わせで出た食い違い: 手順の根拠（`gh project create`・`gh project field-create`・同名の検査）が、`README.ja.md` と `docs/trying_it_out.md` のどちらにも無かった。設計 3-34 の道は「設定を縮める」と「選択肢を画面で足す」の2つである
+- シナリオ `はじめて continuo を動かせるようにする` は、この記述を INCLUDE せず、事前条件「利用者は使うボードの番号を控えている」で受ける
 
 ## はじめて continuo を動かせるようにする（シナリオ）
 
 - `cycle` 2本（`前提の不足` の `RESUME STEP 17`）は正しい（やり直すのは人間で、文書に在る）
-- BASIC FLOW 4〜7（ボードを持っていない枝）は `ボードを新規に用意する` の古さを引いている
+- BASIC FLOW 4〜7（ボードを持っていない枝）は、文書に根拠の無い段を引いていた。引いていた記述 `ボードを新規に用意する` は消し、シナリオは事前条件「利用者は使うボードの番号を控えている」で受ける
 - BASIC FLOW 12（利用者が clone を作る）は古い。いまは `continuo trust` が clone を取る
 - 「7件の見出し語」→ 18件。pane の label は URL ではなく `owner/repo/issues/N`
 - 記述に無い: `continuo allow-keychain-access`、`trust.repositories` の要らない行を消す段、起動時検査のほかの項目、着手の段（空きスロット・入札・`after_create`・`before_run` ほか）、`確認の画面` 以外の起動の失敗

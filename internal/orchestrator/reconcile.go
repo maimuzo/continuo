@@ -296,7 +296,8 @@ func (o *Orchestrator) enterDirectChat(rs *runState, issue tracker.Issue) {
 // reconcileWorktrees は worktree を走査して身元ファイルを読み、Status を ID 指定で
 // 取り直して照合する（巡回の GraphQL リクエストの3本目。設計 3-9 の手順7）。
 //
-//	cleanup.on_states に入っている            … worktree と branch を片付ける
+//	cleanup.on_states に入っている            … worktree と branch を片付ける。**消えなかったら、
+//	                                            issue へ1回だけコメントする**（`noticeDeferredOnPatrol`）
 //	active_states に戻っていて pane が生きている … その pane を閉じる（手順7b）
 //	それ以外（引き渡し・見えない）             … 何もしない。**pane も worktree も残す**
 //
@@ -324,6 +325,15 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		}
 	}
 	o.pruneCloseSet(present)
+	// **片付けを見送った通知を試みた集合からも、走査に出てこなくなった worktree を外す**（設計 3-9 の手順2c）。
+	// **鍵は worktree のパスなので、上の `present` は流用しない。**走査が返した全部のパスで刈る
+	// （run が握っている worktree も、身元ファイルを読めなかった worktree も残す）。
+	// **下の早く返る枝より前に置く。**取り残しが0件の巡回でも、消えた worktree は外す。
+	scannedPaths := make(map[string]struct{}, len(scanned))
+	for _, w := range scanned {
+		scannedPaths[w.Path] = struct{}{}
+	}
+	o.pruneDeferNotices(scannedPaths)
 
 	var orphans []orphan
 	ids := make([]string, 0, len(scanned))
@@ -381,6 +391,12 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 			if result.Removed {
 				o.logger.Info("取り残された worktree を片付けました",
 					"identifier", issue.Identifier, "path", orph.path)
+				continue
+			}
+			// **消えなかったら、issue へ1回だけコメントする**（設計 3-9 の手順2c）。
+			// `Cleanup` 自身の WARN は巡回のたびに出るが、ログを見ない人には伝わらない。
+			if result.ShouldComment {
+				o.noticeDeferredOnPatrol(ctx, orph.path, orph.identity, issue, result.Reasons)
 			}
 			continue
 		}
@@ -894,6 +910,49 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 	// **連番が動いていても「進んでいない」である**（`working` なら段1 が先に拾う）。
 	// **打ち切りは pane を閉じてリトライを積み、理由のコメントを残す。**
 	return stopped, stopped || first
+}
+
+// noticeDeferredOnPatrol は、巡回が片付けようとして消えなかった worktree について、
+// 見送った理由を issue へ1回だけコメントする（設計 3-9 の手順2c）。
+//
+// **やり直さない。**この process が1度でも投稿を試みた worktree では、何もしない（`deferNoticeTried`）。
+// `PostComment` がエラーを返しても、書かれなかったとは限らないためである（設計 3-85）。
+// 投稿に成功すれば身元ファイルへ時刻が入るので、再起動のあとは `Cleanup` の `ShouldComment` が歯止めになる。
+//
+// **書く前に、取り直した issue が worktree の置き場所と同じリポジトリのものかを確かめる**
+// （`recordOrphanClosed` と同じ照合。身元ファイルの `project_item_id` はエージェントが書き換えられるので、
+// 照らさないと無関係の issue にコメントが付く）。**違えば WARN を1行出して、集合へ入れる**
+// （入れないと、同じ WARN を巡回のたびに繰り返す）。
+//
+// **巡回の中で書き込みを待つ**（設計 3-8 の例外。`closedRecordWriteTimeout` の期限で、worktree 1つにつき1回）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// worktreePath: worktree の絶対パス（走査で得た値）。
+// identity: worktree の身元ファイル（ログに出す名前にだけ使う）。
+// issue: 取り直した issue。
+// reasons: 見送った理由。
+func (o *Orchestrator) noticeDeferredOnPatrol(
+	ctx context.Context, worktreePath string, identity *workspace.Identity, issue tracker.Issue, reasons []string,
+) {
+	if o.deferNoticeWasTried(worktreePath) {
+		return
+	}
+	nodeID := issueNodeID(issue)
+	if nodeID == "" {
+		// draft issue にはコメントできない。
+		return
+	}
+	owner, repo, err := o.ws.OwnerRepoOf(worktreePath)
+	if err != nil || !strings.EqualFold(issue.Owner, owner) || !strings.EqualFold(issue.Repo, repo) {
+		o.logger.Warn("取り直した issue が worktree の置き場所と違うリポジトリなので、片付けを見送った通知は書きません",
+			"path", worktreePath, "置き場所", owner+"/"+repo,
+			"取り直した issue", issue.Identifier, "project_item_id", identity.ProjectItemID)
+		o.markDeferNoticeTried(worktreePath)
+		return
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closedRecordWriteTimeout)
+	defer cancel()
+	o.postCleanupDeferred(writeCtx, issue.Identifier, worktreePath, nodeID, reasons)
 }
 
 // recordOrphanClosed は、印に入っていない worktree の pane を閉じたあとで、閉じた記録を書く（設計 3-85）。

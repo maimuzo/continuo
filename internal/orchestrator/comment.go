@@ -116,13 +116,31 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	o.stopWorker(ctx, rs, closedRecordDefer)
 
 	// 段3: 身元ファイルからセッション UUID と設定ファイルのパスを読む。
+	//
+	// **ここから段5 の `agent.start` までの準備が失敗しても、黙って戻らない**（設計 3-25）。
+	// **この run はコメントを1件も書いていない。**黙って戻ると、呼び出し側はそのまま片付けへ進み、
+	// 成果がまとめられていないことが誰にも伝わらないまま issue が `In Review` に並ぶ。
+	// **下の「会話の記録が無い」「`agent.start` が失敗」と同じ形で、`failure_state` へ落として人間へ渡す。**
+	// **止められたことが原因の失敗（`stoppedWhileRecovering`）だけは、いままでどおり黙って戻る。**
 	if snap.WorktreePath == "" {
 		o.logger.Warn("worktree のパスが分からないので復元できません", "identifier", snap.Identifier)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"worktree のパスが分からず、セッションを復元できなかった。**エージェントには何も送っていない。**")
 		return false
 	}
 	identity, err := o.ws.ReadIdentity(snap.WorktreePath)
 	if err != nil {
 		o.logger.Warn("身元ファイルを読めないので復元できません", "identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"worktree の中の身元ファイル（`"+o.ws.IdentityFileName()+"`）を読めなかったので、"+
+				"セッションを復元できなかった。**エージェントには何も送っていない。**"+
+				"身元ファイルが消えたか、壊れている。")
 		return false
 	}
 	// **セッション UUID は、run が持っていれば身元ファイルに無くてもよい**（下で先に採る）。
@@ -131,6 +149,13 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	if identity.SettingsPath == "" || (snap.SessionUUID == "" && identity.SessionUUID == "") {
 		o.logger.Warn("復帰に使うセッション UUID か、設定ファイルのパスがありません",
 			"identifier", snap.Identifier)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"worktree の中の身元ファイルに、設定ファイルのパスか会話の ID（`session_uuid`）が無いので、"+
+				"セッションを復元できなかった。**エージェントには何も送っていない。**"+
+				"身元ファイルが書き換わっている。")
 		return false
 	}
 	// **復帰する先は、この run が使っている UUID を先に採る。**
@@ -193,6 +218,13 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 			return false
 		}
 		o.logger.Warn("復元のための workspace を開けません", "identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"worktree を herdr の workspace として開き直せなかったので、セッションを復元できなかった。"+
+				"**エージェントには何も送っていない。**理由は continuo のログに出ている"+
+				"（herdr が応答しない・worktree が別の branch を出している、など）。")
 		return false
 	}
 	// **開かせた親 workspace を身元ファイルへ控える**（issue #19）。控えないと、
@@ -204,6 +236,15 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 			return false
 		}
 		o.logger.Warn("復元のための pane を引けません", "identifier", snap.Identifier, "error", err)
+		// **開き直した workspace の pane は、ここでは閉じられない。**引けなかったので、
+		// run はその pane の ID を知らない（`failCommentRecovery` の `stopWorker` が閉じる相手が無い）。
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"開き直した herdr の workspace から pane を引けなかったので、セッションを復元できなかった。"+
+				"**エージェントには何も送っていない。**理由は continuo のログに出ている。"+
+				"開き直した workspace は herdr に残っていることがある。")
 		return false
 	}
 	rs.setPaneID(paneID)
@@ -223,6 +264,13 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 			return false
 		}
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"復元に使う agent 名を決められなかったので、セッションを復元できなかった。"+
+				"**エージェントには何も送っていない。**理由は continuo のログに出ている"+
+				"（herdr が agent の一覧を返さない、など）。")
 		return false
 	}
 	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
@@ -344,7 +392,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 
 	// 段9: それでも書かれなければ人間に渡す。
 	//
-	// **ここだけが「送ったのに書かれなかった」である。**上の3つは本文を1文字も送っていない。
+	// **ここだけが「送ったのに書かれなかった」である。**上の `failCommentRecovery` は、どれも本文を1文字も送っていない。
 	if o.abortTerminalForHuman(ctx, rs, why) {
 		return true
 	}

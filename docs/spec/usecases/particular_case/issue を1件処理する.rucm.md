@@ -259,7 +259,7 @@ WHEN running_state の書き込みから Claude Code の起動までのあいだ
 3. システムは issue に失敗した段と直し方を1件コメントする。
 4. INCLUDE USE CASE run を終えて worker を止める
 5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。
 
 SPECIFIC ALTERNATIVE FLOW paneがまだ使えない:
 RFS BASIC FLOW 34
@@ -1016,7 +1016,7 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 | 2 | 理由を1件コメントする（引き渡しの通知） | 1つの run につき1件だけ |
 | 3 | 今回の run が書いたコメントを確かめる（無ければ `コメントの取り戻し`） | turn を1回以上送った run だけ。draft issue と、direct chat から `terminal_states` へ直接抜けた run では行わない |
 | 4 | `workspace_hooks.after_run` を実行する | worktree のパスを持ち、`after_run` が設定されているときだけ |
-| 5 | pane を閉じる | pane を引き終えているときだけ |
+| 5 | pane を閉じる | pane を控えているときだけ。着手で新しく開いた pane は、`worktree.open` の直後に控える |
 | 6 | Claude Code を閉じた記録を書く | 下の「pane を閉じたら、閉じた記録を書く」 |
 | 7 | 印を外す | |
 
@@ -1025,6 +1025,11 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 **初めての着手なら**、働き始めた時刻をまだ持っていないので、あちらの代替フロー `確かめないrun` を通る。
 **バックオフ明けのやり直しの着手では、そうとは限らない。**前の着手で turn を送った run は、働き始めた時刻を持ったままである
 （`beginAttempt` は戻さない）。その run がやり直しの着手の途中で落ちると、成果のコメントを確かめ、無ければ `コメントの取り戻し` へ入る。
+
+**着手の途中で落ちたフローが閉じる pane は、システムが着手で新しく開いたものである。**着手は `worktree.open` の直後に、新しく開いた pane の ID を run に控える
+（`internal/orchestrator/dispatch.go` の `startRunFromWorktree`）。pane を引く段より前（`after_create`・設定ファイル・セッション UUID の採番・身元ファイル・`before_run`）で落ちても、順5 がその pane を閉じる。
+既に開いていた workspace の pane は控えないので、閉じない。pane が残る場合の一覧は、[run を終えて worker を止める.rucm.md](run%20を終えて%20worker%20を止める.rucm.md) の「コメントを確かめない run」に在る。
+**着手の途中で人間が direct chat へ引き取った場合も、控えた pane を閉じる**（`internal/orchestrator/directchat.go` の `abortTerminalForHuman` が、`agent.start` 前のシェルの pane として閉じる。印は外し、次の巡回が direct chat の pane を用意し直す）。
 
 **失敗の回数を増やすのは、順1 の直後である。**`failRun` と、リトライが尽きた側の `abandonRunClaimed` が、
 failure_state を書いた直後に issue ごとの失敗の回数を1つ増やす（`noteFailure`。書けたかどうかも一緒に控える）。
@@ -1038,8 +1043,7 @@ failure_state を書いた直後に issue ごとの失敗の回数を1つ増や�
 | --- | --- | --- |
 | 基本フロー、または `コメントの取り戻し` の成功 | 表明の値の遷移先 | 1件以上ある |
 | `確かめないrun`（draft issue・direct chat から直接抜けた run） | 表明の値の遷移先 | 確かめていない |
-| `復元の断念` | 表明の値の遷移先 | 無い。人間への通知も無い |
-| `取り戻しの復帰の失敗`・`コメントの取り戻しの失敗` | failure_state（遷移先が `terminal_states` か `direct_chat_state` なら書かない） | 無い。成果を確かめてほしい通知が1件ある |
+| `復元の断念`・`取り戻しの復帰の失敗`・`コメントの取り戻しの失敗` | failure_state（遷移先が `terminal_states` か `direct_chat_state` なら書かない） | 無い。成果を確かめてほしい通知が1件ある |
 
 ## バックオフが明けた run は、検査から入り直す
 

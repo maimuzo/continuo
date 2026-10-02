@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "e13275a0b664b761ebaf0ce66c226515dc101fdcd141460c708124498a98f648"
+    "rucm_block_sha256": "fd00799f852dfce88581fd845f8064f976a23eed07d9bda561b7642e0d4f5280"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -199,7 +199,7 @@
           ]
         }
       ],
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。"
     },
     "paneがまだ使えない": {
       "rfs": {
@@ -6366,7 +6366,7 @@
       "id": "P028",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -6832,7 +6832,7 @@
       "id": "P033",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -6919,7 +6919,7 @@
       "id": "P034",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7004,7 +7004,7 @@
       "id": "P035",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7087,7 +7087,7 @@
       "id": "P036",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7168,7 +7168,7 @@
       "id": "P037",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7247,7 +7247,7 @@
       "id": "P038",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7324,7 +7324,7 @@
       "id": "P039",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7607,7 +7607,7 @@
       "id": "P043",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7676,7 +7676,7 @@
       "id": "P044",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

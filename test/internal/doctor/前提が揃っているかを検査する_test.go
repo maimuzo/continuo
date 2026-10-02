@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "8d34b59560432f5f5be879b54890bcbc29a015a9624e41ceff56182d8aa15c44", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4f2e2eaf480b50efd24ae739b618a524d1e218aff6f81c187a0171a24bd030bd", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **ユースケース記述「前提が揃っているかを検査する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

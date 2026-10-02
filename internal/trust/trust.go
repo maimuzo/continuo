@@ -319,6 +319,12 @@ type ApplyResult struct {
 	Verified []Change
 	// VerifyProblems は書き込んだのに確認できなかった項目の理由である。
 	VerifyProblems []string
+	// RevokedSincePlan は、Plan が調べた時点では信頼済みだったのに、書き込みの直前の
+	// 読み直しでは信頼済みでなくなっていたので `true` を書き込んだ項目である（Changed の一部）。
+	//
+	// **要求内容の応答は、この項目を「既に信頼済み。触りません」と出している。**
+	// 黙って書き換えると、人間は読んだ内容と違うことが起きたのに気づけない。
+	RevokedSincePlan []Change
 }
 
 // Apply は、Plan が調べた項目のうち登録の対象にできるものを `~/.claude.json` へ書き込む。
@@ -347,9 +353,14 @@ func Apply(ctx context.Context, opts Options, report *Report) (*ApplyResult, err
 	result := &ApplyResult{ClaudeConfigPath: path}
 
 	var targets []Change
+	// trustedAtPlan は、Plan が調べた時点で信頼済みだった項目の鍵である。
+	trustedAtPlan := make(map[string]bool)
 	for _, e := range report.Entries {
 		if e.Actionable() {
 			targets = append(targets, Change{Repository: e.Repository, TrustKey: e.TrustKey})
+			if e.Trusted {
+				trustedAtPlan[e.TrustKey] = true
+			}
 		}
 	}
 	if len(targets) == 0 {
@@ -379,6 +390,10 @@ func Apply(ctx context.Context, opts Options, report *Report) (*ApplyResult, err
 		}
 		if changed {
 			result.Changed = append(result.Changed, t)
+			// **調べたあとに登録が外れていた。**書き換えるのは変えないが、結果で知らせる。
+			if trustedAtPlan[t.TrustKey] {
+				result.RevokedSincePlan = append(result.RevokedSincePlan, t)
+			}
 		} else {
 			result.Skipped = append(result.Skipped, t)
 		}

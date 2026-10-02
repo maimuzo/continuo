@@ -956,6 +956,63 @@ grep -nE 'five_hour_margin_percent|weekly_margin_percent' WORKFLOW.md
 **待つ時間は `weekly_wait_limit_minutes` を超えることがあります。**
 pane が動いているかぎり待つためです。**書きかけの編集を持ったまま pane を閉じないための待ちです。**
 
+### `continuo doctor` が動けなかったときの終了コードが、1 から 3 になりました
+
+**`continuo doctor` の終了コードをスクリプトで見ている人だけに関係します。**設定に足すものはありません。
+
+**次の4つのとき、終了コードが 1 ではなく 3 になります。**どれも、検査を1件も行わずに止まる場合です。
+
+| どんなとき | 前 | いま |
+| --- | --- | --- |
+| いまいるディレクトリを引けない | 1 | **3** |
+| `continuo doctor --missing-keys-patch` で `WORKFLOW.md` を読めない | 1 | **3** |
+| `continuo doctor --missing-keys-patch` で front matter を切り出せない | 1 | **3** |
+| `continuo doctor --missing-keys-patch` で差分を書き出せない | 1 | **3** |
+
+**1 は「検査で `✗` が1つ以上あった」だけを表すようになりました。**
+**3 は「`continuo doctor` そのものが動けなかった」です**（接続先の環境変数が不正なとき・検査結果を書き出せないときは、前から 3 でした）。
+**`continuo doctor --missing-keys-patch` は検査をしないので、1 を返すことはなくなりました。**成功は 0、引数の誤りは 2、動けなければ 3 です。
+
+**「0 でなければ失敗」と見ているスクリプトは、そのまま動きます。**
+**「1 なら失敗」と値を名指しで見ているスクリプトは、3 も失敗として扱うように直してください。**
+
+### 成果の報告が無いまま `In Review` に並んでいた issue が、`Blocked` になります — 設定に足すものはありません
+
+**エージェントが成果のコメントを書かずに終えると、continuo はセッションを復元して書かせ直します。**
+その準備（worktree の身元ファイルを読む・herdr の workspace を開き直す・pane を引く・agent 名を決める）が失敗したとき、
+**これまではログに警告を1行出すだけで、issue は `In Review` のままでした。**
+
+**この版からは、Status を `failure_state`（既定は `Blocked`）へ動かし、原因を書いた引き渡しの通知を1件投稿します。**
+`Done` など `terminal_states` の issue は Status を書き換えず、通知だけ付きます。
+
+**`In Review` へ来たことを合図に何かを動かしている人は、同じ issue が `Blocked` へ移ることがある、と読み替えてください。**
+
+### 着手の途中で失敗したとき、continuo が新しく開いた pane を閉じます — 設定に足すものはありません
+
+**`workspace_hooks.after_create` や `before_run` の失敗などで、Claude Code を起動する前に着手が止まったとき、
+これまでは herdr にシェルだけの pane が残りました。**
+**この版からは、continuo が新しく開いた pane を閉じます。**
+
+**次の場合は、これまでどおり閉じません。**
+
+| どんなとき | なぜ閉じないか |
+| --- | --- |
+| 既に開いていた workspace の pane | 人間が自分で開いた pane かもしれない |
+| `herdr.worktree.create_via_herdr: false` の設定 | herdr が pane の ID を返さない |
+| herdr が worktree を開いた直後に、continuo の検算が失敗した | continuo が pane の ID を控える前に止まる |
+
+### `Done` にした issue の worktree が片付かなかったとき、issue にコメントが1件付きます — 設定に足すものはありません
+
+**`In Review` で終わった issue を `Done` へ動かすと、巡回が worktree を片付けます。**
+commit していない変更や、push していない commit が残っていて片付けを見送ったとき、**これまではログにしか出ませんでした。**
+
+**この版からは、issue に「worktree を片付けずに残しました」のコメントを1回だけ書きます。**
+**ログの警告は、これまでどおり巡回のたびに出ます。**
+
+**投稿に失敗したときは、やり直しません**（同じコメントが2件付くのを避けるためです）。
+そのときは、continuo を再起動するか、その issue に着手し直すまで、コメントは付きません。
+`cleanup.enabled: false` の機械では、何も変わりません。
+
 ---
 
 ## v0.1.14 から v0.1.15 へ

@@ -69,7 +69,7 @@
 ```rucm
 USE CASE NAME: continuo を入れる
 BRIEF DESCRIPTION: 利用者はネットワークインストーラーを実行する。システムは引数を解釈する。システムは配布物を取って置く。システムは前提の道具を調べて入れる。システムは利用者に次に実行するコマンドを応答する。
-PRECONDITION: 利用者の手元に curl または wget がある。
+PRECONDITION: 利用者はネットワークインストーラーを実行できる。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: なし
 DEPENDENCY: INCLUDE USE CASE 配布物を取って置く、INCLUDE USE CASE 前提の道具を調べて入れる

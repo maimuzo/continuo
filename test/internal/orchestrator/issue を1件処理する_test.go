@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "40944359205582f71061d05231d3133873b669cadd9a58477809ba1114f41594", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "db9742e059aee54b28b4fd1adec1b6e894b95939964d0893843d7bf6651a7a90", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **ユースケース記述「issue を1件処理する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -484,6 +484,86 @@ func Test_issueを1件処理する_P034_paneを引けなければ着手しない
 
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentStart); got != 0 {
 		t.Errorf("pane を引けないのに agent を起動している: %d 回", got)
+	}
+}
+
+// {"RUCM-PATH": "P035"}
+//
+// Test_issueを1件処理する_P035_before_runが失敗したら新しく開いたpaneを閉じる は、
+// 着手の途中の失敗の後始末を確かめる。
+//
+// 目的: `worktree.open` が pane を新しく開いたあと、`agent.start` より前で着手が失敗したら、
+// **その pane を閉じる**ことを示す。**閉じないと、Claude Code の居ないシェルの pane が herdr に残る。**
+//
+// 与える情報: 必ず失敗する `workspace_hooks.before_run`。新規の着手（worktree も workspace も無い）。
+// 成功条件:
+//   - Status が `failure_state` になる
+//   - `pane.close` がちょうど1回呼ばれ、相手は `worktree.open` が返した pane である
+//   - agent を起動していない
+func Test_issueを1件処理する_P035_before_runが失敗したら新しく開いたpaneを閉じる(t *testing.T) {
+	fail := "exit 1"
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.WorkspaceHooks.BeforeRun = &fail },
+	})
+	fx.AllowLog("着手に失敗しました", "before_run")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "Status が failure_state へ落ちる", func() bool {
+		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
+	})
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	closed := closedPaneIDs(fx)
+	if len(closed) != 1 {
+		t.Fatalf("pane.close が1回ではない: %v", closed)
+	}
+	opened := fx.Herdr.ParamsOf(t, herdr.MethodWorktreeOpen)
+	if path, _ := opened["path"].(string); path == "" {
+		t.Fatalf("worktree.open を呼んでいない")
+	}
+	if !strings.HasSuffix(closed[0], ":p1") {
+		t.Errorf("閉じた pane が worktree.open の返した pane ではない: %q", closed[0])
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentStart); got != 0 {
+		t.Errorf("before_run が失敗したのに agent を起動している: %d 回", got)
+	}
+}
+
+// {"RUCM-PATH": "P035"}
+//
+// Test_issueを1件処理する_P035_既に開いていたworkspaceのpaneは着手に失敗しても閉じない は、
+// 着手の途中の失敗の後始末が、人間の pane に手を出さないことを確かめる。
+//
+// 目的: `worktree.open` が「既に開いていた」と答えた workspace の pane は、**着手に失敗しても閉じない**
+// ことを示す。**その pane は人間が開いたものでありうる。**
+//
+// 与える情報: 必ず失敗する `workspace_hooks.before_run`。`already_open` を真で返す `worktree.open`。
+// 成功条件: Status が `failure_state` になり、`pane.close` を1回も呼ばないこと。
+func Test_issueを1件処理する_P035_既に開いていたworkspaceのpaneは着手に失敗しても閉じない(t *testing.T) {
+	fail := "exit 1"
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.WorkspaceHooks.BeforeRun = &fail },
+	})
+	fx.AllowLog("着手に失敗しました", "before_run")
+	open := fx.Herdr.HandlerOf(herdr.MethodWorktreeOpen)
+	fx.Herdr.Handle(herdr.MethodWorktreeOpen, func(params map[string]any) (any, *rpcErr) {
+		res, rerr := open(params)
+		if m, ok := res.(map[string]any); ok {
+			m["already_open"] = true
+		}
+		return res, rerr
+	})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "Status が failure_state へ落ちる", func() bool {
+		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
+	})
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	if closed := closedPaneIDs(fx); len(closed) != 0 {
+		t.Errorf("既に開いていた workspace の pane を閉じている: %v", closed)
 	}
 }
 

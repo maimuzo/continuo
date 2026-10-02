@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "28b51b747d835303e84846effca1be09ff9a3bcab1ff13b66277bfa146312919", "SOURCE": "docs/spec/usecases/particular_case/run を終えて worker を止める.cfg.json"}
+// {"RUCM-CFG-SHA256": "ec7f4383d4074e60d5d7bca77cabe410e24eb2d66f63c8c32ed1293fc2a7d05b", "SOURCE": "docs/spec/usecases/particular_case/run を終えて worker を止める.cfg.json"}
 //
 // **ユースケース記述「run を終えて worker を止める」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -10,6 +10,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -72,47 +73,248 @@ func Test_runを終えてworkerを止める_P003_打ち切るときはworkerを�
 	})
 }
 
+// reviewWithoutComment は、成果のコメントを書かずに `review` を表明して終わる run を1件走らせる。
+//
+// **`finishRunClaimed` を `failureState` が空のまま通る道である。**打ち切り（`abandonRunClaimed`）や
+// 着手の失敗（`failRun`）の道は、書かせ直しより先に自分で Status と通知を書くので、
+// **書かせ直しの準備が失敗したときの動きを確かめられない。**
+//
+// **1回目の `agent.prompt` を受けた時点で `sabotage` を呼ぶ。**そこから先が書かせ直しの準備である。
+//
+// t: 呼び出し元のテスト。
+// fx: fixture。
+// issue: 対象の issue（`Ready` で置く）。
+// sabotage: 書かせ直しの準備を失敗させる仕込み。引数は worktree の絶対パス。
+func reviewWithoutComment(t *testing.T, fx *fixture, issue int, sabotage func(worktreePath string)) {
+	t.Helper()
+	fx.Tracker.AddIssue(sampleIssue(issue, "Ready"))
+
+	path := writeTranscript(t, t.TempDir(), "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "CONTINUO-STATUS: review", false),
+	})
+	var mu sync.Mutex
+	prompts := 0
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		prompts++
+		n := prompts
+		mu.Unlock()
+		if n == 1 {
+			// **コメントは書かない。**書かせ直しの準備を失敗させてから turn を終える。
+			worktreePath := ""
+			for _, r := range fx.Herdr.Requests() {
+				if r.Method == herdr.MethodWorktreeOpen {
+					worktreePath, _ = r.Params["path"].(string)
+					break
+				}
+			}
+			sabotage(worktreePath)
+			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+}
+
+// recoveryPrepFailure は、成果の報告を書かせ直す準備を失敗させる仕込み1件である。
+type recoveryPrepFailure struct {
+	// name はサブテストの名前である。
+	name string
+	// log は、その入口が出す WARN の目印である。
+	log string
+	// cause は、引き渡しの通知に載る原因の文の一部である。
+	cause string
+	// sabotage は失敗の仕込みである。
+	sabotage func(t *testing.T, fx *fixture, worktreePath string)
+}
+
 // {"RUCM-PATH": "P007"}
 //
-// Test_runを終えてworkerを止める_P007_身元ファイルを読めなければ復元をあきらめて片付けへ進む は、
-// 代替フロー「復元の断念」を検査する。
+// Test_runを終えてworkerを止める_P007_身元ファイルから材料を読めなければ人間へ渡す は、
+// 代替フロー「復元の断念」の、身元ファイルから復元の材料を読めない側を検査する。
 //
-// 目的: 設計 3-25 の「コメントを書かせるための復元は、材料が足りなければ**そこでやめる**」
-// を示す。**run を `failure_state` へ落とし直さない。**落とすのは
-// `agent.start --resume` まで進んで書かせられなかったとき（`コメントの取り戻しの失敗`）だけである。
+// 目的: 成果の報告を書かせ直す準備（身元ファイルを読む・設定ファイルのパスを読む）が失敗したとき、
+// **黙って片付けへ進まず、Status を `failure_state` へ書き、引き渡しの通知を1件付ける**ことを示す。
+// **黙って進むと、成果の報告が1件も無い issue が `In Review` に並び、書かれていないことが誰にも伝わらない。**
 //
-// 与える情報: 身元ファイル（`.continuo.json`）の無い worktree を持つ run。
-// リトライは 0 なので、1回目の打ち切りでそのまま引き渡しへ進む。
-// 成功条件: 「身元ファイルを読めないので復元できません」を記録に残し、
-// **そのまま片付けを続けて印から外す**こと。
-func Test_runを終えてworkerを止める_P007_身元ファイルを読めなければ復元をあきらめて片付けへ進む(t *testing.T) {
+// 与える情報: 成果のコメントを書かずに `review` を表明して終わる run（Status は `In Review` になる）。
+// 1回目の turn のあいだに、入口ごとの失敗を仕込む。
+// 成功条件（入口ごとに）: `assertRecoveryPrepFailure` のとおり。
+func Test_runを終えてworkerを止める_P007_身元ファイルから材料を読めなければ人間へ渡す(t *testing.T) {
+	assertRecoveryPrepFailure(t, []recoveryPrepFailure{
+		{
+			name:  "身元ファイルを読めない",
+			log:   "身元ファイルを読めないので復元できません",
+			cause: "身元ファイル（`.continuo.json`）を読めなかった",
+			sabotage: func(_ *testing.T, fx *fixture, worktreePath string) {
+				_ = os.Remove(fx.Workspace.IdentityPath(worktreePath))
+			},
+		},
+		{
+			name:  "設定ファイルのパスが無い",
+			log:   "復帰に使うセッション UUID か、設定ファイルのパスがありません",
+			cause: "設定ファイルのパスか会話の ID",
+			sabotage: func(_ *testing.T, fx *fixture, worktreePath string) {
+				identity, err := fx.Workspace.ReadIdentity(worktreePath)
+				if err != nil {
+					return
+				}
+				identity.SettingsPath = ""
+				_ = fx.Workspace.WriteIdentity(context.Background(), worktreePath, *identity)
+			},
+		},
+	})
+}
+
+// {"RUCM-PATH": "P005"}
+//
+// Test_runを終えてworkerを止める_P005_workspaceを開き直す準備が失敗したら人間へ渡す は、
+// 代替フロー「復元の断念」の、worktree を workspace として開き直す側を検査する。
+//
+// 目的: 成果の報告を書かせ直す準備（workspace を開き直す・pane を引く・agent 名を決める）が失敗したとき、
+// **黙って片付けへ進まず、Status を `failure_state` へ書き、引き渡しの通知を1件付ける**ことを示す。
+//
+// 与える情報: 成果のコメントを書かずに `review` を表明して終わる run（Status は `In Review` になる）。
+// 1回目の turn のあいだに、入口ごとの失敗を仕込む。
+// 成功条件（入口ごとに）: `assertRecoveryPrepFailure` のとおり。
+func Test_runを終えてworkerを止める_P005_workspaceを開き直す準備が失敗したら人間へ渡す(t *testing.T) {
+	assertRecoveryPrepFailure(t, []recoveryPrepFailure{
+		{
+			name:  "workspace を開き直せない",
+			log:   "復元のための workspace を開けません",
+			cause: "herdr の workspace として開き直せなかった",
+			sabotage: func(_ *testing.T, fx *fixture, _ string) {
+				fx.Herdr.Handle(herdr.MethodWorktreeOpen, func(map[string]any) (any, *rpcErr) {
+					return nil, &rpcErr{Code: "worktree_open_failed", Message: "テストが開かせない"}
+				})
+			},
+		},
+		{
+			name:  "pane を引けない",
+			log:   "復元のための pane を引けません",
+			cause: "pane を引けなかった",
+			sabotage: func(_ *testing.T, fx *fixture, _ string) {
+				fx.Herdr.Handle(herdr.MethodPaneList, func(map[string]any) (any, *rpcErr) {
+					return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+				})
+			},
+		},
+		{
+			name:  "agent 名を決められない",
+			log:   "復元のための agent 名を決められません",
+			cause: "agent 名を決められなかった",
+			sabotage: func(_ *testing.T, fx *fixture, _ string) {
+				fx.Herdr.Handle(herdr.MethodAgentList, func(map[string]any) (any, *rpcErr) {
+					return nil, &rpcErr{Code: "internal_error", Message: "テストが一覧を返さない"}
+				})
+			},
+		},
+	})
+}
+
+// assertRecoveryPrepFailure は、書かせ直しの準備が失敗した run が人間へ渡ることを、入口ごとに確かめる。
+//
+// 成功条件（入口ごとに）:
+//   - Status が `failure_state`（`Blocked`）になる
+//   - 引き渡しの通知がちょうど1件付き、その入口の原因の文を含む
+//   - 復元のための `agent.start --resume` を呼ばない
+//   - run が実行中の一覧から外れる（片付けへ進んでいる）
+//
+// t: 呼び出し元のテスト。
+// cases: 入口ごとの仕込み。
+func assertRecoveryPrepFailure(t *testing.T, cases []recoveryPrepFailure) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newFixture(t, fixtureOptions{})
+			fx.AllowLog(tc.log)
+			reviewWithoutComment(t, fx, 188, func(worktreePath string) { tc.sabotage(t, fx, worktreePath) })
+
+			waitFor(t, 30*time.Second, "Status が failure_state へ落ちる", func() bool {
+				return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
+			})
+			fx.WaitRunsDrained(t, 20*time.Second)
+
+			if !strings.Contains(fx.Logs.String(), tc.log) {
+				t.Errorf("仕込んだ入口を通っていない（%q がログに無い）", tc.log)
+			}
+			handoffs := fx.Tracker.HandoffCommentsOf("I_node188")
+			if len(handoffs) != 1 {
+				t.Fatalf("引き渡しの通知が1件ではない: %d 件", len(handoffs))
+			}
+			if !strings.Contains(handoffs[0].Body, tc.cause) {
+				t.Errorf("引き渡しの通知に、この入口の原因の文 %q が無い:\n%s", tc.cause, handoffs[0].Body)
+			}
+			for _, r := range fx.Herdr.Requests() {
+				if r.Method != herdr.MethodAgentStart {
+					continue
+				}
+				args, _ := r.Params["args"].([]any)
+				if strings.Contains(joinAny(args), "--resume") {
+					t.Errorf("準備が失敗したのに、復元のための agent.start を呼んでいる")
+				}
+			}
+			if got := fx.Tracker.StateOf("PVTI_item188"); got != "Blocked" {
+				t.Errorf("片付けのあとの Status が Blocked ではない: %q", got)
+			}
+		})
+	}
+}
+
+// {"RUCM-PATH": "P007"}
+//
+// Test_runを終えてworkerを止める_P007_終端のrunでは準備が失敗してもStatusを書き換えず通知だけ付ける は、
+// 代替フロー「復元の断念」の、Status が `terminal_states` に在る場合を検査する。
+//
+// 目的: 書かせ直しの準備が失敗しても、**人間が `Done` へ動かしたカードを `failure_state` へ書き直さない**
+// ことを示す（`protectedStates` が書き込みを断る）。**通知は付ける。**成果の報告が無いことは伝える。
+//
+// 与える情報: Status が `Done` の issue の run（引き継いだ run。worktree のパスを持たない）。
+// コメントは1件も付いていない。
+// 成功条件:
+//   - Status が `Done` のままである
+//   - 引き渡しの通知がちょうど1件付き、worktree のパスが分からなかったことを含む
+//   - run が実行中の一覧から外れる
+func Test_runを終えてworkerを止める_P007_終端のrunでは準備が失敗してもStatusを書き換えず通知だけ付ける(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			cfg.Agent.MaxRetries = 0
 			cfg.Tracker.VerifyStatesEvery = 0
 		},
 	})
-	issue := sampleIssue(188, "In Progress")
+	issue := sampleIssue(189, "Done")
 	fx.Tracker.AddIssue(issue)
-	// **身元ファイルを1バイトも置いていない worktree を持たせる。**
-	fx.AllowLog("身元ファイルを読めないので復元できません")
+	fx.AllowLog("worktree のパスが分からないので復元できません")
+	// **worktree のパスを持たない run を印の集合へ入れる。**
 	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-		AgentName:    normalize.SafeName("continuo-hello-world-188"),
-		PaneID:       "p-188",
-		SessionUUID:  "session-1",
-		WorktreePath: t.TempDir(),
-	}, true) {
+		AgentName:   normalize.SafeName("continuo-hello-world-189"),
+		PaneID:      "p-189",
+		SessionUUID: "session-1",
+	}, false) {
 		t.Fatalf("検査用の run を印の集合へ入れられません")
 	}
 
 	fx.Orc.Tick(context.Background())
 
-	waitFor(t, 20*time.Second, "身元ファイルを読めないことが記録に残る", func() bool {
-		return strings.Contains(fx.Logs.String(), "身元ファイルを読めないので復元できません")
+	waitFor(t, 20*time.Second, "引き渡しの通知が付く", func() bool {
+		return len(fx.Tracker.HandoffCommentsOf("I_node189")) > 0
 	})
-	waitFor(t, 20*time.Second, "片付けが続いて印から外れる", func() bool {
-		return len(fx.Orc.RunningIdentifiers()) == 0
-	})
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	if got := fx.Tracker.StateOf(issue.ID); got != "Done" {
+		t.Errorf("終端の Status を書き換えている: %q", got)
+	}
+	handoffs := fx.Tracker.HandoffCommentsOf("I_node189")
+	if len(handoffs) != 1 {
+		t.Fatalf("引き渡しの通知が1件ではない: %d 件", len(handoffs))
+	}
+	if !strings.Contains(handoffs[0].Body, "worktree のパスが分からず") {
+		t.Errorf("引き渡しの通知に、worktree のパスが分からなかったことが無い:\n%s", handoffs[0].Body)
+	}
 }
 
 // {"RUCM-PATH": "P006"}

@@ -38,6 +38,7 @@ import (
 const relayFetchTimeout = 60 * time.Second
 
 // closedRecordWriteTimeout は、閉じた記録を1件書くときの期限である（設計 3-85）。
+// **巡回が片付けを見送ったときのコメントを1件書くときの期限にも使う**（設計 3-9。`noticeDeferredOnPatrol`）。
 //
 // **pane を閉じる期限とは別に取る。**止められた ctx からは `context.WithoutCancel` で切り離す
 // （後片付けの先例と同じ）。**やり直さない。**`addComment` は同じものを2回書くことがある。

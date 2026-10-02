@@ -1245,7 +1245,7 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, s
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。
 //
 // **見送った理由は、身元ファイルの cleanup_deferred_at がゼロ値のときだけ issue へ書く**
-// （毎巡回で警告を積まない。設計 3-9 の手順2c）。
+// （毎巡回で警告を積まない。設計 3-9 の手順2c）。書くのは `postCleanupDeferred` で、巡回の片付けも同じ関数を通る。
 //
 // **実際に消えたときだけ、トークンの台帳からもこの issue を落とす**（issue #238）。
 // **worktree が残っているうちは落とせない。**残っていると、人間が Status を戻したときに
@@ -1327,18 +1327,94 @@ func (o *Orchestrator) cleanupPath(
 	if !result.ShouldComment || nodeID == "" {
 		return false
 	}
+	o.postCleanupDeferred(ctx, identifier, worktreePath, nodeID, result.Reasons)
+	return false
+}
+
+// postCleanupDeferred は、片付けを見送った理由を issue へ1件書き、成功したら身元ファイルへ
+// 見送った時刻を書く（設計 3-9 の手順2c）。
+//
+// **`cleanupPath` と巡回（`reconcileWorktrees`）の両方から呼ぶ。**本文と、時刻を書く順を1か所に保つ。
+//
+// **投稿を試みた時点で、その worktree を「試みた集合」へ入れる**（`deferNoticeTried`）。
+// run の終わりの `cleanupPath` が投稿した worktree も、巡回から2件目が出ない。
+// **投稿に失敗しても集合に残す。**エラーが返っても、書かれなかったとは限らない（設計 3-85）。
+//
+// **投稿は `o.mu` の外で行う。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// identifier: ログに出す issue の識別子。
+// worktreePath: 残した worktree の絶対パス。
+// nodeID: 下敷きの GitHub issue のノード ID。
+// reasons: 見送った理由。
+func (o *Orchestrator) postCleanupDeferred(
+	ctx context.Context, identifier, worktreePath, nodeID string, reasons []string,
+) {
+	o.markDeferNoticeTried(worktreePath)
 	body := fmt.Sprintf("worktree を片付けずに残しました（%s）。\n\n理由:\n- %s",
-		worktreePath, strings.Join(result.Reasons, "\n- "))
+		worktreePath, strings.Join(reasons, "\n- "))
 	if err := o.postComment(ctx, nodeID, body); err != nil {
-		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", identifier, "error", err)
-		return false
+		// **issue へ知らせられなかった。**この process のあいだ、巡回からはやり直さない。
+		// 次に試みるのは、その worktree に再着手したあとの見送りか、再起動のあとである。
+		o.logger.Warn("片付けを見送った通知を投稿できませんでした"+
+			"（issue へ知らせられていません。巡回からはやり直しません）",
+			"identifier", identifier, "path", worktreePath, "error", err)
+		return
 	}
 	// **投稿に成功したあとで印を書く。**投稿の前に書くと、投稿が失敗したときに
 	// コメントが永久に出なくなる（設計 3-9 の手順2c）。
 	if err := o.ws.MarkCleanupDeferred(worktreePath, o.now()); err != nil {
 		o.logger.Warn("片付けを見送った印を書けませんでした", "identifier", identifier, "error", err)
 	}
-	return false
+}
+
+// markDeferNoticeTried は、片付けを見送った通知の投稿を試みた worktree を控える（設計 3-9 の手順2c）。
+//
+// worktreePath: worktree の絶対パス。
+func (o *Orchestrator) markDeferNoticeTried(worktreePath string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.deferNoticeTried[worktreePath] = struct{}{}
+}
+
+// deferNoticeWasTried は、その worktree で片付けを見送った通知の投稿を、この process が試みたかを返す。
+//
+// worktreePath: worktree の絶対パス。
+// 戻り値: 試みていれば true。
+func (o *Orchestrator) deferNoticeWasTried(worktreePath string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_, ok := o.deferNoticeTried[worktreePath]
+	return ok
+}
+
+// forgetDeferNotice は、その worktree を「試みた集合」から外す（設計 3-9 の手順2c）。
+//
+// **着手したときに呼ぶ。**再着手は新しい run であり、`MergeForReuse` が身元ファイルの
+// 見送った時刻も消すので、やり直した issue の次の見送りでは、もう一度コメントが付く。
+//
+// worktreePath: worktree の絶対パス。
+func (o *Orchestrator) forgetDeferNotice(worktreePath string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.deferNoticeTried, worktreePath)
+}
+
+// pruneDeferNotices は、走査に出てこなくなった worktree を「試みた集合」から外す（設計 3-9 の手順2c）。
+//
+// **鍵は worktree のパスである。**閉じる集合（`pruneCloseSet`）の鍵は project item の ID なので、流用しない。
+// **run が握っているだけの worktree は外さない**（走査には出てくる）。run の終わりの投稿の最中に
+// 巡回が入っても、集合から外れない。
+//
+// present: 走査が返した全部の worktree のパス（身元ファイルを読めなかったものも含む）。
+func (o *Orchestrator) pruneDeferNotices(present map[string]struct{}) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for path := range o.deferNoticeTried {
+		if _, ok := present[path]; !ok {
+			delete(o.deferNoticeTried, path)
+		}
+	}
 }
 
 // handoffSubagentLimit は引き渡しの通知に載せる subagent の記録の件数の上限である。

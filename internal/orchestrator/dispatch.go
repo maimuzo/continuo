@@ -1319,12 +1319,19 @@ func (o *Orchestrator) startRunFromWorktree(
 		return failed
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
-	// **direct chat の用意では、`worktree.open` が開いた pane をここで控える**（設計 3-83d の用意の段2）。
-	// 段8 まで控えないと、段4〜段8 で落ちたときに後始末（`closeDirectChatSetupPane`）が閉じる相手を知らず、
-	// **シェルの pane が残る。**残った pane は門4 に当たり続けるので、用意し直されず、上限の書く経路にも届かない。
+	// **着手したので、片付けを見送った通知を試みた集合から外す**（設計 3-9 の手順2c）。
+	// 再着手は新しい run であり、下の段6 の `MergeForReuse` が身元ファイルの見送った時刻も消す。
+	// やり直した issue の次の見送りでは、巡回がもう一度コメントする。
+	o.forgetDeferNotice(prepared.Path)
+	// **`worktree.open` が新しく開いた pane を、ここで控える**（設計 3-83d の用意の段2 と、ふつうの着手の両方）。
+	// 段8 まで控えないと、段4〜段8 で落ちたときに後始末が閉じる相手を知らず、**シェルの pane が残る。**
+	// 後始末は、ふつうの着手では `failRun` / `abandonRun` の `stopWorker`、direct chat の用意では
+	// `closeDirectChatSetupPane` である。direct chat の用意で残った pane は門4 に当たり続けるので、
+	// 用意し直されず、上限の書く経路にも届かない。
 	// **新しく開いた workspace のときだけ控える。**既に開いていた workspace の pane は人間のものでありうる
 	// （門4 がそもそも止めるが、閉じる側へ倒す理由にはしない）。段8 は `resolvePane` の値で上書きする（同じ pane）。
-	if directChat && prepared.HerdrPaneID != "" && !prepared.AlreadyOpen {
+	// **`herdr.worktree.create_via_herdr` が偽のときは pane の ID が返らないので、控えない。**
+	if prepared.HerdrPaneID != "" && !prepared.AlreadyOpen {
 		rs.setPaneID(prepared.HerdrPaneID)
 	}
 

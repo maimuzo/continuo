@@ -1,0 +1,1107 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "人間がpaneに入って直接続ける",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.rucm.md",
+    "rucm_block_sha256": "aa791d25d7132d0a7e0621ee98007df4d19ae906b007b7ae579a489a8ff69f10"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。"
+    },
+    "担当者が1人でない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えており、システムは次の巡回で pane を閉じて印を外す。書けなかったときは、issue の Status は変わっておらず、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。worktree は残っている。"
+    },
+    "担当者が別のアカウントに替わった": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "pane は閉じている。印は外れている。システムは issue の Status を書いていない。システムは issue にコメントを書いていない。システムは workspace_hooks の after_run を実行していない。システムは push していない。worktree は残っている。"
+    },
+    "paneの用意で入らなかった": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。run は direct chat の印を持っていない。"
+    },
+    "完了のStatusへ動かされた": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          15
+        ]
+      },
+      "postcondition": "システムは Claude Code に成果のコメントの記録を要求していない。システムは Claude Code を立て直していない。pane は閉じている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。"
+    },
+    "作業中でも完了でもないStatusへ動かされた": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          16
+        ]
+      },
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。"
+    },
+    "応答を書いている最中に戻された": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          21
+        ]
+      },
+      "postcondition": "システムは走っている turn が終わるまで Claude Code に指示を送っていない。pane は閉じていない。run は印を持っている。run は direct chat の印を持っていない。システムは走っている turn の終わりを通常の run の turn の終わりと同じに扱う。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "IF システムが issue の印を持っている THEN"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT issue の担当者が1人である。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT issue の担当者が別のアカウントでない。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは run に direct chat の印を立てる。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "INCLUDE USE CASE directchatのpaneを用意する",
+      "include": "directchatのpaneを用意する"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT run が direct chat の印を持っている。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは run への指示の送信と表明の読み取りと stall の検知を止める。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムは run の direct chat の印を下ろす。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは run の stall の時計を引き直す。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは VALIDATES THAT issue の Status が active_states に入っている。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "IF issue の Status が dispatch_state の選択肢である THEN"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは GitHub Projects v2 に issue の Status への running_state の選択肢の書き込みを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
+      "statement": "システムは issue に hold のコメントを1件書く。"
+    },
+    {
+      "id": "BASIC FLOW-21",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 21,
+      "statement": "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。"
+    },
+    {
+      "id": "BASIC FLOW-22",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 22,
+      "statement": "システムは Claude Code に同じ pane で継続の指示を1回送る。"
+    },
+    {
+      "id": "担当者が1人でない-1",
+      "type": "action",
+      "flow": "担当者が1人でない",
+      "step": 1,
+      "statement": "システムは run に direct chat の印を立てる。"
+    },
+    {
+      "id": "担当者が1人でない-2",
+      "type": "action",
+      "flow": "担当者が1人でない",
+      "step": 2,
+      "statement": "システムは GitHub Projects v2 に issue の Status への failure_state の選択肢の書き込みと理由のコメントを要求する。"
+    },
+    {
+      "id": "担当者が1人でない-3",
+      "type": "abort",
+      "flow": "担当者が1人でない",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "担当者が別のアカウントに替わった-1",
+      "type": "action",
+      "flow": "担当者が別のアカウントに替わった",
+      "step": 1,
+      "statement": "システムは run の direct chat の印を下ろす。"
+    },
+    {
+      "id": "担当者が別のアカウントに替わった-2",
+      "type": "action",
+      "flow": "担当者が別のアカウントに替わった",
+      "step": 2,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "担当者が別のアカウントに替わった-3",
+      "type": "action",
+      "flow": "担当者が別のアカウントに替わった",
+      "step": 3,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "担当者が別のアカウントに替わった-4",
+      "type": "abort",
+      "flow": "担当者が別のアカウントに替わった",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "paneの用意で入らなかった-1",
+      "type": "action",
+      "flow": "paneの用意で入らなかった",
+      "step": 1,
+      "statement": "システムは issue の Status を書かない。"
+    },
+    {
+      "id": "paneの用意で入らなかった-2",
+      "type": "abort",
+      "flow": "paneの用意で入らなかった",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "完了のStatusへ動かされた-1",
+      "type": "action",
+      "flow": "完了のStatusへ動かされた",
+      "step": 1,
+      "statement": "システムは run に direct chat から terminal_states へ直接抜けた印を立てる。"
+    },
+    {
+      "id": "完了のStatusへ動かされた-2",
+      "type": "include",
+      "flow": "完了のStatusへ動かされた",
+      "step": 2,
+      "statement": "INCLUDE USE CASE run を終えて worker を止める",
+      "include": "run を終えて worker を止める"
+    },
+    {
+      "id": "完了のStatusへ動かされた-3",
+      "type": "abort",
+      "flow": "完了のStatusへ動かされた",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "作業中でも完了でもないStatusへ動かされた-1",
+      "type": "action",
+      "flow": "作業中でも完了でもないStatusへ動かされた",
+      "step": 1,
+      "statement": "システムは direct chat を抜けたことを記録に残す。"
+    },
+    {
+      "id": "作業中でも完了でもないStatusへ動かされた-2",
+      "type": "abort",
+      "flow": "作業中でも完了でもないStatusへ動かされた",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "応答を書いている最中に戻された-1",
+      "type": "action",
+      "flow": "応答を書いている最中に戻された",
+      "step": 1,
+      "statement": "システムは走っている turn の終わりを待つ。"
+    },
+    {
+      "id": "応答を書いている最中に戻された-2",
+      "type": "abort",
+      "flow": "応答を書いている最中に戻された",
+      "step": 2,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "システムが issue の印を持っている"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-7",
+      "kind": "false",
+      "condition": "NOT システムが issue の印を持っている"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "issue の担当者が1人である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "担当者が1人でない-1",
+      "kind": "false",
+      "condition": "NOT issue の担当者が1人である"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "issue の担当者が別のアカウントでない"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "担当者が別のアカウントに替わった-1",
+      "kind": "false",
+      "condition": "NOT issue の担当者が別のアカウントでない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-10",
+      "kind": "true",
+      "condition": "run が direct chat の印を持っている"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "paneの用意で入らなかった-1",
+      "kind": "false",
+      "condition": "NOT run が direct chat の印を持っている"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "true",
+      "condition": "issue の Status が terminal_states に入っていない"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "完了のStatusへ動かされた-1",
+      "kind": "false",
+      "condition": "NOT issue の Status が terminal_states に入っていない"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "true",
+      "condition": "issue の Status が active_states に入っている"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "作業中でも完了でもないStatusへ動かされた-1",
+      "kind": "false",
+      "condition": "NOT issue の Status が active_states に入っている"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "true",
+      "condition": "issue の Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-20",
+      "kind": "false",
+      "condition": "NOT issue の Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-22",
+      "kind": "true",
+      "condition": "Claude Code が応答を書いている最中でない"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "応答を書いている最中に戻された-1",
+      "kind": "false",
+      "condition": "NOT Claude Code が応答を書いている最中でない"
+    },
+    {
+      "from": "担当者が1人でない-1",
+      "to": "担当者が1人でない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者が1人でない-2",
+      "to": "担当者が1人でない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者が別のアカウントに替わった-1",
+      "to": "担当者が別のアカウントに替わった-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者が別のアカウントに替わった-2",
+      "to": "担当者が別のアカウントに替わった-3",
+      "kind": "seq"
+    },
+    {
+      "from": "担当者が別のアカウントに替わった-3",
+      "to": "担当者が別のアカウントに替わった-4",
+      "kind": "seq"
+    },
+    {
+      "from": "paneの用意で入らなかった-1",
+      "to": "paneの用意で入らなかった-2",
+      "kind": "seq"
+    },
+    {
+      "from": "完了のStatusへ動かされた-1",
+      "to": "完了のStatusへ動かされた-2",
+      "kind": "seq"
+    },
+    {
+      "from": "完了のStatusへ動かされた-2",
+      "to": "完了のStatusへ動かされた-3",
+      "kind": "seq"
+    },
+    {
+      "from": "作業中でも完了でもないStatusへ動かされた-1",
+      "to": "作業中でも完了でもないStatusへ動かされた-2",
+      "kind": "seq"
+    },
+    {
+      "from": "応答を書いている最中に戻された-1",
+      "to": "応答を書いている最中に戻された-2",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "システムは GitHub Projects v2 に issue の Status への running_state の選択肢の書き込みを要求する。",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "システムは Claude Code に同じ pane で継続の指示を1回送る。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "応答を書いている最中に戻された",
+      "postcondition": "システムは走っている turn が終わるまで Claude Code に指示を送っていない。pane は閉じていない。run は印を持っている。run は direct chat の印を持っていない。システムは走っている turn の終わりを通常の run の turn の終わりと同じに扱う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "応答を書いている最中に戻された-1",
+        "応答を書いている最中に戻された-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "システムは GitHub Projects v2 に issue の Status への running_state の選択肢の書き込みを要求する。",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "CONDITION: NOT Claude Code が応答を書いている最中でない",
+        "システムは走っている turn の終わりを待つ。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "CONDITION: NOT issue の Status が dispatch_state の選択肢である",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "システムは Claude Code に同じ pane で継続の指示を1回送る。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "応答を書いている最中に戻された",
+      "postcondition": "システムは走っている turn が終わるまで Claude Code に指示を送っていない。pane は閉じていない。run は印を持っている。run は direct chat の印を持っていない。システムは走っている turn の終わりを通常の run の turn の終わりと同じに扱う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "応答を書いている最中に戻された-1",
+        "応答を書いている最中に戻された-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "CONDITION: NOT issue の Status が dispatch_state の選択肢である",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "CONDITION: NOT Claude Code が応答を書いている最中でない",
+        "システムは走っている turn の終わりを待つ。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "作業中でも完了でもないStatusへ動かされた",
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "作業中でも完了でもないStatusへ動かされた-1",
+        "作業中でも完了でもないStatusへ動かされた-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "CONDITION: NOT issue の Status が active_states に入っている",
+        "システムは direct chat を抜けたことを記録に残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "完了のStatusへ動かされた",
+      "postcondition": "システムは Claude Code に成果のコメントの記録を要求していない。システムは Claude Code を立て直していない。pane は閉じている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "完了のStatusへ動かされた-1",
+        "完了のStatusへ動かされた-2",
+        "完了のStatusへ動かされた-3"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "システムは run に direct chat の印を立てる。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "CONDITION: NOT issue の Status が terminal_states に入っていない",
+        "システムは run に direct chat から terminal_states へ直接抜けた印を立てる。",
+        "INCLUDE USE CASE run を終えて worker を止める",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "担当者が別のアカウントに替わった",
+      "postcondition": "pane は閉じている。印は外れている。システムは issue の Status を書いていない。システムは issue にコメントを書いていない。システムは workspace_hooks の after_run を実行していない。システムは push していない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "担当者が別のアカウントに替わった-1",
+        "担当者が別のアカウントに替わった-2",
+        "担当者が別のアカウントに替わった-3",
+        "担当者が別のアカウントに替わった-4"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "システムは VALIDATES THAT issue の担当者が別のアカウントでない。",
+        "CONDITION: NOT issue の担当者が別のアカウントでない",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "担当者が1人でない",
+      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えており、システムは次の巡回で pane を閉じて印を外す。書けなかったときは、issue の Status は変わっておらず、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "担当者が1人でない-1",
+        "担当者が1人でない-2",
+        "担当者が1人でない-3"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "システムは VALIDATES THAT issue の担当者が1人である。",
+        "CONDITION: NOT issue の担当者が1人である",
+        "システムは run に direct chat の印を立てる。",
+        "システムは GitHub Projects v2 に issue の Status への failure_state の選択肢の書き込みと理由のコメントを要求する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "システムは GitHub Projects v2 に issue の Status への running_state の選択肢の書き込みを要求する。",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "システムは Claude Code に同じ pane で継続の指示を1回送る。"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "応答を書いている最中に戻された",
+      "postcondition": "システムは走っている turn が終わるまで Claude Code に指示を送っていない。pane は閉じていない。run は印を持っている。run は direct chat の印を持っていない。システムは走っている turn の終わりを通常の run の turn の終わりと同じに扱う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "応答を書いている最中に戻された-1",
+        "応答を書いている最中に戻された-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "システムは GitHub Projects v2 に issue の Status への running_state の選択肢の書き込みを要求する。",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "CONDITION: NOT Claude Code が応答を書いている最中でない",
+        "システムは走っている turn の終わりを待つ。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "CONDITION: NOT issue の Status が dispatch_state の選択肢である",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "システムは Claude Code に同じ pane で継続の指示を1回送る。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "応答を書いている最中に戻された",
+      "postcondition": "システムは走っている turn が終わるまで Claude Code に指示を送っていない。pane は閉じていない。run は印を持っている。run は direct chat の印を持っていない。システムは走っている turn の終わりを通常の run の turn の終わりと同じに扱う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "応答を書いている最中に戻された-1",
+        "応答を書いている最中に戻された-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "IF issue の Status が dispatch_state の選択肢である THEN",
+        "CONDITION: NOT issue の Status が dispatch_state の選択肢である",
+        "システムは issue に hold のコメントを1件書く。",
+        "システムは VALIDATES THAT Claude Code が応答を書いている最中でない。",
+        "CONDITION: NOT Claude Code が応答を書いている最中でない",
+        "システムは走っている turn の終わりを待つ。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "作業中でも完了でもないStatusへ動かされた",
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "作業中でも完了でもないStatusへ動かされた-1",
+        "作業中でも完了でもないStatusへ動かされた-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT issue の Status が active_states に入っている。",
+        "CONDITION: NOT issue の Status が active_states に入っている",
+        "システムは direct chat を抜けたことを記録に残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "完了のStatusへ動かされた",
+      "postcondition": "システムは Claude Code に成果のコメントの記録を要求していない。システムは Claude Code を立て直していない。pane は閉じている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "完了のStatusへ動かされた-1",
+        "完了のStatusへ動かされた-2",
+        "完了のStatusへ動かされた-3"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "システムは run への指示の送信と表明の読み取りと stall の検知を止める。",
+        "利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。",
+        "システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは run の stall の時計を引き直す。",
+        "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
+        "CONDITION: NOT issue の Status が terminal_states に入っていない",
+        "システムは run に direct chat から terminal_states へ直接抜けた印を立てる。",
+        "INCLUDE USE CASE run を終えて worker を止める",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "paneの用意で入らなかった",
+      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。run は direct chat の印を持っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "paneの用意で入らなかった-1",
+        "paneの用意で入らなかった-2"
+      ],
+      "steps": [
+        "利用者はシステムに、カンバンの issue の Status を tracker.direct_chat_state の選択肢にして、direct chat の開始を要求する。",
+        "IF システムが issue の印を持っている THEN",
+        "CONDITION: NOT システムが issue の印を持っている",
+        "INCLUDE USE CASE directchatのpaneを用意する",
+        "システムは VALIDATES THAT run が direct chat の印を持っている。",
+        "CONDITION: NOT run が direct chat の印を持っている",
+        "システムは issue の Status を書かない。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 35,
+    "nodes_covered": 35,
+    "edges_total": 36,
+    "edges_covered": 36
+  }
+}

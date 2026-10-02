@@ -1,0 +1,565 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "Keychainの読み取りを許可する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/Keychainの読み取りを許可する.rucm.md",
+    "rucm_block_sha256": "61f01618f89550f918b4fa3fec102241642aa847f83cbe60f85477b84773f4fa"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "システムは macOS の Keychain の資格情報の項目を1回読んでいる。項目の名前の一覧は標準出力に出ている。項目の値は標準出力にも標準エラーにも出ていない。終了コード 0 が返っている。"
+    },
+    "使い方の表示": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "システムは macOS の Keychain を読んでいない。使い方は標準エラーに出ている。終了コード 0 が返っている。"
+    },
+    "引数指定エラー": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは macOS の Keychain を読んでいない。理由は標準エラーに出ている。終了コード 2 が返っている。"
+    },
+    "macOS以外": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは Keychain を読むコマンドを起動していない。応答は標準出力に出ている。終了コード 0 が返っている。"
+    },
+    "期限内に返らない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "システムは Keychain を読むコマンドを止めている。応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。"
+    },
+    "読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。"
+    },
+    "accessTokenが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに Keychain の読み取りの確認を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT システムが動いている OS が macOS である。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは利用者に読む項目の名前と確認のダイアログでの選び方を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは macOS の Keychain に Claude Code の資格情報の項目を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT macOS の Keychain が 60 秒以内に応答した。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT システムが資格情報の項目を読めた。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは VALIDATES THAT 資格情報の項目に空でない accessToken がある。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは利用者に読めたことと項目の名前の一覧を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは終了コード 0 を返す。"
+    },
+    {
+      "id": "使い方の表示-1",
+      "type": "action",
+      "flow": "使い方の表示",
+      "step": 1,
+      "statement": "システムは利用者に continuo allow-keychain-access の使い方を応答する。"
+    },
+    {
+      "id": "使い方の表示-2",
+      "type": "abort",
+      "flow": "使い方の表示",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "引数指定エラー-1",
+      "type": "action",
+      "flow": "引数指定エラー",
+      "step": 1,
+      "statement": "システムは利用者に引数の受け付けられない箇所を応答する。"
+    },
+    {
+      "id": "引数指定エラー-2",
+      "type": "abort",
+      "flow": "引数指定エラー",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "macOS以外-1",
+      "type": "action",
+      "flow": "macOS以外",
+      "step": 1,
+      "statement": "システムは利用者に動いている OS の名前と macOS でだけ意味を持つことを応答する。"
+    },
+    {
+      "id": "macOS以外-2",
+      "type": "abort",
+      "flow": "macOS以外",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "期限内に返らない-1",
+      "type": "action",
+      "flow": "期限内に返らない",
+      "step": 1,
+      "statement": "システムは利用者に待った上限と確かめ方と原因と対処を応答する。"
+    },
+    {
+      "id": "期限内に返らない-2",
+      "type": "abort",
+      "flow": "期限内に返らない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "読めない-1",
+      "type": "action",
+      "flow": "読めない",
+      "step": 1,
+      "statement": "システムは利用者に読めなかった理由と確かめ方と原因と対処を応答する。"
+    },
+    {
+      "id": "読めない-2",
+      "type": "abort",
+      "flow": "読めない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "accessTokenが無い-1",
+      "type": "action",
+      "flow": "accessTokenが無い",
+      "step": 1,
+      "statement": "システムは利用者に読めた項目の名前の一覧を応答する。"
+    },
+    {
+      "id": "accessTokenが無い-2",
+      "type": "action",
+      "flow": "accessTokenが無い",
+      "step": 2,
+      "statement": "システムは利用者に accessToken が無いことと確かめ方と原因と対処を応答する。"
+    },
+    {
+      "id": "accessTokenが無い-3",
+      "type": "abort",
+      "flow": "accessTokenが無い",
+      "step": 3,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "利用者が使い方の表示を要求していない"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "使い方の表示-1",
+      "kind": "false",
+      "condition": "NOT 利用者が使い方の表示を要求していない"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "利用者が指定した引数が受け付けられる形式である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "引数指定エラー-1",
+      "kind": "false",
+      "condition": "NOT 利用者が指定した引数が受け付けられる形式である"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "システムが動いている OS が macOS である"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "macOS以外-1",
+      "kind": "false",
+      "condition": "NOT システムが動いている OS が macOS である"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "macOS の Keychain が 60 秒以内に応答した"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "期限内に返らない-1",
+      "kind": "false",
+      "condition": "NOT macOS の Keychain が 60 秒以内に応答した"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "システムが資格情報の項目を読めた"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "読めない-1",
+      "kind": "false",
+      "condition": "NOT システムが資格情報の項目を読めた"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "true",
+      "condition": "資格情報の項目に空でない accessToken がある"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "accessTokenが無い-1",
+      "kind": "false",
+      "condition": "NOT 資格情報の項目に空でない accessToken がある"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "使い方の表示-1",
+      "to": "使い方の表示-2",
+      "kind": "seq"
+    },
+    {
+      "from": "引数指定エラー-1",
+      "to": "引数指定エラー-2",
+      "kind": "seq"
+    },
+    {
+      "from": "macOS以外-1",
+      "to": "macOS以外-2",
+      "kind": "seq"
+    },
+    {
+      "from": "期限内に返らない-1",
+      "to": "期限内に返らない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "読めない-1",
+      "to": "読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "accessTokenが無い-1",
+      "to": "accessTokenが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "accessTokenが無い-2",
+      "to": "accessTokenが無い-3",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムは macOS の Keychain の資格情報の項目を1回読んでいる。項目の名前の一覧は標準出力に出ている。項目の値は標準出力にも標準エラーにも出ていない。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT システムが動いている OS が macOS である。",
+        "システムは利用者に読む項目の名前と確認のダイアログでの選び方を応答する。",
+        "システムは macOS の Keychain に Claude Code の資格情報の項目を要求する。",
+        "システムは VALIDATES THAT macOS の Keychain が 60 秒以内に応答した。",
+        "システムは VALIDATES THAT システムが資格情報の項目を読めた。",
+        "システムは VALIDATES THAT 資格情報の項目に空でない accessToken がある。",
+        "システムは利用者に読めたことと項目の名前の一覧を応答する。",
+        "システムは終了コード 0 を返す。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "accessTokenが無い",
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "accessTokenが無い-1",
+        "accessTokenが無い-2",
+        "accessTokenが無い-3"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT システムが動いている OS が macOS である。",
+        "システムは利用者に読む項目の名前と確認のダイアログでの選び方を応答する。",
+        "システムは macOS の Keychain に Claude Code の資格情報の項目を要求する。",
+        "システムは VALIDATES THAT macOS の Keychain が 60 秒以内に応答した。",
+        "システムは VALIDATES THAT システムが資格情報の項目を読めた。",
+        "システムは VALIDATES THAT 資格情報の項目に空でない accessToken がある。",
+        "CONDITION: NOT 資格情報の項目に空でない accessToken がある",
+        "システムは利用者に読めた項目の名前の一覧を応答する。",
+        "システムは利用者に accessToken が無いことと確かめ方と原因と対処を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "読めない",
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "読めない-1",
+        "読めない-2"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT システムが動いている OS が macOS である。",
+        "システムは利用者に読む項目の名前と確認のダイアログでの選び方を応答する。",
+        "システムは macOS の Keychain に Claude Code の資格情報の項目を要求する。",
+        "システムは VALIDATES THAT macOS の Keychain が 60 秒以内に応答した。",
+        "システムは VALIDATES THAT システムが資格情報の項目を読めた。",
+        "CONDITION: NOT システムが資格情報の項目を読めた",
+        "システムは利用者に読めなかった理由と確かめ方と原因と対処を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "期限内に返らない",
+      "postcondition": "システムは Keychain を読むコマンドを止めている。応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "期限内に返らない-1",
+        "期限内に返らない-2"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT システムが動いている OS が macOS である。",
+        "システムは利用者に読む項目の名前と確認のダイアログでの選び方を応答する。",
+        "システムは macOS の Keychain に Claude Code の資格情報の項目を要求する。",
+        "システムは VALIDATES THAT macOS の Keychain が 60 秒以内に応答した。",
+        "CONDITION: NOT macOS の Keychain が 60 秒以内に応答した",
+        "システムは利用者に待った上限と確かめ方と原因と対処を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "macOS以外",
+      "postcondition": "システムは Keychain を読むコマンドを起動していない。応答は標準出力に出ている。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "macOS以外-1",
+        "macOS以外-2"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT システムが動いている OS が macOS である。",
+        "CONDITION: NOT システムが動いている OS が macOS である",
+        "システムは利用者に動いている OS の名前と macOS でだけ意味を持つことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "引数指定エラー",
+      "postcondition": "システムは macOS の Keychain を読んでいない。理由は標準エラーに出ている。終了コード 2 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "引数指定エラー-1",
+        "引数指定エラー-2"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "CONDITION: NOT 利用者が指定した引数が受け付けられる形式である",
+        "システムは利用者に引数の受け付けられない箇所を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "使い方の表示",
+      "postcondition": "システムは macOS の Keychain を読んでいない。使い方は標準エラーに出ている。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "使い方の表示-1",
+        "使い方の表示-2"
+      ],
+      "steps": [
+        "利用者はシステムに Keychain の読み取りの確認を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "CONDITION: NOT 利用者が使い方の表示を要求していない",
+        "システムは利用者に continuo allow-keychain-access の使い方を応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 24,
+    "nodes_covered": 24,
+    "edges_total": 23,
+    "edges_covered": 23
+  }
+}

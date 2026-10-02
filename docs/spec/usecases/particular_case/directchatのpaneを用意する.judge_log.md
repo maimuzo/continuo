@@ -1,0 +1,32 @@
+# 判断ログ: directchatのpaneを用意する
+
+- 対象: `docs/spec/usecases/particular_case/directchatのpaneを用意する.rucm.md`
+- 作成日 / 作成モデル: 2026-10-02 / Claude Opus 5.5。実装を読んで起こした。`人間がpaneに入って直接続ける` から、pane を用意する段を分けて書いた
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-83b / 3-83c / 3-83d / 3-83h）、`internal/orchestrator/directchat.go`、`internal/orchestrator/dispatch.go`、`internal/orchestrator/orchestrator.go`、`test/internal/orchestrator/direct_chat_setup_test.go`
+
+## 判断一覧
+
+| # | 判断対象 | 決定した値 | 合理的決定根拠 | 出典 | 自信 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 配置先ディレクトリ | `particular_case/` | 常駐プロセスの処理のひとまとまり1つ（direct chat の候補の1パス）である | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 95% |
+| 2 | `人間がpaneに入って直接続ける` から分けたこと | 別の記述にし、`INCLUDE USE CASE` で引かせる | 門と用意の結末（打ち切りが19本）を、引く側の出口（戻す・完了へ動かす・ほかへ動かす・応答を書いている最中）と1本に書くと、掛け算で経路が増える。引く側は、この記述のあとに run が direct chat の印を持っているかだけを見るので、掛け合わせた経路に新しい情報は無い | `docs/plans/continuo_design.md` の 6-28、`internal/orchestrator/reconcile.go` の `updateDirectChatMode` | 90% |
+| 3 | USE CASE NAME | directchatのpaneを用意する | 設計 3-83c・3-83d の題（pane を用意する）に合わせた。名前に空白を入れない決まりのため、`direct chat` を詰めて書いた | `docs/plans/continuo_design.md` の 3-83d | 85% |
+| 4 | PRIMARY ACTOR / SECONDARY ACTORS | 巡回タイマー / GitHub Projects v2、herdr、Claude Code | `Tick` が起こす処理で、利用者は居合わせない。既に在る常駐プロセスの記述（`issue を1件処理する` など）と同じ主アクターにした | `internal/orchestrator/orchestrator.go` の `Tick` | 90% |
+| 5 | PRECONDITION | 着手が許されている巡回である。カンバンに選択肢が在る。候補の Status が direct chat である。印を持っていない | `Tick` は `dispatchAllowed` が真のときだけ `prepareDirectChatPanes` を呼ぶ。候補は `candidateStates` が選択肢の実在を確かめてから取る。門1（印を持っている）は、引く側の記述の段2 が分けるので事前条件に寄せた | `internal/orchestrator/orchestrator.go` の `Tick` / `candidateStates`、`internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 90% |
+| 6 | 段2〜段13 の並び | 実装の門の順（門2・門3・門4・門7 の上限・門5・門6・門7 の間隔） | `prepareDirectChatPanes` のループが上から順に見て、1つでも当たったら次の候補へ移る。上限の判定は、枠の判定と着手の直前の検査より前に在る | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 100% |
+| 7 | 段3〜段5（担当者の判定を3段に分けたこと） | 人数 → ログイン名が取れるか → 自分か | `judgeDirectChatAssignees` がこの順に当てる。人数の判定はログイン名を要らないので先に行う | `internal/orchestrator/directchat.go` の `judgeDirectChatAssignees` | 100% |
+| 8 | `この巡回では用意しない`（段2・4・5・7・8・9・11・12・13） | 関門の記録を消して ABORT | どの門も `clearGate` を呼んで `continue` する。その候補についての処理は、この巡回ではそこで終わるので、このユースケースはここで終わる。次の巡回は新しい起動である。9つを1本の複数箇所代替フローにしたのは、することが同じ（記録を消して見送る）ためである | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 90% |
+| 9 | `担当者が1人でない`（段3） | `failure_state` の書き込みを要求して ABORT | `writeDirectChatAssigneeFailureAsync` を呼んで `continue` する。書くのは別の goroutine で、巡回は結果を待たない。その候補についての処理はここで終わるので ABORT | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` / `writeDirectChatAssigneeFailureAsync` | 95% |
+| 10 | `用意の失敗が上限を超えた`（段10） | 用意せず、`failure_state` の書き込みを要求して ABORT | `beginDirectChatSetupLimitWrite` が上限を超えたと答えたら、用意の段へ進まずに書く経路だけを走らせて `continue` する。比べ方は「回数が `agent.max_retries` を超えたら」である。その候補についての処理はここで終わるので ABORT | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` / `beginDirectChatSetupLimitWrite` | 95% |
+| 11 | 書く経路の結末を段にしなかったこと | 本文の表に書いた | 書くのは巡回のループの外で、結末（書いている最中・写しが空・誤り・取り直すと direct chat でない・書けた）のどれでも、この記述の流れは変わらない。段にすると、2つの代替フローがそれぞれ5通りに割れる | `internal/orchestrator/directchat.go` の `writeDirectChatFailure` | 85% |
+| 12 | 段14 | 印を付ける（用意中の記録を立て、閉じる集合から外すことを含む） | `o.claim` → `beginPreparing` → `removeFromCloseSet` を続けて行う。どれも内部の状態の変更で、分岐しないので1段にした | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 85% |
+| 13 | 段15・段16 と `用意が落ちた`（段17） | worktree の用意から Claude Code の起動までを2段にし、失敗は1つの検証で受ける。失敗したら回数を数え、自分で開いた pane を閉じ、印を外して ABORT | `startRunFromWorktree` は着手の段3〜段10 を踏み、どの段で落ちても誤りを1つ返す。`setUpDirectChat` は `ErrStartupBusy` 以外の誤りで `failDirectChatSetup` を呼んで返る。カンバンへは書かない。その run の処理はここで終わるので ABORT。着手の各段の中身は `issue を1件処理する.rucm.md` に在るので、ここでは繰り返さない | `internal/orchestrator/directchat.go` の `setUpDirectChat` / `failDirectChatSetup`、`internal/orchestrator/dispatch.go` の `startRunFromWorktree` | 90% |
+| 14 | `ErrStartupBusy` を失敗にしなかったこと | 段17 の真の側へ進む | herdr が agent を登録していないだけで、Claude Code は動いている。`setUpDirectChat` は失敗として扱わず、用意の段3 へ「既に動いている」と伝える | `internal/orchestrator/directchat.go` の `setUpDirectChat` | 100% |
+| 15 | 段20〜段23 の並び | 印が自分のものか → 取り直せたか → 作業中へ戻されたか → direct chat のままで担当者が合っているか | `finishDirectChatSetup` は、ロックの中でまず印を見て、次に取り直せたかを見て、`switch` で direct chat・作業中・それ以外の順に分ける。direct chat の Status は `active_states` に入らない（設定の検査が断る）ので、段22 と段23 の順を入れ替えても結果は同じである。作業中を先に書いたのは、段23 の偽の側を `用意を取りやめる` の1本にまとめるためである | `internal/orchestrator/directchat.go` の `finishDirectChatSetup`、`internal/config/validate.go` の `validateDirectChatState` | 85% |
+| 16 | `印が外れていた`（段20） | 自分で開いた pane を閉じて ABORT | `setupLost` の枝は `closeDirectChatSetupPane` だけを呼ぶ。印はもう無いので外さない。その run の処理はここで終わるので ABORT | `internal/orchestrator/directchat.go` の `finishDirectChatSetup` | 95% |
+| 17 | `用意を取りやめる`（段21・段23） | 自分で開いた pane を閉じ、印を外して ABORT。失敗としては数えない | 取り直せなかったときも、担当者が自分1人でなくなったときも、Status が作業中でも direct chat でもないときも、`setupAbandon` の枝（`abandonDirectChatSetup`）へ行く。その run の処理はここで終わるので ABORT | `internal/orchestrator/directchat.go` の `finishDirectChatSetup` / `abandonDirectChatSetup` | 95% |
+| 18 | `用意中に作業中へ戻された`（段22） | `running_state`（戻した先が `dispatch_state` のときだけ）と hold を書き、1回目の本文を送って ABORT | `setupReturned` の枝である。`SendFirstPrompt` を立てたまま送る印を立てるので、送るのは1回目の本文である。既に動いていたときは、送る印の代わりに turn の終わりを待つ印を立てる。以後は通常の run で、direct chat の用意としてはここで終わるので ABORT。2つの `IF` はどちらの枝も正常な場合である | `internal/orchestrator/directchat.go` の `finishDirectChatSetup` / `writeRunningStateOnReturn` / `postDirectChatHold` | 90% |
+| 19 | 段24・段25 と事後条件 | direct chat の印を立て、案内のコメントを1件書く。指示は送らない。Status は動かさない | `setupEnter` の枝である。`clearSendFirstPrompt` と `enterDirectChatMode` をロックの中で行い、`postDirectChatReady` をロックの外で呼ぶ。着手の段2（Status の書き込み）と段11（1回目の本文）は踏まない | `internal/orchestrator/directchat.go` の `finishDirectChatSetup` / `postDirectChatReady`、`internal/orchestrator/dispatch.go` の `startRunFromWorktree` | 95% |
+| 20 | 案内・hold・`running_state` の書き込みの失敗を段にしなかったこと | 本文の表に書いた | どれも WARN を出して続ける。流れは変わらない | `internal/orchestrator/directchat.go` の `postDirectChatReady` / `postDirectChatHold` / `writeRunningStateOnReturn` | 90% |
+| 21 | `o.claim` の偽・止める合図を段にしなかったこと | 本文の表に書いた | `o.claim` の偽は、門1 を見てから段14 までに印が増えたときだけ起きる。止める合図は別の記述が扱う | `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` | 80% |
+| 22 | テストの対応づけ | 20本のうち18本に当てた。既に在るテスト18本を移し、新しいテスト7本を足した | 門の見送りと用意の段3 の外れ方は、偽の herdr と偽の tracker で安く書けるので書いた。当てていない2本の理由は記述の本文に書いた | `test/internal/orchestrator/directchatのpaneを用意する_test.go` | 90% |

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9393b397aed98321450a96ead69b5f61dfd58c45dbf03a4ddd9763e496034718", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
+// {"RUCM-CFG-SHA256": "ffd3ba018cfb28289aed713d69b7bd848fb88ac0242b743f6edbc604c08df568", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
 //
 // **ユースケース記述「配布物を取って置く」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -246,9 +247,9 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 	}
 }
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P013"}
 //
-// Test_配布物を取って置く_P012_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
+// Test_配布物を取って置く_P013_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
 //
 // **herdr の Windows 版が安定していないため、continuo は Windows ネイティブに対応しない**
 // （設計 3-32b）。**黙って失敗させず、代わりに何を使えばよいかを示す。**
@@ -256,7 +257,7 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 // 目的: Windows と見分けたら、何も置かずに WSL2 を案内すること。
 // 与える情報: `uname -s` が MINGW64_NT を返す環境。
 // 成功条件: 終了コードが 0 でなく、案内に WSL2 が入り、置き先に何も無いこと。
-func Test_配布物を取って置く_P012_WindowsではWSL2を案内して止まる(t *testing.T) {
+func Test_配布物を取って置く_P013_WindowsではWSL2を案内して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "MINGW64_NT-10.0", "x86_64", dir)
 	if code == 0 {
@@ -270,14 +271,14 @@ func Test_配布物を取って置く_P012_WindowsではWSL2を案内して止�
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
-// Test_配布物を取って置く_P011_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
+// Test_配布物を取って置く_P012_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
 //
 // 目的: 対応していない命令セットで、何も置かずに止まること。
 // 与える情報: `uname -m` が i386 を返す環境。
 // 成功条件: 終了コードが 0 でなく、対応している命令セットを示すこと。
-func Test_配布物を取って置く_P011_対応しない命令セットは対応表を出して止まる(t *testing.T) {
+func Test_配布物を取って置く_P012_対応しない命令セットは対応表を出して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "Linux", "i386", dir)
 	if code == 0 {
@@ -334,5 +335,106 @@ func Test_配布物を取って置く_P001_照合できず端末も無ければ�
 	}
 	if strings.Contains(text, "を入れました") {
 		t.Errorf("端末が無いのに道具を入れています:\n%s", text)
+	}
+}
+
+// pathWithOnly は、名指しした道具だけが在る PATH を作る。
+//
+// **`/usr/bin` を PATH に入れない。**入れると curl が見つかってしまい、
+// 「curl も wget も無い」を作れない。一時ディレクトリへ、要る道具だけを symlink する。
+//
+// t: 呼び出し元のテスト。
+// tools: 置く道具の名前。この機械に無いものは、テストを飛ばす。
+// 戻り値: 道具だけを置いたディレクトリ。そのまま PATH の値に使う。
+func pathWithOnly(t *testing.T, tools ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range tools {
+		real, err := exec.LookPath(name)
+		if err != nil {
+			t.Skipf("%s がありません: %v", name, err)
+		}
+		if err := os.Symlink(real, filepath.Join(dir, name)); err != nil {
+			t.Fatalf("%s を置けません: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// {"RUCM-PATH": "P011"}
+//
+// Test_配布物を取って置く_P011_curlもwgetも無ければ理由を出して止まる は、取ってこられない環境で黙って終わらないことを確かめる。
+//
+// **直す前は、理由を1行も出さずに終わっていた。**「curl も wget もありません」は、
+// 標準エラーを捨てている呼び出しの中で出ていたので、画面に届かなかった。
+// 版を指定しない実行では、代わりに「まだ配布していません」と、事実と違う案内が出ていた。
+//
+// 目的: curl も wget も無いとき、配布サーバへ繋ぐ前に、理由を出して終了コード 1 で止まること。
+// 与える情報: `uname` だけが在る PATH。版を指定した実行と、指定しない実行の両方。
+// 成功条件: どちらも終了コードが 1 で、「curl も wget もありません」が出て、
+// 「まだ配布していません」は出ず、偽サーバへ1度も繋がず、実行ファイルを置かないこと。
+func Test_配布物を取って置く_P011_curlもwgetも無ければ理由を出して止まる(t *testing.T) {
+	fr := newFakeRelease(t, "v1.2.3", "#!/bin/sh\necho ok\n", true)
+	var reached atomic.Bool
+	inner := fr.Server.Config.Handler
+	fr.Server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached.Store(true)
+		inner.ServeHTTP(w, r)
+	})
+	// **`uname` は要る。**OS と命令セットを見分ける段が、取ってこられるかの確かめより前に在る。
+	path := pathWithOnly(t, "uname")
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"版を指定しない", nil},
+		{"版を指定する", []string{"--version", "v1.2.3"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			args := append([]string{scriptPath(t),
+				"--api-url", fr.Server.URL + "/api/latest",
+				"--base-url", fr.Server.URL + "/dl",
+				"--no-deps"}, tc.args...)
+			// **シェルは絶対パスで起動する。**絞った PATH からは `sh` を引けない。
+			shell, err := exec.LookPath(installShell)
+			if err != nil {
+				t.Fatalf("シェル %s を引けません: %v", installShell, err)
+			}
+			cmd := exec.Command(shell, args...)
+			cmd.Stdin = nil
+			detachTerminal(cmd)
+			cmd.Env = []string{
+				"HOME=" + t.TempDir(),
+				"PATH=" + path,
+				"CONTINUO_INSTALL_DIR=" + dir,
+			}
+			out, runErr := cmd.CombinedOutput()
+			text := string(out)
+			code := 0
+			if ee, ok := runErr.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else if runErr != nil {
+				t.Fatalf("install.sh を起動できません: %v", runErr)
+			}
+
+			if code != 1 {
+				t.Errorf("終了コードが 1 ではありません: %d\n%s", code, text)
+			}
+			if !strings.Contains(text, "エラー: curl も wget もありません。どちらかを入れてください") {
+				t.Errorf("理由を出していません:\n%s", text)
+			}
+			if strings.Contains(text, "まだ配布していません") {
+				t.Errorf("取ってこられないだけなのに、配布が無いと案内しています:\n%s", text)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "continuo")); err == nil {
+				t.Error("取ってこられないのに実行ファイルを置いています")
+			}
+		})
+	}
+	if reached.Load() {
+		t.Error("curl も wget も無いのに配布サーバへ繋いでいます")
 	}
 }

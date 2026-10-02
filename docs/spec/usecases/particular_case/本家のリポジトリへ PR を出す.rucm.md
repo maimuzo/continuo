@@ -25,7 +25,7 @@
 - `internal/orchestrator/relay.go` の `settleClosedRecord`、`recordWorkerClosed`、`relayEnabled`（Claude Code を閉じた記録を書く条件）
 - `internal/prompt/builtin.md` の 3-7 と 5-5（エージェントが成果の報告を issue に書く）
 - 引いた記述: `docs/spec/usecases/particular_case/run を終えて worker を止める.rucm.md`、`docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md`
-- `internal/orchestrator/reconcile.go` の `reconcileWorktrees`（巡回の片付け。見送っても issue へコメントしない）
+- `internal/orchestrator/reconcile.go` の `reconcileWorktrees`（巡回の片付け。失うものが残っていて見送ったときは、issue へ1回だけコメントする）
 - `internal/scaffold/template.go`（`tracker.status_signal_map` と `cleanup.on_states` の既定）
 
 ## RUCM
@@ -123,7 +123,7 @@ SPECIFIC ALTERNATIVE FLOW 片付けの見送り:
 RFS BASIC FLOW 31
 1. システムは次の巡回の開始を待つ。
 2. RESUME STEP 30
-POSTCONDITION: worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。システムは片付けを見送ったことを issue にコメントしていない。次の巡回が片付けをやり直す。
+POSTCONDITION: worktree は残っている。issue の branch は残っている。issue の Status は変わっていない。失うものが残っていて見送った場合は、issue に片付けを見送った理由のコメントが1件ある。次の巡回が片付けをやり直し、コメントは重ねて書かない。
 
 GLOBAL ALTERNATIVE FLOW 本家のPRを出せない:
 BRANCH FROM BASIC FLOW 17
@@ -169,8 +169,7 @@ POSTCONDITION: 本家のリポジトリに PR は無い。fork の origin に pu
 | 引いた先の終わり方 | この記述での受け方 |
 | --- | --- |
 | コメントが在る。または、復元して書かせて在るようになった | 基本フローのステップ28 の検証を通り、利用者が Done へ動かす段へ進む |
-| 復元をやめた（Status は書き直さない） | Status は In Review のままなので、ステップ28 の検証を通る。issue に成果の報告は無いままである |
-| 復元しても書かれなかった。または復帰に失敗した（`failure_state` を書く） | `成果の報告を確かめられない` で終わる |
+| 復元の準備が失敗して復元をやめた。復元しても書かれなかった。または復帰に失敗した（どれも `failure_state` を書く） | `成果の報告を確かめられない` で終わる |
 
 **エージェントは、終わる前に成果の報告を issue にコメントする**（`internal/prompt/builtin.md` の 3-7 と 5-5。基本フローのステップ21）。
 blocked で終えるときの理由も、同じコメントに書く（`本家のPRを出せない` のステップ1）。
@@ -203,7 +202,7 @@ blocked で終えるときの理由も、同じコメントに書く（`本家�
 | コミットされていない変更と push されていない成果の検査（git が答えられない場合を含む） | `worktree と branch を片付ける` の `失うものが残っている` |
 | worktree を消したあとに、リポジトリの親 workspace を閉じること | `リポジトリの親 workspace を閉じる` |
 | branch を消すか残すか（消せなかったときに残ること） | `branch を始末する` |
-| 見送っても issue へコメントせず、身元ファイルへ見送りの時刻も書かないこと | `worktree と branch を片付ける` の `失うものが残っている` の POSTCONDITION |
+| 失うものが残っていて見送ったときに、issue へ1回だけコメントし、身元ファイルへ見送りの時刻を書くこと | `worktree と branch を片付ける` の `失うものが残っている` と、「片付けを起こす契機は5つある」 |
 
 **引いた先が worktree を残して終わったときは、次の巡回が片付けをやり直す**（`片付けの見送り`。`reconcileWorktrees` は巡回のたびに同じ worktree を調べ直す）。
 引いた先の代替フローは11本在り、どれも worktree を残して、その巡回の片付けを終える。見送る理由が人間の手当てを要するもの（コミットされていない変更、置き場所の外、など）なら、手当てが済むまで同じ見送りが続く。

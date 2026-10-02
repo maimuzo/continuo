@@ -3,7 +3,7 @@
   "usecase_name": "はじめて continuo を動かせるようにする",
   "source": {
     "file": "docs/spec/usecases/scenario/はじめて continuo を動かせるようにする.rucm.md",
-    "rucm_block_sha256": "47a69102d150a5766f65b01b0f93b9fd448d13838c05453f49268125f56bfb71"
+    "rucm_block_sha256": "9b4fb81c303d49d037e5dc641339bdbf4cb8394caf4eaeb14530419b4aa915b3"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -14,7 +14,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          16
+          15
         ]
       },
       "postcondition": "continuo は常駐していない。✗ が付いた見出し語と直し方が利用者に表示されている。利用者は前提の検査をもう一度要求する。"
@@ -24,9 +24,9 @@
         "flow": "BASIC FLOW",
         "steps": [
           2,
-          7,
-          10,
-          12
+          6,
+          9,
+          11
         ]
       },
       "postcondition": "continuo は常駐していない。利用者は残りの段へ進んでいない。応答と終了コードと、置かれたファイルの状態は、止まった記述の代替フローの事後条件のとおりである。"
@@ -35,6 +35,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
+          22,
           23,
           24,
           25,
@@ -42,8 +43,7 @@
           27,
           28,
           29,
-          30,
-          31
+          30
         ]
       },
       "postcondition": "continuo は常駐していない。システムはボードの巡回を始めていない。システムは生きている pane を閉じていない。最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。理由は標準エラーのログに出ている。終了コード 1 が返っている。"
@@ -54,7 +54,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            34
+            33
           ]
         }
       ],
@@ -79,231 +79,223 @@
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "include",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "INCLUDE USE CASE ボードを新規に用意する",
-      "include": "ボードを新規に用意する"
+      "statement": "利用者はシステムに設定を置く空のディレクトリの作成を要求する。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "利用者はシステムに設定を置く空のディレクトリの作成を要求する。"
-    },
-    {
-      "id": "BASIC FLOW-5",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 5,
       "statement": "システムは設定を置くディレクトリを作る。"
     },
     {
-      "id": "BASIC FLOW-6",
+      "id": "BASIC FLOW-5",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 6,
+      "step": 5,
       "statement": "INCLUDE USE CASE 設定ファイルを作る",
       "include": "設定ファイルを作る"
     },
     {
-      "id": "BASIC FLOW-7",
+      "id": "BASIC FLOW-6",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 7,
+      "step": 6,
       "statement": "システムは VALIDATES THAT WORKFLOW.md が設定を置くディレクトリに在る。"
     },
     {
-      "id": "BASIC FLOW-8",
+      "id": "BASIC FLOW-7",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 8,
+      "step": 7,
       "statement": "利用者は WORKFLOW.md の trust.repositories から要らないリポジトリの行を消す。"
     },
     {
-      "id": "BASIC FLOW-9",
+      "id": "BASIC FLOW-8",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 9,
+      "step": 8,
       "statement": "INCLUDE USE CASE 既存のボードの Status を割り当てる",
       "include": "既存のボードの Status を割り当てる"
     },
     {
-      "id": "BASIC FLOW-10",
+      "id": "BASIC FLOW-9",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 10,
+      "step": 9,
       "statement": "システムは VALIDATES THAT システムが WORKFLOW.md の Status の割り当てを書き換え終えている。"
     },
     {
-      "id": "BASIC FLOW-11",
+      "id": "BASIC FLOW-10",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 11,
+      "step": 10,
       "statement": "INCLUDE USE CASE 対象リポジトリを信頼登録する",
       "include": "対象リポジトリを信頼登録する"
     },
     {
-      "id": "BASIC FLOW-12",
+      "id": "BASIC FLOW-11",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 12,
+      "step": 11,
       "statement": "システムは VALIDATES THAT 対象リポジトリが Claude Code に信頼登録されている。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "利用者はシステムに Keychain へのアクセスの許可を要求する。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "利用者はシステムに Keychain へのアクセスの許可を要求する。"
-    },
-    {
-      "id": "BASIC FLOW-14",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 14,
       "statement": "システムは利用者に Keychain へのアクセスの許可の結果を応答する。"
     },
     {
-      "id": "BASIC FLOW-15",
+      "id": "BASIC FLOW-14",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 15,
+      "step": 14,
       "statement": "INCLUDE USE CASE 前提が揃っているかを検査する",
       "include": "前提が揃っているかを検査する"
     },
     {
-      "id": "BASIC FLOW-16",
+      "id": "BASIC FLOW-15",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 16,
+      "step": 15,
       "statement": "システムは VALIDATES THAT 検査結果の18件の見出し語に ✗ が1件もない。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "利用者はシステムに対象リポジトリへの issue の作成を要求する。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "利用者はシステムに対象リポジトリへの issue の作成を要求する。"
+      "statement": "システムは GitHub に issue の作成を要求する。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは GitHub に issue の作成を要求する。"
+      "statement": "利用者はシステムにボードへの issue の追加を要求する。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "利用者はシステムにボードへの issue の追加を要求する。"
+      "statement": "システムは GitHub にボードへの item の追加を要求する。"
     },
     {
       "id": "BASIC FLOW-20",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは GitHub にボードへの item の追加を要求する。"
+      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+      "statement": "利用者はシステムに continuo の常駐の開始を要求する。"
     },
     {
       "id": "BASIC FLOW-22",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "利用者はシステムに continuo の常駐の開始を要求する。"
+      "statement": "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。"
     },
     {
       "id": "BASIC FLOW-23",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。"
+      "statement": "システムは VALIDATES THAT 送るプロンプトの変数の名前が検証を通る。"
     },
     {
       "id": "BASIC FLOW-24",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは VALIDATES THAT 送るプロンプトの変数の名前が検証を通る。"
+      "statement": "システムは VALIDATES THAT 接続先を差し替える環境変数の値が検証を通る。"
     },
     {
       "id": "BASIC FLOW-25",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "システムは VALIDATES THAT 接続先を差し替える環境変数の値が検証を通る。"
+      "statement": "システムは VALIDATES THAT hook を受ける socket の置き場所を用意できる。"
     },
     {
       "id": "BASIC FLOW-26",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムは VALIDATES THAT hook を受ける socket の置き場所を用意できる。"
+      "statement": "システムは VALIDATES THAT 二重起動防止のロックを取れる。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムは VALIDATES THAT 二重起動防止のロックを取れる。"
+      "statement": "システムは VALIDATES THAT 外部へ繋ぐ部品を組み立てられる。"
     },
     {
       "id": "BASIC FLOW-28",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 28,
-      "statement": "システムは VALIDATES THAT 外部へ繋ぐ部品を組み立てられる。"
+      "statement": "システムは VALIDATES THAT 起動時の検査がすべて通る。"
     },
     {
       "id": "BASIC FLOW-29",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 29,
-      "statement": "システムは VALIDATES THAT 起動時の検査がすべて通る。"
+      "statement": "システムは VALIDATES THAT 使用率を受ける socket を開けるか、rate_limit.source が statusline でない。"
     },
     {
       "id": "BASIC FLOW-30",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 30,
-      "statement": "システムは VALIDATES THAT 使用率を受ける socket を開けるか、rate_limit.source が statusline でない。"
+      "statement": "システムは VALIDATES THAT 引き継ぐ run の復元が完了する。"
     },
     {
       "id": "BASIC FLOW-31",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 31,
-      "statement": "システムは VALIDATES THAT 引き継ぐ run の復元が完了する。"
+      "statement": "システムは起動時の掃除を行う。"
     },
     {
       "id": "BASIC FLOW-32",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 32,
-      "statement": "システムは起動時の掃除を行う。"
-    },
-    {
-      "id": "BASIC FLOW-33",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 33,
       "statement": "システムは利用者に巡回を始めることをログに応答する。"
     },
     {
-      "id": "BASIC FLOW-34",
+      "id": "BASIC FLOW-33",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 34,
+      "step": 33,
       "statement": "INCLUDE USE CASE issue を1件処理する",
       "include": "issue を1件処理する"
     },
@@ -319,7 +311,7 @@
       "type": "resume",
       "flow": "前提の不足",
       "step": 2,
-      "statement": "RESUME STEP 15"
+      "statement": "RESUME STEP 14"
     },
     {
       "id": "用意のコマンドが止まる-1",
@@ -442,19 +434,19 @@
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-8",
       "kind": "true",
       "condition": "WORKFLOW.md が設定を置くディレクトリに在る"
     },
     {
-      "from": "BASIC FLOW-7",
+      "from": "BASIC FLOW-6",
       "to": "用意のコマンドが止まる-1",
       "kind": "false",
       "condition": "NOT WORKFLOW.md が設定を置くディレクトリに在る"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-8",
@@ -464,36 +456,36 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-10",
-      "to": "BASIC FLOW-11",
       "kind": "true",
       "condition": "システムが WORKFLOW.md の Status の割り当てを書き換え終えている"
     },
     {
-      "from": "BASIC FLOW-10",
+      "from": "BASIC FLOW-9",
       "to": "用意のコマンドが止まる-1",
       "kind": "false",
       "condition": "NOT システムが WORKFLOW.md の Status の割り当てを書き換え終えている"
     },
     {
-      "from": "BASIC FLOW-11",
-      "to": "BASIC FLOW-12",
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-12",
-      "to": "BASIC FLOW-13",
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
       "kind": "true",
       "condition": "対象リポジトリが Claude Code に信頼登録されている"
     },
     {
-      "from": "BASIC FLOW-12",
+      "from": "BASIC FLOW-11",
       "to": "用意のコマンドが止まる-1",
       "kind": "false",
       "condition": "NOT 対象リポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-13",
@@ -508,19 +500,19 @@
     {
       "from": "BASIC FLOW-15",
       "to": "BASIC FLOW-16",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-16",
-      "to": "BASIC FLOW-17",
       "kind": "true",
       "condition": "検査結果の18件の見出し語に ✗ が1件もない"
     },
     {
-      "from": "BASIC FLOW-16",
+      "from": "BASIC FLOW-15",
       "to": "前提の不足-1",
       "kind": "false",
       "condition": "NOT 検査結果の18件の見出し語に ✗ が1件もない"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-17",
@@ -550,115 +542,115 @@
     {
       "from": "BASIC FLOW-22",
       "to": "BASIC FLOW-23",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-23",
-      "to": "BASIC FLOW-24",
       "kind": "true",
       "condition": "設定ファイルを読めて front matter が検証を通る"
     },
     {
-      "from": "BASIC FLOW-23",
+      "from": "BASIC FLOW-22",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 設定ファイルを読めて front matter が検証を通る"
     },
     {
-      "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-25",
+      "from": "BASIC FLOW-23",
+      "to": "BASIC FLOW-24",
       "kind": "true",
       "condition": "送るプロンプトの変数の名前が検証を通る"
     },
     {
-      "from": "BASIC FLOW-24",
+      "from": "BASIC FLOW-23",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 送るプロンプトの変数の名前が検証を通る"
     },
     {
-      "from": "BASIC FLOW-25",
-      "to": "BASIC FLOW-26",
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
       "kind": "true",
       "condition": "接続先を差し替える環境変数の値が検証を通る"
     },
     {
-      "from": "BASIC FLOW-25",
+      "from": "BASIC FLOW-24",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 接続先を差し替える環境変数の値が検証を通る"
     },
     {
-      "from": "BASIC FLOW-26",
-      "to": "BASIC FLOW-27",
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-26",
       "kind": "true",
       "condition": "hook を受ける socket の置き場所を用意できる"
     },
     {
-      "from": "BASIC FLOW-26",
+      "from": "BASIC FLOW-25",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT hook を受ける socket の置き場所を用意できる"
     },
     {
-      "from": "BASIC FLOW-27",
-      "to": "BASIC FLOW-28",
+      "from": "BASIC FLOW-26",
+      "to": "BASIC FLOW-27",
       "kind": "true",
       "condition": "二重起動防止のロックを取れる"
     },
     {
-      "from": "BASIC FLOW-27",
+      "from": "BASIC FLOW-26",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 二重起動防止のロックを取れる"
     },
     {
-      "from": "BASIC FLOW-28",
-      "to": "BASIC FLOW-29",
+      "from": "BASIC FLOW-27",
+      "to": "BASIC FLOW-28",
       "kind": "true",
       "condition": "外部へ繋ぐ部品を組み立てられる"
     },
     {
-      "from": "BASIC FLOW-28",
+      "from": "BASIC FLOW-27",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 外部へ繋ぐ部品を組み立てられる"
     },
     {
-      "from": "BASIC FLOW-29",
-      "to": "BASIC FLOW-30",
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
       "kind": "true",
       "condition": "起動時の検査がすべて通る"
     },
     {
-      "from": "BASIC FLOW-29",
+      "from": "BASIC FLOW-28",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 起動時の検査がすべて通る"
     },
     {
-      "from": "BASIC FLOW-30",
-      "to": "BASIC FLOW-31",
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
       "kind": "true",
       "condition": "使用率を受ける socket を開けるか、rate_limit.source が statusline でない"
     },
     {
-      "from": "BASIC FLOW-30",
+      "from": "BASIC FLOW-29",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 使用率を受ける socket を開けるか、rate_limit.source が statusline でない"
     },
     {
-      "from": "BASIC FLOW-31",
-      "to": "BASIC FLOW-32",
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
       "kind": "true",
       "condition": "引き継ぐ run の復元が完了する"
     },
     {
-      "from": "BASIC FLOW-31",
+      "from": "BASIC FLOW-30",
       "to": "起動できない-1",
       "kind": "false",
       "condition": "NOT 引き継ぐ run の復元が完了する"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "BASIC FLOW-32",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-32",
@@ -667,11 +659,6 @@
     },
     {
       "from": "BASIC FLOW-33",
-      "to": "BASIC FLOW-34",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-34",
       "to": "常駐の中断-1",
       "kind": "global",
       "condition": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合"
@@ -683,7 +670,7 @@
     },
     {
       "from": "前提の不足-2",
-      "to": "BASIC FLOW-15",
+      "to": "BASIC FLOW-14",
       "kind": "resume"
     },
     {
@@ -771,13 +758,11 @@
         "BASIC FLOW-30",
         "BASIC FLOW-31",
         "BASIC FLOW-32",
-        "BASIC FLOW-33",
-        "BASIC FLOW-34"
+        "BASIC FLOW-33"
       ],
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -850,7 +835,6 @@
         "BASIC FLOW-31",
         "BASIC FLOW-32",
         "BASIC FLOW-33",
-        "BASIC FLOW-34",
         "常駐の中断-1",
         "常駐の中断-2",
         "常駐の中断-3",
@@ -862,7 +846,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -940,7 +923,6 @@
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
-        "BASIC FLOW-31",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -948,7 +930,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1018,7 +999,6 @@
         "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
-        "BASIC FLOW-30",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1026,7 +1006,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1094,7 +1073,6 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1102,7 +1080,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1168,7 +1145,6 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1176,7 +1152,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1240,7 +1215,6 @@
         "BASIC FLOW-24",
         "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1248,7 +1222,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1310,7 +1283,6 @@
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
-        "BASIC FLOW-26",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1318,7 +1290,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1378,7 +1349,6 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
-        "BASIC FLOW-25",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1386,7 +1356,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1444,7 +1413,6 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
-        "BASIC FLOW-24",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1452,7 +1420,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1508,7 +1475,6 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-23",
         "起動できない-1",
         "起動できない-2",
         "起動できない-3"
@@ -1516,7 +1482,6 @@
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1564,15 +1529,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
         "前提の不足-1",
         "前提の不足-2",
-        "BASIC FLOW-15"
+        "BASIC FLOW-14"
       ],
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1588,7 +1551,7 @@
         "システムは VALIDATES THAT 検査結果の18件の見出し語に ✗ が1件もない。",
         "CONDITION: NOT 検査結果の18件の見出し語に ✗ が1件もない",
         "利用者は ✗ が付いた見出し語の直し方に従って前提を揃える。",
-        "RESUME STEP 15",
+        "RESUME STEP 14",
         "INCLUDE USE CASE 前提が揃っているかを検査する"
       ]
     },
@@ -1609,14 +1572,12 @@
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "BASIC FLOW-12",
         "用意のコマンドが止まる-1",
         "用意のコマンドが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1646,14 +1607,12 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
-        "BASIC FLOW-10",
         "用意のコマンドが止まる-1",
         "用意のコマンドが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1678,14 +1637,12 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
-        "BASIC FLOW-7",
         "用意のコマンドが止まる-1",
         "用意のコマンドが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE continuo を入れる",
         "システムは VALIDATES THAT continuo の実行ファイルが置き先に在る。",
-        "INCLUDE USE CASE ボードを新規に用意する",
         "利用者はシステムに設定を置く空のディレクトリの作成を要求する。",
         "システムは設定を置くディレクトリを作る。",
         "INCLUDE USE CASE 設定ファイルを作る",
@@ -1716,9 +1673,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 48,
-    "nodes_covered": 48,
-    "edges_total": 59,
-    "edges_covered": 59
+    "nodes_total": 47,
+    "nodes_covered": 47,
+    "edges_total": 58,
+    "edges_covered": 58
   }
 }

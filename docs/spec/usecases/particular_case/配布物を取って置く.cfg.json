@@ -3,7 +3,7 @@
   "usecase_name": "配布物を取って置く",
   "source": {
     "file": "docs/spec/usecases/particular_case/配布物を取って置く.rucm.md",
-    "rucm_block_sha256": "2b88c3a31dbaba94c66dc00fc70eed6abae61a7778e30446f7126d2bdf802f1a"
+    "rucm_block_sha256": "32b1d5824815bfe0e997813b7a5e7e2a627e792f39bd27c82295632fa6ebfb43"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -28,11 +28,20 @@
       },
       "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。理由は標準エラーに出ている。終了コード 1 が返っている。"
     },
+    "取ってくる道具が無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。システムはまだ配布していないことを応答していない。版を指定した実行でも、システムは同じ理由で止まっている。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
     "版の問い合わせの失敗": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          6
         ]
       },
       "postcondition": "システムは置き先に実行ファイルを置いていない。システムはまだ配布していないことを応答していない。案内は標準出力に出ている。配布サーバの応答の状態は標準エラーに出ている。終了コード 1 が返っている。"
@@ -41,7 +50,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          6
+          7
         ]
       },
       "postcondition": "システムは置き先に実行ファイルを置いていない。利用者はソースから作る手順を読める。応答は全部が標準出力に出ている。標準エラーには何も出ていない。終了コード 1 が返っている。"
@@ -50,7 +59,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          8
+          9
         ]
       },
       "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに書庫を要求していない。システムは理由も案内も応答していない。システムの応答にエラーで始まる行は無い。一時ディレクトリを作るコマンドが出した文だけが標準エラーに出ている。0 でない終了コードが返っている。"
@@ -59,7 +68,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          10
+          11
         ]
       },
       "postcondition": "システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。取得に失敗した場所は標準エラーに出ている。終了コード 1 が返っている。"
@@ -68,7 +77,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          12
+          13
         ]
       },
       "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。止まった理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -77,7 +86,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          14
         ]
       },
       "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。照合できなくても続ける指定がある実行でも、システムは止まっている。利用者は取得をやり直す案内を読める。理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -86,8 +95,8 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          15,
-          16
+          16,
+          17
         ]
       },
       "postcondition": "システムは入れる版の実行ファイルを置き終えていない。置き先へ移す操作より前に失敗した実行では、システムは置き先の実行ファイルに触っていない。置き先へ移す操作が失敗した実行では、置き先に前の版の実行ファイルが無傷で残っていることを、システムは保証していない。一時ディレクトリは残っていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -98,7 +107,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            9
+            10
           ]
         }
       ],
@@ -129,114 +138,121 @@
     },
     {
       "id": "BASIC FLOW-4",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは入れる版を決める。"
+      "statement": "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは VALIDATES THAT 版の問い合わせが失敗していない。"
+      "statement": "システムは入れる版を決める。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムは VALIDATES THAT 入れる版が決まっている。"
+      "statement": "システムは VALIDATES THAT 版の問い合わせが失敗していない。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。"
+      "statement": "システムは VALIDATES THAT 入れる版が決まっている。"
     },
     {
       "id": "BASIC FLOW-8",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。"
+      "statement": "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは配布サーバに実行ファイルの書庫を要求する。"
+      "statement": "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。"
     },
     {
       "id": "BASIC FLOW-10",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは VALIDATES THAT 書庫を取得できている。"
+      "statement": "システムは配布サーバに実行ファイルの書庫を要求する。"
     },
     {
       "id": "BASIC FLOW-11",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは書庫のチェックサムの照合を試みる。"
+      "statement": "システムは VALIDATES THAT 書庫を取得できている。"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。"
+      "statement": "システムは書庫のチェックサムの照合を試みる。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。"
+      "statement": "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。"
     },
     {
       "id": "BASIC FLOW-14",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは配布物の出所の確認を試みる。"
+      "statement": "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。"
     },
     {
       "id": "BASIC FLOW-15",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。"
+      "statement": "システムは配布物の出所の確認を試みる。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは VALIDATES THAT 取り出した continuo を置き先へ配れる。"
+      "statement": "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。"
     },
     {
       "id": "BASIC FLOW-17",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは実行の権限を付けた continuo を置き先へ配る。"
+      "statement": "システムは VALIDATES THAT 取り出した continuo を置き先へ配れる。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは一時ディレクトリを消す。"
+      "statement": "システムは実行の権限を付けた continuo を置き先へ配る。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
       "statement": "システムは利用者に実行ファイルを置いた場所を応答する。"
     },
     {
@@ -264,6 +280,20 @@
       "id": "対応しない命令セット-2",
       "type": "abort",
       "flow": "対応しない命令セット",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "取ってくる道具が無い-1",
+      "type": "action",
+      "flow": "取ってくる道具が無い",
+      "step": 1,
+      "statement": "システムは利用者に curl も wget も無いことを応答する。"
+    },
+    {
+      "id": "取ってくる道具が無い-2",
+      "type": "abort",
+      "flow": "取ってくる道具が無い",
       "step": 2,
       "statement": "ABORT"
     },
@@ -462,138 +492,150 @@
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "利用者の手元に curl か wget のどちらかがある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "取ってくる道具が無い-1",
+      "kind": "false",
+      "condition": "NOT 利用者の手元に curl か wget のどちらかがある"
     },
     {
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
-      "kind": "true",
-      "condition": "版の問い合わせが失敗していない"
-    },
-    {
-      "from": "BASIC FLOW-5",
-      "to": "版の問い合わせの失敗-1",
-      "kind": "false",
-      "condition": "NOT 版の問い合わせが失敗していない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
       "kind": "true",
-      "condition": "入れる版が決まっている"
+      "condition": "版の問い合わせが失敗していない"
     },
     {
       "from": "BASIC FLOW-6",
+      "to": "版の問い合わせの失敗-1",
+      "kind": "false",
+      "condition": "NOT 版の問い合わせが失敗していない"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "入れる版が決まっている"
+    },
+    {
+      "from": "BASIC FLOW-7",
       "to": "配布がまだ無い-1",
       "kind": "false",
       "condition": "NOT 入れる版が決まっている"
     },
     {
-      "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-8",
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-8",
-      "to": "BASIC FLOW-9",
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
       "kind": "true",
       "condition": "書庫を置く一時ディレクトリを作れている"
     },
     {
-      "from": "BASIC FLOW-8",
+      "from": "BASIC FLOW-9",
       "to": "一時ディレクトリを作れない-1",
       "kind": "false",
       "condition": "NOT 書庫を置く一時ディレクトリを作れている"
     },
     {
-      "from": "BASIC FLOW-9",
-      "to": "BASIC FLOW-10",
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-9",
+      "from": "BASIC FLOW-10",
       "to": "取得中の中断-1",
       "kind": "global",
       "condition": "システムが一時ディレクトリを作ってから実行ファイルを置くまでのあいだに中断のシグナルを受け取る場合"
     },
     {
-      "from": "BASIC FLOW-10",
-      "to": "BASIC FLOW-11",
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
       "kind": "true",
       "condition": "書庫を取得できている"
     },
     {
-      "from": "BASIC FLOW-10",
+      "from": "BASIC FLOW-11",
       "to": "書庫を取得できない-1",
       "kind": "false",
       "condition": "NOT 書庫を取得できている"
     },
     {
-      "from": "BASIC FLOW-11",
-      "to": "BASIC FLOW-12",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "true",
-      "condition": "照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "照合できずに止まる-1",
-      "kind": "false",
-      "condition": "NOT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
       "kind": "true",
-      "condition": "計算した値が一覧の値と食い違っていない"
+      "condition": "照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
     },
     {
       "from": "BASIC FLOW-13",
+      "to": "照合できずに止まる-1",
+      "kind": "false",
+      "condition": "NOT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "計算した値が一覧の値と食い違っていない"
+    },
+    {
+      "from": "BASIC FLOW-14",
       "to": "チェックサムが一致しない-1",
       "kind": "false",
       "condition": "NOT 計算した値が一覧の値と食い違っていない"
     },
     {
-      "from": "BASIC FLOW-14",
-      "to": "BASIC FLOW-15",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-15",
       "to": "BASIC FLOW-16",
-      "kind": "true",
-      "condition": "書庫から通常のファイルの continuo を取り出せる"
-    },
-    {
-      "from": "BASIC FLOW-15",
-      "to": "展開と配置の失敗-1",
-      "kind": "false",
-      "condition": "NOT 書庫から通常のファイルの continuo を取り出せる"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
       "kind": "true",
-      "condition": "取り出した continuo を置き先へ配れる"
+      "condition": "書庫から通常のファイルの continuo を取り出せる"
     },
     {
       "from": "BASIC FLOW-16",
       "to": "展開と配置の失敗-1",
       "kind": "false",
-      "condition": "NOT 取り出した continuo を置き先へ配れる"
+      "condition": "NOT 書庫から通常のファイルの continuo を取り出せる"
     },
     {
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "取り出した continuo を置き先へ配れる"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "展開と配置の失敗-1",
+      "kind": "false",
+      "condition": "NOT 取り出した continuo を置き先へ配れる"
     },
     {
       "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-19",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
@@ -604,6 +646,11 @@
     {
       "from": "対応しない命令セット-1",
       "to": "対応しない命令セット-2",
+      "kind": "seq"
+    },
+    {
+      "from": "取ってくる道具が無い-1",
+      "to": "取ってくる道具が無い-2",
       "kind": "seq"
     },
     {
@@ -707,12 +754,14 @@
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -753,6 +802,7 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "展開と配置の失敗-1",
         "展開と配置の失敗-2",
         "展開と配置の失敗-3"
@@ -761,6 +811,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -801,6 +852,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "展開と配置の失敗-1",
         "展開と配置の失敗-2",
         "展開と配置の失敗-3"
@@ -809,6 +861,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -846,6 +899,7 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "チェックサムが一致しない-1",
         "チェックサムが一致しない-2",
         "チェックサムが一致しない-3"
@@ -854,6 +908,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -888,6 +943,7 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "照合できずに止まる-1",
         "照合できずに止まる-2",
         "照合できずに止まる-3",
@@ -897,6 +953,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -929,6 +986,7 @@
         "BASIC FLOW-8",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
+        "BASIC FLOW-11",
         "書庫を取得できない-1",
         "書庫を取得できない-2",
         "書庫を取得できない-3"
@@ -937,6 +995,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -965,6 +1024,7 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "取得中の中断-1",
         "取得中の中断-2"
       ],
@@ -972,6 +1032,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -997,6 +1058,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "一時ディレクトリを作れない-1",
         "一時ディレクトリを作れない-2"
       ],
@@ -1004,6 +1066,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -1026,6 +1089,7 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "配布がまだ無い-1",
         "配布がまだ無い-2",
         "配布がまだ無い-3"
@@ -1034,6 +1098,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "システムは VALIDATES THAT 入れる版が決まっている。",
@@ -1054,6 +1119,7 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "版の問い合わせの失敗-1",
         "版の問い合わせの失敗-2",
         "版の問い合わせの失敗-3"
@@ -1062,6 +1128,7 @@
         "利用者はシステムに配布物の取得と配置を要求する。",
         "システムは VALIDATES THAT 利用者の OS が対応している。",
         "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
         "システムは入れる版を決める。",
         "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
         "CONDITION: NOT 版の問い合わせが失敗していない",
@@ -1072,6 +1139,29 @@
     },
     {
       "id": "P011",
+      "terminal": "abort",
+      "terminal_flow": "取ってくる道具が無い",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。システムはまだ配布していないことを応答していない。版を指定した実行でも、システムは同じ理由で止まっている。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "取ってくる道具が無い-1",
+        "取ってくる道具が無い-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "CONDITION: NOT 利用者の手元に curl か wget のどちらかがある",
+        "システムは利用者に curl も wget も無いことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "対応しない命令セット",
       "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。理由は標準エラーに出ている。終了コード 1 が返っている。",
@@ -1092,7 +1182,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "対応しないOS",
       "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。OS が Windows 系である実行では、利用者は WSL2 の中で実行する案内を読める。残りの OS の実行では、利用者は対応している OS の名前を読める。理由は標準エラーに出ている。終了コード 1 が返っている。",
@@ -1112,9 +1202,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 46,
-    "nodes_covered": 46,
-    "edges_total": 46,
-    "edges_covered": 46
+    "nodes_total": 49,
+    "nodes_covered": 49,
+    "edges_total": 49,
+    "edges_covered": 49
   }
 }

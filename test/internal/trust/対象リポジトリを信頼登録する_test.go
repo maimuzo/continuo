@@ -484,3 +484,74 @@ func Test_対象リポジトリを信頼登録する_P001_列挙した2件だけ
 		t.Errorf("2回目でバックアップが増えている: %v", names)
 	}
 }
+
+// {"RUCM-PATH": "P001"}
+//
+// 目的: 調べたあとに信頼の登録が外れていたリポジトリを、黙って書き換えずに、結果へ警告を1行出すことを確認する。
+//
+// **要求内容の応答は「既に信頼済み。触りません」と出している。**そのあとで登録が外れていると、
+// 書き込みの直前の読み直しで未信頼に見えるので、continuo は書き換える。
+// 結果に何も出さないと、人間は「触りません」と読んだリポジトリが書き換わったことに気づけない。
+//
+// 与える情報: Plan の時点では信頼済みで、Apply の前に hasTrustDialogAccepted が false へ書き戻された `.claude.json`。
+// 成功条件: Apply の結果の RevokedSincePlan にそのリポジトリが入り、
+// WriteApplyResult の出力に、リポジトリ名と「調べた時点では信頼済み」の警告が出ること。
+// 調べた時点で未信頼だったリポジトリは、RevokedSincePlan に入らないこと。
+func Test_対象リポジトリを信頼登録する_P001_調べたあとに登録が外れていたら結果に警告を出す(t *testing.T) {
+	trustedRepo := initRepo(t, "hello-world")
+	pendingRepo := initRepo(t, "spoon-knife")
+	trustedKey := trustKeyOf(t, trustedRepo)
+	home, configPath := fakeHome(t, `{
+  "projects": {
+    "`+trustedKey+`": {"hasTrustDialogAccepted": true}
+  }
+}
+`)
+	clones := map[string]string{"octocat/hello-world": trustedRepo, "octocat/spoon-knife": pendingRepo}
+	report := planFor(t, home, clones, "octocat/hello-world", "octocat/spoon-knife")
+	if !report.Entries[0].Trusted || report.Entries[1].Trusted {
+		t.Fatalf("前提が崩れている（1件目が信頼済み、2件目が未信頼のはず）: %+v", report.Entries)
+	}
+
+	// Plan と Apply の間に、別のセッションが登録を外したことにする。
+	if err := os.WriteFile(configPath, []byte(`{
+  "projects": {
+    "`+trustedKey+`": {"hasTrustDialogAccepted": false}
+  }
+}
+`), 0o600); err != nil {
+		t.Fatalf("途中の書き換えを再現できなかった: %v", err)
+	}
+
+	result, err := trust.Apply(context.Background(), optionsFor(home, clones), report)
+	if err != nil {
+		t.Fatalf("登録できなかった: %v", err)
+	}
+	if len(result.Changed) != 2 {
+		t.Fatalf("2件とも書き換えるはず: %+v", result.Changed)
+	}
+	if len(result.RevokedSincePlan) != 1 || result.RevokedSincePlan[0].Repository != "octocat/hello-world" {
+		t.Fatalf("調べたあとに登録が外れていた項目が想定と違う: %+v", result.RevokedSincePlan)
+	}
+
+	var out strings.Builder
+	if err := trust.WriteApplyResult(&out, result); err != nil {
+		t.Fatalf("結果を書き出せなかった: %v", err)
+	}
+	got := out.String()
+	var warning string
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "調べた時点では信頼済み") {
+			warning = line
+		}
+	}
+	if warning == "" {
+		t.Fatalf("警告の行が出ていない:\n%s", got)
+	}
+	if !strings.Contains(warning, "octocat/hello-world") {
+		t.Errorf("警告の行に、登録が外れていたリポジトリの名前が無い: %s", warning)
+	}
+	if strings.Contains(warning, "octocat/spoon-knife") {
+		t.Errorf("調べた時点で未信頼だったリポジトリまで警告に載せている: %s", warning)
+	}
+}

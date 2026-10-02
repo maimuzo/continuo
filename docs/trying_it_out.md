@@ -23,7 +23,7 @@ below says which steps were actually executed while writing this document and wh
 | 段1 ビルドする | **叩いた** | `go build` と、各サブコマンドの `--help` |
 | 段2 使うカンバンを確かめる | **叩いた（読むだけ）** | `gh project list` と `gh project field-list`。**本番のカンバンには読み取りしか行っていない** |
 | 段3 設定を置く | **叩いた** | 自動で埋まるとき・`--owner` / `--project` を渡すとき・`gh` が無いとき・既にあるときの4通り |
-| 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のカンバンに対して実行した（読み取りのみ） |
+| 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のカンバンに対して実行した（読み取りのみ）。**載せてある出力は 2026-10-02 に取り直したもので、段2 の例と同じ6つの選択肢を返す偽の `gh` を相手に叩いた。**同じ日に、選択肢が5つの実物のカンバン（検証用のもの。読み取りのみ）でも叩き、1行目に「使うカンバン: …」が出ることと、書き換えたキーの9行が同じであることを確かめた |
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みはテスト用ホームディレクトリで確かめた |
 | 段5b Keychain へのアクセスを許可する | **叩いた** | 実物の Keychain に対して（読むだけ）。**確認のダイアログは出なかった**（2026-08-21、macOS） |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
@@ -126,9 +126,9 @@ Usage of continuo init:
 ```text
 Usage of continuo setup:
   -owner string
-    	Status の選択肢を読むカンバンの GitHub の user / organization 名（省略すると gh から引く）
+    	Status の選択肢を読むカンバンの GitHub の user / organization 名（省略すると WORKFLOW.md の値、それも無ければ gh から引く）
   -project int
-    	Status の選択肢を読むカンバンの番号（省略すると gh から引く）
+    	Status の選択肢を読むカンバンの番号（省略すると WORKFLOW.md の値、それも無ければ gh から引く）
   -status-field string
     	Status を読み書きする single-select フィールドの名前（既定 Status） (default "Status")
 ```
@@ -319,7 +319,7 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 > **organization のカンバンを使うなら `--owner <組織名>` を必ず渡す。**
 > `continuo init` は `gh api user` に聞くので、**渡さないと個人のログイン名が入る。**
 > しかもその値は `✓` として報告されるので、**間違っていることが分からない。**
-> 段4 の `continuo setup` も同じ経路でカンバンを決めるので、そちらにも渡す。
+> 段4 の `continuo setup` は `WORKFLOW.md` に入った owner を使うので、ここで正しく入れておけば、そちらには渡さなくてよい。
 
 **実行する場所: `~/continuo-try`**
 
@@ -406,8 +406,12 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 **段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
 `WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
 
-> **`continuo setup` は、どのカンバンを読むかを `WORKFLOW.md` から決めない。**
-> `gh` に聞き直す。だから次の3つの場合はフラグで指定する。
+> **`continuo setup` は、どのカンバンを読むかを次の順で決める。**
+> `--owner` / `--project` → `WORKFLOW.md` に書いてある `tracker.provider.owner` / `project_number` → `gh`。
+> **段3 で `WORKFLOW.md` に値が入っていれば、フラグは要らない。**
+> **決めたカンバンは、出力の1行目（「使うカンバン: …」）に出る。**
+> フラグで渡した値は、どのカンバンを読むかにだけ使い、`WORKFLOW.md` へは書かない。
+> 次の場合はフラグで指定する。
 >
 > ```bash
 > cd ~/continuo-try
@@ -416,8 +420,9 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 >
 > | いつフラグが要るか | 指定しないとどうなるか |
 > | --- | --- |
-> | **カンバンが2枚以上ある** | カンバンを決められず、終了コード 1 で止まる（段3 と同じ） |
-> | **organization のカンバンを使う** | `gh api user` が返す個人のログイン名で探すので、**別のカンバンの選択肢を読む** |
+> | **`WORKFLOW.md` にカンバンの番号が入っておらず、カンバンが2枚以上ある** | `gh` から引こうとしてカンバンを決められず、終了コード 1 で止まる（段3 と同じ）。**番号が入っていれば止まらない** |
+> | **`WORKFLOW.md` に owner が入っておらず、organization のカンバンを使う** | `gh api user` が返す個人のログイン名から探す。**owner が入っていれば、それを使う** |
+> | **`WORKFLOW.md` に書いたのとは別のカンバンを読ませたい** | `WORKFLOW.md` に書いてあるカンバンを読む |
 > | **`Status` 以外のフィールドを使う**（段2 の「専用のフィールド」） | 既定の `Status` を読む。`--status-field` に段2 で決めた名前を渡す |
 
 ```text
@@ -432,9 +437,11 @@ cd ~/continuo-try
 /tmp/continuo setup
 ```
 
-**実際の出力**（このカンバンの選択肢は段2 で確かめた6つ）。
+**実際の出力**（このカンバンの選択肢は段2 で確かめた6つ。2026-10-02 に取り直した。
+段2 の例と同じ6つの選択肢を返す偽の `gh` を相手に叩いたもので、アカウント名とカンバンの番号は例の値である）。
 
 ```text
+使うカンバン: owner octocat のカンバン #3
 カンバンの Status フィールドには次の選択肢があります。
   1  Ice Box
   2  Ready
@@ -489,13 +496,14 @@ WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/W
   tracker.running_state
   tracker.dispatch_state
   tracker.failure_state
+  tracker.direct_chat_state
+  cleanup.on_states
 ```
 
 ### 段3 で手を入れた内容は消えない
 
 **`continuo setup` に `--force` は無い。**書き換えるのが `Status` に関する9つのキーの行だけなので、
-**上書きから守るものが無くなった。**上の出力は7つしか並べていないが、いまは `tracker.direct_chat_state` と `cleanup.on_states` も書き換える
-（`internal/scaffold/fill.go` の `statusKeys`。2026-10-02 に実装で確かめた。上の出力は取り直していない）。段3 で `trust.repositories` から消した行も、
+**上書きから守るものが無くなった。**段3 で `trust.repositories` から消した行も、
 `workspace.root` や `agent.max_concurrent_agents` を書き換えた値も、そのまま残る。
 **行の右側のコメント・空行・並び順・インデントも変わらない。**
 
@@ -544,7 +552,13 @@ tracker:
   running_state: "In Progress"               # 着手したときに書き込む Status
   dispatch_state: "Ready"                    # 着手待ちの Status
   failure_state: "Blocked"                   # 打ち切った・失敗したときに書き込む Status
+  direct_chat_state: ""                      # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。使わないなら ""
+cleanup:
+  on_states: ["Done"]                        # この Status へ移った時点で片付ける。terminal_states に無い値を書かない
 ```
+
+**`continuo setup` が書き換えるのは、このうち `status_field` を除く9つである**（`status_signal_map` の2つを別々に数える）。
+`status_field` は `continuo setup` では書き換わらないので、変えるなら手で直す。
 
 **選択肢を足せない（足したくない）カンバンでの縮め方の例。**
 組み込みの `Status` が `Todo` / `In Progress` / `Done` の3つだけなら、次のようにする。

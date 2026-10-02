@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "38304317df64e136f9c85edd93f421e76e66cf432856bf4bb01fcfe833aa535a", "SOURCE": "docs/spec/usecases/particular_case/continuo を入れる.cfg.json"}
+// {"RUCM-CFG-SHA256": "a03a2561e6ceaa25dc8c11f82ebce90a9d31f74ea962be22bbeb638e8a12971a", "SOURCE": "docs/spec/usecases/particular_case/continuo を入れる.cfg.json"}
 //
 // **ユースケース記述「continuo を入れる」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

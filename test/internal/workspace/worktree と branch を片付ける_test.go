@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "d1270e1c4559d46586a022205db0ab15bf1abd0265675eaef1f85d89575ca3a3", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "15ac9a60972eee59e304ed177ae6a65a365e6f0785721bb517a3abd859ce9cd1", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **ユースケース記述「worktree と branch を片付ける」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

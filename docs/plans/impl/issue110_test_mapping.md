@@ -80,7 +80,7 @@ P001〜P176 は番号も通る段の並びも変わっていない（役が機�
 `test/internal/doctor/cli_test.go` の `TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとして止まる` が P177 → P182。
 印は無いが経路を通しているテスト: `test/internal/cli/cli_test.go` の `TestRunDoctor_後ろに書いたhelpが効く`（P183）、`TestRunDoctor_差分だけを求められたら検査を1つも行わない`（P177）。
 設計 6-3 の表（見出し語 11 / テストパス 91本）が古い。
-人間へ報告すること: cwd を引けないときと `--missing-keys-patch` の失敗の終了コードが 1 で、「前提が足りない」と区別できない。設定のパスを決められないときの警告は、到達しない行に見える。
+人間へ報告して直したこと: cwd を引けないときと `--missing-keys-patch` の失敗の終了コードが 1 で、「前提が足りない」と区別できなかった。4か所とも 3（`doctorInternalErrorExitCode`）へ直した。テストは `test/internal/cli/前提が揃っているかを検査する_test.go` の P015・P017・P018。設定のパスを決められないときの警告は、到達しない行に見える。
 
 ## 対象リポジトリを信頼登録する（2026-10-02。経路 6本 → 156本。このあと分ける予定）
 
@@ -97,15 +97,15 @@ P001〜P176 は番号も通る段の並びも変わっていない（役が機�
   印は無いが経路を通しているテスト: `test/internal/cli/cli_test.go` の `TestRunDoctor_設定の言語で検査結果を出す`（P001）
 - 人間へ報告すること: 設計 3-35 の2箇所が古い（言語を決める場所、資源の無い言語で起動を止める範囲）
 
-## 既存のボードの Status を割り当てる（2026-10-02。経路 11本 → 32本）/ ボードを新規に用意する（11本 → 2本）/ はじめて continuo を動かせるようにする（13本 → 12本）
+## 既存のボードの Status を割り当てる（2026-10-02。経路 11本 → 32本）/ ボードを新規に用意する（消した）/ はじめて continuo を動かせるようにする（13本 → 16本）
 
 - setup の対応表は `issue110_map_既存のボードの Status を割り当てる.json`。役が関数名だけで当てたもの（`statuses_test.go` の3本、`assign_test.go` の3本、`board_test.go` の3本、`TestRun_ヘルプ…`・`TestRun_位置引数が多すぎたら落とす`）は入れていない
 - 実装のコメントが古い番号を引いている（この issue では直さず報告する）: `internal/cli/cli.go` の `runSetup`「RUCM の基本フロー2」、`internal/scaffold/update.go`「RUCM の基本フロー2」、`internal/setup/assign.go`「RUCM の基本フロー5」「基本フロー10 と 11」
 - `test/internal/cli/cli_test.go` の検査文字列 `[1/5]` は実装の `[1/6]` と合わない（何が出ても通る）
-- `ボードを新規に用意する`: 文書に根拠の無い段（`gh project create`、専用フィールド、同名の検査）と代替フロー6本を消した。中身は「使うボードを確かめ、足りない選択肢を画面から足す」になり、名前と合わなくなった。名前は変えていない
-- `はじめて…`: 順番を文書に合わせ、着手の段は `issue を1件処理する` を INCLUDE する形にした。INCLUDE は7本
+- `ボードを新規に用意する`: 記述ごと消した（人間の決定）。continuo にカンバンを作る機能は無く、この記述は continuo の動きを1つも書いていなかった。同じ手順（`gh project list` で番号を見る・`gh project field-list` で選択肢を見る・足りない選択肢を GitHub の画面から足す）は `docs/trying_it_out.md` の「段2. 使うカンバンを確かめる（作らない）」と `README.ja.md` の「必要なもの」に在る。テストは元から持っていない
+- `はじめて…`: 順番を文書に合わせ、着手の段は `issue を1件処理する` を INCLUDE する形にした。INCLUDE は6本（`ボードを新規に用意する` を外し、事前条件「利用者は使うボードの番号を控えている」で受ける）
 - 道具の癖: 基本フローの末尾に ELSE の無い IF を置くと、偽の枝が CFG に出ない
-- 人間へ報告すること: `ボードを新規に用意する` の名前を変えるか・記述ごと消すか。`continuo allow-keychain-access` に対応する記述が無い。`docs/trying_it_out.md` の段4 の「WORKFLOW.md から決めない」が古い。対話のあとの Ctrl+C は無視されて書き換えが最後まで進む
+- 人間へ報告すること: `continuo allow-keychain-access` に対応する記述が無い。`docs/trying_it_out.md` の段4 の「WORKFLOW.md から決めない」が古い。対話のあとの Ctrl+C は無視されて書き換えが最後まで進む
 
 ## worktree と branch を片付ける / リポジトリの親 workspace を閉じる / branch を始末する（2026-10-02。3本に分けたあと。経路 17本・5本・8本）
 
