@@ -7,8 +7,10 @@
 - `docs/plans/continuo_design.md` の「3-83d. pane と worktree を用意する — 用意の段1〜段3」（踏む段と踏まない段、外れ方の表）
 - `docs/plans/continuo_design.md` の「3-83h. direct chat に入れるのは、担当者が1人で、それが自分のアカウントのときだけ」（判定の表と、`failure_state` を書く経路）
 - `internal/orchestrator/orchestrator.go` の `Tick`（`splitDirectChatCandidates` と `prepareDirectChatPanes` を呼ぶ場所）
-- `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` / `judgeDirectChatAssignees` / `directChatPanes` / `directChatPaneExists` / `beginDirectChatSetupLimitWrite` / `directChatSetupBackoff` / `setUpDirectChat` / `failDirectChatSetup` / `finishDirectChatSetup` / `abandonDirectChatSetup` / `closeDirectChatSetupPane` / `writeDirectChatAssigneeFailureAsync` / `writeDirectChatFailure` / `postDirectChatReady` / `postDirectChatHold` / `writeRunningStateOnReturn`
+- `internal/orchestrator/directchat.go` の `prepareDirectChatPanes` / `judgeDirectChatAssignees` / `directChatPanes` / `directChatPaneExists` / `beginDirectChatSetupLimitWrite` / `directChatSetupBackoff` / `setUpDirectChat` / `failDirectChatSetup` / `noteDirectChatSetupFailure` / `forgetDirectChatSetupFailuresNotIn` / `finishDirectChatSetup` / `abandonDirectChatSetup` / `closeDirectChatSetupPane` / `writeDirectChatAssigneeFailureAsync` / `writeDirectChatFailure` / `postDirectChatReady` / `postDirectChatHold` / `writeRunningStateOnReturn`
 - `internal/orchestrator/dispatch.go` の `preflight` / `startRunFromWorktree`
+- `internal/orchestrator/comment.go` の `postStatusMove`（Status を動かした記録のコメント）
+- `internal/orchestrator/orchestrator.go` の `wakeRuns` と `internal/orchestrator/handoff.go` の `handoffLostOnResume`（1回目の本文を送る前に、担当を1回だけ確かめる）
 
 この記述は [人間がpaneに入って直接続ける.rucm.md](人間がpaneに入って直接続ける.rucm.md) から `INCLUDE USE CASE` で引かれる。
 **分けた理由は経路の数である。**pane を用意するかどうかの門（見送りと `failure_state` の書き込みで11通り）と用意の結末（9通り）を、引く側の出口（戻す・完了へ動かす・ほかへ動かす）と1本に書くと、掛け算になる。
@@ -21,7 +23,7 @@
 | 候補 | `prepareDirectChatPanes` の `candidates` の1件 | この巡回の候補の取得で返った issue のうち、Status が `tracker.direct_chat_state` のもの |
 | 印 | `Orchestrator` の `runs` | 「この issue は自分が取った」という、常駐プロセスのメモリ上の記録。印を持つ issue を run と呼ぶ |
 | direct chat の印 | `runState` の `directChatMode` | 「人間が pane で直接続けている」という、run の上の記録 |
-| 用意の失敗の記録 | `Orchestrator` の `directChatSetupFailures` | この候補の pane の用意が続けて落ちた回数・最後に落ちた時刻・理由。通常の着手の失敗の記録とは別に持つ |
+| 用意の失敗の記録 | `Orchestrator` の `directChatSetupFailures` | この候補の pane の用意が続けて落ちた回数・最後に落ちた時刻・理由。通常の着手の失敗の記録とは別に持つ。消える場面は下の「用意の失敗の記録が消える場面」に在る |
 | 自分で開いた pane | `runState` の `PaneID` | この用意が `worktree.open` で新しく開かせた pane。既に開いていた pane は含まない |
 | 判定に使う Status | `finishDirectChatSetup` の `decided` | 用意を終える前に取り直した Status と、用意の最中に巡回が見た Status のうち、見た時刻が新しいほう |
 
@@ -34,6 +36,19 @@
 | `o.claim` が偽を返す（段14） | 門1（印を持っていない）を見たあと、段14 までに同じ issue の印が増えたときだけ起きる。門1 から段14 までは巡回の同じ goroutine の中で続けて行う。偽なら、その候補は何もせずに次の候補へ移る |
 | 止める合図を受けた（`ctx.Err()`） | 常駐を止める流れは `巡回が回っているあいだに常駐を止める.rucm.md` に在る |
 
+## 用意の失敗の記録が消える場面
+
+記録は常駐プロセスのメモリにだけ在る。消えるのは次の3つの場面である。3つ目は流れを分けないので、段にせず、ここに書く。
+
+| 場面 | どこで消すか |
+| --- | --- |
+| 用意が成功した（段18） | `setUpDirectChat` |
+| `用意の失敗が上限を超えた` で、`failure_state` を実際に書けた | `prepareDirectChatPanes` が立てた書く経路 |
+| その issue が、この巡回の direct chat の候補に無い（利用者がカードをほかの Status へ動かした、など）。段1 の先頭で、候補に無い issue の記録を全部消す | `prepareDirectChatPanes` の先頭の `forgetDirectChatSetupFailuresNotIn` |
+
+3つ目があるので、利用者がカードをいったん direct chat の外へ動かして戻すと、回数は0から数え直しになる。
+候補の取得に失敗した巡回と、着手が許されていない巡回では、段1 に来ないので消えない。
+
 ## failure_state を書く経路の結末
 
 段3 の代替フロー `担当者が1人でない` と、段10 の代替フロー `用意の失敗が上限を超えた` は、同じ関数（`writeDirectChatFailure`）で書く。
@@ -42,18 +57,35 @@
 | 結末 | 何が起きるか |
 | --- | --- |
 | 同じ候補へ書いている最中である | この巡回では2本目を立てない（Debug を1行出す） |
-| カンバンの Status の選択肢の写しが空である | 書かない。WARN を1行出す。次の巡回でやり直す |
-| GitHub への書き込みが誤りを返した | WARN を1行出す。次の巡回でやり直す |
-| 書く直前に取り直した Status が `tracker.direct_chat_state` でなかった（人間が動かした・別の機械が先に書いた・未設定） | 書かない。コメントも書かない |
-| 書けた | Status が `failure_state` になる。issue へ理由のコメントを1件書く（書けなければ WARN を1行）。`用意の失敗が上限を超えた` では、用意の失敗の記録を消す |
+| カンバンの Status の選択肢の写しが空である | 書かない。WARN を1行出す。候補が次の巡回でも direct chat の候補なら、次の巡回でやり直す |
+| GitHub への書き込みが誤りを返した | WARN を1行出す。候補が次の巡回でも direct chat の候補なら、次の巡回でやり直す |
+| 書く直前に取り直した Status が `tracker.direct_chat_state` でなかった（人間が動かした・別の機械が先に書いた・未設定） | 書かない。コメントも書かない。やり直さない。`用意の失敗が上限を超えた` では、用意の失敗の記録はこの時点では残り、候補から外れた巡回で消える |
+| 書けた | Status が `failure_state` になる。issue へ理由のコメントを1件書く（投稿が誤りを返したら WARN を1行出して終える。コメントは増えない）。`用意の失敗が上限を超えた` では、用意の失敗の記録を消す |
 
 ## 応答の投稿が失敗したとき
 
 | 段 | 失敗したとき |
 | --- | --- |
 | 段25（案内のコメント） | WARN を1行出して終える。pane は用意できている。draft issue には書かない |
-| `用意中に作業中へ戻された` の段3（`running_state`） | 選択肢の写しが空・書き込みの誤りなら WARN を1行出して続ける。書く直前に取り直した Status が `dispatch_state` でなければ書かない |
+| `用意中に作業中へ戻された` の段3（`running_state`） | 選択肢の写しが空・書き込みの誤りなら WARN を1行出して続ける（Status は `dispatch_state` のまま残る）。書く直前に取り直した Status が `dispatch_state` でなければ書かない |
 | `用意中に作業中へ戻された` の段5（hold のコメント） | 自分のログイン名が取れない・投稿の誤りなら WARN を1行出して続ける |
+
+`用意中に作業中へ戻された` の段3 で Status を実際に書き換えたときは、issue へ Status を動かした記録のコメントを1件書く（`writeRunningStateOnReturn` が呼ぶ `postStatusMove`）。段5 の hold のコメントとは別の1件である。
+この投稿が誤りを返したときは、WARN を1行出して続ける。流れを分けないので、段にしていない。
+
+## 1回目の本文を送る手前で run が終わる場合
+
+`用意中に作業中へ戻された` の段9 は、段5 までの書き込みが終わったあとの巡回が行う。その手前で次のどれかに当たると、1回目の本文は届かない。
+どれも pane の用意に固有の動きではなく、通常の run が指示を受け取る手前で通る検査である。中身は引き先の記述に在るので、段にも代替フローにもせず、表に書く。
+この代替フローの事後条件のうち「run は印を持っている」と「1回目の本文を受け取っている」は、この表のどれにも当たらなかったときだけ成り立つ。
+
+| 場合 | どこで決まるか | どうなるか |
+| --- | --- | --- |
+| 確かめると、担当が別のアカウントへ移っていた（pane の用意は入札を通らないので、用意した run は担当を1度も確かめていない） | 段5 のあとの巡回の `wakeRuns`（`handoffLostOnResume`） | `after_run` を走らせずに pane を閉じ、印を外す。`issue を1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
+| 戻した先は `active_states` に入っているが、issue が dispatch できない | 段5 のあとの巡回の `reconcileRunning`（用意の最中の run は飛ばすので、用意を終えたあとの巡回で当たる） | pane を閉じて印を外す。worktree は残す |
+| 1回目の本文を組み立てられない・herdr が送信を受け付けない | 段9 の `turnLoop` | `issue を1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
+
+用意したばかりの run の turn 数は0なので、turn 数の上限（`agent.max_dispatch_turns`）には当たらない。
 
 ## テストの当て方
 
@@ -104,27 +136,27 @@ BASIC FLOW:
 23. システムは VALIDATES THAT 判定に使う Status が tracker.direct_chat_state の選択肢であり、かつ担当者が1人であり、かつ担当者が別のアカウントでない。
 24. システムは run に direct chat の印を立てる。
 25. システムは issue に pane を用意したことの案内のコメントを1件書く。
-POSTCONDITION: worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。
+POSTCONDITION: worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。案内のコメントを投稿できたときは、issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。
 
 BOUNDED ALTERNATIVE FLOW この巡回では用意しない:
 RFS BASIC FLOW 2,4,5,7,8,9,11,12,13
 1. システムは候補の関門の記録を消す。
 2. ABORT
-POSTCONDITION: システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。
+POSTCONDITION: システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。
 
 SPECIFIC ALTERNATIVE FLOW 担当者が1人でない:
 RFS BASIC FLOW 3
 1. システムは GitHub Projects v2 に候補の Status への failure_state の選択肢の書き込みと理由のコメントを要求する。
 2. システムは候補の関門の記録を消す。
 3. ABORT
-POSTCONDITION: システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、候補の Status は変わっていない。
+POSTCONDITION: システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢である。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いていない。
 
 SPECIFIC ALTERNATIVE FLOW 用意の失敗が上限を超えた:
 RFS BASIC FLOW 10
 1. システムは候補の関門の記録を消す。
 2. システムは GitHub Projects v2 に候補の Status への failure_state の選択肢の書き込みと理由のコメントを要求する。
 3. ABORT
-POSTCONDITION: システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に用意が落ちた理由のコメントが1件増えており、用意の失敗の記録は消えている。書けなかったときは、候補の Status は変わっておらず、用意の失敗の記録は残っている。
+POSTCONDITION: システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、用意の失敗の記録は消えている。書けて、かつコメントを投稿できたときは、issue に用意が落ちた理由のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いておらず、用意の失敗の記録は、候補が direct chat の候補から外れる巡回まで残っている。
 
 SPECIFIC ALTERNATIVE FLOW 用意が落ちた:
 RFS BASIC FLOW 17
@@ -159,7 +191,7 @@ RFS BASIC FLOW 22
 8. ENDIF
 9. システムは Claude Code に1回目の本文を送る。
 10. ABORT
-POSTCONDITION: run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。
+POSTCONDITION: run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。
 ```
 
 ## フローチャート

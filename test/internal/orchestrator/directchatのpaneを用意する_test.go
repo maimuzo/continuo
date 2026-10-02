@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "8e3c0293a933691f445c37ddb3a773d6e1128ac94ecc2fbb70466b101814a43d", "SOURCE": "docs/spec/usecases/particular_case/directchatのpaneを用意する.cfg.json"}
+// {"RUCM-CFG-SHA256": "cb9e3a2126768e664dc07a5ab28e8820f532913db058968b55dba9865cd90fc5", "SOURCE": "docs/spec/usecases/particular_case/directchatのpaneを用意する.cfg.json"}
 //
 // **ユースケース記述「directchatのpaneを用意する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -203,7 +203,8 @@ func Test_directchatのpaneを用意する_P009_用意の段2が段8より前で
 // 目的: 用意が落ちたら、次に試すまで通常の着手のバックオフと同じ間隔を空ける。
 // **空けないと、30秒ごとに枠を取っては落ちるのを繰り返す。**
 // 与える情報: `agent.start` が必ず失敗する用意。上限は既定（3回）。
-// 成功条件: 1回落ちたあとの巡回で `agent.start` を投げ直さず、Status も動かさないこと。
+// 成功条件: 1回落ちたあとの巡回で、間隔の門に当たったことがログに出て、`agent.start` を投げ直さず、
+// Status も動かさないこと。
 func Test_directchatのpaneを用意する_P010_用意が落ちた直後の巡回ではやり直さない(t *testing.T) {
 	fx := newDirectChatFixture(t, func(cfg *config.Config) { cfg.Agent.MaxRetryBackoffMs = 600000 })
 	fx.AllowLog("direct chat の pane を用意できませんでした", "起動できません")
@@ -218,8 +219,13 @@ func Test_directchatのpaneを用意する_P010_用意が落ちた直後の巡�
 	})
 	starts := fx.Herdr.CountMethod(herdr.MethodAgentStart)
 
+	const backoffLog = "direct chat の用意が直前に落ちたので、間隔を空けます"
+	if strings.Contains(fx.Logs.String(), backoffLog) {
+		t.Fatal("前提が崩れている（次の巡回を回す前に、もう間隔の門のログが出ている）")
+	}
 	fx.Orc.Tick(context.Background())
 	fx.WaitRunsDrained(t, 5*time.Second)
+	assertGateLogged(t, fx, backoffLog)
 	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != starts {
 		t.Fatalf("用意が落ちた直後の巡回でやり直した: agent.start が %d 回から %d 回へ", starts, n)
 	}
@@ -545,30 +551,24 @@ func Test_directchatのpaneを用意する_P019_担当者が1人でないカー�
 //
 // 目的: どの機械が pane を持つかは担当者だけで決まる。**他人のアカウントが担当なら、この機械は何もしない。**
 // 与える情報: Status が direct chat で担当者が1人（他人）の候補。
-// 成功条件: Status が動かず、コメントも書かず、印も付けないこと。
+// 成功条件: 担当者の門（別のアカウント）に当たったことがログに出て、Status が動かず、コメントも書かず、
+// 印も付けず、`agent.start` も投げないこと。
 func Test_directchatのpaneを用意する_P017_担当者が1人で他人の候補には何もしない(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		fx := withDirectChatState(t)
-		issue := sampleIssue(303, humanState)
-		fx.Tracker.AddIssue(issue)
-		fx.Tracker.SetAssignees(issue.ID, "someone-else")
+	fx := newDirectChatFixture(t, nil)
+	issue := sampleIssue(303, humanState)
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, "someone-else")
 
-		fx.Orc.Tick(context.Background())
-		synctest.Wait()
+	fx.Orc.Tick(context.Background())
 
-		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
-			t.Fatalf("他人が担当している direct chat のカードを動かした: %q", got)
-		}
-		if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
-			t.Fatalf("他人が担当している direct chat のカードへ書きに行った: %d 回", n)
-		}
-		if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
-			t.Fatalf("他人が担当している issue に印を付けた: %v", got)
-		}
-		if n := len(fx.Tracker.CommentsOf("I_node303")); n != 0 {
-			t.Fatalf("他人が担当している issue にコメントを書いた: %d 件", n)
-		}
-	})
+	assertNotPrepared(t, fx, issue.ID, 0, 0)
+	assertGateLogged(t, fx, "担当者がこの PC の continuo のアカウントではないので、direct chat の pane を用意しません")
+	if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+		t.Fatalf("他人が担当している direct chat のカードへ書きに行った: %d 回", n)
+	}
+	if n := len(fx.Tracker.CommentsOf(nodeIDOfIssue(issue))); n != 0 {
+		t.Fatalf("他人が担当している issue にコメントを書いた: %d 件", n)
+	}
 }
 
 // {"RUCM-PATH": "P018"}
@@ -577,25 +577,22 @@ func Test_directchatのpaneを用意する_P017_担当者が1人で他人の候�
 //
 // 目的: 自分が誰か分からないまま pane を用意しない（印を持っていない機械は、この巡回では何もしない）。
 // 与える情報: gh の持ち主を取れない状態で、担当者1人の direct chat の候補。
-// 成功条件: 印を付けず、Status も動かさないこと。
+// 成功条件: ログイン名の門に当たったことがログに出て、印を付けず、`agent.start` も投げず、Status も動かさないこと。
 func Test_directchatのpaneを用意する_P018_ログイン名が取れない巡回では候補に何もしない(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		fx := withDirectChatState(t)
-		fx.Tracker.SetViewerError(errors.New("gh が認証されていません"))
-		issue := sampleIssue(304, humanState)
-		fx.Tracker.AddIssue(issue)
-		fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
+	fx := newDirectChatFixture(t, nil)
+	fx.AllowLog("gh の持ち主を GraphQL から取れません")
+	fx.Tracker.SetViewerError(errors.New("gh が認証されていません"))
+	issue := sampleIssue(304, humanState)
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, fakeViewerLogin)
 
-		fx.Orc.Tick(context.Background())
-		synctest.Wait()
+	fx.Orc.Tick(context.Background())
 
-		if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
-			t.Fatalf("自分が誰か分からないのに印を付けた: %v", got)
-		}
-		if got := fx.Tracker.StateOf(issue.ID); got != humanState {
-			t.Fatalf("自分が誰か分からないのにカードを動かした: %q", got)
-		}
-	})
+	assertNotPrepared(t, fx, issue.ID, 0, 0)
+	assertGateLogged(t, fx, "gh の持ち主が分からないので、この巡回では direct chat の pane を用意しません")
+	if n := fx.Tracker.CountCall("UpdateStatus"); n != 0 {
+		t.Fatalf("自分が誰か分からないのにカードへ書きに行った: %d 回", n)
+	}
 }
 
 // {"RUCM-PATH": "P019"}

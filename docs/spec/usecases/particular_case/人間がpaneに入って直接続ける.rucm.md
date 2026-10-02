@@ -11,7 +11,9 @@
 - `internal/orchestrator/reconcile.go` の `reconcileRunning` / `updateDirectChatMode` / `enterDirectChat` / `checkStalls`
 - `internal/orchestrator/directchat.go` の `judgeDirectChatAssignees` / `writeDirectChatAssigneeFailureAsync` / `writeDirectChatFailure` / `letGoOfDirectChatAsync` / `returnFromDirectChatAsync` / `writeRunningStateOnReturn` / `directChatReturnState` / `postDirectChatHold` / `abortTerminalForHuman` / `cardInDirectChat`
 - `internal/orchestrator/orchestrator.go` の `wakeRuns` / `candidateStates`
-- `internal/orchestrator/turn.go` の `turnLoop`（direct chat の run へ送らない判定と、送る直前に応答を書いている最中かを見る判定）
+- `internal/orchestrator/handoff.go` の `handoffLostOnResume` / `stopBecauseHandoffLost`（継続の指示を送る前に、担当を1回だけ確かめる）
+- `internal/orchestrator/comment.go` の `postStatusMove`（Status を動かした記録のコメント）
+- `internal/orchestrator/turn.go` の `turnLoop`（direct chat の run へ送らない判定と、送る直前に応答を書いている最中かを見る判定と、turn 数の上限の検査）
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd` / `decideAfterTurn` / `stopWorker` / `stopAndReleaseAsync`
 - `internal/orchestrator/runstate.go` の `enterDirectChatMode` / `leaveDirectChatMode` / `setDirectExitToTerminal`
 
@@ -40,7 +42,7 @@ continuo がまだ着手していない issue（印を持っていない issue�
 | pane を閉じる | `stopWorker` の入口の門 |
 | 印を外す | `stopAndReleaseAsync` の入口の門。issue がカンバンから見えなくなった巡回でも外さない |
 | 走っていた終わらせる処理を続ける | `abortTerminalForHuman`。その pane で Claude Code の起動が済んでいれば、終わらせる処理をやめて印を残す。済んでいなければ、自分で開いた pane を閉じて印を外し、次の巡回で pane を用意し直す |
-| Status を書く | 例外は、担当者が1人でないときに `failure_state` を書く経路だけである（段3 の代替フロー） |
+| Status を書く | 例外は、担当者が1人でないときに `failure_state` を書く経路だけである（段3 の代替フロー）。pane の用意から入る場合（段7）に、引いた記述が書く Status は、引いた記述に在る |
 
 ## 担当者の判定は、direct chat のあいだ毎巡回当てる
 
@@ -59,17 +61,37 @@ continuo がまだ着手していない issue（印を持っていない issue�
 `担当者が1人でない` の段2 は、巡回のループの外で書く。結末がどれでも、この記述の流れは変わらない。
 結末の表は [directchatのpaneを用意する.rucm.md](directchatのpaneを用意する.rucm.md) の「failure_state を書く経路の結末」に在る（同じ関数 `writeDirectChatFailure` で書く）。
 
+**「もう一度書く」のは、Status が direct chat のまま残った結末だけである。**選択肢の写しが空だったとき・書き込みが誤りを返したときは、次の巡回が同じ判定をもう一度当てて、もう一度書きに行く。
+書く直前に取り直した Status が direct chat でなかったとき（利用者が先にカードを動かした・別の機械が先に書いた）は、書かず、コメントも書かず、やり直さない。次の巡回は、動いた先の Status で段12 から先を行う。
+Status を書けても、理由のコメントの投稿が誤りを返したときは、WARN を1行出して終える。コメントは増えない。
+
 ## 段18・段20 が失敗したとき
 
 どちらも巡回のループの外で行い、失敗しても継続の指示は送る。段にせず表に書く。
 
 | 段 | 失敗の内容 | どうなるか |
 | --- | --- | --- |
-| 段18（`running_state` の書き込み） | カンバンの Status の選択肢の写しが空・書き込みの誤り | WARN を1行出して続ける。次の巡回で書き直さない |
+| 段18（`running_state` の書き込み） | カンバンの Status の選択肢の写しが空・書き込みの誤り | WARN を1行出して続ける。次の巡回で書き直さない。issue の Status は `dispatch_state` のまま残る |
 | 段18 | 書く直前に取り直した Status が `dispatch_state` でなかった | 書かない。人間が動かした値を上書きしない |
 | 段20（hold のコメント） | 自分のログイン名が取れない・投稿の誤り | WARN を1行出して続ける |
 
+段18 で Status を実際に書き換えたときは、issue へ Status を動かした記録のコメントを1件書く（`writeRunningStateOnReturn` が呼ぶ `postStatusMove`）。段20 の hold のコメントとは別の1件である。
+この投稿が誤りを返したときは、WARN を1行出して続ける。流れを分けないので、段にしていない。
+
 段21 の検証（応答を書いている最中か）で、herdr から状態を読めなかったときは、送る側に倒す（段22 へ進む）。
+
+## 継続の指示を送る手前で run が終わる場合
+
+段16 を通った run でも、次のどれかに当たると、段22 の継続の指示は届かない。
+どれも direct chat に固有の動きではなく、通常の run が指示を受け取る手前で通る検査である。中身は引き先の記述に在るので、段にも代替フローにもせず、表に書く。
+基本フローの事後条件のうち「run は印を持っている」と「継続の指示を1回受け取っている」は、この表のどれにも当たらなかったときだけ成り立つ。
+
+| 場合 | どこで決まるか | どうなるか |
+| --- | --- | --- |
+| 戻した先は `active_states` に入っているが、issue が dispatch できない（リポジトリの信頼登録が外れている、など） | 段12 と同じ巡回の `reconcileRunning` | pane を閉じて印を外す。worktree は残す。段17〜段20 の書き込み（`running_state` と hold）は、巡回のループの外で既に始まっているので、止めずに書かれる |
+| run が担当を1度も確かめておらず（pane の用意から入った run と、再起動で引き継いだ run）、確かめると担当が別のアカウントへ移っていた | 段14 のあとの `wakeRuns`（`handoffLostOnResume`。段12 と同じ巡回なので、段17〜段20 の書き込みと並んで走る） | `after_run` を走らせずに pane を閉じ、印を外す。この止める処理は Status もコメントも書かない。`issue を1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
+| run の turn 数が `agent.max_dispatch_turns` に達している（direct chat を挟んでも数え直さない） | 段21 のあとの `turnLoop` | 指示を送らず、Status を `failure_state` へ落として run を終える。`issue を1件処理する.rucm.md` の `上限での打ち切り` と同じ扱いである。段21 が偽（応答を書いている最中）のときは、この検査より先に turn の終わりを待つ |
+| 継続の指示の文面を組み立てられない・herdr が送信を受け付けない | 段22 の `turnLoop` | `issue を1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
 
 ## 段にしていない分岐
 
@@ -79,6 +101,7 @@ continuo がまだ着手していない issue（印を持っていない issue�
 | 巡回が実行中の issue を取り直せない | この巡回では direct chat の出入りを決めない。次の巡回で同じ段を行う。`issue を1件処理する.rucm.md` の巡回の照合の扱いである |
 | 完了の Status を書いたのがカンバンの自動化である | `完了のStatusへ動かされた` は、利用者が動かした場合を書いている。自動化が書いた場合の待ち方は `issue を1件処理する.rucm.md` に在る |
 | 手を離すときに、別の終わらせる処理が既に走っている | `letGoOfDirectChatAsync` は何もせずに返る。走っている側が片付ける |
+| `作業中でも完了でもないStatusへ動かされた` のあとで、動かされた先の Status の扱いが Status を書く | direct chat を抜ける処理（`updateDirectChatMode`）は Status を書かない。同じ巡回の照合は、動かされた先が continuo の知らない Status で、書いたのがカンバンの自動化なら、本来の Status へ書き戻すことがある（`handleUnknownState`）。その扱いは `issue を1件処理する.rucm.md` に在る |
 
 ## テストの当て方
 
@@ -88,7 +111,7 @@ continuo がまだ着手していない issue（印を持っていない issue�
 | --- | --- |
 | P002（印を持っていて、`dispatch_state` へ戻し、応答を書いている最中だった） | 段17 の分岐（`running_state` を書くか）と段21 の分岐（応答を書いている最中か）は、実装の別々の関数（`writeRunningStateOnReturn` と `turnLoop`）が互いを見ずに決める。残りの3つの組み合わせ（P001・P003・P004）にテストを当ててあり、どちらの分岐も真と偽の両方を通している。4つ目の組み合わせに新しい動きは無く、効果が薄い |
 | P010〜P014（段2 の偽の側、つまり pane の用意から入り、段12 から先で分かれる5本） | 段11 から先の動きは、direct chat へ入った道（段2 の真か偽か）で変わらない。どちらの道でも同じ関数（`updateDirectChatMode`）を通り、実装は入った道を覚えていない。P011〜P014 と同じ出口には、段2 の真の側（順に P003〜P006）でテストを当ててある。P010 は、真の側の P002 と同じ組み合わせで、同じ理由で当てていない。偽の側には、基本の出口（P009。`dispatch_state` へ戻すと `running_state` を書き、継続の指示が届く）の1本を当てて、入った道と出口が繋がることを確かめている。偽の側は本物の git で worktree を作るので、同じ出口をもう一度通す効果は薄い |
-| P015（`paneの用意で入らなかった`） | 引いた記述 `directchatのpaneを用意する` の打ち切りの経路そのものである。打ち切りの19本のうち17本に、引いた記述の側でテストを当ててある。この記述の側で足す段は「Status を書かない」だけで、引いた記述のテストが同じことを見ている |
+| P015（`paneの用意で入らなかった`） | 引いた記述 `directchatのpaneを用意する` の打ち切りの経路そのものである。打ち切りの19本のうち17本に、引いた記述の側でテストを当ててある。この記述の側で足す段は「direct chat のあいだの扱いを始めない」だけで、引いた記述のテストが、印を立てていないことと、direct chat の案内を書いていないことを見ている。引いた記述の打ち切りのうち3本（`担当者が1人でない`・`用意の失敗が上限を超えた`・`用意中に作業中へ戻された`）は Status を書くので、この記述の側では Status に触れない |
 
 direct chat のあいだにしないこと（上の表）のうち、stall の検知を飛ばすこと・表明を読まないこと・終わらせる処理をやめることは、direct chat へ入ったところで終わるテスト（`test/internal/orchestrator/direct_chat_test.go` と `direct_chat_setup_test.go`）が確かめている。
 経路の終わりまでは通さないので、経路の番号は付けていない。
@@ -127,14 +150,14 @@ BASIC FLOW:
 20. システムは issue に hold のコメントを1件書く。
 21. システムは VALIDATES THAT Claude Code が応答を書いている最中でない。
 22. システムは Claude Code に同じ pane で継続の指示を1回送る。
-POSTCONDITION: pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。
+POSTCONDITION: システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。
 
 SPECIFIC ALTERNATIVE FLOW 担当者が1人でない:
 RFS BASIC FLOW 3
 1. システムは run に direct chat の印を立てる。
 2. システムは GitHub Projects v2 に issue の Status への failure_state の選択肢の書き込みと理由のコメントを要求する。
 3. ABORT
-POSTCONDITION: システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えており、システムは次の巡回で pane を閉じて印を外す。書けなかったときは、issue の Status は変わっておらず、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。worktree は残っている。
+POSTCONDITION: システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、システムは次の巡回で pane を閉じて印を外す。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。issue の Status が tracker.direct_chat_state の選択肢のまま書けなかったときは、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。書く直前に取り直した Status が tracker.direct_chat_state の選択肢でなかったときは、システムは Status もコメントも書いておらず、次の巡回は動かされた先の Status を扱う。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 担当者が別のアカウントに替わった:
 RFS BASIC FLOW 4
@@ -146,9 +169,9 @@ POSTCONDITION: pane は閉じている。印は外れている。システムは
 
 SPECIFIC ALTERNATIVE FLOW paneの用意で入らなかった:
 RFS BASIC FLOW 8
-1. システムは issue の Status を書かない。
+1. システムは direct chat のあいだの扱いを始めない。
 2. ABORT
-POSTCONDITION: directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。run は direct chat の印を持っていない。
+POSTCONDITION: directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。issue の Status を書いたかは、その代替フローが決める。システムは direct chat の印を持つ run を持っていない。
 
 SPECIFIC ALTERNATIVE FLOW 完了のStatusへ動かされた:
 RFS BASIC FLOW 15
@@ -161,7 +184,7 @@ SPECIFIC ALTERNATIVE FLOW 作業中でも完了でもないStatusへ動かされ
 RFS BASIC FLOW 16
 1. システムは direct chat を抜けたことを記録に残す。
 2. ABORT
-POSTCONDITION: run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。
+POSTCONDITION: run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは direct chat を抜ける処理で issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。
 
 SPECIFIC ALTERNATIVE FLOW 応答を書いている最中に戻された:
 RFS BASIC FLOW 21
@@ -200,7 +223,7 @@ flowchart TD
     A2S2["担当者が別のアカウントに替わった 2 システムは herdr の pane を閉じる"]
     A2S3["担当者が別のアカウントに替わった 3 システムは印を外す"]
     A2S4(["担当者が別のアカウントに替わった 4 ABORT"])
-    A3S1["paneの用意で入らなかった 1 システムは issue の Status を書かない"]
+    A3S1["paneの用意で入らなかった 1 システムは direct chat のあいだの扱いを始めない"]
     A3S2(["paneの用意で入らなかった 2 ABORT"])
     A4S1["完了のStatusへ動かされた 1 システムは run に direct chat から terminal_states へ直接抜けた印を立てる"]
     A4S2[["完了のStatusへ動かされた 2 INCLUDE USE CASE run を終えて worker を止める"]]
@@ -291,7 +314,7 @@ sequenceDiagram
             システム->>GitHub: Status への running_state の書き込みを要求する
         end
         システム->>GitHub: hold のコメントを1件書く
-        Note over システム: 次の巡回
+        Note over システム: 次の巡回（turn 数が上限に達した run は、指示を受け取らずにここで終わる。本文の表）
         システム->>herdr: 応答を書いている最中かを要求する
         alt 応答を書いている最中である
             システム->>システム: 走っている turn の終わりを待つ

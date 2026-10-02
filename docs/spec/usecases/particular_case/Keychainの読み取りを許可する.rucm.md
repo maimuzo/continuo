@@ -6,7 +6,7 @@
 - `docs/plans/continuo_design.md` の「3-34b. 人間に見せるエラーは、原因と対処を必ず書く」（確かめ方・よくある原因・対処を出す）
 - `docs/plans/continuo_design.md` の「3-32. 使い始めるまでの手順」（このコマンドを叩く場面）
 - `internal/cli/cli.go` の `runAllowKeychainAccess` / `printKeychainFailure` / `parseErrorExitCode`
-- `internal/ratelimit/keychain.go` の `ProbeKeychain` / `runSecurity` / `securityStderr`、定数 `AllowAccessTimeout` / `KeychainService`、`ErrKeychainTimeout`
+- `internal/ratelimit/keychain.go` の `ProbeKeychain` / `runSecurity` / `securityStderr` / `parseAccessToken`、定数 `AllowAccessTimeout` / `KeychainService`、`ErrKeychainTimeout`
 
 `continuo allow-keychain-access` は、設定ファイル（`WORKFLOW.md`）を読まない。読む先は Keychain の1項目（`Claude Code-credentials`）に決まっている。
 
@@ -43,12 +43,18 @@ macOS の Keychain は、初めて読む実行ファイルに確認のダイア�
 どれも、標準出力に理由と直し方を出して終了コード 1 で終わる（代替フロー `読めない`）。
 `internal/ratelimit/keychain.go` の `runSecurity` と `ProbeKeychain` が、この順に確かめる。
 
-| 理由 | どの関数が返すか |
-| --- | --- |
-| `security` が PATH に無い | `runSecurity` |
-| `security` が異常終了した（項目が無い、利用者がダイアログで拒否した、など）。標準エラーの先頭200文字を理由に載せる | `runSecurity` |
-| 標準出力を JSON として読めない | `ProbeKeychain` |
-| JSON に `claudeAiOauth` が無い | `ProbeKeychain` |
+| 理由 | どの関数が返すか | 段6・段7 を通るか |
+| --- | --- | --- |
+| `security` が PATH に無い | `runSecurity` | 通らない。`security` を起動する前に決まるので、Keychain へは何も要求せず、待ちもしない。段5 の案内は出たあとである |
+| `security` が異常終了した（項目が無い、利用者がダイアログで拒否した、など）。標準エラーの先頭200文字を理由に載せる | `runSecurity` | 通る |
+| 標準出力を JSON として読めない | `ProbeKeychain` | 通る |
+| JSON に `claudeAiOauth` が無い | `ProbeKeychain` | 通る |
+| `claudeAiOauth` は在るが、`accessToken` が文字列でない（数や配列など）。理由の文面は「JSON として読めない」と同じである | `ProbeKeychain`（`parseAccessToken` が誤りを返す） | 通る |
+
+`security` が PATH に無いときは、段6 の要求と段7 の待ちが起きないまま、段8 の検証が偽になる。
+応答も終了コードも `読めない` のほかの理由と同じで、流れを分けないので、段にも代替フローにもしていない。
+基本フローの段6・段7 と、代替フロー `読めない` の事後条件は、この場合を除いて読む。
+`accessToken` が文字列で、空のとき・キーが無いときは、段8 は真で、段9 が偽になる（代替フロー `accessTokenが無い`）。
 
 `runSecurity` は、呼び出し側が打ち切ったとき（`ErrKeychainCanceled`）も誤りを返す。
 `runAllowKeychainAccess` は打ち切られない文脈（`context.Background()`）を渡すので、このコマンドからは起きない。段にも代替フローにもしていない。
@@ -118,7 +124,7 @@ SPECIFIC ALTERNATIVE FLOW 読めない:
 RFS BASIC FLOW 8
 1. システムは利用者に読めなかった理由と確かめ方と原因と対処を応答する。
 2. ABORT
-POSTCONDITION: 応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。
+POSTCONDITION: 応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。security が PATH に無かったときは、システムは Keychain を読むコマンドを起動していない。
 
 SPECIFIC ALTERNATIVE FLOW accessTokenが無い:
 RFS BASIC FLOW 9

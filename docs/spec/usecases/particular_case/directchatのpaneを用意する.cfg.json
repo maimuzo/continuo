@@ -3,12 +3,12 @@
   "usecase_name": "directchatのpaneを用意する",
   "source": {
     "file": "docs/spec/usecases/particular_case/directchatのpaneを用意する.rucm.md",
-    "rucm_block_sha256": "17ff1ee28ea96f34f40af5ef8205f962c4fccc2b7ee5239661ca19cc7d9876af"
+    "rucm_block_sha256": "975a02104340f4447ff90bdc78644fbad9f1d843f9015452d97175683d2afe08"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。"
+      "postcondition": "worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。案内のコメントを投稿できたときは、issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。"
     },
     "この巡回では用意しない": {
       "rfs": {
@@ -25,7 +25,7 @@
           13
         ]
       },
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。"
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。"
     },
     "担当者が1人でない": {
       "rfs": {
@@ -34,7 +34,7 @@
           3
         ]
       },
-      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、候補の Status は変わっていない。"
+      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢である。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いていない。"
     },
     "用意の失敗が上限を超えた": {
       "rfs": {
@@ -43,7 +43,7 @@
           10
         ]
       },
-      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に用意が落ちた理由のコメントが1件増えており、用意の失敗の記録は消えている。書けなかったときは、候補の Status は変わっておらず、用意の失敗の記録は残っている。"
+      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、用意の失敗の記録は消えている。書けて、かつコメントを投稿できたときは、issue に用意が落ちた理由のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いておらず、用意の失敗の記録は、候補が direct chat の候補から外れる巡回まで残っている。"
     },
     "用意が落ちた": {
       "rfs": {
@@ -80,7 +80,7 @@
           22
         ]
       },
-      "postcondition": "run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。"
+      "postcondition": "run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。"
     }
   },
   "nodes": [
@@ -778,7 +778,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。",
+      "postcondition": "worktree と pane がある。pane で Claude Code が起動している。システムは Claude Code に指示を1つも送っていない。候補の Status は tracker.direct_chat_state の選択肢のままである。run は印と direct chat の印を持っている。案内のコメントを投稿できたときは、issue に案内のコメントが1件増えている。用意の失敗の記録は消えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -901,7 +901,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "用意中に作業中へ戻された",
-      "postcondition": "run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -972,7 +972,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "用意中に作業中へ戻された",
-      "postcondition": "run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1042,7 +1042,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "用意中に作業中へ戻された",
-      "postcondition": "run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1112,7 +1112,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "用意中に作業中へ戻された",
-      "postcondition": "run は印を持っている。run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "run は direct chat の印を持っていない。システムは issue に案内のコメントを書いていない。本文の「1回目の本文を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、Claude Code は1回目の本文を受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1348,7 +1348,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1389,7 +1389,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1428,7 +1428,7 @@
       "id": "P012",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1465,7 +1465,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "用意の失敗が上限を超えた",
-      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に用意が落ちた理由のコメントが1件増えており、用意の失敗の記録は消えている。書けなかったときは、候補の Status は変わっておらず、用意の失敗の記録は残っている。",
+      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、用意の失敗の記録は消えている。書けて、かつコメントを投稿できたときは、issue に用意が落ちた理由のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いておらず、用意の失敗の記録は、候補が direct chat の候補から外れる巡回まで残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1502,7 +1502,7 @@
       "id": "P014",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1535,7 +1535,7 @@
       "id": "P015",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1566,7 +1566,7 @@
       "id": "P016",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1595,7 +1595,7 @@
       "id": "P017",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1620,7 +1620,7 @@
       "id": "P018",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1643,7 +1643,7 @@
       "id": "P019",
       "terminal": "abort",
       "terminal_flow": "担当者が1人でない",
-      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、候補の Status は変わっていない。",
+      "postcondition": "システムは候補に印を付けていない。システムは pane を開いていない。書けたときは、候補の Status は failure_state の選択肢である。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。書けなかったときは、システムは候補の Status を変えておらず、コメントも書いていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1666,7 +1666,7 @@
       "id": "P020",
       "terminal": "abort",
       "terminal_flow": "この巡回では用意しない",
-      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。システムは次の巡回で同じ門をもう一度見る。",
+      "postcondition": "システムは候補に印を付けていない。システムはカンバンへ書いていない。システムは pane を開いていない。候補の worktree に既にある pane は閉じていない。候補が次の巡回でも direct chat の候補なら、システムは次の巡回で同じ門をもう一度見る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

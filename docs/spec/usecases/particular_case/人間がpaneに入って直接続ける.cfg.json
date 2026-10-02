@@ -3,12 +3,12 @@
   "usecase_name": "人間がpaneに入って直接続ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.rucm.md",
-    "rucm_block_sha256": "aa791d25d7132d0a7e0621ee98007df4d19ae906b007b7ae579a489a8ff69f10"
+    "rucm_block_sha256": "ab622ccf0e3d44a8babf0fcecb08fc5535d2d05f7668245200732f46376d6c19"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。"
+      "postcondition": "システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。"
     },
     "担当者が1人でない": {
       "rfs": {
@@ -17,7 +17,7 @@
           3
         ]
       },
-      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えており、システムは次の巡回で pane を閉じて印を外す。書けなかったときは、issue の Status は変わっておらず、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。worktree は残っている。"
+      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、システムは次の巡回で pane を閉じて印を外す。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。issue の Status が tracker.direct_chat_state の選択肢のまま書けなかったときは、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。書く直前に取り直した Status が tracker.direct_chat_state の選択肢でなかったときは、システムは Status もコメントも書いておらず、次の巡回は動かされた先の Status を扱う。worktree は残っている。"
     },
     "担当者が別のアカウントに替わった": {
       "rfs": {
@@ -35,7 +35,7 @@
           8
         ]
       },
-      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。run は direct chat の印を持っていない。"
+      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。issue の Status を書いたかは、その代替フローが決める。システムは direct chat の印を持つ run を持っていない。"
     },
     "完了のStatusへ動かされた": {
       "rfs": {
@@ -53,7 +53,7 @@
           16
         ]
       },
-      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。"
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは direct chat を抜ける処理で issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。"
     },
     "応答を書いている最中に戻された": {
       "rfs": {
@@ -254,7 +254,7 @@
       "type": "action",
       "flow": "paneの用意で入らなかった",
       "step": 1,
-      "statement": "システムは issue の Status を書かない。"
+      "statement": "システムは direct chat のあいだの扱いを始めない。"
     },
     {
       "id": "paneの用意で入らなかった-2",
@@ -517,7 +517,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -608,7 +608,7 @@
       "id": "P003",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -697,7 +697,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "作業中でも完了でもないStatusへ動かされた",
-      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは direct chat を抜ける処理で issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -802,7 +802,7 @@
       "id": "P008",
       "terminal": "abort",
       "terminal_flow": "担当者が1人でない",
-      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、issue に担当者を1人にする案内のコメントが1件増えており、システムは次の巡回で pane を閉じて印を外す。書けなかったときは、issue の Status は変わっておらず、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。worktree は残っている。",
+      "postcondition": "システムは Claude Code に指示を送っていない。書けたときは、issue の Status は failure_state の選択肢であり、システムは次の巡回で pane を閉じて印を外す。書けて、かつコメントを投稿できたときは、issue に担当者を1人にする案内のコメントが1件増えている。issue の Status が tracker.direct_chat_state の選択肢のまま書けなかったときは、run は direct chat の印を持ったままであり、システムは次の巡回でもう一度書く。書く直前に取り直した Status が tracker.direct_chat_state の選択肢でなかったときは、システムは Status もコメントも書いておらず、次の巡回は動かされた先の Status を扱う。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -825,7 +825,7 @@
       "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -914,7 +914,7 @@
       "id": "P011",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pane は direct chat の前と同じ pane である。システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は印を持っている。run は direct chat の印を持っていない。Claude Code は継続の指示を1回受け取っている。turn 数は数え直していない。戻した先が dispatch_state の選択肢だったときは、issue の Status は running_state の選択肢である。",
+      "postcondition": "システムは direct chat のあいだ pane を閉じていない。システムは direct chat のあいだ Claude Code に指示を送っていない。run は direct chat の印を持っていない。turn 数は数え直していない。本文の「継続の指示を送る手前で run が終わる場合」の表に当たらなかったときは、run は印を持っており、pane は direct chat の前と同じ pane であり、Claude Code は継続の指示を1回受け取っている。戻した先が dispatch_state の選択肢であり、かつ running_state の書き込みが書けたときは、issue の Status は running_state の選択肢である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1001,7 +1001,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "作業中でも完了でもないStatusへ動かされた",
-      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
+      "postcondition": "run は direct chat の印を持っていない。システムは Claude Code に継続の指示を送っていない。システムは direct chat を抜ける処理で issue の Status を書いていない。同じ巡回の照合が、動かされた先の Status の通常の扱いを行う。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1077,7 +1077,7 @@
       "id": "P015",
       "terminal": "abort",
       "terminal_flow": "paneの用意で入らなかった",
-      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。run は direct chat の印を持っていない。",
+      "postcondition": "directchatのpaneを用意する の打ち切りの代替フローの事後条件が成り立っている。issue の Status を書いたかは、その代替フローが決める。システムは direct chat の印を持つ run を持っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1093,7 +1093,7 @@
         "INCLUDE USE CASE directchatのpaneを用意する",
         "システムは VALIDATES THAT run が direct chat の印を持っている。",
         "CONDITION: NOT run が direct chat の印を持っている",
-        "システムは issue の Status を書かない。",
+        "システムは direct chat のあいだの扱いを始めない。",
         "ABORT"
       ]
     }

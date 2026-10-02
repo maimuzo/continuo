@@ -3,7 +3,7 @@
   "usecase_name": "Keychainの読み取りを許可する",
   "source": {
     "file": "docs/spec/usecases/particular_case/Keychainの読み取りを許可する.rucm.md",
-    "rucm_block_sha256": "61f01618f89550f918b4fa3fec102241642aa847f83cbe60f85477b84773f4fa"
+    "rucm_block_sha256": "56838f7385d1f1748ed63b7de732b511ef7b57b948fd22973b105cd1c5afc84d"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -53,7 +53,7 @@
           8
         ]
       },
-      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。"
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。security が PATH に無かったときは、システムは Keychain を読むコマンドを起動していない。"
     },
     "accessTokenが無い": {
       "rfs": {
@@ -436,7 +436,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "読めない",
-      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。",
+      "postcondition": "応答は標準出力に出ている。項目の値は出ていない。終了コード 1 が返っている。security が PATH に無かったときは、システムは Keychain を読むコマンドを起動していない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

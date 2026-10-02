@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "e0ce1ff9219a6b98fa6e6f3ce60b45c4d9bf45aadf5dd5903fb66da749e79079", "SOURCE": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "60a1f4794349c1b83c885ffd3c8c14ae47d12f0407842b4e27aa1d661b2e0eab", "SOURCE": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.cfg.json"}
 //
 // **ユースケース記述「人間がpaneに入って直接続ける」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -129,10 +129,26 @@ func Test_人間がpaneに入って直接続ける_P003_作業中のStatusへ戻
 //
 // 与える情報: direct chat に入れたあと、`agent_status` が `working` のまま
 // Status を `In Progress` へ戻した run。
-// 成功条件: 指示が1つも飛ばないこと（turn の終わりを待つ側へ倒れていること）。
+// 成功条件: turn ループが送る直前の検査（応答を書いている最中か）まで進み、そこで待つ側へ倒れたことがログに出て、
+// 指示が1つも飛ばないこと。
+//
+// **戻したあとの巡回は2回回す。**送る合図は、巡回のループの外の書き込み（hold のコメント）が終わってから立つ。
+// 1回目の巡回の `wakeRuns` はその合図をまだ読めないので、1回だけだと turn ループが立たず、
+// 検査を通らないまま「指示が0回」で通ってしまう。**だから、検査へ届いたことをログの文面でも確かめる。**
 func Test_人間がpaneに入って直接続ける_P004_エージェントが動いている最中に戻したら指示を送らない(t *testing.T) {
+	// turn ループが送る直前の検査で待つ側へ倒れたときにだけ出るログ（`turnLoop`）。
+	const waitedLog = "direct chat から戻りましたが、エージェントが動いているので turn の終わりを待ちます"
 	synctest.Test(t, func(t *testing.T) {
-		fx := withDirectChatState(t) // AgentStatus は working のまま
+		// **ログを溜める。**`withDirectChatState` はログを捨てるので、同じ設定をここで組む。
+		fx := newStubFixture(t, stubFixtureOptions{
+			AgentStatus: herdr.AgentStatusWorking, // 戻したあとも working のまま
+			Logs:        true,
+			Mutate: func(cfg *config.Config) {
+				cfg.Tracker.DirectChatState = humanState
+				cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
+			},
+		})
+		fx.Tracker.SetStatusOptions(directChatBoardOptions...)
 		defer fx.Orc.Close()
 		issue := adoptOwnRun(fx, 188)
 
@@ -141,9 +157,19 @@ func Test_人間がpaneに入って直接続ける_P004_エージェントが動
 		synctest.Wait()
 
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+		// 1回目の巡回が direct chat の印を下ろし、巡回のループの外で hold を書いてから送る合図を立てる。
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+		if strings.Contains(fx.Logs.String(), waitedLog) {
+			t.Fatal("前提が崩れている（1回目の巡回で、もう turn ループが検査へ届いている。2回目の巡回が要る理由が無くなった）")
+		}
+		// 2回目の巡回の `wakeRuns` が合図を読み、turn ループを起こす。
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
+		if !strings.Contains(fx.Logs.String(), waitedLog) {
+			t.Fatalf("turn ループが送る直前の検査へ届いていない（指示が0回でも、検査を通ったことにならない）:\n%s", fx.Logs.String())
+		}
 		if got := fx.Herdr.Prompts(); len(got) != 0 {
 			t.Fatalf("エージェントが動いている最中に指示を送った（turn が混ざる）: %v", got)
 		}

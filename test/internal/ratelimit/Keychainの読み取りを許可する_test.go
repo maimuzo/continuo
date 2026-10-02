@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "b959c18ccaa02021419e163ec15f132be5b660da1bc2910ae4c0f6ada8d3be8c", "SOURCE": "docs/spec/usecases/particular_case/Keychainの読み取りを許可する.cfg.json"}
+// {"RUCM-CFG-SHA256": "f15436ef1f4b32a8a33d8ea1b790521660aeec3b550b492f47f24dce283f64ba", "SOURCE": "docs/spec/usecases/particular_case/Keychainの読み取りを許可する.cfg.json"}
 //
 // **ユースケース記述「Keychainの読み取りを許可する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
