@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "028f9d2cde6778e9342fe29589f048aa2bdfa20039790816882f3c3f6d10748c", "SOURCE": "docs/spec/usecases/particular_case/見出し語を1つずつ検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "dcdf701059811d736b132ca4b887fd65724bcf52e76a3c48c04f84f14349d475", "SOURCE": "docs/spec/usecases/particular_case/見出し語を1つずつ検査する.cfg.json"}
 //
 // **ユースケース記述「見出し語を1つずつ検査する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

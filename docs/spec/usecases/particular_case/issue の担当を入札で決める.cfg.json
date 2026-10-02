@@ -3,7 +3,7 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "d999b02f3189a430e54630898c3f78a30a0dc89aaf75c90f7582d82acaccfccd"
+    "rucm_block_sha256": "28186a0ad5f50b2cdf4226811e621d1324af398ff1affe8686c6114829d24900"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -126,7 +126,7 @@
           20
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。"
     },
     "holdを書けない": {
       "rfs": {
@@ -135,7 +135,7 @@
           22
         ]
       },
-      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。"
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。"
     },
     "担当者を消し戻せない": {
       "rfs": {
@@ -144,7 +144,7 @@
           3
         ]
       },
-      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。"
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。"
     }
   },
   "nodes": [
@@ -1357,7 +1357,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
-      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1422,7 +1422,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
-      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1490,7 +1490,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
-      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1747,7 +1747,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
-      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1809,7 +1809,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
-      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1874,7 +1874,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
-      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2138,7 +2138,7 @@
       "id": "P016",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
-      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2220,7 +2220,7 @@
       "id": "P017",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
-      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2305,7 +2305,7 @@
       "id": "P018",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
-      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2647,7 +2647,7 @@
       "id": "P023",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
-      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。",
+      "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2726,7 +2726,7 @@
       "id": "P024",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
-      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
+      "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2808,7 +2808,7 @@
       "id": "P025",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
-      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
+      "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

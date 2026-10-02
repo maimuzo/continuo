@@ -49,24 +49,31 @@ RFS BASIC FLOW 9
 1. システムは VALIDATES THAT branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている。
 2. システムは壊れた ref のファイルを1つ消す。
 3. システムは消したファイルのパスと消す前の commit を片付けの結果に記録する。
-4. システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。
-5. RESUME STEP 11
+4. システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っているかを git に確かめられる。
+5. システムは VALIDATES THAT 壊れた ref のファイルを消したあとに branch が残っていない。
+6. RESUME STEP 11
 POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。消したファイルのパスが片付けの結果に記録されている。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
 RFS 壊れたref 1
 1. システムは branch を消せなかった理由を片付けの結果に記録する。
-2. RESUME STEP 5
+2. RESUME STEP 6
 POSTCONDITION: branch は残っている。ref のファイルは1バイトも消えていない。branch を消せなかった理由が片付けの結果に記録されている。
 
 SPECIFIC ALTERNATIVE FLOW 生き返ったref:
-RFS 壊れたref 4
+RFS 壊れたref 5
 1. システムは git に branch の削除をもう一度要求する。
 2. IF branch が残っている THEN
 3.   システムは branch を消せなかった理由を片付けの結果に記録する。
 4. ENDIF
-5. RESUME STEP 5
+5. RESUME STEP 6
 POSTCONDITION: 壊れた ref のファイルは消えている。packed-refs は書き換えていない。branch は、もう一度の削除が通っていれば無い。branch が残っていれば、消せなかった理由が片付けの結果に記録されている。
+
+SPECIFIC ALTERNATIVE FLOW 有無を確かめられない:
+RFS 壊れたref 4
+1. システムは branch が残っているかを確かめられなかった理由を片付けの結果に記録する。
+2. RESUME STEP 6
+POSTCONDITION: 壊れた ref のファイルは消えている。packed-refs は書き換えていない。システムは git に branch の削除をもう一度要求していない。branch が残っているかは分からない。確かめられなかった理由が片付けの結果に記録されている。
 ```
 
 ## branch の扱いは4通りある
@@ -132,14 +139,17 @@ flowchart TD
     A1S1{"壊れたref 1 branch の ref のファイルが壊れた ref を消してよい条件を全部満たしている"}
     A1S2["壊れたref 2 システムは壊れた ref のファイルを1つ消す"]
     A1S3["壊れたref 3 システムは消したファイルのパスと消す前の commit を片付けの結果に記録する"]
-    A1S4{"壊れたref 4 壊れた ref のファイルを消したあとに branch が残っていない"}
-    A1S5["壊れたref 5 RESUME STEP 11"]
+    A1S4{"壊れたref 4 壊れた ref のファイルを消したあとに branch が残っているかを git に確かめられる"}
+    A1S5{"壊れたref 5 壊れた ref のファイルを消したあとに branch が残っていない"}
+    A1S6["壊れたref 6 RESUME STEP 11"]
     A2S1["消さないref 1 システムは branch を消せなかった理由を片付けの結果に記録する"]
-    A2S2["消さないref 2 RESUME STEP 5"]
+    A2S2["消さないref 2 RESUME STEP 6"]
     A3S1["生き返ったref 1 システムは git に branch の削除をもう一度要求する"]
     A3S2{"生き返ったref 2 IF branch が残っている THEN"}
     A3S3["生き返ったref 3 システムは branch を消せなかった理由を片付けの結果に記録する"]
-    A3S5["生き返ったref 5 RESUME STEP 5"]
+    A3S5["生き返ったref 5 RESUME STEP 6"]
+    A4S1["有無を確かめられない 1 システムは branch が残っているかを確かめられなかった理由を片付けの結果に記録する"]
+    A4S2["有無を確かめられない 2 RESUME STEP 6"]
     BS1 -- はい --> BS2
     BS1 -- いいえ --> BS3
     BS2 --> BS11
@@ -157,15 +167,19 @@ flowchart TD
     A1S2 --> A1S3
     A1S3 --> A1S4
     A1S4 -- はい --> A1S5
-    A1S4 -- いいえ --> A3S1
-    A1S5 -. "戻る" .-> BS11
+    A1S4 -- いいえ --> A4S1
+    A1S5 -- はい --> A1S6
+    A1S5 -- いいえ --> A3S1
+    A1S6 -. "戻る" .-> BS11
     A2S1 --> A2S2
-    A2S2 -. "戻る" .-> A1S5
+    A2S2 -. "戻る" .-> A1S6
     A3S1 --> A3S2
     A3S2 -- はい --> A3S3
     A3S2 -- いいえ --> A3S5
     A3S3 --> A3S5
-    A3S5 -. "戻る" .-> A1S5
+    A3S5 -. "戻る" .-> A1S6
+    A4S1 --> A4S2
+    A4S2 -. "戻る" .-> A1S6
     BS11 --> END(["終了"])
 ```
 

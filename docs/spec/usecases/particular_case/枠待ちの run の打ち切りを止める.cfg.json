@@ -3,7 +3,7 @@
   "usecase_name": "枠待ちの run の打ち切りを止める",
   "source": {
     "file": "docs/spec/usecases/particular_case/枠待ちの run の打ち切りを止める.rucm.md",
-    "rucm_block_sha256": "3fce1adaa947ab6fc086ed08a427b5f7ea795dea5a102a5079bdd4045fbb14c3"
+    "rucm_block_sha256": "f96d278628df783784268cffb837437434e6e714d7afe69696499ebc0dbbcaf1"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -17,7 +17,7 @@
           2
         ]
       },
-      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。システムは herdr に agent_status を要求していない。herdr の pane は閉じていない。"
+      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の最後に動いていた時刻は進んでいない。herdr の pane は閉じていない。"
     },
     "動いているrun": {
       "rfs": {
@@ -59,7 +59,7 @@
       "postcondition": "herdr の pane は閉じていない。issue の担当者は変わっていない。workspace_hooks の after_run は実行していない。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "担当を外せない": {
-      "when": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、いまの担当が自分であるが、issue の担当者から自分を外す書き込みが失敗する場合",
+      "when": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -68,7 +68,7 @@
           ]
         }
       ],
-      "postcondition": "herdr の pane は閉じていない。issue の担当者は自分のままである。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
+      "postcondition": "herdr の pane は閉じていない。issue の担当者は変わっていない。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "担当が移っていた": {
       "when": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者が1人以上いて、issue の担当者に自分が入っていない場合",
@@ -429,7 +429,7 @@
       "from": "BASIC FLOW-1",
       "to": "担当を外せない-1",
       "kind": "global",
-      "condition": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、いまの担当が自分であるが、issue の担当者から自分を外す書き込みが失敗する場合"
+      "condition": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合"
     },
     {
       "from": "BASIC FLOW-1",
@@ -820,7 +820,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "応答のあるrun",
-      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。システムは herdr に agent_status を要求していない。herdr の pane は閉じていない。",
+      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の最後に動いていた時刻は進んでいない。herdr の pane は閉じていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -862,7 +862,7 @@
       "id": "P008",
       "terminal": "cycle",
       "terminal_flow": "担当を外せない",
-      "postcondition": "herdr の pane は閉じていない。issue の担当者は自分のままである。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "herdr の pane は閉じていない。issue の担当者は変わっていない。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "担当を外せない-1",
@@ -873,7 +873,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
-        "CONDITION: 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、いまの担当が自分であるが、issue の担当者から自分を外す書き込みが失敗する場合",
+        "CONDITION: 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは担当者を外せなかったことをログに出す。",
         "システムは herdr の pane を閉じない。",

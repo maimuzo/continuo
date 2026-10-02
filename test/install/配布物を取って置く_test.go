@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2b1a54cf11dcdbff9447c0871679a7abb1888f566c78ddedddefebdb87ef4b73", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
+// {"RUCM-CFG-SHA256": "9393b397aed98321450a96ead69b5f61dfd58c45dbf03a4ddd9763e496034718", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
 //
 // **ユースケース記述「配布物を取って置く」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -183,9 +183,9 @@ func Test_配布物を取って置く_P001_置き先を指定できる(t *testin
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
-// Test_配布物を取って置く_P008_releaseが1つも無ければ作り方を案内する は、配布前の状態を確かめる。
+// Test_配布物を取って置く_P009_releaseが1つも無ければ作り方を案内する は、配布前の状態を確かめる。
 //
 // **タグを打つまで release は1つも無い。**そのとき利用者に見えるものが、
 // 「404」ではなく「まだ配布していません。ソースから作れます」であること。
@@ -193,7 +193,7 @@ func Test_配布物を取って置く_P001_置き先を指定できる(t *testin
 // 目的: release が無いとき、理由と代わりの手順を示して止まること。
 // 与える情報: 空の応答を返す偽サーバ。
 // 成功条件: ソースから作る手順が出ること。
-func Test_配布物を取って置く_P008_releaseが1つも無ければ作り方を案内する(t *testing.T) {
+func Test_配布物を取って置く_P009_releaseが1つも無ければ作り方を案内する(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/latest", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -246,9 +246,9 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
-// Test_配布物を取って置く_P011_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
+// Test_配布物を取って置く_P012_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
 //
 // **herdr の Windows 版が安定していないため、continuo は Windows ネイティブに対応しない**
 // （設計 3-32b）。**黙って失敗させず、代わりに何を使えばよいかを示す。**
@@ -256,7 +256,7 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 // 目的: Windows と見分けたら、何も置かずに WSL2 を案内すること。
 // 与える情報: `uname -s` が MINGW64_NT を返す環境。
 // 成功条件: 終了コードが 0 でなく、案内に WSL2 が入り、置き先に何も無いこと。
-func Test_配布物を取って置く_P011_WindowsではWSL2を案内して止まる(t *testing.T) {
+func Test_配布物を取って置く_P012_WindowsではWSL2を案内して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "MINGW64_NT-10.0", "x86_64", dir)
 	if code == 0 {
@@ -270,14 +270,14 @@ func Test_配布物を取って置く_P011_WindowsではWSL2を案内して止�
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P011"}
 //
-// Test_配布物を取って置く_P010_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
+// Test_配布物を取って置く_P011_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
 //
 // 目的: 対応していない命令セットで、何も置かずに止まること。
 // 与える情報: `uname -m` が i386 を返す環境。
 // 成功条件: 終了コードが 0 でなく、対応している命令セットを示すこと。
-func Test_配布物を取って置く_P010_対応しない命令セットは対応表を出して止まる(t *testing.T) {
+func Test_配布物を取って置く_P011_対応しない命令セットは対応表を出して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "Linux", "i386", dir)
 	if code == 0 {

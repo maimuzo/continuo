@@ -59,7 +59,7 @@ RFS BASIC FLOW 2
 1. システムは run に枠待ちの印を立てない。
 2. システムは run の最後に動いていた時刻を進めない。
 3. ABORT
-POSTCONDITION: run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。システムは herdr に agent_status を要求していない。herdr の pane は閉じていない。
+POSTCONDITION: run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の最後に動いていた時刻は進んでいない。herdr の pane は閉じていない。
 
 SPECIFIC ALTERNATIVE FLOW 動いているrun:
 RFS BASIC FLOW 4
@@ -97,12 +97,12 @@ POSTCONDITION: herdr の pane は閉じていない。issue の担当者は変�
 
 GLOBAL ALTERNATIVE FLOW 担当を外せない:
 BRANCH FROM BASIC FLOW 1
-WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、いまの担当が自分であるが、issue の担当者から自分を外す書き込みが失敗する場合
+WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合
 1. システムは workspace_hooks の after_run を実行する。
 2. システムは担当者を外せなかったことをログに出す。
 3. システムは herdr の pane を閉じない。
 4. RESUME STEP 1
-POSTCONDITION: herdr の pane は閉じていない。issue の担当者は自分のままである。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。
+POSTCONDITION: herdr の pane は閉じていない。issue の担当者は変わっていない。印は残っている。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 GLOBAL ALTERNATIVE FLOW 担当が移っていた:
 BRANCH FROM BASIC FLOW 1
@@ -142,6 +142,7 @@ POSTCONDITION: issue の担当者から自分は外れている。issue に Clau
 | どこで | 何が起きるか | どうなるか |
 | --- | --- | --- |
 | 段3 | herdr が `agent.get` に誤りを返す | WARN を1行出し、**`working` ではないもの**として段5 へ進む（段4 の真の側） |
+| 段2 より前 | 1週間の枠の余裕値が0以下で、明けるまでが上限を超えている | 手放しの判定が、段2 を通らない run（無音が閾値に達していない run）にも `agent.get` を投げることがある（この turn でまだ hook を受けていない run は、無音の長さを見ずに門を通る）。だから `応答のあるrun` は「agent_status を要求していない」とは言えない |
 | 段6 | turn の待ちが先に同じ印を立てている（`レートリミットで待って再開する` の段3） | 巡回は印のある run を段2 より前で飛ばすので、段8 から通る。結果は同じである |
 | 段10 | turn の待ちが先に印を外している | 巡回は外す run を見つけない。結果は同じである |
 | `枠の残り`・手放しの2本の「pane を閉じる」 | herdr が pane を閉じ損ねる | **閉じた記録を書かない。**保留も捨てる（`settleClosedRecord`）。あとの段はそのまま続く。「その pane はもう無い」という誤りは、閉じたものとして扱う |
@@ -268,7 +269,7 @@ flowchart TD
     A8S6(["待つ上限を超えた 6 ABORT"])
     BS1 --> BS2
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっているが、いまの担当を確かめられないか、外す相手を決められない場合" .-> A5S1
-    BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、いまの担当が自分であるが、issue の担当者から自分を外す書き込みが失敗する場合" .-> A6S1
+    BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合" .-> A6S1
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者が1人以上いて、issue の担当者に自分が入っていない場合" .-> A7S1
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいない場合" .-> A8S1
     BS2 -- はい --> BS3

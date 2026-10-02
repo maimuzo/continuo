@@ -3,7 +3,7 @@
   "usecase_name": "画面に出す文言の言語を決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/画面に出す文言の言語を決める.rucm.md",
-    "rucm_block_sha256": "3472e3f8597802637eca87cd883f5144a0a1081e41c39a0a59bd461dd78ce2ad"
+    "rucm_block_sha256": "ef422d04e16ae0525a1e760b0f49beb0ef1fdc0443dd43604c8d366fb7842d60"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -28,7 +28,7 @@
           13
         ]
       },
-      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは設定ファイルの language の値を画面に出す文言の言語に採っていない。設定ファイルの language の値が受け付けられない値である実行も、設定ファイルを読み取れない実行と同じ扱いである。言語を決める処理は、利用者が要求したコマンドを止めていない。利用者が要求したコマンドは、設定ファイルを読めない理由を環境変数 LANG から決めた言語の文言で報告する。continuo doctor と continuo setup は、報告したあとも処理を続ける。常駐プロセスと continuo trust と continuo prompt と continuo abandon は、報告して終わる。"
+      "postcondition": "画面に出す文言の言語は環境変数 LANG から決めた言語である。システムは設定ファイルの language の値を画面に出す文言の言語に採っていない。設定ファイルの language の値が受け付けられない値である実行も、設定ファイルを読み取れない実行と同じ扱いである。言語を決める処理は、利用者が要求したコマンドを止めていない。利用者が要求したコマンドは、設定ファイルを読めない理由を環境変数 LANG から決めた言語の文言で報告する。検査を行う実行の continuo doctor と continuo setup は、報告したあとも処理を続ける。検査を行わない実行の continuo doctor は、処理を続けない。常駐プロセスと continuo trust と continuo prompt と continuo abandon は、報告して終わる。"
     },
     "文言が登録されていない": {
       "rfs": {

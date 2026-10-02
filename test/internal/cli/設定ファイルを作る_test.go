@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "beee1cbd0487f402fe5e6e9fad748c002ef821e891546ab112081af38c43794b", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
+// {"RUCM-CFG-SHA256": "aabc96cf347649c45020e53dc347244a1e1eac8a57051a6455c70f2f64e0d39f", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
 //
 // **ユースケース記述「設定ファイルを作る」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -342,15 +342,15 @@ func Test_設定ファイルを作る_P014_書き出す先がsymlinkならリン
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P018"}
 //
-// Test_設定ファイルを作る_P017_ownerの形が不正なら外部へ接続する前に落とす は、段0 の検査を確かめる。
+// Test_設定ファイルを作る_P018_ownerの形が不正なら外部へ接続する前に落とす は、段0 の検査を確かめる。
 //
 // 目的: `--owner` に GitHub のアカウント名として成り立たない文字列を渡したとき、
 // `gh` を1回も起動せずに 2 で止まること。
 // 与える情報: 空白や記号を含む owner。
 // 成功条件: すべて終了コードが 2。
-func Test_設定ファイルを作る_P017_ownerの形が不正なら外部へ接続する前に落とす(t *testing.T) {
+func Test_設定ファイルを作る_P018_ownerの形が不正なら外部へ接続する前に落とす(t *testing.T) {
 	for _, owner := range []string{"has space", "-leading", "trailing-", "a/b", strings.Repeat("x", 40)} {
 		t.Run(owner, func(t *testing.T) {
 			code, _, stderr := runCLI([]string{"init", "--owner", owner, t.TempDir()}, "")
@@ -361,14 +361,14 @@ func Test_設定ファイルを作る_P017_ownerの形が不正なら外部へ�
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P018"}
 //
-// Test_設定ファイルを作る_P017_projectが0以下なら落とす は、カンバンの番号の検査を確かめる。
+// Test_設定ファイルを作る_P018_projectが0以下なら落とす は、カンバンの番号の検査を確かめる。
 //
 // 目的: `--project 0` や負の数を、カンバンを引きに行く前に弾くこと。
 // 与える情報: 0 と -1。
 // 成功条件: 終了コードが 2。
-func Test_設定ファイルを作る_P017_projectが0以下なら落とす(t *testing.T) {
+func Test_設定ファイルを作る_P018_projectが0以下なら落とす(t *testing.T) {
 	for _, n := range []string{"0", "-1"} {
 		t.Run(n, func(t *testing.T) {
 			code, _, _ := runCLI([]string{"init", "--project", n, t.TempDir()}, "")

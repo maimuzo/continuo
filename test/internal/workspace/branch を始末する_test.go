@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "e72622f895097213edbebf6b7e232170979c65956f6bafd1024f3e4a9572f308", "SOURCE": "docs/spec/usecases/particular_case/branch を始末する.cfg.json"}
+// {"RUCM-CFG-SHA256": "df7179a7e571603f7d98116fc57f23336550fe41030705ead67a696a0a4dc931", "SOURCE": "docs/spec/usecases/particular_case/branch を始末する.cfg.json"}
 //
 // **ユースケース記述「branch を始末する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

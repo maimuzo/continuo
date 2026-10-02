@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "757606f9abc1bcaae33326d5838d1be26e4b4fd106852bfd13d74105a50aa70c", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "307a3de7f2f8297be18cc4cb28fd1821d4dd380560a3a668f369d20a9fa63472", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 //
 // **ユースケース記述「本家のリポジトリへ PR を出す」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -60,7 +60,7 @@ func Test_本家のリポジトリへPRを出す_P001_公開かどうかで判�
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P007"}
 //
 // 目的: 公開リポジトリの issue に着手したとき、危ない道具の呼び出しを判定させる hook が
 // `PreToolUse` に載ること、そして **turn の終わりを知るための `command` の hook が
@@ -76,7 +76,7 @@ func Test_本家のリポジトリへPRを出す_P001_公開かどうかで判�
 // 与える情報: `mode: public_only` の設定と、公開リポジトリ（`RepoIsPrivate` が false）の issue。
 // 成功条件: `prompt` の hook が1件あり、matcher が `Bash`、`model` が設定に書いたとおりの文字列、
 // `continueOnBlock` が真、指示文に `$ARGUMENTS` が入っていること。`command` の hook も残ること。
-func Test_本家のリポジトリへPRを出す_P005_公開リポジトリのissueには判定のhookを足す(t *testing.T) {
+func Test_本家のリポジトリへPRを出す_P007_公開リポジトリのissueには判定のhookを足す(t *testing.T) {
 	public := false
 	// モデル名は架空である。**受け付ける名前の一覧が公式文書に無いので、実在の名前を書かない**
 	// （設計 3-64c）。ここで確かめたいのは「書いた文字列がそのまま settings.json へ通ること」である。

@@ -128,7 +128,64 @@ POSTCONDITION: システムは issue の Status を動かしていない。issue
 
 ```mermaid
 flowchart TD
-    A --> B
+    BS1["1 エージェントはシステムに最終応答を返す"]
+    BS2["2 システムは transcript から表明の行を読む"]
+    BS3{"3 transcript に表明の行が1行以上ある"}
+    BS4{"4 表明の値が status_signal_map にある"}
+    BS5{"5 status_signal_map の遷移先が null ではない"}
+    BS6["6 システムは GitHub Projects v2 に issue の Status の取り直しを要求する"]
+    BS7{"7 取り直した Status が terminal_states にも direct_chat_state にも入っていない"}
+    BS8{"8 取り直した Status が遷移先の選択肢と違う"}
+    BS9["9 システムは GitHub Projects v2 に issue の Status への遷移先の選択肢の書き込みを要求する"]
+    BS10{"10 GitHub Projects v2 が Status の書き込みを受け付ける"}
+    BS11["11 システムは遷移先の選択肢を最後に書いた Status として控える"]
+    BS12["12 システムは Status を動かした記録を issue にコメントする"]
+    A1S1["表明なし 1 システムはボードの issue の Status を動かさない"]
+    A1S2["表明なし 2 システムは次の継続の指示に表明を促す1文を足す合図を run に立てる"]
+    A1S3(["表明なし 3 ABORT"])
+    A2S1["知らない表明 1 システムは表明の値が status_signal_map にないことをログに出す"]
+    A2S2["知らない表明 2 システムはボードの issue の Status を動かさない"]
+    A2S3(["知らない表明 3 ABORT"])
+    A3S1["動かさない表明 1 システムはボードの issue の Status を動かさない"]
+    A3S2(["動かさない表明 2 ABORT"])
+    A4S1["書いてはいけないStatus 1 システムはボードの issue の Status を書かない"]
+    A4S2["書いてはいけないStatus 2 システムは遷移先の選択肢を最後に書いた Status として控えない"]
+    A4S3(["書いてはいけないStatus 3 ABORT"])
+    A5S1["既に同じStatus 1 システムは GitHub Projects v2 に Status の書き込みを要求しない"]
+    A5S2["既に同じStatus 2 システムは遷移先の選択肢を最後に書いた Status として控える"]
+    A5S3(["既に同じStatus 3 ABORT"])
+    A6S1["Statusを書けない 1 システムは Status を動かせないことをログに出す"]
+    A6S2["Statusを書けない 2 システムは Status を動かした記録を issue にコメントしない"]
+    A6S3(["Statusを書けない 3 ABORT"])
+    BS1 --> BS2
+    BS2 --> BS3
+    BS3 -- はい --> BS4
+    BS3 -- いいえ --> A1S1
+    BS4 -- はい --> BS5
+    BS4 -- いいえ --> A2S1
+    BS5 -- はい --> BS6
+    BS5 -- いいえ --> A3S1
+    BS6 --> BS7
+    BS7 -- はい --> BS8
+    BS7 -- いいえ --> A4S1
+    BS8 -- はい --> BS9
+    BS8 -- いいえ --> A5S1
+    BS9 --> BS10
+    BS10 -- はい --> BS11
+    BS10 -- いいえ --> A6S1
+    BS11 --> BS12
+    A1S1 --> A1S2
+    A1S2 --> A1S3
+    A2S1 --> A2S2
+    A2S2 --> A2S3
+    A3S1 --> A3S2
+    A4S1 --> A4S2
+    A4S2 --> A4S3
+    A5S1 --> A5S2
+    A5S2 --> A5S3
+    A6S1 --> A6S2
+    A6S2 --> A6S3
+    BS12 --> END(["終了"])
 ```
 
 ## シーケンス図

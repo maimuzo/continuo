@@ -73,49 +73,51 @@ BASIC FLOW:
 12. システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。
 13. システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。
 14. INCLUDE USE CASE issue の担当を入札で決める
-15. システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。
-16. システムは先頭の issue に印を付ける。
-17. システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。
-18. システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。
-19. システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。
-20. システムはボードの issue の Status に running_state の選択肢を書く。
-21. システムは Status を動かした記録を issue にコメントする。
-22. システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。
-23. システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。
-24. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
-25. システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。
-26. システムは Claude Code の設定ファイルを worktree の外に書く。
-27. システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。
-28. システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。
-29. システムは workspace_hooks の before_run を実行する。
-30. システムは herdr に workspace の pane の一覧を要求する。
-31. システムは pane の label に owner/repo/issues/N を書く。
-32. システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。
-33. システムは pane で Claude Code をいま選ばれている起動フラグで起動する。
-34. システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。
-35. システムは VALIDATES THAT この run の turn ループが1本も走っていない。
-36. DO
-37.   システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。
-38.   システムは VALIDATES THAT turn の本文を組み立てられる。
-39.   システムは Claude Code に turn の本文を送る。
-40.   システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。
-41.   システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。
-42.   システムは Claude Code の Stop hook を受ける。
-43.   システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。
-44.   システムは settle_ms のあいだ待つ。
-45.   システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。
-46.   システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。
-47.   システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。
-48.   システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。
-49.   システムは transcript から表明の行を読む。
-50.   システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。
-51.   システムは Status を動かした記録を issue にコメントする。
-52.   システムはボードの issue の Status を ID 指定で取り直す。
-53.   システムは VALIDATES THAT 取り直した issue がボードから見えている。
-54. UNTIL 取り直した issue の Status が active_states に入っていない
-55. システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。
-56. INCLUDE USE CASE run を終えて worker を止める
-POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。issue の担当者はこの機械の投稿者1人のままである。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。印は外れている。遷移先の選択肢が cleanup.on_states に入っていなければ、worktree と branch は残っている。
+15. システムは VALIDATES THAT 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない。
+16. システムは VALIDATES THAT 入札の段が、先頭の issue をこの機械が着手する相手として渡している。
+17. システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。
+18. システムは先頭の issue に印を付ける。
+19. システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。
+20. システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。
+21. システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。
+22. システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く。
+23. システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする。
+24. システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。
+25. システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。
+26. システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
+27. システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。
+28. システムは Claude Code の設定ファイルを worktree の外に書く。
+29. システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。
+30. システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。
+31. システムは workspace_hooks の before_run を実行する。
+32. システムは herdr に workspace の pane の一覧を要求する。
+33. システムは pane の label に owner/repo/issues/N を書く。
+34. システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。
+35. システムは pane で Claude Code をいま選ばれている起動フラグで起動する。
+36. システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。
+37. システムは VALIDATES THAT この run の turn ループが1本も走っていない。
+38. DO
+39.   システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。
+40.   システムは VALIDATES THAT turn の本文を組み立てられる。
+41.   システムは Claude Code に turn の本文を送る。
+42.   システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。
+43.   システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。
+44.   システムは Claude Code の Stop hook を受ける。
+45.   システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。
+46.   システムは settle_ms のあいだ待つ。
+47.   システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。
+48.   システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。
+49.   システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。
+50.   システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。
+51.   システムは transcript から表明の行を読む。
+52.   システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。
+53.   システムは Status を動かした記録を issue にコメントする。
+54.   システムはボードの issue の Status を ID 指定で取り直す。
+55.   システムは VALIDATES THAT 取り直した issue がボードから見えている。
+56. UNTIL 取り直した issue の Status が active_states に入っていない
+57. システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。
+58. INCLUDE USE CASE run を終えて worker を止める
+POSTCONDITION: issue の担当者はこの機械の投稿者1人のままである。印は外れている。run を終える段が成果のコメントを確かめられた場合は、issue の Status は表明の値の遷移先の選択肢であり、issue にエージェントが書いたコメントが1件以上あり、herdr の pane は閉じており、issue に Claude Code を閉じた記録のコメントが1件増えている。run を終える段が代替フローで終わった場合は、Status とコメントと pane は、run を終えて worker を止める の代替フローの事後条件のとおりである。遷移先の選択肢が cleanup.on_states に入っていなければ、worktree と branch は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 巡回のdispatchの見送り:
 RFS BASIC FLOW 3
@@ -195,95 +197,112 @@ RFS BASIC FLOW 13
 3. ABORT
 POSTCONDITION: issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。
 
-SPECIFIC ALTERNATIVE FLOW 印の取り損ね:
+SPECIFIC ALTERNATIVE FLOW 入札での巡回の打ち切り:
 RFS BASIC FLOW 15
+1. システムはこの巡回で残りの候補を1件も見ない。
+2. ABORT
+POSTCONDITION: 印の件数は変わっていない。issue の Status はボードにある選択肢のままである。worktree は作っていない。入札の段が書いたものは、入札の記述の事後条件のとおりである。残りの候補は、次の巡回で上から見直す。
+
+SPECIFIC ALTERNATIVE FLOW 入札で降りた:
+RFS BASIC FLOW 16
+1. システムはこの issue を dispatch の対象から外す。
+2. ABORT
+POSTCONDITION: システムは印を付けていない。システムは issue の Status を書いていない。worktree は作っていない。入札の段が issue に書いたコメントと担当者は、入札の記述の事後条件のとおりである。他の候補の dispatch は続いている。
+
+SPECIFIC ALTERNATIVE FLOW 印の取り損ね:
+RFS BASIC FLOW 17
 1. システムは、この巡回の入札で担当者を書いていれば、書いた担当者を issue から外す。
 2. システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く。
 3. ABORT
 POSTCONDITION: システムは新しい印を付けていない。issue の Status はボードにある選択肢のままである。worktree は作られていない。担当者を外せなかった場合は、書いた担当者が issue に残っている。他の候補の dispatch は続いている。
 
 BOUNDED ALTERNATIVE FLOW 書かずに取りやめる:
-RFS BASIC FLOW 17,18,19
+RFS BASIC FLOW 19,20,21
 1. システムは印を外す。
 2. システムは、この着手で担当者を書いており、かつ direct_chat_state へ動かされた issue のやり直しでなければ、書いた担当者を issue から外す。
 3. システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く。
 4. ABORT
-POSTCONDITION: issue の Status はボードにある選択肢のままである。worktree は作られていない。issue に Status を動かした記録のコメントは付いていない。issue に人間へ引き渡す通知のコメントは付いていない。印は外れている。担当者を外せなかった場合は、書いた担当者が issue に残っている。
+POSTCONDITION: issue の Status はボードにある選択肢のままである。システムはこの着手で worktree を作っていない。やり直しの着手では、前の着手で作った worktree が残っている。issue に Status を動かした記録のコメントは付いていない。issue に人間へ引き渡す通知のコメントは付いていない。印は外れている。担当者を外せなかった場合は、書いた担当者が issue に残っている。
 
 GLOBAL ALTERNATIVE FLOW 壊れたref:
-BRANCH FROM BASIC FLOW 22
+BRANCH FROM BASIC FLOW 24
 WHEN branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合
 1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
 2. システムは壊れた ref のファイルを1つ消す。
 3. システムは消したファイルのパスと消した理由を記録に残す。
-4. RESUME STEP 22
+4. RESUME STEP 24
 POSTCONDITION: 壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
 RFS 壊れたref 1
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue に worktree を用意できなかった理由を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue に worktree を用意できなかった理由を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。印は外れている。
 
 GLOBAL ALTERNATIVE FLOW worktreeの用意のやり直し:
-BRANCH FROM BASIC FLOW 22
+BRANCH FROM BASIC FLOW 24
 WHEN issue にリンクされた branch を remote から取ってこられず、worktree の用意が待てば通る見込みのある理由で失敗した場合
 1. システムは失敗の理由を記録に残す。
 2. システムはリトライの回数を1つ増やす。
 3. システムはバックオフの期限を印に書く。
 4. ABORT
-POSTCONDITION: issue の Status は running_state の選択肢のままである。worktree は作られていない。herdr の pane は開いていない。印は残っている。バックオフが明けた巡回が着手をやり直す。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
+POSTCONDITION: issue の Status は running_state の選択肢のままである。システムはこの着手で worktree を作っていない。herdr の pane は開いていない。印は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
 
 GLOBAL ALTERNATIVE FLOW 着手の途中の失敗:
-BRANCH FROM BASIC FLOW 20,22,25,26,27,28,29,30,31,33
-WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合
+BRANCH FROM BASIC FLOW 22,24,27,28,29,30,31,32,33,35
+WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue に失敗した段と直し方を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue に失敗した段と直し方を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。pane を引く前に失敗した場合は、herdr の workspace と pane は開いたまま残る。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。
 
 SPECIFIC ALTERNATIVE FLOW paneがまだ使えない:
-RFS BASIC FLOW 32
+RFS BASIC FLOW 34
 1. システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。
 2. システムは 500 ミリ秒待つ。
-3. RESUME STEP 32
+3. RESUME STEP 34
 POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。
 
 SPECIFIC ALTERNATIVE FLOW paneの断念:
 RFS paneがまだ使えない 1
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue に pane が使えなかった理由を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue に pane が使えなかった理由を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 起動直後の確認画面:
-RFS BASIC FLOW 34
+RFS BASIC FLOW 36
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
-3. システムは issue に起動直後の確認の画面で止まった理由を1件コメントする。
-4. INCLUDE USE CASE run を終えて worker を止める
-5. ABORT
+3. システムは issue の失敗の回数を1つ増やす。
+4. システムは issue に起動直後の確認の画面で止まった理由を1件コメントする。
+5. INCLUDE USE CASE run を終えて worker を止める
+6. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。止まった起動は新しいセッション UUID の指定つきの起動である。
 
 SPECIFIC ALTERNATIVE FLOW 起動の待ち直し:
-RFS BASIC FLOW 34
+RFS BASIC FLOW 36
 1. システムは VALIDATES THAT herdr が agent_not_found 以外の誤りを返しておらず、かつ agent_status が working のまま herdr.startup_timeout_ms を過ぎていない。
-2. システムは VALIDATES THAT 起動を待ち始めてから herdr.startup_timeout_ms が経っていない。
+2. システムは VALIDATES THAT 最初に起動を確かめ始めてから herdr.startup_timeout_ms が経っていない。
 3. システムは 500 ミリ秒待つ。
 4. システムは、herdr が agent を登録しておらず、かつ run から作業中の hook が1件も届いていなければ、pane で Claude Code を直前と同じ起動フラグでもう一度起動する。
-5. RESUME STEP 34
+5. RESUME STEP 36
 POSTCONDITION: Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 起動の確認の失敗:
 RFS 起動の待ち直し 1
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue に起動を確かめられなかった理由を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue に起動を確かめられなかった理由を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。リトライの回数は増えていない。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。失敗した起動は新しいセッション UUID の指定つきの起動である。
 
 SPECIFIC ALTERNATIVE FLOW 起動の断念:
@@ -294,10 +313,10 @@ RFS 起動の待ち直し 2
 4. システムはリトライの回数を1つ増やす。
 5. システムはバックオフの期限を印に書く。
 6. ABORT
-POSTCONDITION: issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。worktree は残っている。バックオフが明けた巡回が着手をやり直す。断念した起動は新しいセッション UUID の指定つきの起動である。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
+POSTCONDITION: issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。worktree は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。断念した起動は新しいセッション UUID の指定つきの起動である。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
 
 SPECIFIC ALTERNATIVE FLOW 未登録のまま作業中:
-RFS BASIC FLOW 34
+RFS BASIC FLOW 36
 1. システムは herdr が agent を登録していないまま作業中の hook が届いていることを記録に残す。
 2. システムは Claude Code に1回目の turn の本文を送らない。
 3. システムは run に turn の終わりを待つ印を立てる。
@@ -305,7 +324,7 @@ RFS BASIC FLOW 34
 POSTCONDITION: Claude Code は pane の中で走っている。hook の引き当ての索引は張り替えていない。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。次の巡回が turn ループを起こし、turn を送らずに走っている turn の終わりを待つ。1回目の turn の本文は、走っている turn が終わった次の周で送る。
 
 GLOBAL ALTERNATIVE FLOW 復帰の失敗:
-BRANCH FROM BASIC FLOW 32,33,34
+BRANCH FROM BASIC FLOW 34,35,36
 WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合
 1. システムは新しいセッション UUID を採番する。
 2. システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。
@@ -314,17 +333,17 @@ WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前
 5. システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。
 6. システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。
 7. システムは前の Claude Code を止めずに同じ pane を使い続ける。
-8. RESUME STEP 32
+8. RESUME STEP 34
 POSTCONDITION: 立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW turnループの重なり:
-RFS BASIC FLOW 35
+RFS BASIC FLOW 37
 1. システムは次の巡回で turn を送り直す印を立てる。
 2. ABORT
 POSTCONDITION: 印は残っている。issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。herdr の pane は開いたままである。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 上限での打ち切り:
-RFS BASIC FLOW 37
+RFS BASIC FLOW 39
 1. システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
 3. システムは issue に打ち切りの理由を1件コメントする。
@@ -333,15 +352,16 @@ RFS BASIC FLOW 37
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。herdr の pane は閉じている。印は外れている。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。
 
 SPECIFIC ALTERNATIVE FLOW 本文の組み立ての失敗:
-RFS BASIC FLOW 38
+RFS BASIC FLOW 40
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue にテンプレートの直し方を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue にテンプレートの直し方を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 権限の確認:
-BRANCH FROM BASIC FLOW 39,42
+BRANCH FROM BASIC FLOW 41,44
 WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直しているあいだに agent_status が blocked になった場合
 1. システムは走っている subagent が終わるのを claude.poll_wait_ms まで待つ。
 2. システムは pane に esc のキー入力を送る。
@@ -352,7 +372,7 @@ WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直し�
 POSTCONDITION: issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 送信の失敗:
-BRANCH FROM BASIC FLOW 39
+BRANCH FROM BASIC FLOW 41
 WHEN herdr が指示の送信そのものを断った場合
 1. システムは workspace_hooks の after_run を実行する。
 2. システムは herdr の pane を閉じる。
@@ -363,7 +383,7 @@ WHEN herdr が指示の送信そのものを断った場合
 POSTCONDITION: turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
 
 GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗:
-BRANCH FROM BASIC FLOW 39
+BRANCH FROM BASIC FLOW 41
 WHEN herdr の呼び出しが一時的な理由で失敗した場合
 1. システムは turn の本文が Claude Code に届いたかどうかを判断しない。
 2. システムは turn の本文を送り直さない。
@@ -372,14 +392,14 @@ WHEN herdr の呼び出しが一時的な理由で失敗した場合
 POSTCONDITION: 印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。次の巡回が turn ループを起こし、turn を送らずに turn の終わりを待つ。
 
 SPECIFIC ALTERNATIVE FLOW 騙りのhook:
-RFS BASIC FLOW 40
+RFS BASIC FLOW 42
 1. システムはこの hook を捨てる。
 2. システムは捨てた理由と session_id を記録に残す。
-3. RESUME STEP 40
+3. RESUME STEP 42
 POSTCONDITION: 捨てた hook は Stop hook の到着に数えていない。turn 数は増えていない。システムは次の hook を待っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW turnの終わりの取りこぼし:
-RFS BASIC FLOW 41
+RFS BASIC FLOW 43
 1. システムは VALIDATES THAT リトライの回数が agent.max_retries に達していない。
 2. システムは workspace_hooks の after_run を実行する。
 3. システムは herdr の pane を閉じる。
@@ -387,18 +407,19 @@ RFS BASIC FLOW 41
 5. システムはリトライの回数を1つ増やす。
 6. システムはバックオフの期限を印に書く。
 7. ABORT
-POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。バックオフが明けた巡回が着手をやり直す。
+POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。
 
 SPECIFIC ALTERNATIVE FLOW リトライの尽き:
 RFS turnの終わりの取りこぼし 1
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは issue に打ち切りの理由を1件コメントする。
-3. INCLUDE USE CASE run を終えて worker を止める
-4. ABORT
+2. システムは issue の失敗の回数を1つ増やす。
+3. システムは issue に打ち切りの理由を1件コメントする。
+4. INCLUDE USE CASE run を終えて worker を止める
+5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。印は外れている。herdr の pane は閉じている。issue に打ち切りの理由のコメントが1件ある。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
-BRANCH FROM BASIC FLOW 42
+BRANCH FROM BASIC FLOW 44
 WHEN claude.turn_timeout_ms のあいだ run が進んだ形跡が無く、herdr が返す agent_status が working でない場合
 1. システムは herdr に agent_status を要求する。
 2. システムは workspace_hooks の after_run を実行する。
@@ -410,19 +431,19 @@ WHEN claude.turn_timeout_ms のあいだ run が進んだ形跡が無く、herdr
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
 
 BOUNDED ALTERNATIVE FLOW turnの継続:
-RFS BASIC FLOW 43,45
+RFS BASIC FLOW 45,47
 1. システムは turn がまだ続いているとみなす。
-2. RESUME STEP 42
+2. RESUME STEP 44
 POSTCONDITION: turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 書き直しの待ち:
-RFS BASIC FLOW 46
+RFS BASIC FLOW 48
 1. システムは受けた空の Stop hook を turn の終わりとして扱わない。
-2. RESUME STEP 44
+2. RESUME STEP 46
 POSTCONDITION: turn 数は増えていない。システムは settle_ms ごとに agent_status を見直している。新しい Stop hook が届かないまま agent_status が working でなくなれば、システムは turn の終わりとして先へ進む。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 担当が移った:
-RFS BASIC FLOW 48
+RFS BASIC FLOW 50
 1. システムは issue のコメントを1件残らず取り直す。
 2. システムは担当が移った先のアカウント名と、この機械の担当を外した released の印が先頭に付いたコメントの中身を記録に残す。
 3. システムは workspace_hooks の after_run を実行しない。
@@ -433,14 +454,14 @@ RFS BASIC FLOW 48
 POSTCONDITION: issue の担当者はこの機械の投稿者ではない。この機械は branch へ1バイトも push していない。システムはこの turn の表明を読んでいない。issue の Status は running_state の選択肢のままである。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントは増えていない。印は外れている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 既に同じStatus:
-BRANCH FROM BASIC FLOW 50
+BRANCH FROM BASIC FLOW 52
 WHEN 書く直前に取り直した Status が表明の値の遷移先の選択肢と同じ場合
 1. システムはボードへ書き込まない。
-2. RESUME STEP 52
+2. RESUME STEP 54
 POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。ボードへは1バイトも書いていない。Status を動かした記録のコメントは増えていない。
 
 SPECIFIC ALTERNATIVE FLOW ボードから消えたissue:
-RFS BASIC FLOW 53
+RFS BASIC FLOW 55
 1. システムは issue がボードから見えなくなったことを記録に残す。
 2. システムは workspace_hooks の after_run を実行する。
 3. システムは herdr の pane を閉じる。
@@ -469,8 +490,14 @@ POSTCONDITION: herdr の pane は閉じている。印は残っている。issue
 | 印を付けたあと | 負けた機械が Status を running_state へ動かしてから降りる。**ボードに嘘の running が残る** |
 | worktree を作ったあと | 負けた機械の worktree と branch が残る。**片付けが人間の仕事になる** |
 
-**入札の段は、この機械が担当者になるか、降りるかのどちらかで終わる。**
-降りる側の経路は入札のユースケースが持っているので、こちらには代替フローを置かない。
+**入札の段の終わり方は3通りあり、こちらは直後の2段で受ける**（`internal/orchestrator/dispatch.go` の `dispatchCandidates`）。
+降りる理由そのもの（負けた・期限内の担当がいる・人間が付けた担当である、など）は入札の記述が持つ。こちらが持つのは、降りたあとに何が続くかだけである。
+
+| 入札の段の終わり方 | こちらの受け方 | 実装 |
+| --- | --- | --- |
+| この機械が着手する相手として渡す | 「印を付ける」の段へ進む | `decision.proceed` が真 |
+| その issue だけ降りる | `入札で降りた`。印を付けずに、次の候補へ進む | `decision.proceed` が偽で `continue` |
+| 巡回の残りを打ち切る（コメントの読み取りが巡回の上限に達した） | `入札での巡回の打ち切り`。残りの候補も見ない。`空きスロット不足` と同じ終わり方である | `decision.stop` が真で `break` |
 
 **入札には既定3分（`bid_window_ms`）かかる。**空きスロットの検査（「空きスロットを見る」の段）を
 入札より前に置いてあるのは、**枠が空いていない機械が3分待ってから降りるのを避けるため**である。
@@ -580,7 +607,7 @@ herdr はその workspace を issue の親にしてしまい、閉じられな�
 （`internal/orchestrator/dispatch.go`）。**見ているエラーの種類は `ErrStartupBusy` の1つだけなので、`agent_pane_busy` を
 30秒返され続けた場合も、復帰つきの起動なら立て直しへ回る。**だから `復帰の失敗` は
 「pane の受け付けを見る」「Claude Code を起動する」「起動の完了を見る」の3つの段から枝を出している
-（`BRANCH FROM BASIC FLOW 32,33,34`）。
+（`BRANCH FROM BASIC FLOW 34,35,36`）。
 
 | 分岐元の段 | そこで起きる、復帰つきの起動の失敗 |
 | --- | --- |
@@ -638,6 +665,11 @@ hook の宛先を張り替えてしまう。****待たない。**`ErrStartupBusy
 `herdr.startup_timeout_ms` まで待ち、期限が来たら `起動の断念` へ進む。
 **`起動の断念` は人間へ渡さない。**`runStartOrFail` は `ErrStartupRetryable` を見て `abandonRun` を呼ぶので、
 リトライを1つ積み、Status は `running_state` のまま、バックオフが明けた巡回で着手をやり直す。
+
+**期限は、`agent.start` をやり直すたびに数え直しになる部分がある。**やり直すかどうかを決める期限（`confirmStartupWithRestart`）は
+最初に起動を確かめ始めた時刻から数えるが、1回の確認の中の待ち（`confirmStartup`）は、呼ばれるたびにそこから
+`herdr.startup_timeout_ms` を数える。`agent_not_found` で `agent.start` をやり直した直後の確認が `unknown` のまま続くと、
+合計の待ちは最大で `herdr.startup_timeout_ms` の約2倍になる。
 `failure_state` へ落ちるのは、リトライの回数が `agent.max_retries` に達していたときだけである（`リトライの尽き` と同じ段）。
 
 **`agent_status` が `working` のまま期限を過ぎた場合は、やり直さない。**`confirmStartup` は
@@ -795,6 +827,7 @@ worktree の置き場所を決められない場合と、置き場所が `worksp
 | pane の一覧を取る | `pane.list` の失敗。pane が1つでない |
 | pane の label を書く | `pane.rename` の失敗 |
 | Claude Code を起動する | agent 名を決められない。`agent.start` が `agent_pane_busy` 以外の誤りを返した（新しいセッション UUID の指定つきの起動の場合） |
+| （`復帰の失敗` の中） | 立て直しのためのセッション UUID の採番の失敗。分岐元は「起動フラグを決める」の段の採番の失敗と同じ扱いにして、枝を足していない |
 
 「workspace として開く」の段は、「worktree を作る」の段と同じ `Prepare` の呼び出しの中にあるので、分岐元には並べていない。
 
@@ -989,7 +1022,43 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 
 **順3 から順7 は、`INCLUDE USE CASE run を終えて worker を止める` の1段で書いてある。**
 着手の途中で落ちたフロー（`消さないref`・`着手の途中の失敗`・`paneの断念`・`起動直後の確認画面`・`起動の確認の失敗`）は、
-turn を1回も送っていないので、あちらの代替フロー `確かめないrun` を通る。
+**初めての着手なら**、働き始めた時刻をまだ持っていないので、あちらの代替フロー `確かめないrun` を通る。
+**バックオフ明けのやり直しの着手では、そうとは限らない。**前の着手で turn を送った run は、働き始めた時刻を持ったままである
+（`beginAttempt` は戻さない）。その run がやり直しの着手の途中で落ちると、成果のコメントを確かめ、無ければ `コメントの取り戻し` へ入る。
+
+**失敗の回数を増やすのは、順1 の直後である。**`failRun` と、リトライが尽きた側の `abandonRunClaimed` が、
+failure_state を書いた直後に issue ごとの失敗の回数を1つ増やす（`noteFailure`。書けたかどうかも一緒に控える）。
+基本フローの「失敗の回数を見る」の段と `失敗の繰り返し` が読むのは、この回数である。
+**`上限での打ち切り` と `権限の確認` は増やさない**（`finishRunClaimed` は `noteFailure` を呼ばない）。
+最後まで通った run は、pane を閉じたあとに失敗の記録を消す（`finishRunClaimed` の `forgetFailure`）。リトライを積む出口は、増やしも消しもしない。
+
+**基本フローの最後の INCLUDE が代替フローで終わった場合。**基本フローの事後条件は、引いた先の終わり方で変わる。
+
+| 引いた先の終わり方 | Status | エージェントのコメント |
+| --- | --- | --- |
+| 基本フロー、または `コメントの取り戻し` の成功 | 表明の値の遷移先 | 1件以上ある |
+| `確かめないrun`（draft issue・direct chat から直接抜けた run） | 表明の値の遷移先 | 確かめていない |
+| `復元の断念` | 表明の値の遷移先 | 無い。人間への通知も無い |
+| `取り戻しの復帰の失敗`・`コメントの取り戻しの失敗` | failure_state（遷移先が `terminal_states` か `direct_chat_state` なら書かない） | 無い。成果を確かめてほしい通知が1件ある |
+
+## バックオフが明けた run は、検査から入り直す
+
+**言いたいこと。**リトライを積んだ run は、印を持ったままバックオフを待つ。**明けた巡回は、基本フローの先頭からではなく、
+途中から入り直す**（`internal/orchestrator/reconcile.go` の `resumeBackoff`、`internal/orchestrator/dispatch.go` の `redispatch`）。
+rucm ブロックには入口を足していない。基本フローの段のうち、通るものと通らないものが在るだけだからである。
+
+| 段 | やり直しの着手では |
+| --- | --- |
+| 候補の一覧を取る 〜 required_labels を見る、空きスロットを見る、枠の余裕を見る | **通らない。**印を持っているので、候補としては `走行中のissue` で飛ばされる。定期の検査に落ちた巡回では、やり直しも見送る |
+| 信頼登録を見る、branch の使われ方を見る、worktree の置き場所を見る | **通る**（`preflight`） |
+| 担当を入札で決める、印を付ける | **通らない** |
+| 取り直した Status が active_states か見る | 通る |
+| 取り直した担当者を見る | **通らない**（やり直しでは見ない） |
+| 書く直前の取り直しを見る 以降 | 通る。worktree は再利用し、身元ファイルの引き継いだ回数を1つ増やす。送るのは1回目の本文である |
+
+**検査に落ちたやり直しは、何もせずに戻る。**バックオフの期限は過去の値のまま残るので、同じ巡回の停滞の検知が、
+閉じた pane の agent を引いて誤りを受け、**その run をもう1度打ち切る**（`無音の打ち切り` と同じ後始末）。
+検査に落ち続けると、Claude Code を1度も起動しないままリトライが減り、使い切ると `リトライの尽き` で failure_state へ落ちる。
 
 **尽きたときだけ、Status を failure_state へ落とし、理由を1件コメントし、印を外す。**
 **その順番は変えられない。**引き渡しの通知は1つの run につき1件しか投稿できないので、
@@ -1028,47 +1097,49 @@ flowchart TD
     BS12{"12 先頭の issue の branch を置き場所以外の worktree が使っていない"}
     BS13{"13 先頭の issue の worktree の置き場所をそのまま使える"}
     BS14[["14 INCLUDE USE CASE issue の担当を入札で決める"]]
-    BS15{"15 入札のあいだに、先頭の issue に別の run の印が付いていない"}
-    BS16["16 システムは先頭の issue に印を付ける"]
-    BS17{"17 ID 指定で取り直したボードの issue の Status が active_states に入っている"}
-    BS18{"18 この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない"}
-    BS19{"19 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない"}
-    BS20["20 システムはボードの issue の Status に running_state の選択肢を書く"]
-    BS21["21 システムは Status を動かした記録を issue にコメントする"]
-    BS22["22 システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る"]
-    BS23["23 システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う"]
-    BS24["24 システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く"]
-    BS25["25 システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する"]
-    BS26["26 システムは Claude Code の設定ファイルを worktree の外に書く"]
-    BS27["27 システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める"]
-    BS28["28 システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く"]
-    BS29["29 システムは workspace_hooks の before_run を実行する"]
-    BS30["30 システムは herdr に workspace の pane の一覧を要求する"]
-    BS31["31 システムは pane の label に owner/repo/issues/N を書く"]
-    BS32{"32 pane が Claude Code の起動を受け付ける"}
-    BS33["33 システムは pane で Claude Code をいま選ばれている起動フラグで起動する"]
-    BS34{"34 Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"}
-    BS35{"35 この run の turn ループが1本も走っていない"}
-    BS37{"37 turn 数が max_dispatch_turns に達していない"}
-    BS38{"38 turn の本文を組み立てられる"}
-    BS39["39 システムは Claude Code に turn の本文を送る"]
-    BS40{"40 Claude Code から届いた hook の cwd が worktree の内側である"}
-    BS41{"41 herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている"}
-    BS42["42 システムは Claude Code の Stop hook を受ける"]
-    BS43{"43 受けた Stop hook の background_tasks が空配列である"}
-    BS44["44 システムは settle_ms のあいだ待つ"]
-    BS45{"45 settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない"}
-    BS46{"46 settle_ms が過ぎた時点の agent_status が working でない"}
-    BS47["47 システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す"]
-    BS48{"48 取り直した issue の担当者が、ほかのアカウントだけになっていない"}
-    BS49["49 システムは transcript から表明の行を読む"]
-    BS50["50 システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く"]
-    BS51["51 システムは Status を動かした記録を issue にコメントする"]
-    BS52["52 システムはボードの issue の Status を ID 指定で取り直す"]
-    BS53{"53 取り直した issue がボードから見えている"}
-    BS54{"54 UNTIL 取り直した issue の Status が active_states に入っていない"}
-    BS55["55 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
-    BS56[["56 INCLUDE USE CASE run を終えて worker を止める"]]
+    BS15{"15 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない"}
+    BS16{"16 入札の段が、先頭の issue をこの機械が着手する相手として渡している"}
+    BS17{"17 入札のあいだに、先頭の issue に別の run の印が付いていない"}
+    BS18["18 システムは先頭の issue に印を付ける"]
+    BS19{"19 ID 指定で取り直したボードの issue の Status が active_states に入っている"}
+    BS20{"20 この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない"}
+    BS21{"21 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない"}
+    BS22["22 システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く"]
+    BS23["23 システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする"]
+    BS24["24 システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る"]
+    BS25["25 システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う"]
+    BS26["26 システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く"]
+    BS27["27 システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する"]
+    BS28["28 システムは Claude Code の設定ファイルを worktree の外に書く"]
+    BS29["29 システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める"]
+    BS30["30 システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く"]
+    BS31["31 システムは workspace_hooks の before_run を実行する"]
+    BS32["32 システムは herdr に workspace の pane の一覧を要求する"]
+    BS33["33 システムは pane の label に owner/repo/issues/N を書く"]
+    BS34{"34 pane が Claude Code の起動を受け付ける"}
+    BS35["35 システムは pane で Claude Code をいま選ばれている起動フラグで起動する"]
+    BS36{"36 Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"}
+    BS37{"37 この run の turn ループが1本も走っていない"}
+    BS39{"39 turn 数が max_dispatch_turns に達していない"}
+    BS40{"40 turn の本文を組み立てられる"}
+    BS41["41 システムは Claude Code に turn の本文を送る"]
+    BS42{"42 Claude Code から届いた hook の cwd が worktree の内側である"}
+    BS43{"43 herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている"}
+    BS44["44 システムは Claude Code の Stop hook を受ける"]
+    BS45{"45 受けた Stop hook の background_tasks が空配列である"}
+    BS46["46 システムは settle_ms のあいだ待つ"]
+    BS47{"47 settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない"}
+    BS48{"48 settle_ms が過ぎた時点の agent_status が working でない"}
+    BS49["49 システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す"]
+    BS50{"50 取り直した issue の担当者が、ほかのアカウントだけになっていない"}
+    BS51["51 システムは transcript から表明の行を読む"]
+    BS52["52 システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く"]
+    BS53["53 システムは Status を動かした記録を issue にコメントする"]
+    BS54["54 システムはボードの issue の Status を ID 指定で取り直す"]
+    BS55{"55 取り直した issue がボードから見えている"}
+    BS56{"56 UNTIL 取り直した issue の Status が active_states に入っていない"}
+    BS57["57 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
+    BS58[["58 INCLUDE USE CASE run を終えて worker を止める"]]
     A1S1["巡回のdispatchの見送り 1 システムは dispatch を見送る理由を記録に残す"]
     A1S2["巡回のdispatchの見送り 2 システムはこの巡回で issue を1件も dispatch しない"]
     A1S3(["巡回のdispatchの見送り 3 ABORT"])
@@ -1103,136 +1174,147 @@ flowchart TD
     A11S1["使えないworktree 1 システムはこの issue を dispatch の対象から外す"]
     A11S2["使えないworktree 2 システムは置き場所をそのまま使えない理由を記録に残す"]
     A11S3(["使えないworktree 3 ABORT"])
-    A12S1["印の取り損ね 1 システムは、この巡回の入札で担当者を書いていれば、書いた担当者を issue から外す"]
-    A12S2["印の取り損ね 2 システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く"]
-    A12S3(["印の取り損ね 3 ABORT"])
-    A13S1["書かずに取りやめる 1 システムは印を外す"]
-    A13S2["書かずに取りやめる 2 システムは、この着手で担当者を書いており、かつ direct_chat_state へ動かされた issue のやり直しでなければ、書いた担当者を issue から外す"]
-    A13S3["書かずに取りやめる 3 システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く"]
-    A13S4(["書かずに取りやめる 4 ABORT"])
-    A14S1{"壊れたref 1 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない"}
-    A14S2["壊れたref 2 システムは壊れた ref のファイルを1つ消す"]
-    A14S3["壊れたref 3 システムは消したファイルのパスと消した理由を記録に残す"]
-    A14S4["壊れたref 4 RESUME STEP 22"]
-    A15S1["消さないref 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A15S2["消さないref 2 システムは issue に worktree を用意できなかった理由を1件コメントする"]
-    A15S3[["消さないref 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A15S4(["消さないref 4 ABORT"])
-    A16S1["worktreeの用意のやり直し 1 システムは失敗の理由を記録に残す"]
-    A16S2["worktreeの用意のやり直し 2 システムはリトライの回数を1つ増やす"]
-    A16S3["worktreeの用意のやり直し 3 システムはバックオフの期限を印に書く"]
-    A16S4(["worktreeの用意のやり直し 4 ABORT"])
-    A17S1["着手の途中の失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A17S2["着手の途中の失敗 2 システムは issue に失敗した段と直し方を1件コメントする"]
-    A17S3[["着手の途中の失敗 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A17S4(["着手の途中の失敗 4 ABORT"])
-    A18S1{"paneがまだ使えない 1 pane を待ち始めてから 30 秒が経っていない"}
-    A18S2["paneがまだ使えない 2 システムは 500 ミリ秒待つ"]
-    A18S3["paneがまだ使えない 3 RESUME STEP 32"]
-    A19S1["paneの断念 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A19S2["paneの断念 2 システムは issue に pane が使えなかった理由を1件コメントする"]
-    A19S3[["paneの断念 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A19S4(["paneの断念 4 ABORT"])
-    A20S1["起動直後の確認画面 1 システムは pane に esc のキー入力を送る"]
-    A20S2["起動直後の確認画面 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A20S3["起動直後の確認画面 3 システムは issue に起動直後の確認の画面で止まった理由を1件コメントする"]
-    A20S4[["起動直後の確認画面 4 INCLUDE USE CASE run を終えて worker を止める"]]
-    A20S5(["起動直後の確認画面 5 ABORT"])
-    A21S1{"起動の待ち直し 1 herdr が agent_not_found 以外の誤りを返しておらず、かつ agent_status が working のまま herdr.startup_timeout_ms を過ぎていない"}
-    A21S2{"起動の待ち直し 2 起動を待ち始めてから herdr.startup_timeout_ms が経っていない"}
-    A21S3["起動の待ち直し 3 システムは 500 ミリ秒待つ"]
-    A21S4["起動の待ち直し 4 システムは、herdr が agent を登録しておらず、かつ run から作業中の hook が1件も届いていなければ、pane で Claude Code を直前と同じ起動フラグでもう一度起動する"]
-    A21S5["起動の待ち直し 5 RESUME STEP 34"]
-    A22S1["起動の確認の失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A22S2["起動の確認の失敗 2 システムは issue に起動を確かめられなかった理由を1件コメントする"]
-    A22S3[["起動の確認の失敗 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A22S4(["起動の確認の失敗 4 ABORT"])
-    A23S1["起動の断念 1 システムは workspace_hooks の after_run を実行する"]
-    A23S2["起動の断念 2 システムは herdr の pane を閉じる"]
-    A23S3["起動の断念 3 システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする"]
-    A23S4["起動の断念 4 システムはリトライの回数を1つ増やす"]
-    A23S5["起動の断念 5 システムはバックオフの期限を印に書く"]
-    A23S6(["起動の断念 6 ABORT"])
-    A24S1["未登録のまま作業中 1 システムは herdr が agent を登録していないまま作業中の hook が届いていることを記録に残す"]
-    A24S2["未登録のまま作業中 2 システムは Claude Code に1回目の turn の本文を送らない"]
-    A24S3["未登録のまま作業中 3 システムは run に turn の終わりを待つ印を立てる"]
-    A24S4(["未登録のまま作業中 4 ABORT"])
-    A25S1["復帰の失敗 1 システムは新しいセッション UUID を採番する"]
-    A25S2["復帰の失敗 2 システムは hook の引き当ての索引を新しいセッション UUID へ張り替える"]
-    A25S3["復帰の失敗 3 システムはトークンの集計の基準を作り直す"]
-    A25S4["復帰の失敗 4 システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む"]
-    A25S5["復帰の失敗 5 システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す"]
-    A25S6["復帰の失敗 6 システムは起動フラグを新しいセッション UUID の指定つきへ差し替える"]
-    A25S7["復帰の失敗 7 システムは前の Claude Code を止めずに同じ pane を使い続ける"]
-    A25S8["復帰の失敗 8 RESUME STEP 32"]
-    A26S1["turnループの重なり 1 システムは次の巡回で turn を送り直す印を立てる"]
-    A26S2(["turnループの重なり 2 ABORT"])
-    A27S1["上限での打ち切り 1 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
-    A27S2["上限での打ち切り 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A27S3["上限での打ち切り 3 システムは issue に打ち切りの理由を1件コメントする"]
-    A27S4[["上限での打ち切り 4 INCLUDE USE CASE run を終えて worker を止める"]]
-    A27S5(["上限での打ち切り 5 ABORT"])
-    A28S1["本文の組み立ての失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A28S2["本文の組み立ての失敗 2 システムは issue にテンプレートの直し方を1件コメントする"]
-    A28S3[["本文の組み立ての失敗 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A28S4(["本文の組み立ての失敗 4 ABORT"])
-    A29S1["権限の確認 1 システムは走っている subagent が終わるのを claude.poll_wait_ms まで待つ"]
-    A29S2["権限の確認 2 システムは pane に esc のキー入力を送る"]
-    A29S3["権限の確認 3 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A29S4["権限の確認 4 システムは issue に権限の確認で止まった理由を1件コメントする"]
-    A29S5[["権限の確認 5 INCLUDE USE CASE run を終えて worker を止める"]]
-    A29S6(["権限の確認 6 ABORT"])
-    A30S1["送信の失敗 1 システムは workspace_hooks の after_run を実行する"]
-    A30S2["送信の失敗 2 システムは herdr の pane を閉じる"]
-    A30S3["送信の失敗 3 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A30S4["送信の失敗 4 システムはリトライの回数を1つ増やす"]
-    A30S5["送信の失敗 5 システムはバックオフの期限を印に書く"]
-    A30S6(["送信の失敗 6 ABORT"])
-    A31S1["一時的な送信の失敗 1 システムは turn の本文が Claude Code に届いたかどうかを判断しない"]
-    A31S2["一時的な送信の失敗 2 システムは turn の本文を送り直さない"]
-    A31S3["一時的な送信の失敗 3 システムは run に turn の終わりを待ち直す印を立てる"]
-    A31S4(["一時的な送信の失敗 4 ABORT"])
-    A32S1["騙りのhook 1 システムはこの hook を捨てる"]
-    A32S2["騙りのhook 2 システムは捨てた理由と session_id を記録に残す"]
-    A32S3["騙りのhook 3 RESUME STEP 40"]
-    A33S1{"turnの終わりの取りこぼし 1 リトライの回数が agent.max_retries に達していない"}
-    A33S2["turnの終わりの取りこぼし 2 システムは workspace_hooks の after_run を実行する"]
-    A33S3["turnの終わりの取りこぼし 3 システムは herdr の pane を閉じる"]
-    A33S4["turnの終わりの取りこぼし 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A33S5["turnの終わりの取りこぼし 5 システムはリトライの回数を1つ増やす"]
-    A33S6["turnの終わりの取りこぼし 6 システムはバックオフの期限を印に書く"]
-    A33S7(["turnの終わりの取りこぼし 7 ABORT"])
-    A34S1["リトライの尽き 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
-    A34S2["リトライの尽き 2 システムは issue に打ち切りの理由を1件コメントする"]
-    A34S3[["リトライの尽き 3 INCLUDE USE CASE run を終えて worker を止める"]]
-    A34S4(["リトライの尽き 4 ABORT"])
-    A35S1["無音の打ち切り 1 システムは herdr に agent_status を要求する"]
-    A35S2["無音の打ち切り 2 システムは workspace_hooks の after_run を実行する"]
-    A35S3["無音の打ち切り 3 システムは herdr の pane を閉じる"]
-    A35S4["無音の打ち切り 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A35S5["無音の打ち切り 5 システムはリトライの回数を1つ増やす"]
-    A35S6["無音の打ち切り 6 システムはバックオフの期限を印に書く"]
-    A35S7(["無音の打ち切り 7 ABORT"])
-    A36S1["turnの継続 1 システムは turn がまだ続いているとみなす"]
-    A36S2["turnの継続 2 RESUME STEP 42"]
-    A37S1["書き直しの待ち 1 システムは受けた空の Stop hook を turn の終わりとして扱わない"]
-    A37S2["書き直しの待ち 2 RESUME STEP 44"]
-    A38S1["担当が移った 1 システムは issue のコメントを1件残らず取り直す"]
-    A38S2["担当が移った 2 システムは担当が移った先のアカウント名と、この機械の担当を外した released の印が先頭に付いたコメントの中身を記録に残す"]
-    A38S3["担当が移った 3 システムは workspace_hooks の after_run を実行しない"]
-    A38S4["担当が移った 4 システムは herdr の pane を閉じる"]
-    A38S5["担当が移った 5 システムは Claude Code を閉じた記録を issue に書かない"]
-    A38S6["担当が移った 6 システムは印を外す"]
-    A38S7(["担当が移った 7 ABORT"])
-    A39S1["既に同じStatus 1 システムはボードへ書き込まない"]
-    A39S2["既に同じStatus 2 RESUME STEP 52"]
-    A40S1["ボードから消えたissue 1 システムは issue がボードから見えなくなったことを記録に残す"]
-    A40S2["ボードから消えたissue 2 システムは workspace_hooks の after_run を実行する"]
-    A40S3["ボードから消えたissue 3 システムは herdr の pane を閉じる"]
-    A40S4["ボードから消えたissue 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
-    A40S5["ボードから消えたissue 5 システムはリトライの回数を1つ増やす"]
-    A40S6["ボードから消えたissue 6 システムはバックオフの期限を印に書く"]
-    A40S7(["ボードから消えたissue 7 ABORT"])
+    A12S1["入札での巡回の打ち切り 1 システムはこの巡回で残りの候補を1件も見ない"]
+    A12S2(["入札での巡回の打ち切り 2 ABORT"])
+    A13S1["入札で降りた 1 システムはこの issue を dispatch の対象から外す"]
+    A13S2(["入札で降りた 2 ABORT"])
+    A14S1["印の取り損ね 1 システムは、この巡回の入札で担当者を書いていれば、書いた担当者を issue から外す"]
+    A14S2["印の取り損ね 2 システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く"]
+    A14S3(["印の取り損ね 3 ABORT"])
+    A15S1["書かずに取りやめる 1 システムは印を外す"]
+    A15S2["書かずに取りやめる 2 システムは、この着手で担当者を書いており、かつ direct_chat_state へ動かされた issue のやり直しでなければ、書いた担当者を issue から外す"]
+    A15S3["書かずに取りやめる 3 システムは、担当者を外せた場合に、released の印を先頭に置いたコメントを issue に1件書く"]
+    A15S4(["書かずに取りやめる 4 ABORT"])
+    A16S1{"壊れたref 1 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない"}
+    A16S2["壊れたref 2 システムは壊れた ref のファイルを1つ消す"]
+    A16S3["壊れたref 3 システムは消したファイルのパスと消した理由を記録に残す"]
+    A16S4["壊れたref 4 RESUME STEP 24"]
+    A17S1["消さないref 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A17S2["消さないref 2 システムは issue の失敗の回数を1つ増やす"]
+    A17S3["消さないref 3 システムは issue に worktree を用意できなかった理由を1件コメントする"]
+    A17S4[["消さないref 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A17S5(["消さないref 5 ABORT"])
+    A18S1["worktreeの用意のやり直し 1 システムは失敗の理由を記録に残す"]
+    A18S2["worktreeの用意のやり直し 2 システムはリトライの回数を1つ増やす"]
+    A18S3["worktreeの用意のやり直し 3 システムはバックオフの期限を印に書く"]
+    A18S4(["worktreeの用意のやり直し 4 ABORT"])
+    A19S1["着手の途中の失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A19S2["着手の途中の失敗 2 システムは issue の失敗の回数を1つ増やす"]
+    A19S3["着手の途中の失敗 3 システムは issue に失敗した段と直し方を1件コメントする"]
+    A19S4[["着手の途中の失敗 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A19S5(["着手の途中の失敗 5 ABORT"])
+    A20S1{"paneがまだ使えない 1 pane を待ち始めてから 30 秒が経っていない"}
+    A20S2["paneがまだ使えない 2 システムは 500 ミリ秒待つ"]
+    A20S3["paneがまだ使えない 3 RESUME STEP 34"]
+    A21S1["paneの断念 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A21S2["paneの断念 2 システムは issue の失敗の回数を1つ増やす"]
+    A21S3["paneの断念 3 システムは issue に pane が使えなかった理由を1件コメントする"]
+    A21S4[["paneの断念 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A21S5(["paneの断念 5 ABORT"])
+    A22S1["起動直後の確認画面 1 システムは pane に esc のキー入力を送る"]
+    A22S2["起動直後の確認画面 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A22S3["起動直後の確認画面 3 システムは issue の失敗の回数を1つ増やす"]
+    A22S4["起動直後の確認画面 4 システムは issue に起動直後の確認の画面で止まった理由を1件コメントする"]
+    A22S5[["起動直後の確認画面 5 INCLUDE USE CASE run を終えて worker を止める"]]
+    A22S6(["起動直後の確認画面 6 ABORT"])
+    A23S1{"起動の待ち直し 1 herdr が agent_not_found 以外の誤りを返しておらず、かつ agent_status が working のまま herdr.startup_timeout_ms を過ぎていない"}
+    A23S2{"起動の待ち直し 2 最初に起動を確かめ始めてから herdr.startup_timeout_ms が経っていない"}
+    A23S3["起動の待ち直し 3 システムは 500 ミリ秒待つ"]
+    A23S4["起動の待ち直し 4 システムは、herdr が agent を登録しておらず、かつ run から作業中の hook が1件も届いていなければ、pane で Claude Code を直前と同じ起動フラグでもう一度起動する"]
+    A23S5["起動の待ち直し 5 RESUME STEP 36"]
+    A24S1["起動の確認の失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A24S2["起動の確認の失敗 2 システムは issue の失敗の回数を1つ増やす"]
+    A24S3["起動の確認の失敗 3 システムは issue に起動を確かめられなかった理由を1件コメントする"]
+    A24S4[["起動の確認の失敗 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A24S5(["起動の確認の失敗 5 ABORT"])
+    A25S1["起動の断念 1 システムは workspace_hooks の after_run を実行する"]
+    A25S2["起動の断念 2 システムは herdr の pane を閉じる"]
+    A25S3["起動の断念 3 システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする"]
+    A25S4["起動の断念 4 システムはリトライの回数を1つ増やす"]
+    A25S5["起動の断念 5 システムはバックオフの期限を印に書く"]
+    A25S6(["起動の断念 6 ABORT"])
+    A26S1["未登録のまま作業中 1 システムは herdr が agent を登録していないまま作業中の hook が届いていることを記録に残す"]
+    A26S2["未登録のまま作業中 2 システムは Claude Code に1回目の turn の本文を送らない"]
+    A26S3["未登録のまま作業中 3 システムは run に turn の終わりを待つ印を立てる"]
+    A26S4(["未登録のまま作業中 4 ABORT"])
+    A27S1["復帰の失敗 1 システムは新しいセッション UUID を採番する"]
+    A27S2["復帰の失敗 2 システムは hook の引き当ての索引を新しいセッション UUID へ張り替える"]
+    A27S3["復帰の失敗 3 システムはトークンの集計の基準を作り直す"]
+    A27S4["復帰の失敗 4 システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む"]
+    A27S5["復帰の失敗 5 システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す"]
+    A27S6["復帰の失敗 6 システムは起動フラグを新しいセッション UUID の指定つきへ差し替える"]
+    A27S7["復帰の失敗 7 システムは前の Claude Code を止めずに同じ pane を使い続ける"]
+    A27S8["復帰の失敗 8 RESUME STEP 34"]
+    A28S1["turnループの重なり 1 システムは次の巡回で turn を送り直す印を立てる"]
+    A28S2(["turnループの重なり 2 ABORT"])
+    A29S1["上限での打ち切り 1 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
+    A29S2["上限での打ち切り 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A29S3["上限での打ち切り 3 システムは issue に打ち切りの理由を1件コメントする"]
+    A29S4[["上限での打ち切り 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A29S5(["上限での打ち切り 5 ABORT"])
+    A30S1["本文の組み立ての失敗 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A30S2["本文の組み立ての失敗 2 システムは issue の失敗の回数を1つ増やす"]
+    A30S3["本文の組み立ての失敗 3 システムは issue にテンプレートの直し方を1件コメントする"]
+    A30S4[["本文の組み立ての失敗 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A30S5(["本文の組み立ての失敗 5 ABORT"])
+    A31S1["権限の確認 1 システムは走っている subagent が終わるのを claude.poll_wait_ms まで待つ"]
+    A31S2["権限の確認 2 システムは pane に esc のキー入力を送る"]
+    A31S3["権限の確認 3 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A31S4["権限の確認 4 システムは issue に権限の確認で止まった理由を1件コメントする"]
+    A31S5[["権限の確認 5 INCLUDE USE CASE run を終えて worker を止める"]]
+    A31S6(["権限の確認 6 ABORT"])
+    A32S1["送信の失敗 1 システムは workspace_hooks の after_run を実行する"]
+    A32S2["送信の失敗 2 システムは herdr の pane を閉じる"]
+    A32S3["送信の失敗 3 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A32S4["送信の失敗 4 システムはリトライの回数を1つ増やす"]
+    A32S5["送信の失敗 5 システムはバックオフの期限を印に書く"]
+    A32S6(["送信の失敗 6 ABORT"])
+    A33S1["一時的な送信の失敗 1 システムは turn の本文が Claude Code に届いたかどうかを判断しない"]
+    A33S2["一時的な送信の失敗 2 システムは turn の本文を送り直さない"]
+    A33S3["一時的な送信の失敗 3 システムは run に turn の終わりを待ち直す印を立てる"]
+    A33S4(["一時的な送信の失敗 4 ABORT"])
+    A34S1["騙りのhook 1 システムはこの hook を捨てる"]
+    A34S2["騙りのhook 2 システムは捨てた理由と session_id を記録に残す"]
+    A34S3["騙りのhook 3 RESUME STEP 42"]
+    A35S1{"turnの終わりの取りこぼし 1 リトライの回数が agent.max_retries に達していない"}
+    A35S2["turnの終わりの取りこぼし 2 システムは workspace_hooks の after_run を実行する"]
+    A35S3["turnの終わりの取りこぼし 3 システムは herdr の pane を閉じる"]
+    A35S4["turnの終わりの取りこぼし 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A35S5["turnの終わりの取りこぼし 5 システムはリトライの回数を1つ増やす"]
+    A35S6["turnの終わりの取りこぼし 6 システムはバックオフの期限を印に書く"]
+    A35S7(["turnの終わりの取りこぼし 7 ABORT"])
+    A36S1["リトライの尽き 1 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A36S2["リトライの尽き 2 システムは issue の失敗の回数を1つ増やす"]
+    A36S3["リトライの尽き 3 システムは issue に打ち切りの理由を1件コメントする"]
+    A36S4[["リトライの尽き 4 INCLUDE USE CASE run を終えて worker を止める"]]
+    A36S5(["リトライの尽き 5 ABORT"])
+    A37S1["無音の打ち切り 1 システムは herdr に agent_status を要求する"]
+    A37S2["無音の打ち切り 2 システムは workspace_hooks の after_run を実行する"]
+    A37S3["無音の打ち切り 3 システムは herdr の pane を閉じる"]
+    A37S4["無音の打ち切り 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A37S5["無音の打ち切り 5 システムはリトライの回数を1つ増やす"]
+    A37S6["無音の打ち切り 6 システムはバックオフの期限を印に書く"]
+    A37S7(["無音の打ち切り 7 ABORT"])
+    A38S1["turnの継続 1 システムは turn がまだ続いているとみなす"]
+    A38S2["turnの継続 2 RESUME STEP 44"]
+    A39S1["書き直しの待ち 1 システムは受けた空の Stop hook を turn の終わりとして扱わない"]
+    A39S2["書き直しの待ち 2 RESUME STEP 46"]
+    A40S1["担当が移った 1 システムは issue のコメントを1件残らず取り直す"]
+    A40S2["担当が移った 2 システムは担当が移った先のアカウント名と、この機械の担当を外した released の印が先頭に付いたコメントの中身を記録に残す"]
+    A40S3["担当が移った 3 システムは workspace_hooks の after_run を実行しない"]
+    A40S4["担当が移った 4 システムは herdr の pane を閉じる"]
+    A40S5["担当が移った 5 システムは Claude Code を閉じた記録を issue に書かない"]
+    A40S6["担当が移った 6 システムは印を外す"]
+    A40S7(["担当が移った 7 ABORT"])
+    A41S1["既に同じStatus 1 システムはボードへ書き込まない"]
+    A41S2["既に同じStatus 2 RESUME STEP 54"]
+    A42S1["ボードから消えたissue 1 システムは issue がボードから見えなくなったことを記録に残す"]
+    A42S2["ボードから消えたissue 2 システムは workspace_hooks の after_run を実行する"]
+    A42S3["ボードから消えたissue 3 システムは herdr の pane を閉じる"]
+    A42S4["ボードから消えたissue 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
+    A42S5["ボードから消えたissue 5 システムはリトライの回数を1つ増やす"]
+    A42S6["ボードから消えたissue 6 システムはバックオフの期限を印に書く"]
+    A42S7(["ボードから消えたissue 7 ABORT"])
     BS1 --> BS2
     BS2 --> BS3
     BS3 -- はい --> BS4
@@ -1260,84 +1342,88 @@ flowchart TD
     BS14 --> BS15
     BS15 -- はい --> BS16
     BS15 -- いいえ --> A12S1
-    BS16 --> BS17
+    BS16 -- はい --> BS17
+    BS16 -- いいえ --> A13S1
     BS17 -- はい --> BS18
-    BS17 -- いいえ --> A13S1
-    BS18 -- はい --> BS19
-    BS18 -- いいえ --> A13S1
+    BS17 -- いいえ --> A14S1
+    BS18 --> BS19
     BS19 -- はい --> BS20
-    BS19 -- いいえ --> A13S1
-    BS20 --> BS21
-    BS20 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
-    BS21 --> BS22
+    BS19 -- いいえ --> A15S1
+    BS20 -- はい --> BS21
+    BS20 -- いいえ --> A15S1
+    BS21 -- はい --> BS22
+    BS21 -- いいえ --> A15S1
     BS22 --> BS23
-    BS22 -. "WHEN branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合" .-> A14S1
-    BS22 -. "WHEN issue にリンクされた branch を remote から取ってこられず、worktree の用意が待てば通る見込みのある理由で失敗した場合" .-> A16S1
-    BS22 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
+    BS22 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS23 --> BS24
     BS24 --> BS25
+    BS24 -. "WHEN branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合" .-> A16S1
+    BS24 -. "WHEN issue にリンクされた branch を remote から取ってこられず、worktree の用意が待てば通る見込みのある理由で失敗した場合" .-> A18S1
+    BS24 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS25 --> BS26
-    BS25 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
     BS26 --> BS27
-    BS26 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
     BS27 --> BS28
-    BS27 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
+    BS27 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS28 --> BS29
-    BS28 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
+    BS28 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS29 --> BS30
-    BS29 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
+    BS29 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS30 --> BS31
-    BS30 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
+    BS30 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS31 --> BS32
-    BS31 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
-    BS32 -- はい --> BS33
-    BS32 -- いいえ --> A18S1
-    BS32 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A25S1
+    BS31 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
+    BS32 --> BS33
+    BS32 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS33 --> BS34
-    BS33 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、セッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A17S1
-    BS33 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A25S1
+    BS33 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
     BS34 -- はい --> BS35
     BS34 -- いいえ --> A20S1
-    BS34 -- いいえ --> A21S1
-    BS34 -- いいえ --> A24S1
-    BS34 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A25S1
-    BS35 -- はい --> BS37
-    BS35 -- いいえ --> A26S1
-    BS37 -- はい --> BS38
-    BS37 -- いいえ --> A27S1
-    BS38 -- はい --> BS39
-    BS38 -- いいえ --> A28S1
-    BS39 --> BS40
-    BS39 -. "WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直しているあいだに agent_status が blocked になった場合" .-> A29S1
-    BS39 -. "WHEN herdr が指示の送信そのものを断った場合" .-> A30S1
-    BS39 -. "WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> A31S1
+    BS34 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A27S1
+    BS35 --> BS36
+    BS35 -. "WHEN running_state の書き込みから Claude Code の起動までのあいだに、GitHub・git・ghq・herdr の呼び出しか、ファイルの書き込みか、復帰の失敗の中での採番を含むセッション UUID の採番か、workspace_hooks の after_create か before_run が、壊れた ref でも待てば通る見込みのある理由でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合" .-> A19S1
+    BS35 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A27S1
+    BS36 -- はい --> BS37
+    BS36 -- いいえ --> A22S1
+    BS36 -- いいえ --> A23S1
+    BS36 -- いいえ --> A26S1
+    BS36 -. "WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、herdr が agent を登録していないまま作業中の hook が届いている場合を除いて、理由を問わず完了しなかった場合" .-> A27S1
+    BS37 -- はい --> BS39
+    BS37 -- いいえ --> A28S1
+    BS39 -- はい --> BS40
+    BS39 -- いいえ --> A29S1
     BS40 -- はい --> BS41
-    BS40 -- いいえ --> A32S1
-    BS41 -- はい --> BS42
-    BS41 -- いいえ --> A33S1
-    BS42 --> BS43
-    BS42 -. "WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直しているあいだに agent_status が blocked になった場合" .-> A29S1
-    BS42 -. "WHEN claude.turn_timeout_ms のあいだ run が進んだ形跡が無く、herdr が返す agent_status が working でない場合" .-> A35S1
+    BS40 -- いいえ --> A30S1
+    BS41 --> BS42
+    BS41 -. "WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直しているあいだに agent_status が blocked になった場合" .-> A31S1
+    BS41 -. "WHEN herdr が指示の送信そのものを断った場合" .-> A32S1
+    BS41 -. "WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> A33S1
+    BS42 -- はい --> BS43
+    BS42 -- いいえ --> A34S1
     BS43 -- はい --> BS44
-    BS43 -- いいえ --> A36S1
+    BS43 -- いいえ --> A35S1
     BS44 --> BS45
+    BS44 -. "WHEN herdr の待ち受けが blocked を返すか、Stop hook を待ち直しているあいだに agent_status が blocked になった場合" .-> A31S1
+    BS44 -. "WHEN claude.turn_timeout_ms のあいだ run が進んだ形跡が無く、herdr が返す agent_status が working でない場合" .-> A37S1
     BS45 -- はい --> BS46
-    BS45 -- いいえ --> A36S1
-    BS46 -- はい --> BS47
-    BS46 -- いいえ --> A37S1
-    BS47 --> BS48
+    BS45 -- いいえ --> A38S1
+    BS46 --> BS47
+    BS47 -- はい --> BS48
+    BS47 -- いいえ --> A38S1
     BS48 -- はい --> BS49
-    BS48 -- いいえ --> A38S1
+    BS48 -- いいえ --> A39S1
     BS49 --> BS50
-    BS50 --> BS51
-    BS50 -. "WHEN 書く直前に取り直した Status が表明の値の遷移先の選択肢と同じ場合" .-> A39S1
+    BS50 -- はい --> BS51
+    BS50 -- いいえ --> A40S1
     BS51 --> BS52
     BS52 --> BS53
-    BS53 -- はい --> BS54
-    BS53 -- いいえ --> A40S1
-    BS54 -- はい --> BS55
-    BS54 -. "繰り返す" .-> BS37
-    BS55 --> BS56
+    BS52 -. "WHEN 書く直前に取り直した Status が表明の値の遷移先の選択肢と同じ場合" .-> A41S1
+    BS53 --> BS54
+    BS54 --> BS55
+    BS55 -- はい --> BS56
+    BS55 -- いいえ --> A42S1
+    BS56 -- はい --> BS57
+    BS56 -. "繰り返す" .-> BS39
+    BS57 --> BS58
     A1S1 --> A1S2
     A1S2 --> A1S3
     A2S1 --> A2S2
@@ -1362,120 +1448,129 @@ flowchart TD
     A11S1 --> A11S2
     A11S2 --> A11S3
     A12S1 --> A12S2
-    A12S2 --> A12S3
     A13S1 --> A13S2
-    A13S2 --> A13S3
-    A13S3 --> A13S4
-    A14S1 -- はい --> A14S2
-    A14S1 -- いいえ --> A15S1
+    A14S1 --> A14S2
     A14S2 --> A14S3
-    A14S3 --> A14S4
-    A14S4 -. "戻る" .-> BS22
     A15S1 --> A15S2
     A15S2 --> A15S3
     A15S3 --> A15S4
-    A16S1 --> A16S2
+    A16S1 -- はい --> A16S2
+    A16S1 -- いいえ --> A17S1
     A16S2 --> A16S3
     A16S3 --> A16S4
+    A16S4 -. "戻る" .-> BS24
     A17S1 --> A17S2
     A17S2 --> A17S3
     A17S3 --> A17S4
-    A18S1 -- はい --> A18S2
-    A18S1 -- いいえ --> A19S1
+    A17S4 --> A17S5
+    A18S1 --> A18S2
     A18S2 --> A18S3
-    A18S3 -. "戻る" .-> BS32
+    A18S3 --> A18S4
     A19S1 --> A19S2
     A19S2 --> A19S3
     A19S3 --> A19S4
-    A20S1 --> A20S2
+    A19S4 --> A19S5
+    A20S1 -- はい --> A20S2
+    A20S1 -- いいえ --> A21S1
     A20S2 --> A20S3
-    A20S3 --> A20S4
-    A20S4 --> A20S5
-    A21S1 -- はい --> A21S2
-    A21S1 -- いいえ --> A22S1
-    A21S2 -- はい --> A21S3
-    A21S2 -- いいえ --> A23S1
+    A20S3 -. "戻る" .-> BS34
+    A21S1 --> A21S2
+    A21S2 --> A21S3
     A21S3 --> A21S4
     A21S4 --> A21S5
-    A21S5 -. "戻る" .-> BS34
     A22S1 --> A22S2
     A22S2 --> A22S3
     A22S3 --> A22S4
-    A23S1 --> A23S2
-    A23S2 --> A23S3
+    A22S4 --> A22S5
+    A22S5 --> A22S6
+    A23S1 -- はい --> A23S2
+    A23S1 -- いいえ --> A24S1
+    A23S2 -- はい --> A23S3
+    A23S2 -- いいえ --> A25S1
     A23S3 --> A23S4
     A23S4 --> A23S5
-    A23S5 --> A23S6
+    A23S5 -. "戻る" .-> BS36
     A24S1 --> A24S2
     A24S2 --> A24S3
     A24S3 --> A24S4
+    A24S4 --> A24S5
     A25S1 --> A25S2
     A25S2 --> A25S3
     A25S3 --> A25S4
     A25S4 --> A25S5
     A25S5 --> A25S6
-    A25S6 --> A25S7
-    A25S7 --> A25S8
-    A25S8 -. "戻る" .-> BS32
     A26S1 --> A26S2
+    A26S2 --> A26S3
+    A26S3 --> A26S4
     A27S1 --> A27S2
     A27S2 --> A27S3
     A27S3 --> A27S4
     A27S4 --> A27S5
+    A27S5 --> A27S6
+    A27S6 --> A27S7
+    A27S7 --> A27S8
+    A27S8 -. "戻る" .-> BS34
     A28S1 --> A28S2
-    A28S2 --> A28S3
-    A28S3 --> A28S4
     A29S1 --> A29S2
     A29S2 --> A29S3
     A29S3 --> A29S4
     A29S4 --> A29S5
-    A29S5 --> A29S6
     A30S1 --> A30S2
     A30S2 --> A30S3
     A30S3 --> A30S4
     A30S4 --> A30S5
-    A30S5 --> A30S6
     A31S1 --> A31S2
     A31S2 --> A31S3
     A31S3 --> A31S4
+    A31S4 --> A31S5
+    A31S5 --> A31S6
     A32S1 --> A32S2
     A32S2 --> A32S3
-    A32S3 -. "戻る" .-> BS40
-    A33S1 -- はい --> A33S2
-    A33S1 -- いいえ --> A34S1
+    A32S3 --> A32S4
+    A32S4 --> A32S5
+    A32S5 --> A32S6
+    A33S1 --> A33S2
     A33S2 --> A33S3
     A33S3 --> A33S4
-    A33S4 --> A33S5
-    A33S5 --> A33S6
-    A33S6 --> A33S7
     A34S1 --> A34S2
     A34S2 --> A34S3
-    A34S3 --> A34S4
-    A35S1 --> A35S2
+    A34S3 -. "戻る" .-> BS42
+    A35S1 -- はい --> A35S2
+    A35S1 -- いいえ --> A36S1
     A35S2 --> A35S3
     A35S3 --> A35S4
     A35S4 --> A35S5
     A35S5 --> A35S6
     A35S6 --> A35S7
     A36S1 --> A36S2
-    A36S2 -. "戻る" .-> BS42
+    A36S2 --> A36S3
+    A36S3 --> A36S4
+    A36S4 --> A36S5
     A37S1 --> A37S2
-    A37S2 -. "戻る" .-> BS44
+    A37S2 --> A37S3
+    A37S3 --> A37S4
+    A37S4 --> A37S5
+    A37S5 --> A37S6
+    A37S6 --> A37S7
     A38S1 --> A38S2
-    A38S2 --> A38S3
-    A38S3 --> A38S4
-    A38S4 --> A38S5
-    A38S5 --> A38S6
-    A38S6 --> A38S7
+    A38S2 -. "戻る" .-> BS44
     A39S1 --> A39S2
-    A39S2 -. "戻る" .-> BS52
+    A39S2 -. "戻る" .-> BS46
     A40S1 --> A40S2
     A40S2 --> A40S3
     A40S3 --> A40S4
     A40S4 --> A40S5
     A40S5 --> A40S6
     A40S6 --> A40S7
-    BS56 --> END(["終了"])
+    A41S1 --> A41S2
+    A41S2 -. "戻る" .-> BS54
+    A42S1 --> A42S2
+    A42S2 --> A42S3
+    A42S3 --> A42S4
+    A42S4 --> A42S5
+    A42S5 --> A42S6
+    A42S6 --> A42S7
+    BS58 --> END(["終了"])
 ```
 
 ## シーケンス図
@@ -1512,6 +1607,11 @@ sequenceDiagram
                 S->>GH: 入札の印を付けたコメントの投稿を要求する
                 M->>GH: ほかの機械も入札の印を付けたコメントを投稿する
                 S->>GH: 勝ったときの担当者への追加と hold の印を付けたコメントの投稿を要求する
+                alt 入札の段がコメントの読み取りの上限に達した
+                    Note over S: ABORT この巡回では残りの候補を見ない
+                else 入札の段がこの issue から降りた
+                    Note over S: ABORT この issue だけ飛ばす。印は付けない
+                end
                 alt 入札のあいだに別の run の印が付いている
                     S->>GH: 入札で書いた担当者の取り外しと、released のコメントの投稿を要求する
                     Note over S: ABORT 印は付けない
@@ -1550,7 +1650,7 @@ sequenceDiagram
                     H-->>S: agent_status と interactive_ready を応答する
                     alt 復帰つきの起動が完了しない
                         S->>S: 新しいセッション UUID を採番し、hook の索引と身元ファイルを書き直す
-                        Note over S: RESUME STEP 32 前の Claude Code を止めずに、同じ pane で pane の受け付けからやり直す
+                        Note over S: RESUME STEP 34 前の Claude Code を止めずに、同じ pane で pane の受け付けからやり直す
                     else 確認の画面が出ている
                         S->>H: pane への esc のキー入力を要求する
                         S->>GH: Status への failure_state の書き込みと、理由のコメントの投稿を要求する
@@ -1595,7 +1695,7 @@ sequenceDiagram
                         CC-->>S: hook を届ける
                         S->>S: hook の cwd が worktree の内側であることを検証する
                         alt cwd が worktree の外である
-                            Note over S: RESUME STEP 40 この hook を捨てて次の hook を待つ
+                            Note over S: RESUME STEP 42 この hook を捨てて次の hook を待つ
                         end
                         S->>S: 待ち受けが返ってから settle_ms のあいだに Stop hook が届いていることを検証する
                         alt Stop hook が届かない、または background_tasks の項目が無い
@@ -1605,9 +1705,9 @@ sequenceDiagram
                         S->>S: Stop hook の background_tasks が空配列であることを検証する
                         S->>S: settle_ms のあいだ待つ
                         alt 空でない Stop か task-notification が届く
-                            Note over S: RESUME STEP 42 turn は続いている。次の Stop hook を待つ
+                            Note over S: RESUME STEP 44 turn は続いている。次の Stop hook を待つ
                         else settle_ms のあとも agent_status が working である
-                            Note over S: RESUME STEP 44 書き直しを待つ。working でなくなれば turn の終わりとして進む
+                            Note over S: RESUME STEP 46 書き直しを待つ。working でなくなれば turn の終わりとして進む
                         else turn が終わっている
                             S->>GH: recheck_interval_ms を過ぎていれば issue の取り直しを要求する
                             GH-->>S: 担当者を応答する
@@ -1617,7 +1717,7 @@ sequenceDiagram
                             end
                             S->>S: transcript から表明の行を読む
                             alt 書く直前に取り直した Status が既に表明の遷移先と同じ
-                                Note over S: RESUME STEP 52 書き込みを送らない。記録のコメントも書かない
+                                Note over S: RESUME STEP 54 書き込みを送らない。記録のコメントも書かない
                             else 取り直した Status が表明の遷移先と違う
                                 S->>GH: Status への表明の遷移先の書き込みを要求する
                                 S->>GH: 何から何へ動かしたかのコメントの投稿を要求する

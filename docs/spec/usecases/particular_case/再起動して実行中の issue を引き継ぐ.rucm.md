@@ -15,8 +15,7 @@
 - `docs/plans/continuo_design.md#3-83j`（再起動で direct chat のカードの pane を閉じない）
 - `docs/plans/continuo_design.md#3-85c`（引き継がない pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#3-49`（身元を確かめられない worktree の復元と、止まり方）
-- `docs/plans/continuo_design.md#3-52`（Ctrl+C を受けたあとの後始末と、2回目の Ctrl+C）
-- `internal/daemon/daemon.go` の `Run`（起動の段1 から段5）、`build`、`close`（後始末で `sl.sock` を hook の受け口より先に閉じる）、`WatchInterrupt`、`announceShutdown`
+- `internal/daemon/daemon.go` の `Run`（起動の段1 から段5）、`build`
 - `internal/cli/cli.go` の `runMain`（ログの出力先と終了コード）
 - `internal/orchestrator/restore.go` の `Restore`、`handleBrokenWorktrees`、`recoverIdentity`、`slugAgrees`、`scanIdentities`、`pathAgrees`、`refetchByIdentities`、`matchPanes`、`closeExtraPanes`、`decideAdoptions`、`decideOne`、`issueAgreesWithPath`、`moveToFailure`、`closePaneInto`
 - `internal/orchestrator/orchestrator.go` の `Adopt`、`Run`、`Tick`、`DisableStatusline`
@@ -30,6 +29,7 @@
 - `internal/lock/lock.go` の `Acquire`
 
 起動時の掃除は `起動時に終わった worktree と孤児 branch を掃除する.rucm.md` に、pane が残っていない run の扱いは `再起動で pane が残っていない run を扱う.rucm.md` に書いてある。
+起動を終えたあとに常駐を止める流れ（Ctrl+C と SIGTERM）は `巡回が回っているあいだに常駐を止める.rucm.md` に書いてある。
 
 ## RUCM
 
@@ -67,12 +67,12 @@ BASIC FLOW:
 22. システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。
 23. システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っていない。
 24. システムは VALIDATES THAT 取り直した Status が active_states に入っている。
-25. システムは VALIDATES THAT 身元ファイルの socket のパスが今回の hook を受ける socket のパスと一致する。
+25. システムは VALIDATES THAT 身元ファイルの socket のパスが、空であるか今回の hook を受ける socket のパスと一致する。
 26. システムは VALIDATES THAT agent の一覧に pane に対応する agent 名がある。
 27. システムは VALIDATES THAT pane の agent_session か身元ファイルからセッション UUID を取れる。
 28. システムは VALIDATES THAT agent_status が idle と done と working と blocked のどれかである。
 29. システムは VALIDATES THAT agent_status が blocked でない。
-30. システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。
+30. システムは VALIDATES THAT 身元ファイルの引き継いだ回数が、0 より大きい agent.max_takeover に達していない。
 31. システムは身元ファイルの引き継いだ回数を1つ増やす。
 32. IF agent_status が working である THEN
 33.   システムは run の実行時状態に turn の終わりを待つ印を入れる。
@@ -89,7 +89,7 @@ BASIC FLOW:
 44. システムは server.port が設定されていればダッシュボードを開く。
 45. システムは巡回のループを始める。
 46. システムは最初の巡回を回す。
-POSTCONDITION: continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は turn の終わりを待つ印を持つ run の Stop hook を待つ。
+POSTCONDITION: continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。
 
 SPECIFIC ALTERNATIVE FLOW 設定の不備:
 RFS BASIC FLOW 2
@@ -269,30 +269,9 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。herdr 
 SPECIFIC ALTERNATIVE FLOW hookの受け口を開けない:
 RFS BASIC FLOW 37
 1. システムは利用者に hook を受ける socket の listen を始められない理由を応答する。
-2. システムは herdr の pane を1つも閉じずに終了する。
+2. システムは終了のときに herdr の pane を閉じない。
 3. ABORT
-POSTCONDITION: continuo は常駐していない。システムが引き継ぐと決めた run の herdr の pane は閉じていない。worktree は残っている。システムが引き継ぐと決めた run の身元ファイルは、引き継いだ回数が1つ増えたままである。システムが引き継がないと決めた run に行った扱いは、行ったままである。理由は標準エラーに出ている。終了コード 1 が返っている。
-
-GLOBAL ALTERNATIVE FLOW 中断:
-BRANCH FROM BASIC FLOW 31
-WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
-1. システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。
-2. システムはボードの巡回を止める。
-3. システムはダッシュボードを閉じる。
-4. システムは使用率を受ける sl.sock を閉じる。
-5. システムは hook を受ける socket を閉じる。
-6. システムは走行中の turn ループの終了を待つ。
-7. システムは herdr の pane を閉じずに終了する。
-8. ABORT
-POSTCONDITION: continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。終了コード 0 が返っている。
-
-GLOBAL ALTERNATIVE FLOW 中断の連打:
-BRANCH FROM 中断 3
-WHEN 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合
-1. システムは利用者に後始末を待たずに終わることを応答する。
-2. システムは herdr の pane を閉じずに終了する。
-3. ABORT
-POSTCONDITION: continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。終了コード 130 が返っている。
+POSTCONDITION: continuo は常駐していない。システムは終了のときに herdr の pane を閉じていない。システムが引き継ぐと決めた run の herdr の pane は閉じていない。worktree は残っている。システムが引き継ぐと決めた run の身元ファイルは、引き継いだ回数が1つ増えたままである。システムが引き継がないと決めた run に行った扱いは、行ったままである。理由は標準エラーに出ている。終了コード 1 が返っている。
 ```
 
 ## この記述が追うのは、前回の run の worktree 1件である
@@ -330,6 +309,11 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | 壊れたworktreeでの停止 | `handleBrokenWorktrees`。`workspace.on_broken_worktree` が `stop`（既定） |
 | hookの受け口を開けない、pane無しでhookの受け口を開けない | `Restore` の段5d |
 
+**依存の組み立てと起動時の検査の途中で Ctrl+C を受けたときも、終了コード 1 で終わる**（`依存の組み立ての失敗`・`前提の不足` の経路）。
+どちらも外部コマンドと herdr と GitHub を、Ctrl+C で切れる ctx で呼ぶ。切れた ctx では呼び出しが誤りを返し、`Run` はそれを起動の失敗として返す。`巡回が回っているあいだに常駐を止める` の流れ（終了コード 0）にはならない。
+身元を確かめられない worktree が在って `workspace.on_broken_worktree` が `stop` のときも、切れた ctx で issue の引き直しが失敗すれば `壊れたworktreeでの停止`（終了コード 1）になる。
+取り消し済みの ctx で `exec.CommandContext` が `context canceled` を返すことは、小さなプログラムを走らせて確かめた（2026-10-02）。herdr のクライアントと GraphQL のクライアントが切れた ctx で誤りを返すことは、走らせて確かめていない。
+
 **hook を受ける socket の listen は、引き継がない経路でも同じ1回の呼び出しである。**
 始められなければ、どの worktree の結末のあとでも起動を止める。引き継がないと決めたときに済ませた扱い（pane の close・Status の書き込み・コメント）は、そのまま残る。
 
@@ -344,6 +328,35 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | 在る | 失敗 | `ボードの取り直しの失敗`。pane を閉じずに、worktree を閉じる集合へ入れる |
 | 無い | 失敗 | `paneの不在` から引いた先の `取り直しの失敗`。閉じる集合へは入れない |
 | 一覧を取れない | どちらでも | `一覧の取得の失敗`。候補を全部閉じる集合へ入れる |
+
+## Ctrl+C を見るのは、最初の巡回を回したあとである
+
+**言いたいこと。**`Restore` も `Run` の起動の段も、Ctrl+C や SIGTERM で切れる ctx を自分では1度も見ない。
+実装が取り消しを見て後始末へ移るのは、巡回のループが最初の巡回を回したあとの1か所だけである（`internal/orchestrator/orchestrator.go` の `Run`）。
+**だから常駐を止める流れは、この記述の代替フローにせず、`巡回が回っているあいだに常駐を止める` に書いた。**
+止める流れは起動の続きの段ではなく、巡回が回っているあいだの出来事なので、`INCLUDE USE CASE` でも引いていない。
+
+| いつ停止の要求を受けるか | 何が起きるか |
+| --- | --- |
+| 依存の組み立て・起動時の検査の途中 | 呼び出しが誤りを返し、終了コード 1 で終わる（上の「起動を止める失敗」） |
+| 復元から最初の巡回までの途中（ステップ10 から46） | 受けたことと待たせる理由はすぐ応答する。後ろの段（listen・読み戻し・印に入れる・配送の開始・掃除・ダッシュボード・最初の巡回）は全部通る。そのあとで `巡回が回っているあいだに常駐を止める` の流れへ入る。途中の段の外向きの呼び出しは、切れた ctx で失敗しうる（どれも WARN を出して次の段へ進む失敗である） |
+| 巡回が回っているあいだ | `巡回が回っているあいだに常駐を止める` の基本フロー |
+| 後始末の途中でもう1回 | `巡回が回っているあいだに常駐を止める` の `停止の連打`（終了コード 130） |
+
+**後始末は pane を閉じない。**起動の途中で引き継がないと決めて閉じた pane は、閉じたままである。
+
+## 最初の巡回は、引き継いだ run の担当を確かめてから起こす
+
+**言いたいこと。**最初の巡回は、turn ループを起こす前に、印を持つ run の担当者を1回だけ読む（`wakeRuns` の `handoffLostOnResume`。設計 3-77c）。
+1度も確かめていない run にだけ効き、復元で引き継いだ run はそれに当たる。`recheck_interval_ms` が 0 でも行う。
+
+| 担当者 | 何が起きるか |
+| --- | --- |
+| この機械の投稿者、担当者なし、2人以上、読めない | turn ループを起こす。継続の指示を送るか、Stop hook を待つ |
+| ほかのアカウント1人 | run を止める。pane を閉じ、印から外す。Status は書かず、コメントも書かず、閉じた記録も書かない。`after_run` も走らせない。worktree は残す |
+
+この分岐は最初の巡回の中で起き、この記述の段はステップ46 で終わるので、段にはしていない。基本フローの事後条件に条件として書いた。
+巡回の側の記述は `issue を1件処理する` の `担当が移った` である。
 
 ## 引き継ぐかどうかを Status で決める
 
@@ -379,12 +392,12 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 
 | 経路 | 理由 |
 | --- | --- |
-| 引き継げないpane（ステップ25） | hook を受ける socket のパスが前回と違う |
+| 引き継げないpane（ステップ25） | hook を受ける socket のパスが前回と違う。身元ファイルにパスが書かれていなければ、この検査は通る |
 | 引き継げないpane（ステップ26） | pane に agent 名が無い |
 | 引き継げないpane（ステップ27） | セッション UUID を pane からも身元ファイルからも取れない |
 | 引き継げないpane（ステップ28） | agent_status を判断できない |
 | 権限の確認での停止 | agent_status が blocked。引き渡しの通知も1件書くので、コメントは最大2件増える |
-| 引き継ぎの上限 | 引き継いだ回数が `agent.max_takeover` に達した。引き渡しの通知も1件書く |
+| 引き継ぎの上限 | 引き継いだ回数が `agent.max_takeover` に達した。引き渡しの通知も1件書く。`agent.max_takeover` が 0 以下なら上限を見ない |
 | 片付け対象のStatus | Status が cleanup.on_states |
 
 **閉じた記録は、relay が有効で（`claude.permission_mode` が `auto`、`agent.relay_trusted_comments` が真、`tracker.comments.self_marker` が空でない）、
@@ -460,6 +473,7 @@ worktree として復元させられる。**
 （`internal/daemon/daemon.go` の `Run` が `DisableStatusline` を呼ぶ。復元が issue ごとの設定ファイルを書く前に呼ぶので、
 開いていない `sl.sock` を statusLine に書かない）。`none` のときは開かない。この2つは、ステップ9 の真の側である。
 閉じられなかった workspace は一覧に残して起動を続け、`quota.json` が読めなければ捨てて起動を続ける。
+**`oauth_usage_api` で `sl.sock` のパスが長すぎるときは、依存の組み立ての段（`build`）が WARN を出し、ステップ8 の listen を始めない。**これもステップ9 の真の側である。`statusline` でパスが長すぎるときは `依存の組み立ての失敗` になる。
 
 ## 起動時の掃除は、引き継ぎが終わってから走らせる
 
@@ -513,12 +527,12 @@ flowchart TD
     BS22{"22 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する"}
     BS23{"23 取り直した Status が cleanup.on_states に入っていない"}
     BS24{"24 取り直した Status が active_states に入っている"}
-    BS25{"25 身元ファイルの socket のパスが今回の hook を受ける socket のパスと一致する"}
+    BS25{"25 身元ファイルの socket のパスが、空であるか今回の hook を受ける socket のパスと一致する"}
     BS26{"26 agent の一覧に pane に対応する agent 名がある"}
     BS27{"27 pane の agent_session か身元ファイルからセッション UUID を取れる"}
     BS28{"28 agent_status が idle と done と working と blocked のどれかである"}
     BS29{"29 agent_status が blocked でない"}
-    BS30{"30 身元ファイルの引き継いだ回数が agent.max_takeover に達していない"}
+    BS30{"30 身元ファイルの引き継いだ回数が、0 より大きい agent.max_takeover に達していない"}
     BS31["31 システムは身元ファイルの引き継いだ回数を1つ増やす"]
     BS32{"32 IF agent_status が working である THEN"}
     BS33["33 システムは run の実行時状態に turn の終わりを待つ印を入れる"]
@@ -617,19 +631,8 @@ flowchart TD
     A23S4["引き継ぎの上限 4 システムは Claude Code を閉じた記録を issue に1件コメントする"]
     A23S5["引き継ぎの上限 5 RESUME STEP 37"]
     A24S1["hookの受け口を開けない 1 システムは利用者に hook を受ける socket の listen を始められない理由を応答する"]
-    A24S2["hookの受け口を開けない 2 システムは herdr の pane を1つも閉じずに終了する"]
+    A24S2["hookの受け口を開けない 2 システムは終了のときに herdr の pane を閉じない"]
     A24S3(["hookの受け口を開けない 3 ABORT"])
-    A25S1["中断 1 システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する"]
-    A25S2["中断 2 システムはボードの巡回を止める"]
-    A25S3["中断 3 システムはダッシュボードを閉じる"]
-    A25S4["中断 4 システムは使用率を受ける sl.sock を閉じる"]
-    A25S5["中断 5 システムは hook を受ける socket を閉じる"]
-    A25S6["中断 6 システムは走行中の turn ループの終了を待つ"]
-    A25S7["中断 7 システムは herdr の pane を閉じずに終了する"]
-    A25S8(["中断 8 ABORT"])
-    A26S1["中断の連打 1 システムは利用者に後始末を待たずに終わることを応答する"]
-    A26S2["中断の連打 2 システムは herdr の pane を閉じずに終了する"]
-    A26S3(["中断の連打 3 ABORT"])
     BS1 --> BS2
     BS2 -- はい --> BS3
     BS2 -- いいえ --> A1S1
@@ -683,7 +686,6 @@ flowchart TD
     BS30 -- はい --> BS31
     BS30 -- いいえ --> A23S1
     BS31 --> BS32
-    BS31 -. "WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合" .-> A25S1
     BS32 -- はい --> BS33
     BS32 -- いいえ --> BS35
     BS33 --> BS37
@@ -780,16 +782,6 @@ flowchart TD
     A23S5 -. "戻る" .-> BS37
     A24S1 --> A24S2
     A24S2 --> A24S3
-    A25S1 --> A25S2
-    A25S2 --> A25S3
-    A25S3 --> A25S4
-    A25S3 -. "WHEN 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合" .-> A26S1
-    A25S4 --> A25S5
-    A25S5 --> A25S6
-    A25S6 --> A25S7
-    A25S7 --> A25S8
-    A26S1 --> A26S2
-    A26S2 --> A26S3
     BS46 --> END(["終了"])
 ```
 
@@ -851,12 +843,7 @@ sequenceDiagram
             opt 次の turn を要する印を持つ run がある
                 S->>CC: 継続の指示を送る
             end
-            opt 利用者が Ctrl+C を入力する
-                S-->>U: 待たせる理由と2回目で即座に終わることを応答する
-                S->>S: 巡回を止めてダッシュボードと sl.sock と hook の socket を閉じる
-                S->>S: turn ループの終了を待つ
-                Note over S: ABORT 終了コード 0。2回目の Ctrl+C なら 130。pane は閉じない
-            end
+            Note over S: 起動を終えたあとの停止は、巡回が回っているあいだに常駐を止める の流れ
         end
     end
 ```

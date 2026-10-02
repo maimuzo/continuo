@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f99e2491290ee83ea6b886bb29b9721038763ee5082a7f53dd7a875fafc5a0d2", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "fae008737910e6ef801fc7754aaca46b962f082a4a86531aa7b4af59e2e87c7c", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **ユースケース記述「issue の担当を入札で決める」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

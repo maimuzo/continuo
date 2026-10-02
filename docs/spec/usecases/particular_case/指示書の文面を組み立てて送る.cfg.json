@@ -3,7 +3,7 @@
   "usecase_name": "指示書の文面を組み立てて送る",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md",
-    "rucm_block_sha256": "2ec6a1cbef0d73bef35d2f00ff06dc195cc8f8a7fa685e0d444d55379b53c282"
+    "rucm_block_sha256": "9aa955954456ee1987510469958633bb4d9e3d52a50aec57759e98d4d5fe48c8"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -17,7 +17,7 @@
           2
         ]
       },
-      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、run を終えて worker を止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
     },
     "relayを試みない": {
       "rfs": {
@@ -141,44 +141,17 @@
     },
     {
       "id": "変数を展開できない-4",
-      "type": "action",
+      "type": "include",
       "flow": "変数を展開できない",
       "step": 4,
-      "statement": "システムは、この run が turn を1回以上送っていれば、issue にこの run が書いたコメントがあるかを確かめる。"
+      "statement": "INCLUDE USE CASE run を終えて worker を止める",
+      "include": "run を終えて worker を止める"
     },
     {
       "id": "変数を展開できない-5",
-      "type": "action",
-      "flow": "変数を展開できない",
-      "step": 5,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
-    },
-    {
-      "id": "変数を展開できない-6",
-      "type": "action",
-      "flow": "変数を展開できない",
-      "step": 6,
-      "statement": "システムは herdr の pane を閉じる。"
-    },
-    {
-      "id": "変数を展開できない-7",
-      "type": "action",
-      "flow": "変数を展開できない",
-      "step": 7,
-      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
-    },
-    {
-      "id": "変数を展開できない-8",
-      "type": "action",
-      "flow": "変数を展開できない",
-      "step": 8,
-      "statement": "システムは印を外す。"
-    },
-    {
-      "id": "変数を展開できない-9",
       "type": "abort",
       "flow": "変数を展開できない",
-      "step": 9,
+      "step": 5,
       "statement": "ABORT"
     },
     {
@@ -316,26 +289,6 @@
     {
       "from": "変数を展開できない-4",
       "to": "変数を展開できない-5",
-      "kind": "seq"
-    },
-    {
-      "from": "変数を展開できない-5",
-      "to": "変数を展開できない-6",
-      "kind": "seq"
-    },
-    {
-      "from": "変数を展開できない-6",
-      "to": "変数を展開できない-7",
-      "kind": "seq"
-    },
-    {
-      "from": "変数を展開できない-7",
-      "to": "変数を展開できない-8",
-      "kind": "seq"
-    },
-    {
-      "from": "変数を展開できない-8",
-      "to": "変数を展開できない-9",
       "kind": "seq"
     },
     {
@@ -562,7 +515,7 @@
       "id": "P007",
       "terminal": "abort",
       "terminal_flow": "変数を展開できない",
-      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、run を終えて worker を止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -570,11 +523,7 @@
         "変数を展開できない-2",
         "変数を展開できない-3",
         "変数を展開できない-4",
-        "変数を展開できない-5",
-        "変数を展開できない-6",
-        "変数を展開できない-7",
-        "変数を展開できない-8",
-        "変数を展開できない-9"
+        "変数を展開できない-5"
       ],
       "steps": [
         "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
@@ -583,19 +532,15 @@
         "システムはカンバンの issue の Status に failure_state の選択肢を書く。",
         "システムは issue の失敗を1回数える。",
         "システムは issue にテンプレートの直し方を1件コメントする。",
-        "システムは、この run が turn を1回以上送っていれば、issue にこの run が書いたコメントがあるかを確かめる。",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
+        "INCLUDE USE CASE run を終えて worker を止める",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 25,
-    "nodes_covered": 25,
-    "edges_total": 26,
-    "edges_covered": 26
+    "nodes_total": 21,
+    "nodes_covered": 21,
+    "edges_total": 22,
+    "edges_covered": 22
   }
 }

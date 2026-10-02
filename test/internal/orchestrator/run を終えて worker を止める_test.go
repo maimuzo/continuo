@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a5b45d69d76a512b413b35173a176cdc3b45dec20022976d9cd586b13402632", "SOURCE": "docs/spec/usecases/particular_case/run を終えて worker を止める.cfg.json"}
+// {"RUCM-CFG-SHA256": "28b51b747d835303e84846effca1be09ff9a3bcab1ff13b66277bfa146312919", "SOURCE": "docs/spec/usecases/particular_case/run を終えて worker を止める.cfg.json"}
 //
 // **ユースケース記述「run を終えて worker を止める」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

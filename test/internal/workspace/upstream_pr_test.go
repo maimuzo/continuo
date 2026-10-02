@@ -4,7 +4,7 @@
 //
 // **このファイルに置くのは、このユースケースにしか無い観点だけである。**
 // base の決め方（経路 P013）は test/internal/workspace/prepare_test.go の
-// `Test_本家のリポジトリへPRを出す_P009_baseもdefault_branchも無ければ失敗させる` が、判定の hook を足すかどうかは
+// `Test_本家のリポジトリへPRを出す_P013_baseもdefault_branchも無ければ失敗させる` が、判定の hook を足すかどうかは
 // test/internal/orchestrator/tool_gate_test.go が押さえているので、**同じ検査をここへ写さない。**
 //
 // **エージェントの判断に属する段はテストにできない。**理由は

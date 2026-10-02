@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "e8b88514225748d38e4ba86b316dac6c1e12fdf560870cf206e164ec7f507fc7", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "f062191af1130bab37fc5d8b1e5794c29f320a23610d1d0a2d349577dd40bd00", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **ユースケース記述「既存のボードの Status を割り当てる」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

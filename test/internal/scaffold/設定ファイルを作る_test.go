@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "beee1cbd0487f402fe5e6e9fad748c002ef821e891546ab112081af38c43794b", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
+// {"RUCM-CFG-SHA256": "aabc96cf347649c45020e53dc347244a1e1eac8a57051a6455c70f2f64e0d39f", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
 //
 // **ユースケース記述「設定ファイルを作る」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

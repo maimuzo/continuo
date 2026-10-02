@@ -3,7 +3,7 @@
   "usecase_name": "設定ファイルを作る",
   "source": {
     "file": "docs/spec/usecases/particular_case/設定ファイルを作る.rucm.md",
-    "rucm_block_sha256": "e47625ae535ea6d4a61de9d6209798bf847645f47b1fa95625f10aa359f09154"
+    "rucm_block_sha256": "dbb070ca60cb940c24204859e427c388b689ab91558acb55b66c7e02af63b242"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -32,7 +32,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          6
         ]
       },
       "postcondition": "WORKFLOW.md は作られていない。continuo-ci.yaml は作られていない。システムはディレクトリを作っていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -41,7 +41,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          6
+          7
         ]
       },
       "postcondition": "WORKFLOW.md は作られていない。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -50,7 +50,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          7
+          8
         ]
       },
       "postcondition": "symlink のリンク先の内容は変わっていない。システムは symlink を辿っていない。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
@@ -59,7 +59,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          8
+          9
         ]
       },
       "postcondition": "WORKFLOW.md の内容が雛形の全文に置き換わっている。continuo-ci.yaml の内容が見本の全文である。終了コード 0 が返っている。"
@@ -80,7 +80,7 @@
           5
         ]
       },
-      "postcondition": "WORKFLOW.md の内容が雛形の全文に置き換わっている。システムは continuo-ci.yaml を書いていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。"
+      "postcondition": "WORKFLOW.md の内容が雛形の全文に置き換わっている。システムは continuo-ci.yaml を書き終えていない。既にある continuo-ci.yaml を差し替えられなかった場合は、既存の continuo-ci.yaml の内容は変わっていない。新しく作る continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。"
     },
     "上書きの指定なし": {
       "rfs": {
@@ -98,7 +98,7 @@
           2
         ]
       },
-      "postcondition": "既存の WORKFLOW.md の内容は変わっていない。システムはファイルを1つも書いていない。触っていないことは標準出力に出ている。書けなかった理由は標準エラーに出ている。終了コード 1 が返っている。"
+      "postcondition": "既存の WORKFLOW.md の内容は変わっていない。システムは continuo-ci.yaml を書き終えていない。continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。触っていないことは標準出力に出ている。書けなかった理由は標準エラーに出ている。終了コード 1 が返っている。"
     },
     "設定も見本も既にある": {
       "rfs": {
@@ -113,25 +113,26 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          9
+          5,
+          10
         ]
       },
-      "postcondition": "システムはファイルを1つも書いていない。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
+      "postcondition": "システムは WORKFLOW.md を書き終えていない。WORKFLOW.md への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた WORKFLOW.md が残っている。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
     },
     "見本を書けない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          12
+          13
         ]
       },
-      "postcondition": "WORKFLOW.md がある。システムは continuo-ci.yaml を書いていない。continuo-ci.yaml が symlink である場合は、symlink のリンク先の内容は変わっていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。"
+      "postcondition": "WORKFLOW.md がある。システムは continuo-ci.yaml を書き終えていない。continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。continuo-ci.yaml が symlink である場合は、symlink のリンク先の内容は変わっていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。"
     },
     "既存の見本": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          14
         ]
       },
       "postcondition": "WORKFLOW.md がある。既存の continuo-ci.yaml の内容は変わっていない。終了コード 0 が返っている。"
@@ -151,7 +152,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            11
+            12
           ]
         }
       ],
@@ -193,104 +194,111 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは VALIDATES THAT 書き出す先に指定されたパスがある。"
+      "statement": "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。"
+      "statement": "システムは VALIDATES THAT 書き出す先に指定されたパスがある。"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。"
+      "statement": "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。"
+      "statement": "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。"
     },
     {
       "id": "BASIC FLOW-9",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。"
+      "statement": "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。"
     },
     {
       "id": "BASIC FLOW-10",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは書き出す先に WORKFLOW.md を作る。"
+      "statement": "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは WORKFLOW.md に雛形の全文を書き込む。"
+      "statement": "システムは書き出す先に WORKFLOW.md を作る。"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。"
+      "statement": "システムは WORKFLOW.md に雛形の全文を書き込む。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは VALIDATES THAT 書き出す先に continuo-ci.yaml がない。"
+      "statement": "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。"
     },
     {
       "id": "BASIC FLOW-14",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは書き出す先に continuo-ci.yaml を作る。"
+      "statement": "システムは VALIDATES THAT 書き出す先に continuo-ci.yaml がない。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは continuo-ci.yaml に見本の全文を書き込む。"
+      "statement": "システムは書き出す先に continuo-ci.yaml を作る。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは利用者に作成した WORKFLOW.md の絶対パスを応答する。"
+      "statement": "システムは continuo-ci.yaml に見本の全文を書き込む。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは利用者に作成した continuo-ci.yaml の絶対パスを応答する。"
+      "statement": "システムは利用者に作成した WORKFLOW.md の絶対パスを応答する。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは利用者に continuo-ci.yaml を CI へ移す案内を応答する。"
+      "statement": "システムは利用者に作成した continuo-ci.yaml の絶対パスを応答する。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
+      "statement": "システムは利用者に continuo-ci.yaml を CI へ移す案内を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
       "statement": "システムは利用者にキーごとの値の決め方を応答する。"
     },
     {
@@ -473,7 +481,7 @@
       "type": "resume",
       "flow": "既存の設定ファイル",
       "step": 15,
-      "statement": "RESUME STEP 19"
+      "statement": "RESUME STEP 20"
     },
     {
       "id": "設定ファイルを差し替えられない-1",
@@ -627,7 +635,7 @@
       "type": "action",
       "flow": "設定ファイルを書けない",
       "step": 1,
-      "statement": "システムは利用者に書き出せなかったファイルの名前と絶対パスと理由を応答する。"
+      "statement": "システムは利用者に書き出せなかったファイルの名前と理由を応答する。"
     },
     {
       "id": "設定ファイルを書けない-2",
@@ -697,7 +705,7 @@
       "type": "resume",
       "flow": "既存の見本",
       "step": 5,
-      "statement": "RESUME STEP 19"
+      "statement": "RESUME STEP 20"
     },
     {
       "id": "見本の上書き-1",
@@ -795,66 +803,73 @@
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
       "kind": "true",
-      "condition": "書き出す先に指定されたパスがある"
+      "condition": "書き出す先のディレクトリを調べられる"
     },
     {
       "from": "BASIC FLOW-5",
-      "to": "書き出し先のパス不在-1",
+      "to": "設定ファイルを書けない-1",
       "kind": "false",
-      "condition": "NOT 書き出す先に指定されたパスがある"
+      "condition": "NOT 書き出す先のディレクトリを調べられる"
     },
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
       "kind": "true",
-      "condition": "書き出す先に指定されたパスがディレクトリである"
+      "condition": "書き出す先に指定されたパスがある"
     },
     {
       "from": "BASIC FLOW-6",
-      "to": "書き出し先がディレクトリではない-1",
+      "to": "書き出し先のパス不在-1",
       "kind": "false",
-      "condition": "NOT 書き出す先に指定されたパスがディレクトリである"
+      "condition": "NOT 書き出す先に指定されたパスがある"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
       "kind": "true",
-      "condition": "書き出す先の WORKFLOW.md が symlink ではない"
+      "condition": "書き出す先に指定されたパスがディレクトリである"
     },
     {
       "from": "BASIC FLOW-7",
-      "to": "書き出し先がsymlink-1",
+      "to": "書き出し先がディレクトリではない-1",
       "kind": "false",
-      "condition": "NOT 書き出す先の WORKFLOW.md が symlink ではない"
+      "condition": "NOT 書き出す先に指定されたパスがディレクトリである"
     },
     {
       "from": "BASIC FLOW-8",
       "to": "BASIC FLOW-9",
       "kind": "true",
-      "condition": "書き出す先に WORKFLOW.md がない"
+      "condition": "書き出す先の WORKFLOW.md が symlink ではない"
     },
     {
       "from": "BASIC FLOW-8",
-      "to": "既存の設定ファイル-1",
+      "to": "書き出し先がsymlink-1",
       "kind": "false",
-      "condition": "NOT 書き出す先に WORKFLOW.md がない"
+      "condition": "NOT 書き出す先の WORKFLOW.md が symlink ではない"
     },
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
       "kind": "true",
-      "condition": "書き出す先に WORKFLOW.md を作成できる"
+      "condition": "書き出す先に WORKFLOW.md がない"
     },
     {
       "from": "BASIC FLOW-9",
-      "to": "設定ファイルを書けない-1",
+      "to": "既存の設定ファイル-1",
       "kind": "false",
-      "condition": "NOT 書き出す先に WORKFLOW.md を作成できる"
+      "condition": "NOT 書き出す先に WORKFLOW.md がない"
     },
     {
       "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "書き出す先に WORKFLOW.md を書き出せる"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "設定ファイルを書けない-1",
+      "kind": "false",
+      "condition": "NOT 書き出す先に WORKFLOW.md を書き出せる"
     },
     {
       "from": "BASIC FLOW-11",
@@ -862,39 +877,39 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-11",
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
       "to": "書き込み中の中断-1",
       "kind": "global",
       "condition": "利用者が continuo init の実行を中断する場合"
     },
     {
-      "from": "BASIC FLOW-12",
-      "to": "BASIC FLOW-13",
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
       "kind": "true",
       "condition": "書き出す先の continuo-ci.yaml を書き出せる"
     },
     {
-      "from": "BASIC FLOW-12",
+      "from": "BASIC FLOW-13",
       "to": "見本を書けない-1",
       "kind": "false",
       "condition": "NOT 書き出す先の continuo-ci.yaml を書き出せる"
     },
     {
-      "from": "BASIC FLOW-13",
-      "to": "BASIC FLOW-14",
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
       "kind": "true",
       "condition": "書き出す先に continuo-ci.yaml がない"
     },
     {
-      "from": "BASIC FLOW-13",
+      "from": "BASIC FLOW-14",
       "to": "既存の見本-1",
       "kind": "false",
       "condition": "NOT 書き出す先に continuo-ci.yaml がない"
-    },
-    {
-      "from": "BASIC FLOW-14",
-      "to": "BASIC FLOW-15",
-      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-15",
@@ -914,6 +929,11 @@
     {
       "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-19",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
@@ -1046,7 +1066,7 @@
     },
     {
       "from": "既存の設定ファイル-15",
-      "to": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "resume"
     },
     {
@@ -1192,7 +1212,7 @@
     },
     {
       "from": "既存の見本-5",
-      "to": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "resume"
     },
     {
@@ -1251,18 +1271,20 @@
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに WORKFLOW.md の雛形の作成を要求する。",
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
         "システムは書き出す先に WORKFLOW.md を作る。",
         "システムは WORKFLOW.md に雛形の全文を書き込む。",
         "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。",
@@ -1294,23 +1316,25 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "既存の見本-1",
         "既存の見本-2",
         "既存の見本-3",
         "既存の見本-4",
         "既存の見本-5",
-        "BASIC FLOW-19"
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに WORKFLOW.md の雛形の作成を要求する。",
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
         "システムは書き出す先に WORKFLOW.md を作る。",
         "システムは WORKFLOW.md に雛形の全文を書き込む。",
         "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。",
@@ -1320,7 +1344,7 @@
         "システムは既存の continuo-ci.yaml の内容を変えない。",
         "システムは利用者に作成した WORKFLOW.md の絶対パスを応答する。",
         "システムは利用者に continuo-ci.yaml が既にあるので触っていないことを応答する。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは利用者にキーごとの値の決め方を応答する。"
       ]
     },
@@ -1343,6 +1367,7 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "既存の見本-1",
         "見本の上書き-1",
         "見本の上書き-2",
@@ -1356,11 +1381,12 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
         "システムは書き出す先に WORKFLOW.md を作る。",
         "システムは WORKFLOW.md に雛形の全文を書き込む。",
         "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。",
@@ -1380,7 +1406,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "見本を書けない",
-      "postcondition": "WORKFLOW.md がある。システムは continuo-ci.yaml を書いていない。continuo-ci.yaml が symlink である場合は、symlink のリンク先の内容は変わっていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。",
+      "postcondition": "WORKFLOW.md がある。システムは continuo-ci.yaml を書き終えていない。continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。continuo-ci.yaml が symlink である場合は、symlink のリンク先の内容は変わっていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1394,6 +1420,7 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "見本を書けない-1",
         "見本を書けない-2",
         "見本を書けない-3",
@@ -1404,11 +1431,12 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
         "システムは書き出す先に WORKFLOW.md を作る。",
         "システムは WORKFLOW.md に雛形の全文を書き込む。",
         "システムは VALIDATES THAT 書き出す先の continuo-ci.yaml を書き出せる。",
@@ -1436,6 +1464,7 @@
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "書き込み中の中断-1",
         "書き込み中の中断-2"
       ],
@@ -1444,11 +1473,12 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
         "システムは書き出す先に WORKFLOW.md を作る。",
         "システムは WORKFLOW.md に雛形の全文を書き込む。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
@@ -1460,7 +1490,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "設定ファイルを書けない",
-      "postcondition": "システムはファイルを1つも書いていない。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "postcondition": "システムは WORKFLOW.md を書き終えていない。WORKFLOW.md への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた WORKFLOW.md が残っている。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1471,6 +1501,7 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "設定ファイルを書けない-1",
         "設定ファイルを書けない-2"
       ],
@@ -1479,13 +1510,14 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
         "システムは VALIDATES THAT 書き出す先に WORKFLOW.md がない。",
-        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を作成できる。",
-        "CONDITION: NOT 書き出す先に WORKFLOW.md を作成できる",
-        "システムは利用者に書き出せなかったファイルの名前と絶対パスと理由を応答する。",
+        "システムは VALIDATES THAT 書き出す先に WORKFLOW.md を書き出せる。",
+        "CONDITION: NOT 書き出す先に WORKFLOW.md を書き出せる",
+        "システムは利用者に書き出せなかったファイルの名前と理由を応答する。",
         "ABORT"
       ]
     },
@@ -1503,6 +1535,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "既存の設定ファイル-2",
         "既存の設定ファイル-3",
@@ -1514,13 +1547,14 @@
         "既存の設定ファイル-13",
         "既存の設定ファイル-14",
         "既存の設定ファイル-15",
-        "BASIC FLOW-19"
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに WORKFLOW.md の雛形の作成を要求する。",
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1536,7 +1570,7 @@
         "システムは利用者に上書きした WORKFLOW.md の絶対パスを応答する。",
         "システムは利用者に continuo-ci.yaml の絶対パスを応答する。",
         "システムは利用者に continuo-ci.yaml を CI へ移す案内を応答する。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは利用者にキーごとの値の決め方を応答する。"
       ]
     },
@@ -1554,6 +1588,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "既存の設定ファイル-2",
         "既存の設定ファイル-3",
@@ -1566,13 +1601,14 @@
         "既存の設定ファイル-13",
         "既存の設定ファイル-14",
         "既存の設定ファイル-15",
-        "BASIC FLOW-19"
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに WORKFLOW.md の雛形の作成を要求する。",
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1590,7 +1626,7 @@
         "システムは利用者に上書きした WORKFLOW.md の絶対パスを応答する。",
         "システムは利用者に continuo-ci.yaml の絶対パスを応答する。",
         "システムは利用者に continuo-ci.yaml を CI へ移す案内を応答する。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "システムは利用者にキーごとの値の決め方を応答する。"
       ]
     },
@@ -1598,7 +1634,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "上書き時に見本を書けない",
-      "postcondition": "WORKFLOW.md の内容が雛形の全文に置き換わっている。システムは continuo-ci.yaml を書いていない。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。",
+      "postcondition": "WORKFLOW.md の内容が雛形の全文に置き換わっている。システムは continuo-ci.yaml を書き終えていない。既にある continuo-ci.yaml を差し替えられなかった場合は、既存の continuo-ci.yaml の内容は変わっていない。新しく作る continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。continuo-ci.yaml を書けなかった理由は標準エラーに出ている。終了コード 0 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1608,6 +1644,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "既存の設定ファイル-2",
         "既存の設定ファイル-3",
@@ -1623,6 +1660,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1654,6 +1692,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "既存の設定ファイル-2",
         "設定ファイルを差し替えられない-1",
@@ -1664,6 +1703,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1690,6 +1730,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "上書きの指定なし-1",
         "上書きの指定なし-2",
@@ -1706,6 +1747,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1738,6 +1780,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "上書きの指定なし-1",
         "上書きの指定なし-2",
@@ -1751,6 +1794,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1771,7 +1815,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "見本だけも書けない",
-      "postcondition": "既存の WORKFLOW.md の内容は変わっていない。システムはファイルを1つも書いていない。触っていないことは標準出力に出ている。書けなかった理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "postcondition": "既存の WORKFLOW.md の内容は変わっていない。システムは continuo-ci.yaml を書き終えていない。continuo-ci.yaml への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた continuo-ci.yaml が残っている。触っていないことは標準出力に出ている。書けなかった理由は標準エラーに出ている。終了コード 1 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1781,6 +1825,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "既存の設定ファイル-1",
         "上書きの指定なし-1",
         "上書きの指定なし-2",
@@ -1793,6 +1838,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1821,6 +1867,7 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
+        "BASIC FLOW-8",
         "書き出し先がsymlink-1",
         "書き出し先がsymlink-2",
         "書き出し先がsymlink-3"
@@ -1830,6 +1877,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "システムは VALIDATES THAT 書き出す先の WORKFLOW.md が symlink ではない。",
@@ -1851,6 +1899,7 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "書き出し先がディレクトリではない-1",
         "書き出し先がディレクトリではない-2",
         "書き出し先がディレクトリではない-3"
@@ -1860,6 +1909,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがディレクトリである。",
         "CONDITION: NOT 書き出す先に指定されたパスがディレクトリである",
@@ -1879,6 +1929,7 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "書き出し先のパス不在-1",
         "書き出し先のパス不在-2",
         "書き出し先のパス不在-3"
@@ -1888,6 +1939,7 @@
         "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
         "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
         "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: NOT 書き出す先に指定されたパスがある",
         "システムは利用者に指定されたディレクトリがないことを応答する。",
@@ -1897,6 +1949,31 @@
     },
     {
       "id": "P017",
+      "terminal": "abort",
+      "terminal_flow": "設定ファイルを書けない",
+      "postcondition": "システムは WORKFLOW.md を書き終えていない。WORKFLOW.md への書き込みか閉じる操作が失敗した場合は、空か途中まで書かれた WORKFLOW.md が残っている。continuo-ci.yaml は作られていない。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "設定ファイルを書けない-1",
+        "設定ファイルを書けない-2"
+      ],
+      "steps": [
+        "利用者はシステムに WORKFLOW.md の雛形の作成を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "INCLUDE USE CASE 設定に書く値を gh から引く",
+        "システムは VALIDATES THAT 書き出す先のディレクトリを調べられる。",
+        "CONDITION: NOT 書き出す先のディレクトリを調べられる",
+        "システムは利用者に書き出せなかったファイルの名前と理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "引数指定エラー",
       "postcondition": "WORKFLOW.md は作られていない。continuo-ci.yaml は作られていない。システムは gh に何も要求していない。理由は標準エラーに出ている。終了コード 2 が返っている。",
@@ -1917,7 +1994,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "使い方の表示",
       "postcondition": "WORKFLOW.md は作られていない。continuo-ci.yaml は作られていない。システムは gh に何も要求していない。終了コード 0 が返っている。",
@@ -1937,9 +2014,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 85,
-    "nodes_covered": 85,
-    "edges_total": 87,
-    "edges_covered": 87
+    "nodes_total": 86,
+    "nodes_covered": 86,
+    "edges_total": 89,
+    "edges_covered": 89
   }
 }

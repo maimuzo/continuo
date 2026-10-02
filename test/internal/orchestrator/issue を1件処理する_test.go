@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4197880202bad94447dc463278247f841949815c17efd72ec20ad02847eafc78", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "40944359205582f71061d05231d3133873b669cadd9a58477809ba1114f41594", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **ユースケース記述「issue を1件処理する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -149,14 +149,14 @@ func Test_issueを1件処理する_P014_打ち切りのときissueに残る理�
 	}
 }
 
-// {"RUCM-PATH": "P058"}
+// {"RUCM-PATH": "P060"}
 //
-// Test_issueを1件処理する_P058_既に印を持っているissueは二重にdispatchしない は、印の役目を確かめる。
+// Test_issueを1件処理する_P060_既に印を持っているissueは二重にdispatchしない は、印の役目を確かめる。
 //
 // 目的: 設計 3-10 の「『この issue は自分が取った』という印で防ぐ。状態の絞り込みでは防がない」を示す。
 // 与える情報: `Ready` の issue を1件 dispatch したあと、もう一度巡回する。
 // 成功条件: `agent.start` が1回しか呼ばれない。
-func Test_issueを1件処理する_P058_既に印を持っているissueは二重にdispatchしない(t *testing.T) {
+func Test_issueを1件処理する_P060_既に印を持っているissueは二重にdispatchしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
@@ -289,9 +289,9 @@ func Test_issueを1件処理する_P047_failure_stateのissueをrunning_stateへ
 	}
 }
 
-// {"RUCM-PATH": "P055"}
+// {"RUCM-PATH": "P057"}
 //
-// Test_issueを1件処理する_P055_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
+// Test_issueを1件処理する_P057_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
 // issue 単位の失敗の記録を確かめる。
 //
 // **印（run）は失敗のたびに消えるので、印の中のリトライの回数では止まらない。**
@@ -301,7 +301,7 @@ func Test_issueを1件処理する_P047_failure_stateのissueをrunning_stateへ
 // 与える情報: カンバンへ1バイトも書けない状況（failure_state へも落とせないので、
 // issue は Ready のまま候補に上がり続ける）と、`agent.max_retries: 1`。
 // 成功条件: 3回目以降の巡回で着手を試みなくなり、そのことが人間へ1度だけ知らされること。
-func Test_issueを1件処理する_P055_同じ理由で失敗し続けるissueは上限を超えたら拾わない(t *testing.T) {
+func Test_issueを1件処理する_P057_同じ理由で失敗し続けるissueは上限を超えたら拾わない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Agent.MaxRetries = 1
 	}})
@@ -328,9 +328,9 @@ func Test_issueを1件処理する_P055_同じ理由で失敗し続けるissue�
 	}
 }
 
-// {"RUCM-PATH": "P056"}
+// {"RUCM-PATH": "P058"}
 //
-// Test_issueを1件処理する_P056_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
+// Test_issueを1件処理する_P058_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
 // 巡回全体を止めないことを確かめる。
 //
 // **1件の食い違いで巡回の dispatch を丸ごと止めると、無関係の issue まで着手されなくなる。**
@@ -339,7 +339,7 @@ func Test_issueを1件処理する_P055_同じ理由で失敗し続けるissue�
 // 目的: 頼んだ Status に無い候補が混ざっても、他の issue の着手が進むこと。
 // 与える情報: Ready の issue が1件と、候補の一覧にだけ載る Blocked の写しが1件。
 // 成功条件: Ready の issue に turn が送られ、Blocked の issue の Status は動かないこと。
-func Test_issueを1件処理する_P056_絞り込みの食い違いが1件あっても他のissueのdispatchは続く(t *testing.T) {
+func Test_issueを1件処理する_P058_絞り込みの食い違いが1件あっても他のissueのdispatchは続く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.AllowLog("頼んだ Status に無い候補が返ったので飛ばします")
 	holdPrompt(fx)
@@ -511,14 +511,14 @@ func Test_issueを1件処理する_P044_Statusを書けなければworktreeを�
 	}
 }
 
-// {"RUCM-PATH": "P059"}
+// {"RUCM-PATH": "P061"}
 //
-// Test_issueを1件処理する_P059_カンバンを読めなくても巡回は止まらない は、候補の取得の失敗を確かめる。
+// Test_issueを1件処理する_P061_カンバンを読めなくても巡回は止まらない は、候補の取得の失敗を確かめる。
 //
 // 目的: `FetchIssuesByStates` が失敗しても、continuo が落ちないこと。
 // 与える情報: 常に失敗する候補の取得。
 // 成功条件: 巡回が返り、**worktree も pane も作らない**こと。
-func Test_issueを1件処理する_P059_カンバンを読めなくても巡回は止まらない(t *testing.T) {
+func Test_issueを1件処理する_P061_カンバンを読めなくても巡回は止まらない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.SetStatesError(errors.New("GitHub へ繋がりません"))
 
@@ -530,9 +530,9 @@ func Test_issueを1件処理する_P059_カンバンを読めなくても巡回�
 	}
 }
 
-// {"RUCM-PATH": "P059"}
+// {"RUCM-PATH": "P061"}
 //
-// Test_issueを1件処理する_P059_Statusの選択肢が食い違ったら着手しない は、起動時検査の失敗を確かめる。
+// Test_issueを1件処理する_P061_Statusの選択肢が食い違ったら着手しない は、起動時検査の失敗を確かめる。
 //
 // **人間がカンバンの Status の選択肢を改名することがある。**
 // **設定と食い違ったまま着手すると、continuo は存在しない選択肢へ書こうとして毎回失敗する。**
@@ -540,7 +540,7 @@ func Test_issueを1件処理する_P059_カンバンを読めなくても巡回�
 // 目的: 選択肢の照合に失敗したら、その巡回では着手しないこと。
 // 与える情報: 常に失敗する `VerifyStatusOptions`。
 // 成功条件: worktree を開かず、Status も動かさないこと。
-func Test_issueを1件処理する_P059_Statusの選択肢が食い違ったら着手しない(t *testing.T) {
+func Test_issueを1件処理する_P061_Statusの選択肢が食い違ったら着手しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	fx.Tracker.SetVerifyError(errors.New("Status の選択肢名が設定と一致しません"))
@@ -556,16 +556,16 @@ func Test_issueを1件処理する_P059_Statusの選択肢が食い違ったら�
 	}
 }
 
-// {"RUCM-PATH": "P054"}
+// {"RUCM-PATH": "P056"}
 //
-// Test_issueを1件処理する_P054_未信頼なら着手せず承認を促すコメントを1件書く は、段0 の信頼の検査を確かめる。
+// Test_issueを1件処理する_P056_未信頼なら着手せず承認を促すコメントを1件書く は、段0 の信頼の検査を確かめる。
 //
 // 目的: 信頼登録されていないリポジトリの issue に着手しないこと。
 // **そのまま黙って飛ばすと、人間は「なぜ動かないのか」を知る手がかりを持たない**ので、
 // issue へ直し方を1件だけ書く。
 // 与える情報: 信頼登録していないリポジトリ（`Untrusted`）。
 // 成功条件: Status が動かず、worktree も開かず、issue にコメントが1件だけ付くこと。
-func Test_issueを1件処理する_P054_未信頼なら着手せず承認を促すコメントを1件書く(t *testing.T) {
+func Test_issueを1件処理する_P056_未信頼なら着手せず承認を促すコメントを1件書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Untrusted: true})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
@@ -589,9 +589,9 @@ func Test_issueを1件処理する_P054_未信頼なら着手せず承認を促�
 	}
 }
 
-// {"RUCM-PATH": "P049"}
+// {"RUCM-PATH": "P051"}
 //
-// Test_issueを1件処理する_P049_登録の無い実体があるならStatusを1バイトも書かずに飛ばす は、
+// Test_issueを1件処理する_P051_登録の無い実体があるならStatusを1バイトも書かずに飛ばす は、
 // 段0 の worktree の検査を確かめる。
 //
 // **この検査が段3（worktree の用意）にあると、必ず失敗する着手でも先に running_state を
@@ -603,7 +603,7 @@ func Test_issueを1件処理する_P054_未信頼なら着手せず承認を促�
 // 与える情報: 目的のパスに、git に登録されていないディレクトリを先に置く。
 // 成功条件: UpdateStatus が1回も呼ばれず、Status が Ready のままで、
 // worktree も開かれず、印も残らないこと。
-func Test_issueを1件処理する_P049_登録の無い実体があるならStatusを1バイトも書かずに飛ばす(t *testing.T) {
+func Test_issueを1件処理する_P051_登録の無い実体があるならStatusを1バイトも書かずに飛ばす(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	// **git の登録を持たない実体を、目的のパスへ先に置く。**
 	// 人間が手で作ったディレクトリや、消し損ねた残骸がこの形になる。
@@ -631,9 +631,9 @@ func Test_issueを1件処理する_P049_登録の無い実体があるならStat
 	}
 }
 
-// {"RUCM-PATH": "P050"}
+// {"RUCM-PATH": "P052"}
 //
-// Test_issueを1件処理する_P050_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす は、
+// Test_issueを1件処理する_P052_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす は、
 // 段0 の branch の検査を確かめる。
 //
 // **目的のパスには何も無い。**それでも `git worktree add <目的のパス> <branch>` は
@@ -647,7 +647,7 @@ func Test_issueを1件処理する_P049_登録の無い実体があるならStat
 // 与える情報: 置き場所の外に、同じ branch を出す worktree を1つ作っておく。
 // 成功条件: UpdateStatus が1回も呼ばれず、Status が Ready のままで、
 // 目的のパスも作られず、印も残らないこと。
-func Test_issueを1件処理する_P050_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす(t *testing.T) {
+func Test_issueを1件処理する_P052_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	// **置き場所の外**に、同じ branch を出す worktree を作る。
 	// 前の run の worktree が別の場所に残っている状態や、人間が手で切った状態がこれである。
@@ -679,14 +679,14 @@ func Test_issueを1件処理する_P050_branchを別のworktreeが使ってい�
 	}
 }
 
-// {"RUCM-PATH": "P053"}
+// {"RUCM-PATH": "P055"}
 //
-// Test_issueを1件処理する_P053_1つでも欠けたら着手しない は、絞り込みが効くことを確かめる。
+// Test_issueを1件処理する_P055_1つでも欠けたら着手しない は、絞り込みが効くことを確かめる。
 //
 // 目的: `required_labels` に並べたラベルを**全部**持っている issue だけに着手すること。
 // 与える情報: 必須2つのうち1つしか持たない issue。
 // 成功条件: **worktree も pane も作らない**（herdr を1回も叩かない）。
-func Test_issueを1件処理する_P053_1つでも欠けたら着手しない(t *testing.T) {
+func Test_issueを1件処理する_P055_1つでも欠けたら着手しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.RequiredLabels = []string{"bug", "ready-for-ai"}
@@ -1163,14 +1163,14 @@ func Test_issueを1件処理する_P024_入力を受け付けないまま期限�
 	}
 }
 
-// {"RUCM-PATH": "P052"}
+// {"RUCM-PATH": "P054"}
 //
-// Test_issueを1件処理する_P052_上限まで着手したらそれ以上着手しない は、全体の上限を確かめる。
+// Test_issueを1件処理する_P054_上限まで着手したらそれ以上着手しない は、全体の上限を確かめる。
 //
 // 目的: `max_concurrent_agents` を超えて dispatch しないこと。
 // 与える情報: 上限 2 の設定と、Ready の issue 3件。
 // 成功条件: **2件だけが着手される**（3件目は Ready のまま）。
-func Test_issueを1件処理する_P052_上限まで着手したらそれ以上着手しない(t *testing.T) {
+func Test_issueを1件処理する_P054_上限まで着手したらそれ以上着手しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) { cfg.Agent.MaxConcurrentAgents = 2 },
 	})
@@ -1960,9 +1960,9 @@ func Test_issueを1件処理する_P046_候補の写しでは自分が担当で�
 	}
 }
 
-// {"RUCM-PATH": "P051"}
+// {"RUCM-PATH": "P053"}
 //
-// Test_issueを1件処理する_P051_マージンが先に効いて止まり使用率と閾値が出る は、出す1行の中身を確かめる
+// Test_issueを1件処理する_P053_マージンが先に効いて止まり使用率と閾値が出る は、出す1行の中身を確かめる
 // （設計 3-77j。issue #173）。
 //
 // 目的: **新規着手が止まる使用率は `100 − マージン` である。**
@@ -1971,7 +1971,7 @@ func Test_issueを1件処理する_P046_候補の写しでは自分が担当で�
 //
 // 与える情報: 1週間の枠が 92%。担当者のいない `Ready` の issue が1件。
 // 成功条件: dispatch されず、使用率と閾値が1行に出ること。
-func Test_issueを1件処理する_P051_マージンが先に効いて止まり使用率と閾値が出る(t *testing.T) {
+func Test_issueを1件処理する_P053_マージンが先に効いて止まり使用率と閾値が出る(t *testing.T) {
 	endpoint, _ := newUsageServer(t, []map[string]any{
 		{"kind": "session", "percent": 30, "resets_at": nil, "severity": "normal"},
 		{"kind": "weekly_all", "percent": 92, "resets_at": nil, "severity": "normal"},
@@ -2013,9 +2013,9 @@ func Test_issueを1件処理する_P051_マージンが先に効いて止まり�
 	}
 }
 
-// {"RUCM-PATH": "P051"}
+// {"RUCM-PATH": "P053"}
 //
-// Test_issueを1件処理する_P051_枠を使い切っているときはquotaJSONを消す手順まで出す は、100% の機械への案内を確かめる
+// Test_issueを1件処理する_P053_枠を使い切っているときはquotaJSONを消す手順まで出す は、100% の機械への案内を確かめる
 // （issue #173。実装レビュー5周目の MEDIUM）。
 //
 // 目的: **使用率100 では、マージンをどう書いても動き出さない。**
@@ -2031,7 +2031,7 @@ func Test_issueを1件処理する_P051_マージンが先に効いて止まり�
 // 与える情報: 5時間の枠が 100% で、リセットは2時間後。担当者のいない `Ready` の issue が1件。
 // 成功条件: 着手しないこと。**「マージンを下げても動き出しません」と
 // 「quota.json を消し」の両方が、同じ1行に出ること。**
-func Test_issueを1件処理する_P051_枠を使い切っているときはquotaJSONを消す手順まで出す(t *testing.T) {
+func Test_issueを1件処理する_P053_枠を使い切っているときはquotaJSONを消す手順まで出す(t *testing.T) {
 	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
 	endpoint, _ := newUsageServer(t, []map[string]any{
 		{"kind": "session", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
@@ -2076,15 +2076,15 @@ func Test_issueを1件処理する_P051_枠を使い切っているときはquot
 	}
 }
 
-// {"RUCM-PATH": "P051"}
+// {"RUCM-PATH": "P053"}
 //
-// Test_issueを1件処理する_P051_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。
+// Test_issueを1件処理する_P053_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。
 //
 // 目的: **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
 // 与える情報: 使用率を読む設定（`statusline`。issue #284）だが、ステータスラインの行が
 // 1行も届いていない状態。trust.repositories は空（statusline取得は「使える clone が無い」で終わる）。
 // 成功条件: 入札のコメントが1件も増えず、着手もしないこと。
-func Test_issueを1件処理する_P051_枠を読めない機械は入札しない(t *testing.T) {
+func Test_issueを1件処理する_P053_枠を読めない機械は入札しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			// **使用率を読む設定にする。**行は1行も入れないので、保管値は空のままになる
@@ -2108,7 +2108,7 @@ func Test_issueを1件処理する_P051_枠を読めない機械は入札しな�
 	}
 }
 
-// {"RUCM-PATH": "P051"}
+// {"RUCM-PATH": "P053"}
 //
 // 目的: 使用率の値が古くなったら、そこから先は入札しないことを確認する（設計 3-77i。issue #284）。
 //
@@ -2123,7 +2123,7 @@ func Test_issueを1件処理する_P051_枠を読めない機械は入札しな�
 // 2回目の巡回の前に issue 189 を足す。trust.repositories は空（statusline取得は
 // 「使える clone が無い」で終わる）。
 // 成功条件: issue 188 には入札があり、**issue 189 には入札が1件も無い**こと。
-func Test_issueを1件処理する_P051_値が古くなったら入札を止める(t *testing.T) {
+func Test_issueを1件処理する_P053_値が古くなったら入札を止める(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,
@@ -2156,12 +2156,12 @@ func Test_issueを1件処理する_P051_値が古くなったら入札を止め�
 	}
 }
 
-// {"RUCM-PATH": "P051"}
+// {"RUCM-PATH": "P053"}
 //
 // **新しい issue を取るかどうかの門を確かめる。**門は `issue を1件処理する` の代替フロー
 // `枠の余裕なし` に在る（`レートリミットで待って再開する` は、走っている run の話で、この門を持たない）。
 //
-// Test_issueを1件処理する_P051_枠を読めなければ入札の要るissueには着手しない は、2つの門を1つに揃えたことを
+// Test_issueを1件処理する_P053_枠を読めなければ入札の要るissueには着手しない は、2つの門を1つに揃えたことを
 // 確かめる（設計 3-77j。issue #173）。
 //
 // 目的: **枠を読めないとき、入札は「黙る」、新規 dispatch は「止めない」で逆を向いていた。**
@@ -2170,7 +2170,7 @@ func Test_issueを1件処理する_P051_値が古くなったら入札を止め�
 //
 // 与える情報: usage API が 500 を返す（枠を読めない）。担当者のいない `Ready` の issue が1件。
 // 成功条件: その issue が dispatch されず、`Info` で理由が出ること。
-func Test_issueを1件処理する_P051_枠を読めなければ入札の要るissueには着手しない(t *testing.T) {
+func Test_issueを1件処理する_P053_枠を読めなければ入札の要るissueには着手しない(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

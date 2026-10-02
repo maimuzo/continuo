@@ -1,0 +1,231 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "巡回が回っているあいだに常駐を止める",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/巡回が回っているあいだに常駐を止める.rucm.md",
+    "rucm_block_sha256": "2c82f4cfcddb2bea1369c18efa0db493ac81eb4b0d5cc9443a3bde2c545874c8"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "continuo は常駐していない。印の集合は失われている。システムは herdr の pane を1つも閉じていない。worktree は残っている。システムは issue の Status を書いていない。応答は標準エラーに出ている。終了コード 0 が返っている。"
+    },
+    "停止の連打": {
+      "when": "利用者が後始末の途中でもう一度停止を要求する場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            4
+          ]
+        }
+      ],
+      "postcondition": "continuo は常駐していない。印の集合は失われている。システムは herdr の pane を1つも閉じていない。worktree は残っている。システムは issue の Status を書いていない。応答は標準エラーに出ている。終了コード 130 が返っている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに continuo の停止を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは利用者に待たせる理由と、もう一度の要求で後始末を待たずに終わることを応答する。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムはボードの巡回を止める。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムはダッシュボードを閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは使用率を受ける sl.sock を閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは hook を受ける socket を閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは走行中の turn ループの終了を待つ。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムはロックファイルの flock を手放す。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは利用者に continuo が終了したことを応答する。"
+    },
+    {
+      "id": "停止の連打-1",
+      "type": "action",
+      "flow": "停止の連打",
+      "step": 1,
+      "statement": "システムは利用者に後始末を待たずに終わることを応答する。"
+    },
+    {
+      "id": "停止の連打-2",
+      "type": "action",
+      "flow": "停止の連打",
+      "step": 2,
+      "statement": "システムは残りの後始末を行わずに終了する。"
+    },
+    {
+      "id": "停止の連打-3",
+      "type": "abort",
+      "flow": "停止の連打",
+      "step": 3,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "停止の連打-1",
+      "kind": "global",
+      "condition": "利用者が後始末の途中でもう一度停止を要求する場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "停止の連打-1",
+      "to": "停止の連打-2",
+      "kind": "seq"
+    },
+    {
+      "from": "停止の連打-2",
+      "to": "停止の連打-3",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "continuo は常駐していない。印の集合は失われている。システムは herdr の pane を1つも閉じていない。worktree は残っている。システムは issue の Status を書いていない。応答は標準エラーに出ている。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の停止を要求する。",
+        "システムは利用者に待たせる理由と、もう一度の要求で後始末を待たずに終わることを応答する。",
+        "システムはボードの巡回を止める。",
+        "システムはダッシュボードを閉じる。",
+        "システムは使用率を受ける sl.sock を閉じる。",
+        "システムは hook を受ける socket を閉じる。",
+        "システムは走行中の turn ループの終了を待つ。",
+        "システムはロックファイルの flock を手放す。",
+        "システムは利用者に continuo が終了したことを応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "停止の連打",
+      "postcondition": "continuo は常駐していない。印の集合は失われている。システムは herdr の pane を1つも閉じていない。worktree は残っている。システムは issue の Status を書いていない。応答は標準エラーに出ている。終了コード 130 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "停止の連打-1",
+        "停止の連打-2",
+        "停止の連打-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の停止を要求する。",
+        "システムは利用者に待たせる理由と、もう一度の要求で後始末を待たずに終わることを応答する。",
+        "システムはボードの巡回を止める。",
+        "システムはダッシュボードを閉じる。",
+        "CONDITION: 利用者が後始末の途中でもう一度停止を要求する場合",
+        "システムは利用者に後始末を待たずに終わることを応答する。",
+        "システムは残りの後始末を行わずに終了する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 12,
+    "nodes_covered": 12,
+    "edges_total": 11,
+    "edges_covered": 11
+  }
+}

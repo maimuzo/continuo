@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "aec75137b279c88e28fcdc35e4a0f51fa84b330652d9e5e24502d5080855b414", "SOURCE": "docs/spec/usecases/particular_case/画面に出す文言の言語を決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "073e7d638ba7b85aaea26852de2badd5e430c18540034931edb82daf737ea43d", "SOURCE": "docs/spec/usecases/particular_case/画面に出す文言の言語を決める.cfg.json"}
 //
 // **ユースケース記述「画面に出す文言の言語を決める」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

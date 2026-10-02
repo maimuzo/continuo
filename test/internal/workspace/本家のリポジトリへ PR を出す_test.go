@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "757606f9abc1bcaae33326d5838d1be26e4b4fd106852bfd13d74105a50aa70c", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "307a3de7f2f8297be18cc4cb28fd1821d4dd380560a3a668f369d20a9fa63472", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 //
 // **ユースケース記述「本家のリポジトリへ PR を出す」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -74,7 +74,7 @@ func Test_本家のリポジトリへPRを出す_P001_成果がworktreeの外に
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P013"}
 //
 // 目的: base を決められない issue を失敗として扱う（base を推測しない）ことを確認する
 // （設計 3-22 の段4）。
@@ -85,7 +85,7 @@ func Test_本家のリポジトリへPRを出す_P001_成果がworktreeの外に
 //
 // 与える情報: base が null の設定と、NativeRef に default_branch を持たない issue。
 // 成功条件: Prepare が ErrBaseUnknown を返し、worktree も branch も作られないこと。
-func Test_本家のリポジトリへPRを出す_P009_baseもdefault_branchも無ければ失敗させる(t *testing.T) {
+func Test_本家のリポジトリへPRを出す_P013_baseもdefault_branchも無ければ失敗させる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
 	})

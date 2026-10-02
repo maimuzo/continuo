@@ -3,7 +3,7 @@
   "usecase_name": "run を終えて worker を止める",
   "source": {
     "file": "docs/spec/usecases/particular_case/run を終えて worker を止める.rucm.md",
-    "rucm_block_sha256": "1931363b46315ec41e0f24683596d61963186a7fbdc6ed985701e52dbbcba8eb"
+    "rucm_block_sha256": "b1d4431e4a4f64f1ab81e1d7b492cda1647fdc8b52852a23ca1d2a6a70a112a8"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -17,7 +17,7 @@
           2
         ]
       },
-      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。"
+      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。"
     },
     "コメントの取り戻し": {
       "rfs": {
@@ -71,7 +71,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。"
+      "statement": "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。"
     },
     {
       "id": "BASIC FLOW-3",
@@ -392,13 +392,13 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "true",
-      "condition": "run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
+      "condition": "run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
     },
     {
       "from": "BASIC FLOW-2",
       "to": "確かめないrun-1",
       "kind": "false",
-      "condition": "NOT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
+      "condition": "NOT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"
     },
     {
       "from": "BASIC FLOW-3",
@@ -655,7 +655,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
@@ -689,7 +689,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -736,7 +736,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -784,7 +784,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -827,7 +827,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -868,7 +868,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -907,7 +907,7 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -926,7 +926,7 @@
       "id": "P008",
       "terminal": "abort",
       "terminal_flow": "確かめないrun",
-      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。",
+      "postcondition": "システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -938,8 +938,8 @@
       ],
       "steps": [
         "巡回タイマーはシステムに、終えると決まった run の後始末を要求する。",
-        "システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
-        "CONDITION: NOT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない",
+        "システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。",
+        "CONDITION: NOT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない",
         "システムは、worktree のパスを持っていれば、workspace_hooks の after_run を実行する。",
         "システムは、pane を引き終えていれば、herdr の pane を閉じる。",
         "システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。",

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6036e6c27e4a71587d4af0d218b20faba73f9c1e0c9a442e4c5af6726dadbf16", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "b15e418544ffa731b6667f97b7d3b677a02302b5e6586fbca90ff227331093ed", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **ユースケース記述「レートリミットで待って再開する」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "72a63d82691ff26a020720386712595474b51f169d6d4c4a8b9a46bfb0aacb3d"
+    "rucm_block_sha256": "19df7c664280f5b52aa642befb75d5fb1fc18600a5c52eb8d15f3d239e585cdb"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -299,35 +299,28 @@
       "type": "action",
       "flow": "確認の画面",
       "step": 4,
-      "statement": "システムはバックグラウンド処理の申告が空になるのを待つ。"
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
     },
     {
       "id": "確認の画面-5",
       "type": "action",
       "flow": "確認の画面",
       "step": 5,
-      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
-    },
-    {
-      "id": "確認の画面-6",
-      "type": "action",
-      "flow": "確認の画面",
-      "step": 6,
       "statement": "システムは issue に引き渡しの通知を1件コメントする。"
     },
     {
-      "id": "確認の画面-7",
+      "id": "確認の画面-6",
       "type": "include",
       "flow": "確認の画面",
-      "step": 7,
+      "step": 6,
       "statement": "INCLUDE USE CASE run を終えて worker を止める",
       "include": "run を終えて worker を止める"
     },
     {
-      "id": "確認の画面-8",
+      "id": "確認の画面-7",
       "type": "abort",
       "flow": "確認の画面",
-      "step": 8,
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -681,11 +674,6 @@
       "kind": "seq"
     },
     {
-      "from": "確認の画面-7",
-      "to": "確認の画面-8",
-      "kind": "seq"
-    },
-    {
       "from": "待ちの最中のturnの終わり-1",
       "to": "待ちの最中のturnの終わり-2",
       "kind": "seq"
@@ -921,8 +909,7 @@
         "確認の画面-4",
         "確認の画面-5",
         "確認の画面-6",
-        "確認の画面-7",
-        "確認の画面-8"
+        "確認の画面-7"
       ],
       "steps": [
         "herdrはシステムに turn の待ち受けの時間切れを応答する。",
@@ -937,7 +924,6 @@
         "システムは run に枠待ちの印を残さない。",
         "システムは Claude Code に継続の指示を送らない。",
         "システムは Claude Code に esc を送る。",
-        "システムはバックグラウンド処理の申告が空になるのを待つ。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
         "INCLUDE USE CASE run を終えて worker を止める",
@@ -983,8 +969,7 @@
         "確認の画面-4",
         "確認の画面-5",
         "確認の画面-6",
-        "確認の画面-7",
-        "確認の画面-8"
+        "確認の画面-7"
       ],
       "steps": [
         "herdrはシステムに turn の待ち受けの時間切れを応答する。",
@@ -995,7 +980,6 @@
         "システムは run に枠待ちの印を残さない。",
         "システムは Claude Code に継続の指示を送らない。",
         "システムは Claude Code に esc を送る。",
-        "システムはバックグラウンド処理の申告が空になるのを待つ。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
         "INCLUDE USE CASE run を終えて worker を止める",
@@ -1154,9 +1138,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 55,
-    "nodes_covered": 55,
-    "edges_total": 57,
-    "edges_covered": 57
+    "nodes_total": 54,
+    "nodes_covered": 54,
+    "edges_total": 56,
+    "edges_covered": 56
   }
 }

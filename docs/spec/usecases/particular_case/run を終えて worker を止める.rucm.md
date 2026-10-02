@@ -26,7 +26,7 @@
 ```rucm
 USE CASE NAME: run を終えて worker を止める
 BRIEF DESCRIPTION: システムは終えると決めた run について、エージェントが成果のコメントを書いたかを確かめる。コメントが無ければ、システムはセッションを復元してエージェントに書かせる。システムは workspace_hooks の after_run を実行し、herdr の pane を閉じ、Claude Code を閉じた記録を書き、印を外す。
-PRECONDITION: システムは run を終えると決めている。run は終わらせる処理の印を取っている。人間へ渡して終える run では、システムは failure_state の書き込みと引き渡しの通知を済ませている。run は direct chat に入っていない。
+PRECONDITION: システムは run を終えると決めている。run は終わらせる処理の印を取っている。failure_state へ落として終える run では、システムは failure_state の書き込みと引き渡しの通知を済ませている。run は direct chat に入っていない。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code
 DEPENDENCY: なし
@@ -34,7 +34,7 @@ GENERALIZATION: なし
 
 BASIC FLOW:
 1. 巡回タイマーはシステムに、終えると決まった run の後始末を要求する。
-2. システムは VALIDATES THAT run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。
+2. システムは VALIDATES THAT run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない。
 3. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
 4. システムは workspace_hooks の after_run を実行する。
 5. システムは herdr の pane を閉じる。
@@ -49,7 +49,7 @@ RFS BASIC FLOW 2
 3. システムは、閉じた pane で Claude Code の起動が成功していたときだけ、Claude Code を閉じた記録を issue に1件コメントする。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。
+POSTCONDITION: システムは issue のコメントを読んでいない。システムはセッションを復元していない。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。pane を引く前に着手が失敗していた run では、herdr の workspace と pane は開いたまま残る。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
 RFS BASIC FLOW 3
@@ -109,7 +109,7 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 
 | 関数 | いつ呼ばれるか | この記述より前にすること | 共通の並びのほかにすること |
 | --- | --- | --- | --- |
-| `finishRunClaimed` | 取り直した Status が active_states から外れた。turn 数の上限に達した。権限の確認で止まった | バックグラウンド処理の申告を待つ。人間へ渡すときは failure_state を書き、引き渡しの通知を書く | pane を閉じたあとに失敗の記録を消し、Status を取り直す。`cleanup.on_states` に入っていれば worktree と branch を片付ける |
+| `finishRunClaimed` | turn の終わりに取り直した Status が active_states から外れた。巡回が、走っている run の Status が `terminal_states` になっているのを見つけた。設定に無い Status のまま猶予を過ぎた。turn 数の上限に達した。権限の確認で止まった | バックグラウンド処理の申告を待つ。人間へ渡すときは failure_state を書き、引き渡しの通知を書く | pane を閉じたあとに失敗の記録を消し、Status を取り直す。`cleanup.on_states` に入っていれば worktree と branch を片付ける |
 | `failRun` | 着手の途中の失敗。本文の組み立ての失敗 | failure_state を書き、失敗を数え、引き渡しの通知を書く | なし |
 | `abandonRunClaimed`（リトライが尽きた側） | リトライを積む出口で、リトライの回数が `agent.max_retries` に達していた | failure_state を書き、失敗を数え、引き渡しの通知を書く | なし |
 
@@ -135,11 +135,12 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 | 記録を要求する指示を herdr へ送れなかった | 警告を記録に残して、コメントを読み直す段へ進む | `ensureAgentComment` |
 | 開き直しで親の workspace を新しく開かせた | 親の workspace の ID を身元ファイルへ控える | `recordRepoWorkspace` |
 
-**後始末を途中でやめる分岐が2つある。**どちらも、この記述の代替フローにはしていない。
+**後始末を途中でやめる分岐が3つある。**どちらも、この記述の代替フローにはしていない。
 
 | 何が起きたか | 実装がすること | どこか |
 | --- | --- | --- |
-| 人間が issue を direct_chat_state へ動かしていた | 終わらせる処理をやめる。pane を閉じず、印も外さない。入口・引き渡しの通知の直前・コメントを確かめた直後・印を外す直前と、取り戻しの中の5箇所で見る | `abortTerminalForHuman`（設計 3-83f） |
+| 人間が issue を direct_chat_state へ動かしていて、run の pane で Claude Code が起動済みである | 終わらせる処理をやめる。pane を閉じず、印も外さない（巡回が direct chat へ入れる）。入口・引き渡しの通知の直前・コメントを確かめた直後・印を外す直前と、取り戻しの中の5箇所で見る | `abortTerminalForHuman`（設計 3-83f） |
+| 人間が issue を direct_chat_state へ動かしていて、run が pane を持っていないか、pane で Claude Code がまだ起動していない | 終わらせる処理をやめる。自分で開いたシェルの pane があれば閉じ、無ければ保留していた閉じた記録を書く。**印は外す**（次の巡回が direct chat の pane を用意し直す）。Status もコメントも書かない | `abortTerminalForHuman`（設計 3-83j） |
 | continuo が止められた（ctx が切れた） | 取り戻しを途中でやめて戻る。pane は期限つきで閉じる。コメントの依頼は次の起動に回す | `stoppedWhileRecovering`、`stopWorker` |
 
 ## コメントを確かめない run
@@ -148,9 +149,24 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 
 | コメントを確かめない場合 | 理由 |
 | --- | --- |
-| turn を1回も送っていない | 会話が1つも無いセッションを復元しても、書かせる材料が無い。着手の途中で落ちた run がこれである |
+| 働き始めた時刻を持っていない | 会話が1つも無いセッションを復元しても、書かせる材料が無い。**初めての着手の途中で落ちた run がこれである** |
 | issue が draft issue である | draft issue にはコメントできない |
 | direct chat から `terminal_states` へ直接抜けた run である | 人間が Claude Code を終了させてから動かした出口である。書かせに行くと、終了させたものを立て直すことになる（設計 3-83g） |
+
+**判定は「turn を送ったか」ではなく、働き始めた時刻（`StartedAt`）がゼロ値かどうかである。**
+時刻が入るのは次の3つで、一度入ると、着手をやり直しても戻らない（`beginAttempt` は消さない）。
+
+| いつ入るか | 実装 |
+| --- | --- |
+| turn を送ったとき | `beginTurn` |
+| herdr が agent を登録していないまま作業中の hook が届いて、本文を送らずに着手を終えたとき | `markStartedIfZero` |
+| 再起動で run を引き継いだとき | `Adopt` |
+
+だから、前の着手で turn を送った run がバックオフ明けの着手の途中で落ちた場合は、コメントを確かめる。
+
+**`確かめないrun` でも、片付けへ進むことがある。**`finishRunClaimed` は、コメントを確かめなかった run についても、
+pane を閉じたあとに Status を取り直し、`cleanup.on_states` に入っていれば片付ける
+（draft issue の run と、direct chat から `terminal_states` へ直接抜けた run）。事後条件の worktree に条件を付けてあるのは、そのためである。
 
 **リトライが残っている run も、コメントを確かめない。**その run はこの記述を通らない
 （[issue を1件処理する.rucm.md](issue%20を1件処理する.rucm.md) のリトライを積む出口が、after_run と pane を閉じる段を自分で持つ）。
@@ -189,7 +205,7 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。issue 
 **枠は1件しか無いので、`postHandoffComment` は2件目を投稿せずにログへ落とす。**
 だから2本の失敗のフローの段は「まだ1件も書いていなければ」と条件を付けてあり、
 事後条件も「1件だけある」と書いてある。**この並びを崩すと、stall で打ち切った本当の理由が
-issue に1文字も残らない**（`test/internal/orchestrator/audit_fixes_test.go` の
+issue に1文字も残らない**（`test/internal/orchestrator/issue を1件処理する_test.go` の
 `Test_issueを1件処理する_P014_打ち切りのときissueに残る理由が本当の理由である` がそれを確かめている）。
 
 ## 復元をあきらめる経路は、人間へ渡さない
@@ -291,7 +307,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     BS1["1 巡回タイマーはシステムに、終えると決まった run の後始末を要求する"]
-    BS2{"2 run が turn を1回以上送っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"}
+    BS2{"2 run が働き始めた時刻を持っており、issue が draft issue でなく、かつ run が direct chat から terminal_states へ直接抜けた run でない"}
     BS3{"3 issue に今回の run が書いたコメントがある"}
     BS4["4 システムは workspace_hooks の after_run を実行する"]
     BS5["5 システムは herdr の pane を閉じる"]

@@ -29,7 +29,7 @@
 ```rucm
 USE CASE NAME: issue の担当を入札で決める
 BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは候補の先頭の issue の担当者を読む。システムは担当者が1人もいない issue に、枠の余裕値から出した判定スコアを書いた入札のコメントを1件書く。システムは締め切りの前の巡回では担当者を決めない。システムは締め切りを過ぎた巡回で今の回の入札を比べ、判定スコアがいちばん大きい入札がこの機械の投稿者の入札であれば、この機械の投稿者を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者がこの機械の投稿者である issue には入札せず、そのまま着手と引き継ぎへ渡す。
-PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの active_states の Status に issue が1件以上ある。先頭の issue は draft issue ではない。この機械に空きスロットがある。担当者が1人もいない先頭の issue は、呼び出し元の枠の判定を通っている。先頭の issue は着手の直前の検査を通っている。同じボードを見張っている機械が1台以上ある。
+PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの active_states の Status に issue が1件以上ある。先頭の issue は draft issue ではない。先頭の issue は、呼び出し元の issue を1件処理する が担当の判定より前に行う検査をすべて通っている。担当者が1人もいない先頭の issue は、呼び出し元の枠の判定を通っている。同じボードを見張っている機械が1台以上ある。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、ほかの機械
 DEPENDENCY: なし
@@ -173,7 +173,7 @@ RFS BASIC FLOW 20
 2. システムは hold のコメントを1件も書かない。
 3. システムは先頭の issue を着手の対象から外す。
 4. ABORT
-POSTCONDITION: 先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。
+POSTCONDITION: 先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。
 
 SPECIFIC ALTERNATIVE FLOW holdを書けない:
 RFS BASIC FLOW 22
@@ -183,7 +183,7 @@ RFS BASIC FLOW 22
 4. システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。
 5. システムは先頭の issue を着手の対象から外す。
 6. ABORT
-POSTCONDITION: システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、released のコメントが1件増えている。GitHub Projects v2 が released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が入札をやり直す。
+POSTCONDITION: システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。
 
 SPECIFIC ALTERNATIVE FLOW 担当者を消し戻せない:
 RFS holdを書けない 3
@@ -191,7 +191,7 @@ RFS holdを書けない 3
 2. システムは released のコメントを1件も書かない。
 3. システムは先頭の issue を着手の対象から外す。
 4. ABORT
-POSTCONDITION: システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと released のコメントは1件も増えていない。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。
+POSTCONDITION: システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。
 ```
 
 ## 担当は assignee で持ち、期限は hold のコメントで持つ
@@ -216,6 +216,7 @@ POSTCONDITION: システムは先頭の issue に着手していない。先頭�
 
 | 順 | 何を見るか | どこで見るか | どの記述が持つか |
 | --- | --- | --- | --- |
+| 0 | 別の run の印・閉じ終えていない pane・頼んだ Status・失敗の繰り返し・信頼登録・必須のラベル | `dispatchCandidates`（`lookupRunByID`、`inCloseSet`、`skipByFailure`、`missingRequiredLabels` など） | `issue を1件処理する`（このユースケースの前提） |
 | 1 | 空きスロット | `dispatchCandidates` | `issue を1件処理する`（このユースケースの前提） |
 | 2 | 担当者のいない issue に、この機械が入札できるか（保管値だけで決まる） | `dispatchCandidates` の `newWorkBlockedWith` | `issue を1件処理する` の `枠の余裕なし`（このユースケースの前提） |
 | 3 | 着手の直前の検査（信頼登録・worktree の置き場所） | `dispatchCandidates` が呼ぶ `preflight` | `issue を1件処理する`（このユースケースの前提） |
