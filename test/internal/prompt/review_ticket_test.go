@@ -156,7 +156,13 @@ func fencedBashBlock(t *testing.T, mark string) string {
 
 // fakeGh は、試しに使う偽の gh である。読み取りは $BODY を返し、書き込みは $OUT の下へ写す。
 // `issue view` と `pr view` は、探す段の jq を通した結果として $FIND_ID を返す。
+// $VIEW_FAIL が空でなければ、`issue view` と `pr view` を終了コード 1 で落とす。
+// 受け取った引数は、1回につき1行で $OUT/args へ足す。
 const fakeGh = `#!/bin/sh
+echo "$*" >> "$OUT/args"
+if [ -n "$VIEW_FAIL" ]; then
+  case "$1 $2" in "issue view"|"pr view") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;; esac
+fi
 case "$1 $2" in
   "api --method")
     for a in "$@"; do case "$a" in body=@*) cp "${a#body=@}" "$OUT/patched";; esac; done
@@ -185,6 +191,17 @@ type sampleRun struct {
 // r: 走らせる内容。
 // 戻り値: 標準出力と標準エラーをまとめたもの、PATCH に渡した本文、新しく貼った本文（無ければ空）。
 func runSample(t *testing.T, r sampleRun) (out, patched, posted string) {
+	t.Helper()
+	out, patched, posted, _ = runSampleWithArgs(t, r)
+	return out, patched, posted
+}
+
+// runSampleWithArgs は、runSample と同じく見本を走らせ、偽の gh が受け取った引数も返す。
+//
+// t: テストコンテキスト。
+// r: 走らせる内容。
+// 戻り値: runSample の3つと、偽の gh が受け取った引数（1回につき1行）。
+func runSampleWithArgs(t *testing.T, r sampleRun) (out, patched, posted, ghArgs string) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -222,7 +239,14 @@ func runSample(t *testing.T, r sampleRun) (out, patched, posted string) {
 		}
 		return string(c)
 	}
-	return string(b), read("patched"), read("posted")
+	return string(b), read("patched"), read("posted"), read("args")
+}
+
+// asChangeReview は、見本の `KIND=` と `PR=` と `PRREPO=` を、実装の判断票の値へ置き換える。
+func asChangeReview(script, pr, prRepo string) string {
+	script = regexp.MustCompile(`(?m)^KIND=計画$`).ReplaceAllLiteralString(script, "KIND=実装")
+	script = regexp.MustCompile(`(?m)^PR=$`).ReplaceAllLiteralString(script, "PR="+pr)
+	return regexp.MustCompile(`(?m)^PRREPO=.*$`).ReplaceAllLiteralString(script, "PRREPO="+prRepo)
 }
 
 // shellsForSample は、見本を試すシェルを返す。bash が無ければ検査を飛ばし、zsh は在れば足す。
@@ -305,8 +329,14 @@ func TestTemplate_判断票の見本は遷移表に今回の周を1行足す(t *
 				strings.Count(second, "<details>") != 2 || !strings.Contains(second, "<summary>2周目</summary>") {
 				t.Fatalf("書き換えた判断票に、2周目の行と2つ目の <details> がありません\n%s", second)
 			}
-			if !strings.Contains(second, "- 2周目で削除: "+note) {
-				t.Fatalf("削除の行が、周の番号つきでそのまま入っていません（引用符と $ を含む）\n%s", second)
+			if !strings.Contains(second, "| 2周目 | <CRITICAL の件数> | <HIGH の件数> | <MEDIUM の件数> | <LOW の件数> |\n\n- 2周目で削除: "+note+"\n\n<details>") {
+				t.Fatalf("削除の行が、周の番号つきでそのまま、遷移表と <details> から空行で離れて入っていません（引用符と $ を含む）\n%s", second)
+			}
+
+			// 続けて削った周: 削除の行は、前の周の削除の行のすぐ下に、空行を挟まずに並ぶ。
+			_, third, _ := runSample(t, sampleRun{shell: sh, script: postSample(t, "123", "3", "y"), body: second})
+			if !strings.Contains(third, "- 2周目で削除: "+note+"\n- 3周目で削除: y\n\n<details>") {
+				t.Fatalf("2つの周の削除の行が、続けて並んでいません\n%s", third)
 			}
 
 			// 長さの上限を超える: 前の周の中身を落とし、遷移表を写して新しく貼る。
@@ -315,6 +345,94 @@ func TestTemplate_判断票の見本は遷移表に今回の周を1行足す(t *
 			if countRows(copied) != 3 || strings.Count(copied, "<details>") != 1 ||
 				!strings.Contains(copied, "<summary>3周目</summary>") || !strings.Contains(copied, "- 2周目で削除: ") {
 				t.Fatalf("上限を超えたのに、遷移表と削除の行を写した新しい判断票になっていません\n%s\n%s", out, copied)
+			}
+		})
+	}
+}
+
+// 目的: 前の判断票を探す見本が、gh で探せなかったときに「1周目」と言わずに止めることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**探せなかったことを「前の判断票が無い」と取り違えると、エージェントは1周目として新しく貼る。
+// 前の判断票の続きが別のコメントに分かれ、周の番号も1に戻って、連続10回の数えが狂う。
+// `PR=` を埋め忘れた実装の判断票も、同じ経路で止める。
+//
+// 与える情報: 段0 の見本。偽の gh は `issue view` と `pr view` を終了コード 1 で落とす。
+// 成功条件: 計画でも実装でも「判断票を探せませんでした」と出て、「今回は1周目です」と出ない。
+// `PR=` が空のときは gh を呼ばずに「PR= が空です」と出る。
+func TestTemplate_前の判断票を探せないときは1周目にしない(t *testing.T) {
+	find := fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api"))
+	for _, sh := range shellsForSample(t) {
+		t.Run(sh, func(t *testing.T) {
+			for _, tc := range []struct{ name, script, want string }{
+				{"計画で issue view が落ちる", find, "gh issue view が失敗しました"},
+				{"実装で pr view が落ちる", asChangeReview(find, "7", "octocat/hello-world"), "gh pr view が失敗しました"},
+			} {
+				out, _, _ := runSample(t, sampleRun{shell: sh, script: tc.script, findID: "123", env: []string{"VIEW_FAIL=1"}})
+				if !strings.Contains(out, "判断票を探せませんでした（"+tc.want+"）") || strings.Contains(out, "今回は1周目です") {
+					t.Errorf("%s: 探せなかったのに止まっていないか、1周目と出しています: %q", tc.name, out)
+				}
+			}
+			out, _, _, ghArgs := runSampleWithArgs(t, sampleRun{shell: sh, script: asChangeReview(find, "", "octocat/hello-world"), findID: "123"})
+			if !strings.Contains(out, "判断票を探せませんでした（PR= が空です）") || strings.Contains(out, "今回は1周目です") {
+				t.Errorf("PR= が空なのに止まっていません: %q", out)
+			}
+			if strings.Contains(ghArgs, "pr view") {
+				t.Errorf("PR= が空なのに gh pr view を呼んでいます: %q", ghArgs)
+			}
+		})
+	}
+}
+
+// 目的: 実装の判断票を、`PRREPO=` に書いたリポジトリで探し・書き換え・貼ることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**7-3 で別のリポジトリへ出した pull request でも、issue のリポジトリに固定されていると、
+// **同じ番号の無関係な pull request の判断票を探して書き換えうる。**
+// 計画の判断票（issue のコメント）は issue のリポジトリのままである。
+//
+// 与える情報: 段0 と段5 の見本。`KIND=実装`・`PR=7`・`PRREPO=octocat/spoon-knife`。
+// 成功条件: 段0 が `pr view 7 --repo octocat/spoon-knife` と `repos/octocat/spoon-knife/issues/comments/123` を読み、
+// 段5 が同じリポジトリのコメントを PATCH し、新しく貼るときは `pr comment 7 --repo octocat/spoon-knife` で貼る。
+// どれも issue のリポジトリ（octocat/hello-world）へは届かない。計画の段5 は issue のリポジトリを PATCH する。
+func TestTemplate_実装の判断票はPRREPOのリポジトリで扱う(t *testing.T) {
+	const other = "octocat/spoon-knife"
+	find := asChangeReview(fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api")), "7", other)
+	ticket := "<!-- code-review-result -->\n<!-- continuo:agent -->\n" + changeTicketHeading + "\n\n" +
+		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n\n" +
+		"<details>\n<summary>1周目</summary>\n\nx\n\n</details>\n"
+	for _, sh := range shellsForSample(t) {
+		t.Run(sh, func(t *testing.T) {
+			notIssueRepo := func(step, ghArgs string) {
+				if strings.Contains(ghArgs, "octocat/hello-world") {
+					t.Errorf("%s が、実装の判断票なのに issue のリポジトリへ届いています\n%s", step, ghArgs)
+				}
+			}
+			out, _, _, ghArgs := runSampleWithArgs(t, sampleRun{shell: sh, script: find, body: ticket, findID: "123"})
+			notIssueRepo("段0", ghArgs)
+			for _, want := range []string{"pr view 7 --repo " + other + " ", "api repos/" + other + "/issues/comments/123 "} {
+				if !strings.Contains(ghArgs, want) {
+					t.Errorf("段0 が %q を呼んでいません\n%s\n%s", want, ghArgs, out)
+				}
+			}
+			if !strings.Contains(out, "今回は 2 周目です") {
+				t.Errorf("段0 が PRREPO の判断票から周の番号を出していません: %q", out)
+			}
+
+			_, patched, _, ghArgs := runSampleWithArgs(t, sampleRun{shell: sh, script: asChangeReview(postSample(t, "123", "2", ""), "7", other), body: ticket})
+			notIssueRepo("段5 の書き換え", ghArgs)
+			if !strings.Contains(ghArgs, "api --method PATCH repos/"+other+"/issues/comments/123 ") || countRows(patched) != 2 {
+				t.Errorf("段5 が PRREPO のコメントを書き換えていません\n%s", ghArgs)
+			}
+
+			_, _, posted, ghArgs := runSampleWithArgs(t, sampleRun{shell: sh, script: asChangeReview(postSample(t, "", "1", ""), "7", other)})
+			notIssueRepo("段5 の新しく貼る経路", ghArgs)
+			if !strings.Contains(ghArgs, "pr comment 7 --repo "+other+" ") || !strings.HasPrefix(posted, "<!-- code-review-result -->\n<!-- continuo:agent -->\n") {
+				t.Errorf("段5 が PRREPO の pull request へ新しく貼っていません\n%s", ghArgs)
+			}
+
+			_, _, _, ghArgs = runSampleWithArgs(t, sampleRun{shell: sh, script: postSample(t, "123", "2", ""), body: "<!-- continuo:agent -->\n<!-- design-review-result -->\n" + planTicketHeading + "\n\n" +
+				transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n\n<details>\n<summary>1周目</summary>\n\nx\n\n</details>\n"})
+			if !strings.Contains(ghArgs, "api --method PATCH repos/octocat/hello-world/issues/comments/123 ") {
+				t.Errorf("計画の段5 が issue のリポジトリのコメントを書き換えていません\n%s", ghArgs)
 			}
 		})
 	}

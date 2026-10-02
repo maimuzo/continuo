@@ -315,6 +315,9 @@ turn が途中で終わったときに、何をしたかを書かせ直す経路
 
 **毎周、次の2つの段で貼ります。**5-6 の「毎周やること」の段0 と段5 です。
 **3-6 の判断票も、同じ2つの見本で貼ります。**そのときは、どちらの見本も `KIND=計画` を `KIND=実装` に変え、`PR=` の右に、実装レビューを回している pull request の番号を書きます。
+**`PRREPO=` は、その pull request があるリポジトリです。**ふだんは見本のまま（issue のリポジトリ）にします。
+**7-3 で別のリポジトリへ出したときは、出した先のリポジトリ（`<owner>/<repo>`）に書き換えてください。**書き換えないと、issue のリポジトリの同じ番号の、無関係な pull request を探して書き換えます。
+計画の判断票（`KIND=計画`）は issue のコメントなので、`PRREPO=` を使いません。
 
 **段0。毎周の最初（レビュワーを走らせる前）に、前の判断票を探し、今回の周の番号を決めます。**
 探すのは、あなたが書いた判断票のうち、本文が2行の印で始まる最新の1件です
@@ -324,28 +327,47 @@ turn が途中で終わったときに、何をしたかを書かせ直す経路
 ```bash
 KIND=計画
 PR=
+PRREPO={{.issue.owner}}/{{.issue.repo}}
+REPO={{.issue.owner}}/{{.issue.repo}}
+ID=
+ERR=
 if [ "$KIND" = 実装 ]; then
-  ID=$(gh pr view "$PR" --repo {{.issue.owner}}/{{.issue.repo}} --json comments \
-    --jq '[.comments[] | select(.viewerDidAuthor and ((.body // "") | test("^[ \t\r\n]*<!-- code-review-result -->[ \t\r\n]*<!-- continuo:agent -->")))] | .[-1:][] | .url | split("#issuecomment-")[1]')
+  REPO=$PRREPO
+  if [ -z "$PR" ]; then
+    ERR="PR= が空です"
+  else
+    ID=$(gh pr view "$PR" --repo "$PRREPO" --json comments \
+      --jq '[.comments[] | select(.viewerDidAuthor and ((.body // "") | test("^[ \t\r\n]*<!-- code-review-result -->[ \t\r\n]*<!-- continuo:agent -->")))] | .[-1:][] | .url | split("#issuecomment-")[1]') \
+      || ERR="gh pr view が失敗しました"
+  fi
 else
   ID=$(gh issue view {{.issue.url}} --json comments \
-    --jq '[.comments[] | select(.viewerDidAuthor and ((.body // "") | test("^[ \t\r\n]*<!-- continuo:agent -->[ \t\r\n]*<!-- design-review-result -->")))] | .[-1:][] | .url | split("#issuecomment-")[1]')
+    --jq '[.comments[] | select(.viewerDidAuthor and ((.body // "") | test("^[ \t\r\n]*<!-- continuo:agent -->[ \t\r\n]*<!-- design-review-result -->")))] | .[-1:][] | .url | split("#issuecomment-")[1]') \
+    || ERR="gh issue view が失敗しました"
 fi
-case "$ID" in
-  '' | *[!0-9]*)
-    echo "前の判断票はありません。今回は1周目です。段5 は ID= を空のまま、NO=1 で叩きます"
-    ;;
-  *)
-    LAST=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body | tr -d '\r' \
-      | awk '/^<details>/ { exit } /^[|] *[0-9]+周目 *[|]/ { n = $0; sub(/^[|] */, "", n); sub(/周目.*/, "", n); last = n + 0 } END { print last + 0 }')
-    if [ "$LAST" -gt 0 ]; then
-      echo "前の判断票があります。今回は $((LAST + 1)) 周目です。段5 は ID=$ID NO=$((LAST + 1)) で叩きます"
-    else
-      echo "前の判断票はありますが、遷移表を読めません。段5 は ID=$ID と、あなたが数えている今回の周の番号で叩きます"
-    fi
-    ;;
-esac
+if [ -n "$ERR" ]; then
+  echo "判断票を探せませんでした（${ERR}）。1周目として貼らないでください"
+else
+  case "$ID" in
+    '' | *[!0-9]*)
+      echo "前の判断票はありません。今回は1周目です。段5 は ID= を空のまま、NO=1 で叩きます"
+      ;;
+    *)
+      LAST=$(gh api "repos/$REPO/issues/comments/$ID" --jq .body | tr -d '\r' \
+        | awk '/^<details>/ { exit } /^[|] *[0-9]+周目 *[|]/ { n = $0; sub(/^[|] */, "", n); sub(/周目.*/, "", n); last = n + 0 } END { print last + 0 }')
+      if [ "$LAST" -gt 0 ]; then
+        echo "前の判断票があります。今回は $((LAST + 1)) 周目です。段5 は ID=$ID NO=$((LAST + 1)) で叩きます"
+      else
+        echo "前の判断票はありますが、遷移表を読めません。段5 は ID=$ID と、あなたが数えている今回の周の番号で叩きます"
+      fi
+      ;;
+  esac
+fi
 ```
+
+**`判断票を探せませんでした` と出たら、段5 へ進まないでください。**探せなかったのは「前の判断票が無い」ことではありません。
+1周目として貼ると、前の判断票の続きが別のコメントに分かれ、周の番号も1に戻ります。
+**`PR=` と `PRREPO=` を確かめてから、もう一度叩いてください。**それでも出るなら、そのことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください。
 
 **出てきた番号が、今回の周の番号です。**遷移表の最後の行の番号に1を足したものです。
 **レビュワーへ渡す「何周目か」（5-7）と、5-6 の「何周回すか」は、この番号で数えます。**
@@ -355,7 +377,7 @@ esac
 段5 を `ID=` を空のまま、`NO=1` で叩き、判断票を新しく1件にします。前の判断票の遷移表に、区切りの行を足さないでください。
 
 **段5。判断票を貼ります。**囲みの中身を、1回の Bash の呼び出しでそのまま叩いてください。
-**書き換えるのは、`ID=` と `NO=` の右と、3つのヒアドキュメントの中身だけです**（3-6 では `KIND=` と `PR=` も）。
+**書き換えるのは、`ID=` と `NO=` の右と、3つのヒアドキュメントの中身だけです**（3-6 では `KIND=` と `PR=` も。7-3 で別のリポジトリへ出したときは `PRREPO=` も、段0 と同じ値に）。
 
     COUNTS の中   今回の周の件数（5-6 の4段で付け直したあと）を、CRITICAL・HIGH・MEDIUM・LOW の順に1行で
     NOTE の中     issue に無いものを削った周だけ、削った内容を1行で。削らなかった周は空のまま
@@ -366,6 +388,7 @@ esac
 ```bash
 KIND=計画
 PR=
+PRREPO={{.issue.owner}}/{{.issue.repo}}
 ID=<段0 が出した ID。前の判断票が無いときと、数え直すときは空のまま>
 NO=<段0 が出した今回の周の番号。数え直すときは 1>
 COUNTS=$(mktemp)
@@ -398,6 +421,7 @@ cat > "$ROUND" <<'ROUND'
 ROUND
 REPO={{.issue.owner}}/{{.issue.repo}}
 if [ "$KIND" = 実装 ]; then
+  REPO=$PRREPO
   M1='<!-- code-review-result -->'; M2='<!-- continuo:agent -->'; TITLE='# レビューの判断票（実装）'
 else
   M1='<!-- continuo:agent -->'; M2='<!-- design-review-result -->'; TITLE='# レビューの判断票（計画）'
@@ -419,10 +443,12 @@ build() {
       no = last + 1
       for (i = 1; i <= lt; i++) print l[i]
       print "| " no "周目 " c
-      for (i = lt + 1; i < fd; i++) print l[i]
+      e = fd - 1
+      while (e > lt && l[e] ~ /^[ \t]*$/) e--
+      for (i = lt + 1; i <= e; i++) print l[i]
       k = 0
-      while ((getline r < notef) > 0) if (r != "") { print "- " no "周目で削除: " r; k = 1 }
-      if (k) print ""
+      while ((getline r < notef) > 0) if (r != "") { if (!k && e == lt) print ""; print "- " no "周目で削除: " r; k = 1 }
+      print ""
       if (keep) { for (i = fd; i <= NR; i++) print l[i]; print "" }
       print "<details>"; print "<summary>" no "周目</summary>"; print ""
       while ((getline r < roundf) > 0) print r
@@ -598,7 +624,8 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 **判断票は、3-2 の「判断票の貼り方」の2つの見本で貼ります。**
 どちらの見本も `KIND=計画` を `KIND=実装` に変え、`PR=` の右に、実装レビューを回している pull request の番号を書いてください。
 **判断票は、その pull request に1件だけ置き、周ごとに書き足します**（理由は 3-2 と同じです）。
-**探すのも、書き換えるのも、貼るのも `{{.issue.owner}}/{{.issue.repo}}` の pull request のコメントです。**
+**探すのも、書き換えるのも、貼るのも、見本の `PRREPO=` に書いたリポジトリの pull request のコメントです。**
+ふだんは issue のリポジトリ（`{{.issue.owner}}/{{.issue.repo}}`）のままです。**7-3 で別のリポジトリへ出したときは、`PRREPO=` を出した先に書き換えてください。**
 
 貼り上がりの形。
 
