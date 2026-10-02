@@ -1,0 +1,408 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "リポジトリの親workspaceを閉じる",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/リポジトリの親workspaceを閉じる.rucm.md",
+    "rucm_block_sha256": "4278ee6c18cf6854f7697139cde430268df6079db306ecdd315c2145faff466d"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。"
+    },
+    "一覧を引けない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "リポジトリの親 workspace は開いたままである。システムは herdr に close を要求していない。システムは親 workspace の ID を書き移していない。"
+    },
+    "IDの食い違い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "身元ファイルの ID の workspace は開いたままである。システムは herdr に close を要求していない。システムは親 workspace の ID を書き移していない。"
+    },
+    "親workspaceを閉じられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "リポジトリの親 workspace は開いたままである。システムは親 workspace の ID を残っている worktree の身元ファイルへ書き移していない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは herdr に workspace の一覧を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT herdr が workspace の一覧を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 身元ファイルの ID の workspace がリポジトリ本体を開いている。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "IF 同じリポジトリの worktree の workspace が1つも残っていない THEN"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは herdr にリポジトリの親 workspace の close を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT herdr がリポジトリの親 workspace を閉じている。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは同じリポジトリの残っている worktree の身元ファイルへ親 workspace の ID を書き移す。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムはリポジトリの親 workspace の始末を終える。"
+    },
+    {
+      "id": "一覧を引けない-1",
+      "type": "action",
+      "flow": "一覧を引けない",
+      "step": 1,
+      "statement": "システムは利用者に workspace の一覧を引けないので親 workspace を閉じないことをログで応答する。"
+    },
+    {
+      "id": "一覧を引けない-2",
+      "type": "resume",
+      "flow": "一覧を引けない",
+      "step": 2,
+      "statement": "RESUME STEP 12"
+    },
+    {
+      "id": "IDの食い違い-1",
+      "type": "action",
+      "flow": "IDの食い違い",
+      "step": 1,
+      "statement": "システムは利用者に身元ファイルの ID がリポジトリの現物と一致しないので閉じないことをログで応答する。"
+    },
+    {
+      "id": "IDの食い違い-2",
+      "type": "resume",
+      "flow": "IDの食い違い",
+      "step": 2,
+      "statement": "RESUME STEP 12"
+    },
+    {
+      "id": "親workspaceを閉じられない-1",
+      "type": "action",
+      "flow": "親workspaceを閉じられない",
+      "step": 1,
+      "statement": "システムは利用者にリポジトリの親 workspace が残ったことをログで応答する。"
+    },
+    {
+      "id": "親workspaceを閉じられない-2",
+      "type": "resume",
+      "flow": "親workspaceを閉じられない",
+      "step": 2,
+      "statement": "RESUME STEP 12"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "true",
+      "condition": "システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-12",
+      "kind": "false",
+      "condition": "NOT システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "herdr が workspace の一覧を応答する"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "一覧を引けない-1",
+      "kind": "false",
+      "condition": "NOT herdr が workspace の一覧を応答する"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "身元ファイルの ID の workspace がリポジトリ本体を開いている"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "IDの食い違い-1",
+      "kind": "false",
+      "condition": "NOT 身元ファイルの ID の workspace がリポジトリ本体を開いている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "同じリポジトリの worktree の workspace が1つも残っていない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-9",
+      "kind": "false",
+      "condition": "NOT 同じリポジトリの worktree の workspace が1つも残っていない"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-12",
+      "kind": "true",
+      "condition": "herdr がリポジトリの親 workspace を閉じている"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "親workspaceを閉じられない-1",
+      "kind": "false",
+      "condition": "NOT herdr がリポジトリの親 workspace を閉じている"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "一覧を引けない-1",
+      "to": "一覧を引けない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "一覧を引けない-2",
+      "to": "BASIC FLOW-12",
+      "kind": "resume"
+    },
+    {
+      "from": "IDの食い違い-1",
+      "to": "IDの食い違い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "IDの食い違い-2",
+      "to": "BASIC FLOW-12",
+      "kind": "resume"
+    },
+    {
+      "from": "親workspaceを閉じられない-1",
+      "to": "親workspaceを閉じられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "親workspaceを閉じられない-2",
+      "to": "BASIC FLOW-12",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "システムは VALIDATES THAT herdr が workspace の一覧を応答する。",
+        "システムは VALIDATES THAT 身元ファイルの ID の workspace がリポジトリ本体を開いている。",
+        "IF 同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace の close を要求する。",
+        "システムは VALIDATES THAT herdr がリポジトリの親 workspace を閉じている。",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "親workspaceを閉じられない-1",
+        "親workspaceを閉じられない-2",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "システムは VALIDATES THAT herdr が workspace の一覧を応答する。",
+        "システムは VALIDATES THAT 身元ファイルの ID の workspace がリポジトリ本体を開いている。",
+        "IF 同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace の close を要求する。",
+        "システムは VALIDATES THAT herdr がリポジトリの親 workspace を閉じている。",
+        "CONDITION: NOT herdr がリポジトリの親 workspace を閉じている",
+        "システムは利用者にリポジトリの親 workspace が残ったことをログで応答する。",
+        "RESUME STEP 12",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-9",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "システムは VALIDATES THAT herdr が workspace の一覧を応答する。",
+        "システムは VALIDATES THAT 身元ファイルの ID の workspace がリポジトリ本体を開いている。",
+        "IF 同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "CONDITION: NOT 同じリポジトリの worktree の workspace が1つも残っていない",
+        "システムは同じリポジトリの残っている worktree の身元ファイルへ親 workspace の ID を書き移す。",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "IDの食い違い-1",
+        "IDの食い違い-2",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "システムは VALIDATES THAT herdr が workspace の一覧を応答する。",
+        "システムは VALIDATES THAT 身元ファイルの ID の workspace がリポジトリ本体を開いている。",
+        "CONDITION: NOT 身元ファイルの ID の workspace がリポジトリ本体を開いている",
+        "システムは利用者に身元ファイルの ID がリポジトリの現物と一致しないので閉じないことをログで応答する。",
+        "RESUME STEP 12",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "一覧を引けない-1",
+        "一覧を引けない-2",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "システムは VALIDATES THAT herdr が workspace の一覧を応答する。",
+        "CONDITION: NOT herdr が workspace の一覧を応答する",
+        "システムは利用者に workspace の一覧を引けないので親 workspace を閉じないことをログで応答する。",
+        "RESUME STEP 12",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "システムはリポジトリの親 workspace の始末を終えている。呼び出し元は次の段へ進む。システムが開かせたリポジトリの親 workspace は、herdr が close の要求を受け付けていれば閉じている。同じリポジトリの worktree の workspace が残っていれば、親 workspace は開いたままである。システムが ID を書き移した worktree の身元ファイルは親 workspace の ID を持っている。身元ファイルに ID が無ければ、システムは herdr に何も要求していない。人間が開いたリポジトリの workspace は開いたままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "IF システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある THEN",
+        "CONDITION: NOT システムが開かせたリポジトリの親 workspace の ID が身元ファイルにある",
+        "システムはリポジトリの親 workspace の始末を終える。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 15,
+    "nodes_covered": 15,
+    "edges_total": 19,
+    "edges_covered": 19
+  }
+}

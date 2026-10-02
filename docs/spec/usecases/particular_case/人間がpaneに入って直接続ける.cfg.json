@@ -3,7 +3,7 @@
   "usecase_name": "人間がpaneに入って直接続ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.rucm.md",
-    "rucm_block_sha256": "ab622ccf0e3d44a8babf0fcecb08fc5535d2d05f7668245200732f46376d6c19"
+    "rucm_block_sha256": "77a61e916aef3d3ded329f69a0e78fd5587b89353ce1587b986b55d237227aff"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -275,8 +275,8 @@
       "type": "include",
       "flow": "完了のStatusへ動かされた",
       "step": 2,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "完了のStatusへ動かされた-3",
@@ -767,7 +767,7 @@
         "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
         "CONDITION: NOT issue の Status が terminal_states に入っていない",
         "システムは run に direct chat から terminal_states へ直接抜けた印を立てる。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -1069,7 +1069,7 @@
         "システムは VALIDATES THAT issue の Status が terminal_states に入っていない。",
         "CONDITION: NOT issue の Status が terminal_states に入っていない",
         "システムは run に direct chat から terminal_states へ直接抜けた印を立てる。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },

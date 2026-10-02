@@ -1,4 +1,4 @@
-// **「本家のリポジトリへ PR を出す」のうち、continuo 側の振る舞いだけを固定する。**
+// **「本家のリポジトリへPRを出す」のうち、continuo 側の振る舞いだけを固定する。**
 // このユースケースは issue が非公開のリポジトリにあり、コードは public の fork にある。
 // **成果は worktree の中に1バイトも残らない**（エージェントが worktree の外の clone で直す）。
 //
@@ -8,7 +8,7 @@
 // test/internal/orchestrator/tool_gate_test.go が押さえているので、**同じ検査をここへ写さない。**
 //
 // **エージェントの判断に属する段はテストにできない。**理由は
-// docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.judge_log.md に書いてある。
+// docs/spec/usecases/particular_case/本家のリポジトリへPRを出す.judge_log.md に書いてある。
 package workspace_test
 
 import (

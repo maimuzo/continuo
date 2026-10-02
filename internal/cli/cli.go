@@ -677,7 +677,7 @@ func countLines(s string) int {
 }
 
 // runSetup は `continuo setup` サブコマンドである（設計 3-32 / RUCM
-// docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
+// docs/spec/usecases/particular_case/既存のボードのStatusを割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
 // continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当て、`scaffold.StatusKeyNames` が返す9つのキーの行を差し替える。
@@ -751,7 +751,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		dir = positional[0]
 	}
 
-	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM「既存のボードの Status を割り当てる」の基本フローの、指定されたパスと WORKFLOW.md を検査する段）。
+	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM「既存のボードのStatusを割り当てる」の基本フローの、指定されたパスと WORKFLOW.md を検査する段）。
 	// ここで止まる実行では、役割の割り当てを1つも尋ねない。
 	check, err := scaffold.CheckUpdatable(dir)
 	if err != nil {

@@ -81,9 +81,9 @@
 
 | 場合 | どこで決まるか | どうなるか |
 | --- | --- | --- |
-| 確かめると、担当が別のアカウントへ移っていた（pane の用意は入札を通らないので、用意した run は担当を1度も確かめていない） | 段5 のあとの巡回の `wakeRuns`（`handoffLostOnResume`） | `after_run` を走らせずに pane を閉じ、印を外す。`issue を1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
+| 確かめると、担当が別のアカウントへ移っていた（pane の用意は入札を通らないので、用意した run は担当を1度も確かめていない） | 段5 のあとの巡回の `wakeRuns`（`handoffLostOnResume`） | `after_run` を走らせずに pane を閉じ、印を外す。`issueを1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
 | 戻した先は `active_states` に入っているが、issue が dispatch できない | 段5 のあとの巡回の `reconcileRunning`（用意の最中の run は飛ばすので、用意を終えたあとの巡回で当たる） | pane を閉じて印を外す。worktree は残す |
-| 1回目の本文を組み立てられない・herdr が送信を受け付けない | 段9 の `turnLoop` | `issue を1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
+| 1回目の本文を組み立てられない・herdr が送信を受け付けない | 段9 の `turnLoop` | `issueを1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
 
 用意したばかりの run の turn 数は0なので、turn 数の上限（`agent.max_dispatch_turns`）には当たらない。
 

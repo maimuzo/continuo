@@ -1,0 +1,634 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "まとめて直したissueへ成果を書く",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/まとめて直したissueへ成果を書く.rucm.md",
+    "rucm_block_sha256": "5954d34e77d93ee8ea23d01054b59af961e4ceb626dc93a60d44f6e3a6bcdef3"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。"
+    },
+    "本文を読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "pull request の本文は変わっていない。元の閉じる行と説明は消えていない。"
+    },
+    "閉じる行がもう入っている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "pull request の本文に同じ閉じる行は1行だけである。"
+    },
+    "成果報告へ書き足す": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "まとめて直した issue の成果報告は1件のままである。成果報告に今回の分の行が足されている。"
+    },
+    "成果報告の本文を読めない": {
+      "rfs": {
+        "flow": "成果報告へ書き足す",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "まとめて直した issue の成果報告が1件増えている。前の成果報告の本文は壊れていない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "エージェントは GitHub に pull request の本文を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "エージェントは VALIDATES THAT pull request の本文を読めている。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "エージェントは pull request の本文の末尾に、まとめて直した issue を閉じる行を足す。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "エージェントはまとめて直した issue へ、グループの印を付けた成果報告を新しくコメントする。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "エージェントは成果報告のコメントの URL を控える。"
+    },
+    {
+      "id": "本文を読めない-1",
+      "type": "action",
+      "flow": "本文を読めない",
+      "step": 1,
+      "statement": "エージェントは pull request の本文を書き戻さない。"
+    },
+    {
+      "id": "本文を読めない-2",
+      "type": "action",
+      "flow": "本文を読めない",
+      "step": 2,
+      "statement": "エージェントは本文を読めなかったことを応答に書く。"
+    },
+    {
+      "id": "本文を読めない-3",
+      "type": "resume",
+      "flow": "本文を読めない",
+      "step": 3,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "閉じる行がもう入っている-1",
+      "type": "action",
+      "flow": "閉じる行がもう入っている",
+      "step": 1,
+      "statement": "エージェントは pull request の本文を書き換えない。"
+    },
+    {
+      "id": "閉じる行がもう入っている-2",
+      "type": "resume",
+      "flow": "閉じる行がもう入っている",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "成果報告へ書き足す-1",
+      "type": "action",
+      "flow": "成果報告へ書き足す",
+      "step": 1,
+      "statement": "エージェントは既にある成果報告の本文を読む。"
+    },
+    {
+      "id": "成果報告へ書き足す-2",
+      "type": "condition",
+      "flow": "成果報告へ書き足す",
+      "step": 2,
+      "statement": "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。"
+    },
+    {
+      "id": "成果報告へ書き足す-3",
+      "type": "action",
+      "flow": "成果報告へ書き足す",
+      "step": 3,
+      "statement": "エージェントは読んだ本文の末尾に、前に書いていない分の行を足して書き戻す。"
+    },
+    {
+      "id": "成果報告へ書き足す-4",
+      "type": "resume",
+      "flow": "成果報告へ書き足す",
+      "step": 4,
+      "statement": "RESUME STEP 8"
+    },
+    {
+      "id": "成果報告の本文を読めない-1",
+      "type": "action",
+      "flow": "成果報告の本文を読めない",
+      "step": 1,
+      "statement": "エージェントは成果報告を書き戻さない。"
+    },
+    {
+      "id": "成果報告の本文を読めない-2",
+      "type": "action",
+      "flow": "成果報告の本文を読めない",
+      "step": 2,
+      "statement": "エージェントは前に書いた分を読めなかったことを添えた成果報告を新しくコメントする。"
+    },
+    {
+      "id": "成果報告の本文を読めない-3",
+      "type": "resume",
+      "flow": "成果報告の本文を読めない",
+      "step": 3,
+      "statement": "RESUME STEP 4"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "pull request の本文を読めている"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "本文を読めない-1",
+      "kind": "false",
+      "condition": "NOT pull request の本文を読めている"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "pull request の本文に、まとめて直した issue を閉じる行がまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "閉じる行がもう入っている-1",
+      "kind": "false",
+      "condition": "NOT pull request の本文に、まとめて直した issue を閉じる行がまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "まとめて直した issue に自分の成果報告のコメントがまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "成果報告へ書き足す-1",
+      "kind": "false",
+      "condition": "NOT まとめて直した issue に自分の成果報告のコメントがまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "本文を読めない-1",
+      "to": "本文を読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "本文を読めない-2",
+      "to": "本文を読めない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "本文を読めない-3",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "閉じる行がもう入っている-1",
+      "to": "閉じる行がもう入っている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "閉じる行がもう入っている-2",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "成果報告へ書き足す-1",
+      "to": "成果報告へ書き足す-2",
+      "kind": "seq"
+    },
+    {
+      "from": "成果報告へ書き足す-2",
+      "to": "成果報告へ書き足す-3",
+      "kind": "true",
+      "condition": "読んだ本文にグループの印が入っている"
+    },
+    {
+      "from": "成果報告へ書き足す-2",
+      "to": "成果報告の本文を読めない-1",
+      "kind": "false",
+      "condition": "NOT 読んだ本文にグループの印が入っている"
+    },
+    {
+      "from": "成果報告へ書き足す-3",
+      "to": "成果報告へ書き足す-4",
+      "kind": "seq"
+    },
+    {
+      "from": "成果報告へ書き足す-4",
+      "to": "BASIC FLOW-8",
+      "kind": "resume"
+    },
+    {
+      "from": "成果報告の本文を読めない-1",
+      "to": "成果報告の本文を読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "成果報告の本文を読めない-2",
+      "to": "成果報告の本文を読めない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "成果報告の本文を読めない-3",
+      "to": "成果報告へ書き足す-4",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "エージェントは pull request の本文の末尾に、まとめて直した issue を閉じる行を足す。",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "エージェントはまとめて直した issue へ、グループの印を付けた成果報告を新しくコメントする。",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告へ書き足す-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "エージェントは pull request の本文の末尾に、まとめて直した issue を閉じる行を足す。",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "エージェントは読んだ本文の末尾に、前に書いていない分の行を足して書き戻す。",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告の本文を読めない-1",
+        "成果報告の本文を読めない-2",
+        "成果報告の本文を読めない-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "エージェントは pull request の本文の末尾に、まとめて直した issue を閉じる行を足す。",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "CONDITION: NOT 読んだ本文にグループの印が入っている",
+        "エージェントは成果報告を書き戻さない。",
+        "エージェントは前に書いた分を読めなかったことを添えた成果報告を新しくコメントする。",
+        "RESUME STEP 4",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "閉じる行がもう入っている-1",
+        "閉じる行がもう入っている-2",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "CONDITION: NOT pull request の本文に、まとめて直した issue を閉じる行がまだ無い",
+        "エージェントは pull request の本文を書き換えない。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "エージェントはまとめて直した issue へ、グループの印を付けた成果報告を新しくコメントする。",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "閉じる行がもう入っている-1",
+        "閉じる行がもう入っている-2",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告へ書き足す-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "CONDITION: NOT pull request の本文に、まとめて直した issue を閉じる行がまだ無い",
+        "エージェントは pull request の本文を書き換えない。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "エージェントは読んだ本文の末尾に、前に書いていない分の行を足して書き戻す。",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "閉じる行がもう入っている-1",
+        "閉じる行がもう入っている-2",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告の本文を読めない-1",
+        "成果報告の本文を読めない-2",
+        "成果報告の本文を読めない-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "エージェントは VALIDATES THAT pull request の本文に、まとめて直した issue を閉じる行がまだ無い。",
+        "CONDITION: NOT pull request の本文に、まとめて直した issue を閉じる行がまだ無い",
+        "エージェントは pull request の本文を書き換えない。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "CONDITION: NOT 読んだ本文にグループの印が入っている",
+        "エージェントは成果報告を書き戻さない。",
+        "エージェントは前に書いた分を読めなかったことを添えた成果報告を新しくコメントする。",
+        "RESUME STEP 4",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "本文を読めない-1",
+        "本文を読めない-2",
+        "本文を読めない-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "CONDITION: NOT pull request の本文を読めている",
+        "エージェントは pull request の本文を書き戻さない。",
+        "エージェントは本文を読めなかったことを応答に書く。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "エージェントはまとめて直した issue へ、グループの印を付けた成果報告を新しくコメントする。",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "本文を読めない-1",
+        "本文を読めない-2",
+        "本文を読めない-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告へ書き足す-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "CONDITION: NOT pull request の本文を読めている",
+        "エージェントは pull request の本文を書き戻さない。",
+        "エージェントは本文を読めなかったことを応答に書く。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "エージェントは読んだ本文の末尾に、前に書いていない分の行を足して書き戻す。",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "pull request の本文に、まとめて直した issue を閉じる行がある。まとめて直した issue に、グループの印が付いた成果報告がある。エージェントは成果報告のコメントの URL を控えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "本文を読めない-1",
+        "本文を読めない-2",
+        "本文を読めない-3",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "成果報告へ書き足す-1",
+        "成果報告へ書き足す-2",
+        "成果報告の本文を読めない-1",
+        "成果報告の本文を読めない-2",
+        "成果報告の本文を読めない-3",
+        "成果報告へ書き足す-4",
+        "BASIC FLOW-8"
+      ],
+      "steps": [
+        "エージェントは GitHub に pull request の本文を要求する。",
+        "エージェントは VALIDATES THAT pull request の本文を読めている。",
+        "CONDITION: NOT pull request の本文を読めている",
+        "エージェントは pull request の本文を書き戻さない。",
+        "エージェントは本文を読めなかったことを応答に書く。",
+        "RESUME STEP 5",
+        "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
+        "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
+        "CONDITION: NOT まとめて直した issue に自分の成果報告のコメントがまだ無い",
+        "エージェントは既にある成果報告の本文を読む。",
+        "エージェントは VALIDATES THAT 読んだ本文にグループの印が入っている。",
+        "CONDITION: NOT 読んだ本文にグループの印が入っている",
+        "エージェントは成果報告を書き戻さない。",
+        "エージェントは前に書いた分を読めなかったことを添えた成果報告を新しくコメントする。",
+        "RESUME STEP 4",
+        "RESUME STEP 8",
+        "エージェントは成果報告のコメントの URL を控える。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 20,
+    "nodes_covered": 20,
+    "edges_total": 23,
+    "edges_covered": 23
+  }
+}

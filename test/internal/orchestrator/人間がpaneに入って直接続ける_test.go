@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "60a1f4794349c1b83c885ffd3c8c14ae47d12f0407842b4e27aa1d661b2e0eab", "SOURCE": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "fbf5e2c834729398c81d2877ce33335c3d7671131c465b93cbc62707be8f5a5a", "SOURCE": "docs/spec/usecases/particular_case/人間がpaneに入って直接続ける.cfg.json"}
 //
 // **ユースケース記述「人間がpaneに入って直接続ける」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

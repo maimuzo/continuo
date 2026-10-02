@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "5efeab6893b0bca32159bf1809f832aba999c220d7893d959bc3a1d409ba6f41"
+    "rucm_block_sha256": "c8e6f391673b01259ae59bbf9f2c7ad60491098169d6165bcb144a625c11cee2"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -119,8 +119,8 @@
       "type": "include",
       "flow": "BASIC FLOW",
       "step": 1,
-      "statement": "INCLUDE USE CASE 表明を読んで Status を動かす",
-      "include": "表明を読んで Status を動かす"
+      "statement": "INCLUDE USE CASE 表明を読んでStatusを動かす",
+      "include": "表明を読んでStatusを動かす"
     },
     {
       "id": "BASIC FLOW-2",
@@ -176,8 +176,8 @@
       "type": "include",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "BASIC FLOW-10",
@@ -240,8 +240,8 @@
       "type": "include",
       "flow": "完了済みのissue",
       "step": 2,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "完了済みのissue-3",
@@ -311,8 +311,8 @@
       "type": "include",
       "flow": "turnの終わりの知らないStatus",
       "step": 3,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "turnの終わりの知らないStatus-4",
@@ -480,8 +480,8 @@
       "type": "include",
       "flow": "レビューの完了",
       "step": 1,
-      "statement": "INCLUDE USE CASE worktree と branch を片付ける",
-      "include": "worktree と branch を片付ける"
+      "statement": "INCLUDE USE CASE worktreeとbranchを片付ける",
+      "include": "worktreeとbranchを片付ける"
     },
     {
       "id": "レビューの完了-2",
@@ -822,7 +822,7 @@
         "BASIC FLOW-12"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
@@ -830,7 +830,7 @@
         "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
         "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。",
         "システムはバックグラウンド処理の申告が空になるのを待つ。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
         "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
@@ -856,7 +856,7 @@
         "レビューの完了-2"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
@@ -864,10 +864,10 @@
         "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
         "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。",
         "システムはバックグラウンド処理の申告が空になるのを待つ。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "利用者はボードの issue のコメントを読む。",
         "CONDITION: 利用者が判断の回答の代わりに issue の Status を cleanup.on_states の選択肢へ動かす場合",
-        "INCLUDE USE CASE worktree と branch を片付ける",
+        "INCLUDE USE CASE worktreeとbranchを片付ける",
         "ABORT"
       ]
     },
@@ -890,7 +890,7 @@
         "turnの終わりの知らないStatus-4"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
@@ -900,7 +900,7 @@
         "CONDITION: NOT 取り直した Status が設定に名前のある選択肢である",
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
         "システムはバックグラウンド処理の申告が空になるのを待つ。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -922,7 +922,7 @@
         "BASIC FLOW-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
@@ -932,7 +932,7 @@
         "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
         "システムはエージェントに継続の指示を送る。",
         "RESUME STEP 1",
-        "INCLUDE USE CASE 表明を読んで Status を動かす"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
@@ -952,7 +952,7 @@
         "BASIC FLOW-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
@@ -961,7 +961,7 @@
         "システムは run が外から動かされた記録を消す。",
         "システムはエージェントに継続の指示を送る。",
         "RESUME STEP 1",
-        "INCLUDE USE CASE 表明を読んで Status を動かす"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
@@ -979,13 +979,13 @@
         "完了済みのissue-3"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "CONDITION: NOT 取り直した Status が terminal_states に入っていない",
         "システムはバックグラウンド処理の申告が空になるのを待つ。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -1005,7 +1005,7 @@
         "BASIC FLOW-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "システムは GitHub Projects v2 に issue の取り直しを要求する。",
         "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "CONDITION: NOT GitHub Projects v2 が issue の取り直しに応答する",
@@ -1013,7 +1013,7 @@
         "システムは控えてある issue の写しの Status で run の行き先を決める。",
         "システムはエージェントに継続の指示を送る。",
         "RESUME STEP 1",
-        "INCLUDE USE CASE 表明を読んで Status を動かす"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
@@ -1031,14 +1031,14 @@
         "BASIC FLOW-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合",
         "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
         "IF GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた THEN",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは worker を止めない。",
         "RESUME STEP 1",
-        "INCLUDE USE CASE 表明を読んで Status を動かす"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
@@ -1056,7 +1056,7 @@
         "BASIC FLOW-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合",
         "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
         "IF GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた THEN",
@@ -1064,7 +1064,7 @@
         "システムは戻せなかった回数を1つ増やす。",
         "システムは worker を止めない。",
         "RESUME STEP 1",
-        "INCLUDE USE CASE 表明を読んで Status を動かす"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
@@ -1083,7 +1083,7 @@
         "知らないStatus-7"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
@@ -1109,7 +1109,7 @@
         "知らないStatus-1"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
@@ -1134,7 +1134,7 @@
         "巡回が先に見つけた引き渡し-5"
       ],
       "steps": [
-        "INCLUDE USE CASE 表明を読んで Status を動かす",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
         "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が引き渡しの選択肢であり、システムが最後に書いた Status でもボードの自動化が書いた Status でもない場合",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",

@@ -1,0 +1,643 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "表明を読んでStatusを動かす",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/表明を読んでStatusを動かす.rucm.md",
+    "rucm_block_sha256": "93ef97ddab7bfb97b75b3462c01ef73d09d172cff2c07e07adffac303af24437"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "issue の Status は status_signal_map の遷移先の選択肢である。issue に Status を動かした記録のコメントが1件増えている。herdr の pane は閉じていない。印は残っている。"
+    },
+    "表明なし": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図が立っている。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
+    },
+    "知らない表明": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
+    },
+    "動かさない表明": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
+        ]
+      },
+      "postcondition": "システムは issue の Status を書いていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
+    },
+    "書いてはいけないStatus": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "issue の Status は取り直した選択肢のままである。システムは Status を巻き戻していない。issue に Status を動かした記録のコメントは増えていない。"
+    },
+    "既に同じStatus": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "issue の Status は status_signal_map の遷移先の選択肢である。issue に Status を動かした記録のコメントは増えていない。"
+    },
+    "Statusを書けない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          10
+        ]
+      },
+      "postcondition": "システムは issue の Status を動かしていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "エージェントはシステムに最終応答を返す。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは transcript から表明の行を読む。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT transcript に表明の行が1行以上ある。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 表明の値が status_signal_map にある。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは GitHub Projects v2 に issue の Status の取り直しを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 取り直した Status が terminal_states にも direct_chat_state にも入っていない。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT 取り直した Status が遷移先の選択肢と違う。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは GitHub Projects v2 に issue の Status への遷移先の選択肢の書き込みを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が Status の書き込みを受け付ける。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは遷移先の選択肢を最後に書いた Status として控える。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
+    },
+    {
+      "id": "表明なし-1",
+      "type": "action",
+      "flow": "表明なし",
+      "step": 1,
+      "statement": "システムはボードの issue の Status を動かさない。"
+    },
+    {
+      "id": "表明なし-2",
+      "type": "action",
+      "flow": "表明なし",
+      "step": 2,
+      "statement": "システムは次の継続の指示に表明を促す1文を足す合図を run に立てる。"
+    },
+    {
+      "id": "表明なし-3",
+      "type": "abort",
+      "flow": "表明なし",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "知らない表明-1",
+      "type": "action",
+      "flow": "知らない表明",
+      "step": 1,
+      "statement": "システムは表明の値が status_signal_map にないことをログに出す。"
+    },
+    {
+      "id": "知らない表明-2",
+      "type": "action",
+      "flow": "知らない表明",
+      "step": 2,
+      "statement": "システムはボードの issue の Status を動かさない。"
+    },
+    {
+      "id": "知らない表明-3",
+      "type": "abort",
+      "flow": "知らない表明",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "動かさない表明-1",
+      "type": "action",
+      "flow": "動かさない表明",
+      "step": 1,
+      "statement": "システムはボードの issue の Status を動かさない。"
+    },
+    {
+      "id": "動かさない表明-2",
+      "type": "abort",
+      "flow": "動かさない表明",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "書いてはいけないStatus-1",
+      "type": "action",
+      "flow": "書いてはいけないStatus",
+      "step": 1,
+      "statement": "システムはボードの issue の Status を書かない。"
+    },
+    {
+      "id": "書いてはいけないStatus-2",
+      "type": "action",
+      "flow": "書いてはいけないStatus",
+      "step": 2,
+      "statement": "システムは遷移先の選択肢を最後に書いた Status として控えない。"
+    },
+    {
+      "id": "書いてはいけないStatus-3",
+      "type": "abort",
+      "flow": "書いてはいけないStatus",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "既に同じStatus-1",
+      "type": "action",
+      "flow": "既に同じStatus",
+      "step": 1,
+      "statement": "システムは GitHub Projects v2 に Status の書き込みを要求しない。"
+    },
+    {
+      "id": "既に同じStatus-2",
+      "type": "action",
+      "flow": "既に同じStatus",
+      "step": 2,
+      "statement": "システムは遷移先の選択肢を最後に書いた Status として控える。"
+    },
+    {
+      "id": "既に同じStatus-3",
+      "type": "abort",
+      "flow": "既に同じStatus",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "Statusを書けない-1",
+      "type": "action",
+      "flow": "Statusを書けない",
+      "step": 1,
+      "statement": "システムは Status を動かせないことをログに出す。"
+    },
+    {
+      "id": "Statusを書けない-2",
+      "type": "action",
+      "flow": "Statusを書けない",
+      "step": 2,
+      "statement": "システムは Status を動かした記録を issue にコメントしない。"
+    },
+    {
+      "id": "Statusを書けない-3",
+      "type": "abort",
+      "flow": "Statusを書けない",
+      "step": 3,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "transcript に表明の行が1行以上ある"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "表明なし-1",
+      "kind": "false",
+      "condition": "NOT transcript に表明の行が1行以上ある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "表明の値が status_signal_map にある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "知らない表明-1",
+      "kind": "false",
+      "condition": "NOT 表明の値が status_signal_map にある"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "status_signal_map の遷移先が null ではない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "動かさない表明-1",
+      "kind": "false",
+      "condition": "NOT status_signal_map の遷移先が null ではない"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "取り直した Status が terminal_states にも direct_chat_state にも入っていない"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "書いてはいけないStatus-1",
+      "kind": "false",
+      "condition": "NOT 取り直した Status が terminal_states にも direct_chat_state にも入っていない"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "取り直した Status が遷移先の選択肢と違う"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "既に同じStatus-1",
+      "kind": "false",
+      "condition": "NOT 取り直した Status が遷移先の選択肢と違う"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "GitHub Projects v2 が Status の書き込みを受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "Statusを書けない-1",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が Status の書き込みを受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "表明なし-1",
+      "to": "表明なし-2",
+      "kind": "seq"
+    },
+    {
+      "from": "表明なし-2",
+      "to": "表明なし-3",
+      "kind": "seq"
+    },
+    {
+      "from": "知らない表明-1",
+      "to": "知らない表明-2",
+      "kind": "seq"
+    },
+    {
+      "from": "知らない表明-2",
+      "to": "知らない表明-3",
+      "kind": "seq"
+    },
+    {
+      "from": "動かさない表明-1",
+      "to": "動かさない表明-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書いてはいけないStatus-1",
+      "to": "書いてはいけないStatus-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書いてはいけないStatus-2",
+      "to": "書いてはいけないStatus-3",
+      "kind": "seq"
+    },
+    {
+      "from": "既に同じStatus-1",
+      "to": "既に同じStatus-2",
+      "kind": "seq"
+    },
+    {
+      "from": "既に同じStatus-2",
+      "to": "既に同じStatus-3",
+      "kind": "seq"
+    },
+    {
+      "from": "Statusを書けない-1",
+      "to": "Statusを書けない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "Statusを書けない-2",
+      "to": "Statusを書けない-3",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は status_signal_map の遷移先の選択肢である。issue に Status を動かした記録のコメントが1件増えている。herdr の pane は閉じていない。印は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。",
+        "システムは GitHub Projects v2 に issue の Status の取り直しを要求する。",
+        "システムは VALIDATES THAT 取り直した Status が terminal_states にも direct_chat_state にも入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が遷移先の選択肢と違う。",
+        "システムは GitHub Projects v2 に issue の Status への遷移先の選択肢の書き込みを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が Status の書き込みを受け付ける。",
+        "システムは遷移先の選択肢を最後に書いた Status として控える。",
+        "システムは Status を動かした記録を issue にコメントする。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "Statusを書けない",
+      "postcondition": "システムは issue の Status を動かしていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "Statusを書けない-1",
+        "Statusを書けない-2",
+        "Statusを書けない-3"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。",
+        "システムは GitHub Projects v2 に issue の Status の取り直しを要求する。",
+        "システムは VALIDATES THAT 取り直した Status が terminal_states にも direct_chat_state にも入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が遷移先の選択肢と違う。",
+        "システムは GitHub Projects v2 に issue の Status への遷移先の選択肢の書き込みを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が Status の書き込みを受け付ける。",
+        "CONDITION: NOT GitHub Projects v2 が Status の書き込みを受け付ける",
+        "システムは Status を動かせないことをログに出す。",
+        "システムは Status を動かした記録を issue にコメントしない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "既に同じStatus",
+      "postcondition": "issue の Status は status_signal_map の遷移先の選択肢である。issue に Status を動かした記録のコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "既に同じStatus-3"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。",
+        "システムは GitHub Projects v2 に issue の Status の取り直しを要求する。",
+        "システムは VALIDATES THAT 取り直した Status が terminal_states にも direct_chat_state にも入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が遷移先の選択肢と違う。",
+        "CONDITION: NOT 取り直した Status が遷移先の選択肢と違う",
+        "システムは GitHub Projects v2 に Status の書き込みを要求しない。",
+        "システムは遷移先の選択肢を最後に書いた Status として控える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "書いてはいけないStatus",
+      "postcondition": "issue の Status は取り直した選択肢のままである。システムは Status を巻き戻していない。issue に Status を動かした記録のコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "書いてはいけないStatus-1",
+        "書いてはいけないStatus-2",
+        "書いてはいけないStatus-3"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。",
+        "システムは GitHub Projects v2 に issue の Status の取り直しを要求する。",
+        "システムは VALIDATES THAT 取り直した Status が terminal_states にも direct_chat_state にも入っていない。",
+        "CONDITION: NOT 取り直した Status が terminal_states にも direct_chat_state にも入っていない",
+        "システムはボードの issue の Status を書かない。",
+        "システムは遷移先の選択肢を最後に書いた Status として控えない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "動かさない表明",
+      "postcondition": "システムは issue の Status を書いていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "動かさない表明-1",
+        "動かさない表明-2"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "システムは VALIDATES THAT status_signal_map の遷移先が null ではない。",
+        "CONDITION: NOT status_signal_map の遷移先が null ではない",
+        "システムはボードの issue の Status を動かさない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "知らない表明",
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "知らない表明-1",
+        "知らない表明-2",
+        "知らない表明-3"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
+        "CONDITION: NOT 表明の値が status_signal_map にある",
+        "システムは表明の値が status_signal_map にないことをログに出す。",
+        "システムはボードの issue の Status を動かさない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "表明なし",
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図が立っている。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "表明なし-1",
+        "表明なし-2",
+        "表明なし-3"
+      ],
+      "steps": [
+        "エージェントはシステムに最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "システムは VALIDATES THAT transcript に表明の行が1行以上ある。",
+        "CONDITION: NOT transcript に表明の行が1行以上ある",
+        "システムはボードの issue の Status を動かさない。",
+        "システムは次の継続の指示に表明を促す1文を足す合図を run に立てる。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 29,
+    "nodes_covered": 29,
+    "edges_total": 28,
+    "edges_covered": 28
+  }
+}

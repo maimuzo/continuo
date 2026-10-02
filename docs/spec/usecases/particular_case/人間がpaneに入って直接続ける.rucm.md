@@ -18,7 +18,7 @@
 - `internal/orchestrator/runstate.go` の `enterDirectChatMode` / `leaveDirectChatMode` / `setDirectExitToTerminal`
 
 continuo がまだ着手していない issue（印を持っていない issue）を direct chat へ動かしたときの pane の用意は、[directchatのpaneを用意する.rucm.md](directchatのpaneを用意する.rucm.md) に書いてある。この記述は `INCLUDE USE CASE` で引く。
-完了の Status へ動かされたあとの後始末は、[run を終えて worker を止める.rucm.md](run%20を終えて%20worker%20を止める.rucm.md) を引く。
+完了の Status へ動かされたあとの後始末は、[runを終えてworkerを止める.rucm.md](runを終えてworkerを止める.rucm.md) を引く。
 
 ## 記述の中の語が指すもの
 
@@ -89,19 +89,19 @@ Status を書けても、理由のコメントの投稿が誤りを返したと�
 | 場合 | どこで決まるか | どうなるか |
 | --- | --- | --- |
 | 戻した先は `active_states` に入っているが、issue が dispatch できない（リポジトリの信頼登録が外れている、など） | 段12 と同じ巡回の `reconcileRunning` | pane を閉じて印を外す。worktree は残す。段17〜段20 の書き込み（`running_state` と hold）は、巡回のループの外で既に始まっているので、止めずに書かれる |
-| run が担当を1度も確かめておらず（pane の用意から入った run と、再起動で引き継いだ run）、確かめると担当が別のアカウントへ移っていた | 段14 のあとの `wakeRuns`（`handoffLostOnResume`。段12 と同じ巡回なので、段17〜段20 の書き込みと並んで走る） | `after_run` を走らせずに pane を閉じ、印を外す。この止める処理は Status もコメントも書かない。`issue を1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
-| run の turn 数が `agent.max_dispatch_turns` に達している（direct chat を挟んでも数え直さない） | 段21 のあとの `turnLoop` | 指示を送らず、Status を `failure_state` へ落として run を終える。`issue を1件処理する.rucm.md` の `上限での打ち切り` と同じ扱いである。段21 が偽（応答を書いている最中）のときは、この検査より先に turn の終わりを待つ |
-| 継続の指示の文面を組み立てられない・herdr が送信を受け付けない | 段22 の `turnLoop` | `issue を1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
+| run が担当を1度も確かめておらず（pane の用意から入った run と、再起動で引き継いだ run）、確かめると担当が別のアカウントへ移っていた | 段14 のあとの `wakeRuns`（`handoffLostOnResume`。段12 と同じ巡回なので、段17〜段20 の書き込みと並んで走る） | `after_run` を走らせずに pane を閉じ、印を外す。この止める処理は Status もコメントも書かない。`issueを1件処理する.rucm.md` の `担当が移った` と同じ扱いである |
+| run の turn 数が `agent.max_dispatch_turns` に達している（direct chat を挟んでも数え直さない） | 段21 のあとの `turnLoop` | 指示を送らず、Status を `failure_state` へ落として run を終える。`issueを1件処理する.rucm.md` の `上限での打ち切り` と同じ扱いである。段21 が偽（応答を書いている最中）のときは、この検査より先に turn の終わりを待つ |
+| 継続の指示の文面を組み立てられない・herdr が送信を受け付けない | 段22 の `turnLoop` | `issueを1件処理する.rucm.md` の `本文の組み立ての失敗`・`送信の失敗`・`一時的な送信の失敗` と同じ扱いである |
 
 ## 段にしていない分岐
 
 | 実装の分岐 | 段にしない理由 |
 | --- | --- |
 | `tracker.direct_chat_state` が空・カンバンに選択肢が無い | 事前条件に寄せた。選択肢が無ければ、利用者は段1 の操作ができない。選択肢が無いとき、システムは候補の取得にその Status を足さず、WARN を1回だけ出す（`candidateStates`） |
-| 巡回が実行中の issue を取り直せない | この巡回では direct chat の出入りを決めない。次の巡回で同じ段を行う。`issue を1件処理する.rucm.md` の巡回の照合の扱いである |
-| 完了の Status を書いたのがカンバンの自動化である | `完了のStatusへ動かされた` は、利用者が動かした場合を書いている。自動化が書いた場合の待ち方は `issue を1件処理する.rucm.md` に在る |
+| 巡回が実行中の issue を取り直せない | この巡回では direct chat の出入りを決めない。次の巡回で同じ段を行う。`issueを1件処理する.rucm.md` の巡回の照合の扱いである |
+| 完了の Status を書いたのがカンバンの自動化である | `完了のStatusへ動かされた` は、利用者が動かした場合を書いている。自動化が書いた場合の待ち方は `issueを1件処理する.rucm.md` に在る |
 | 手を離すときに、別の終わらせる処理が既に走っている | `letGoOfDirectChatAsync` は何もせずに返る。走っている側が片付ける |
-| `作業中でも完了でもないStatusへ動かされた` のあとで、動かされた先の Status の扱いが Status を書く | direct chat を抜ける処理（`updateDirectChatMode`）は Status を書かない。同じ巡回の照合は、動かされた先が continuo の知らない Status で、書いたのがカンバンの自動化なら、本来の Status へ書き戻すことがある（`handleUnknownState`）。その扱いは `issue を1件処理する.rucm.md` に在る |
+| `作業中でも完了でもないStatusへ動かされた` のあとで、動かされた先の Status の扱いが Status を書く | direct chat を抜ける処理（`updateDirectChatMode`）は Status を書かない。同じ巡回の照合は、動かされた先が continuo の知らない Status で、書いたのがカンバンの自動化なら、本来の Status へ書き戻すことがある（`handleUnknownState`）。その扱いは `issueを1件処理する.rucm.md` に在る |
 
 ## テストの当て方
 
@@ -124,7 +124,7 @@ BRIEF DESCRIPTION: 利用者はカンバンの issue の Status を tracker.dire
 PRECONDITION: システムは常駐している。tracker.direct_chat_state に Status 名が設定されている。カンバンに tracker.direct_chat_state の選択肢がある。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code
-DEPENDENCY: INCLUDE USE CASE directchatのpaneを用意する、INCLUDE USE CASE run を終えて worker を止める
+DEPENDENCY: INCLUDE USE CASE directchatのpaneを用意する、INCLUDE USE CASE runを終えてworkerを止める
 GENERALIZATION: なし
 
 BASIC FLOW:
@@ -176,7 +176,7 @@ POSTCONDITION: directchatのpaneを用意する の打ち切りの代替フロ�
 SPECIFIC ALTERNATIVE FLOW 完了のStatusへ動かされた:
 RFS BASIC FLOW 15
 1. システムは run に direct chat から terminal_states へ直接抜けた印を立てる。
-2. INCLUDE USE CASE run を終えて worker を止める
+2. INCLUDE USE CASE runを終えてworkerを止める
 3. ABORT
 POSTCONDITION: システムは Claude Code に成果のコメントの記録を要求していない。システムは Claude Code を立て直していない。pane は閉じている。印は外れている。issue の Status が cleanup.on_states に入っていなければ、worktree は残っている。
 
@@ -226,7 +226,7 @@ flowchart TD
     A3S1["paneの用意で入らなかった 1 システムは direct chat のあいだの扱いを始めない"]
     A3S2(["paneの用意で入らなかった 2 ABORT"])
     A4S1["完了のStatusへ動かされた 1 システムは run に direct chat から terminal_states へ直接抜けた印を立てる"]
-    A4S2[["完了のStatusへ動かされた 2 INCLUDE USE CASE run を終えて worker を止める"]]
+    A4S2[["完了のStatusへ動かされた 2 INCLUDE USE CASE runを終えてworkerを止める"]]
     A4S3(["完了のStatusへ動かされた 3 ABORT"])
     A5S1["作業中でも完了でもないStatusへ動かされた 1 システムは direct chat を抜けたことを記録に残す"]
     A5S2(["作業中でも完了でもないStatusへ動かされた 2 ABORT"])
@@ -305,7 +305,7 @@ sequenceDiagram
     システム->>システム: direct chat の印を下ろし、stall の時計を引き直す
     alt Status が terminal_states に入っている
         システム->>システム: 直接抜けた印を立てる
-        システム->>システム: run を終えて worker を止める（INCLUDE。成果のコメントは書かせない）
+        システム->>システム: runを終えてworkerを止める（INCLUDE。成果のコメントは書かせない）
     else Status が active_states に入っていない
         システム->>システム: direct chat を抜けたことを記録に残す（継続の指示は送らない）
     else Status が active_states に入っている

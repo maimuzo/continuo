@@ -3,7 +3,7 @@
   "usecase_name": "夜に機械を落として翌朝に担当を続ける",
   "source": {
     "file": "docs/spec/usecases/scenario/夜に機械を落として翌朝に担当を続ける.rucm.md",
-    "rucm_block_sha256": "ed144ffdaccc48e58605a17f3b47fc3cd699ed9ed4def1cbbc20917c838b9b42"
+    "rucm_block_sha256": "dc8cdbf94a573169daca903b5eab8c53de835a5b627132fe62db43edb2938bf1"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -73,16 +73,16 @@
       "type": "include",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
-      "include": "再起動して実行中の issue を引き継ぐ"
+      "statement": "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+      "include": "再起動して実行中のissueを引き継ぐ"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "include",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "INCLUDE USE CASE issue の担当を入札で決める",
-      "include": "issue の担当を入札で決める"
+      "statement": "INCLUDE USE CASE issueの担当を入札で決める",
+      "include": "issueの担当を入札で決める"
     },
     {
       "id": "BASIC FLOW-8",
@@ -201,8 +201,8 @@
       "type": "include",
       "flow": "期限をまたぐ",
       "step": 9,
-      "statement": "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
-      "include": "再起動して実行中の issue を引き継ぐ"
+      "statement": "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+      "include": "再起動して実行中のissueを引き継ぐ"
     },
     {
       "id": "期限をまたぐ-10",
@@ -404,8 +404,8 @@
         "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。",
         "利用者は翌朝に同じ機械の電源を入れる。",
         "利用者はシステムに continuo の常駐の開始を要求する。",
-        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
-        "INCLUDE USE CASE issue の担当を入札で決める",
+        "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+        "INCLUDE USE CASE issueの担当を入札で決める",
         "システムは issue の Status が既に running_state の選択肢なので Status を書かない。",
         "システムは前の日の worktree をそのまま使う。",
         "システムは VALIDATES THAT 身元ファイルのセッション UUID の会話の記録がある。",
@@ -440,8 +440,8 @@
         "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。",
         "利用者は翌朝に同じ機械の電源を入れる。",
         "利用者はシステムに continuo の常駐の開始を要求する。",
-        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
-        "INCLUDE USE CASE issue の担当を入札で決める",
+        "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+        "INCLUDE USE CASE issueの担当を入札で決める",
         "システムは issue の Status が既に running_state の選択肢なので Status を書かない。",
         "システムは前の日の worktree をそのまま使う。",
         "システムは VALIDATES THAT 身元ファイルのセッション UUID の会話の記録がある。",
@@ -488,7 +488,7 @@
         "ほかの機械は同じ名前の branch で新しい worktree を作る。",
         "利用者は翌朝に同じ機械の電源を入れる。",
         "利用者はシステムに continuo の常駐の開始を要求する。",
-        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+        "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
         "システムは最初の巡回で、担当者がほかの機械の投稿者であることを読む。",
         "システムはこの issue を着手の対象から外す。",
         "システムは前の日の worktree を消さずに残す。",

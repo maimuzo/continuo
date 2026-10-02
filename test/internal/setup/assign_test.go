@@ -1,7 +1,7 @@
 // Package setup_test は internal/setup の対話を、公開 API（setup.Assign）を通して検証する。
 //
-// 確かめたいことは RUCM「既存のボードの Status を割り当てる」の基本フローと代替フローである。
-// docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md
+// 確かめたいことは RUCM「既存のボードのStatusを割り当てる」の基本フローと代替フローである。
+// docs/spec/usecases/particular_case/既存のボードのStatusを割り当てる.rucm.md
 //
 // **カンバンは1回も読まない。**選択肢は引数で渡すので、本番のカンバンにも GitHub にも触れない。
 package setup_test

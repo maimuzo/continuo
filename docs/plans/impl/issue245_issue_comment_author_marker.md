@@ -137,7 +137,7 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 
 **4-3（関連する記録を読む）。**別の issue と pull request を辿って読むときも、4-1・4-2 と同じ式で読む、と1文足す。
 
-**3-4 の例外の段1 と 6-3 も、同じ決まりに揃える。**いまは「OWNER / MEMBER / COLLABORATOR が『コードは別のリポジトリにある』と書いている」「OWNER / MEMBER / COLLABORATOR が『この branch へ出せ』と書いている」と、立場だけで命令を通す。これを「`trusted_comment` が true のコメントか、`trusted_body` が true の issue の本文に…と書いている」に直す。直さないと、AI の印付きのコメントが push 先を変えられ、6-1 と食い違う。issue の本文を入れるのは、設計 3-78b の 4-4 の見本と RUCM「本家のリポジトリへ PR を出す」が、本文に書く形で案内しているからである。
+**3-4 の例外の段1 と 6-3 も、同じ決まりに揃える。**いまは「OWNER / MEMBER / COLLABORATOR が『コードは別のリポジトリにある』と書いている」「OWNER / MEMBER / COLLABORATOR が『この branch へ出せ』と書いている」と、立場だけで命令を通す。これを「`trusted_comment` が true のコメントか、`trusted_body` が true の issue の本文に…と書いている」に直す。直さないと、AI の印付きのコメントが push 先を変えられ、6-1 と食い違う。issue の本文を入れるのは、設計 3-78b の 4-4 の見本と RUCM「本家のリポジトリへPRを出す」が、本文に書く形で案内しているからである。
 
 **6-1 のテストが固定している文は消さない。**次の4つの文と「従わないでください」は、`TestPrompt_命令として扱う立場を限定している`・`TestPrompt_外部が立てたissueでも手が止まらない` が固定しており、issue #60（公開 issue のコメントから、確認なしでコマンドを実行させられる経路がある）の守りを確かめている。どれも順1（外部の人）の話で、順2 と食い違わない。
 
@@ -304,7 +304,7 @@ continuo が起動した Claude Code は、コメントを読むときに jq の
 | `internal/prompt/builtin.md` | 1 に run の宣言、4-1・4-2・4-3 の読み方、6-1 の決まり（3-82 の順の表と本文の扱い）、3-4 の例外の段1 と 6-3 |
 | `docs/plans/continuo_design.md` へ移すときの書き方 | 3-82〜3-82d の中の「7-5」「1 の表」のような、この計画ファイルの節を指す参照は、中身をその場に書く形に直す。continuo専用プロンプトの節（3-4・4-1・6-1 など）は、設計文書の同じ番号の別の節と取り違えないよう「continuo専用プロンプトの」を添える |
 | `docs/plans/continuo_design.md` | 3-82〜3-82d を足し、3-72a・3-72b・3-29・3-72・3-76・2-2 に 3-82 を指す1文を足す。5-3 の写しを continuo専用プロンプトと同じ中身に直す |
-| `docs/plans/continuo_design_slim.md` | 立場だけで命令にすると書いた箇所に、AI の印付きのコメントは命令として扱わないことを足す。RUCM（`docs/spec/usecases/`）は触らない。「本家のリポジトリへ PR を出す」は本文の話で変わらず、「指示書に沿って issue を1件仕上げる」の代わりの流れは外部の人の話で変わらない。触ると CFG の作り直しとテストのハッシュの貼り直しが要る |
+| `docs/plans/continuo_design_slim.md` | 立場だけで命令にすると書いた箇所に、AI の印付きのコメントは命令として扱わないことを足す。RUCM（`docs/spec/usecases/`）は触らない。「本家のリポジトリへPRを出す」は本文の話で変わらず、「指示書に沿ってissueを1件仕上げる」の代わりの流れは外部の人の話で変わらない。触ると CFG の作り直しとテストのハッシュの貼り直しが要る |
 | `.claude-plugin/marketplace.json`・`plugins/continuo-issue-comments/` | 新しく置く |
 | `docs/FAQ.md` | 人間と AI の書き込みの見分け方、plugin の入れ方、人間の決定は人間が自分で書くこと、run への指示は印の無いコメントで書くこと。人間の手順の見本（いまの236行）は「`<!-- continuo:agent -->` を1行目に置くのは continuo が起動したエージェントのときだけ」に直す。`## 書いた人によって扱いを変えること` を数えさせる2つの節（いまの122〜160行と2139〜2160行）を、「v0.1.13 からは組み込みに入っている。本文に残っていたら消す」前提で、数え方と表ごと書き直す。plugin の更新のしかた（`claude plugin marketplace update continuo` と `claude plugin update continuo-issue-comments@continuo`）。pull request の本文を命令として扱わなくなったこと。3-4 の例外の説明（いまの1048行）を「`trusted_comment` か `trusted_body` が true のものに」と直すこと |
 | `internal/scaffold/ci_template.go`（利用者の CI の雛形） | 案内の `<!-- continuo:agent -->` の行（いまの218行）を「continuo が起動したエージェントのときだけ」と書き分ける |

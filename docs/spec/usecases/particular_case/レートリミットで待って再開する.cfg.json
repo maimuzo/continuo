@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "19df7c664280f5b52aa642befb75d5fb1fc18600a5c52eb8d15f3d239e585cdb"
+    "rucm_block_sha256": "bac1e172b6ac9ee5520b81ab8401cd7e373c3821975aa681e9837721b3eb0a36"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -263,8 +263,8 @@
       "type": "include",
       "flow": "指示の回数の上限",
       "step": 5,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "指示の回数の上限-6",
@@ -313,8 +313,8 @@
       "type": "include",
       "flow": "確認の画面",
       "step": 6,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "確認の画面-7",
@@ -468,8 +468,8 @@
       "type": "include",
       "flow": "リトライの使い切り",
       "step": 3,
-      "statement": "INCLUDE USE CASE run を終えて worker を止める",
-      "include": "run を終えて worker を止める"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "リトライの使い切り-4",
@@ -850,7 +850,7 @@
         "システムはバックグラウンド処理の申告が空になるのを待つ。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -926,7 +926,7 @@
         "システムは Claude Code に esc を送る。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -982,7 +982,7 @@
         "システムは Claude Code に esc を送る。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },
@@ -1109,7 +1109,7 @@
         "CONDITION: NOT run のリトライの回数が max_retries に達していない",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に引き渡しの通知を1件コメントする。",
-        "INCLUDE USE CASE run を終えて worker を止める",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "ABORT"
       ]
     },

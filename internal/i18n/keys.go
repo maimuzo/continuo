@@ -613,7 +613,7 @@ const (
 // `continuo setup` が6つの役割を説明するときの文言（6つ目の direct chat は飛ばせる）。
 //
 // **役割の名前より説明が先に出る。**初見の利用者は「どの Status がどの役割か」を
-// 知らないので、Status の名前で尋ねても選べない（RUCM「既存のボードの Status を割り当てる」の「割り当てる6つの役割」の節）。
+// 知らないので、Status の名前で尋ねても選べない（RUCM「既存のボードのStatusを割り当てる」の「割り当てる6つの役割」の節）。
 const (
 	// KeySetupRoleDispatchDesc は着手待ちの役割の説明に出る。
 	KeySetupRoleDispatchDesc Key = "setup.role.dispatch_desc"

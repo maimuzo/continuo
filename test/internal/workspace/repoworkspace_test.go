@@ -1,5 +1,5 @@
 // **リポジトリの親 workspace を閉じるかどうか**の分岐を確かめるテストである。
-// ユースケース記述「リポジトリの親 workspace を閉じる」の経路に対応づけたテストは `リポジトリの親 workspace を閉じる_test.go` に在る。
+// ユースケース記述「リポジトリの親workspaceを閉じる」の経路に対応づけたテストは `リポジトリの親workspaceを閉じる_test.go` に在る。
 package workspace_test
 
 import (
