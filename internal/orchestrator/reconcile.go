@@ -944,9 +944,10 @@ func (o *Orchestrator) noticeDeferredOnPatrol(
 	}
 	owner, repo, err := o.ws.OwnerRepoOf(worktreePath)
 	if err != nil || !strings.EqualFold(issue.Owner, owner) || !strings.EqualFold(issue.Repo, repo) {
+		// **置き場所からリポジトリを引けなかったときも、ここへ来る**（`err` が入る）。原因を取り違えないように載せる。
 		o.logger.Warn("取り直した issue が worktree の置き場所と違うリポジトリなので、片付けを見送った通知は書きません",
 			"path", worktreePath, "置き場所", owner+"/"+repo,
-			"取り直した issue", issue.Identifier, "project_item_id", identity.ProjectItemID)
+			"取り直した issue", issue.Identifier, "project_item_id", identity.ProjectItemID, "error", err)
 		o.markDeferNoticeTried(worktreePath)
 		return
 	}

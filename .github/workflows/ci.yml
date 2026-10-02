@@ -9,7 +9,8 @@
 #
 # **RUCM → CFG → テストの連鎖は、ここでは見ない。**
 # 検査のスクリプトは非公開のプラグインに同梱されており、CI は持っていない。
-# 手元で `sh scripts/check-rucm.sh --strict` を回す（リリース前の検査にも入っている）。
+# 手元で `sh scripts/check-rucm.sh --strict` を回す（リリースの前にも、docs/releasing.md の手順で人が叩く。
+# scripts/check-release-ready.sh は、これを呼ばない）。
 
 name: ci
 

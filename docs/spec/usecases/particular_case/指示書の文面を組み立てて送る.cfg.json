@@ -3,7 +3,7 @@
   "usecase_name": "指示書の文面を組み立てて送る",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md",
-    "rucm_block_sha256": "efb8d459b753b83c9325ccfd7a53980e9499258e4c2e99f4379889444030ad7b"
+    "rucm_block_sha256": "7128cfa47cd2afc093333cf734f553d3e0577a9c1ea32b68cc2a2186ebb4375f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -17,7 +17,7 @@
           2
         ]
       },
-      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、run を終えて worker を止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、runを終えてworkerを止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
     },
     "relayを試みない": {
       "rfs": {
@@ -515,7 +515,7 @@
       "id": "P007",
       "terminal": "abort",
       "terminal_flow": "変数を展開できない",
-      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、run を終えて worker を止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、runを終えてworkerを止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

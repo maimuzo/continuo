@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "50921736c45c1f15ae5fa06edfb7c899bec55f753d79007d8dff567a6e84b1a8", "SOURCE": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.cfg.json"}
+// {"RUCM-CFG-SHA256": "df5264d3de84bc130f20c4fc7e705822c18e521ca5273e5f376d0e84f46d33ee", "SOURCE": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.cfg.json"}
 //
 // **ユースケース記述「指示書の文面を組み立てて送る」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
