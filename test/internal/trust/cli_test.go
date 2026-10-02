@@ -1,6 +1,3 @@
-// {"RUCM-CFG-SHA256": "aa1cf432a64c82dfe67a546da4d8ee8565a21c043f21222f98da8a2b99b39cf7", "SOURCE": "docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 // Package trust_test のうち、このファイルは `continuo trust` を実際に起動して、
 // 端から端まで通ることを確かめる（設計 3-33）。
 //
@@ -13,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -44,86 +40,6 @@ func buildBinary(t *testing.T, outDir string) string {
 		t.Fatalf("continuo をビルドできません: %v\n%s", err, out)
 	}
 	return bin
-}
-
-// {"RUCM-PATH": "P005"}
-//
-// 目的: `continuo trust --dry-run` が要求内容を出すだけで、`~/.claude.json` を
-// 1バイトも書き換えないことを、実際にコマンドを起動して確認する。
-//
-// **`--dry-run` は信頼のダイアログの代わりである**（設計 3-33）。
-// ここが書き換えてしまうと、確かめてから決めるという手順そのものが成立しない。
-//
-// 与える情報: テスト用ホームディレクトリ・テスト用ghq mock の置き場所・
-// trust.repositories に2件を書いた WORKFLOW.md。
-// 成功条件: 出力に要求内容が出て、終了コードが 1（登録の対象が残っている）で、
-// `~/.claude.json` が変わらず、バックアップも作られないこと。
-func TestCLI_dryrunは要求内容を出すだけで書き換えない(t *testing.T) {
-	requireCommands(t, "ghq", "git")
-
-	env := setUpCLI(t)
-	stdout, code := runContinuo(t, env, "trust", "--dry-run")
-
-	if code != 1 {
-		t.Errorf("登録の対象が残っているのに終了コードが 1 でない: %d\n%s", code, stdout)
-	}
-	for _, want := range []string{
-		"octocat/demo-a", "Bash(rm -rf:*)", "/etc", "payments", "docs",
-		"--dry-run なので何も書き換えていません",
-	} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("出力に %q が無い:\n%s", want, stdout)
-		}
-	}
-	if got := readFile(t, env.configPath); got != env.before {
-		t.Errorf("--dry-run なのにファイルが変わっている\n期待:\n%s\n実際:\n%s", env.before, got)
-	}
-	if names := backupNames(t, env.home); len(names) != 0 {
-		t.Errorf("--dry-run なのにバックアップを作っている: %v", names)
-	}
-}
-
-// 目的: `continuo trust` が列挙された2件だけを登録し、列挙していないものに触らないことを、
-// 実際にコマンドを起動して確認する。あわせて、2回目の実行が何も書かないことを見る。
-//
-// 与える情報: dry-run と同じ環境。ghq には列挙していないリポジトリも置いてある。
-// 成功条件: 終了コードが 0、列挙した2件だけが登録され、
-// 列挙していないリポジトリの記述が作られないこと。2回目は何も書かないこと。
-func TestCLI_列挙した2件だけを登録し2回目は何も書かない(t *testing.T) {
-	requireCommands(t, "ghq", "git")
-
-	env := setUpCLI(t)
-	stdout, code := runContinuo(t, env, "trust")
-
-	if code != 0 {
-		t.Fatalf("登録できたのに終了コードが 0 でない: %d\n%s", code, stdout)
-	}
-	after := readFile(t, env.configPath)
-	for _, repo := range []string{"demo-a", "demo-b"} {
-		key := trustKeyOf(t, filepath.Join(env.ghqRoot, "github.com", "octocat", repo))
-		entry, ok := projectEntry(t, after, key)
-		if !ok || entry["hasTrustDialogAccepted"] != true {
-			t.Errorf("%s が登録されていない:\n%s", repo, after)
-		}
-	}
-	if strings.Contains(after, "demo-unlisted") {
-		t.Errorf("列挙していないリポジトリまで登録されている:\n%s", after)
-	}
-	if names := backupNames(t, env.home); len(names) != 1 {
-		t.Errorf("バックアップが1つ残っていない: %v", names)
-	}
-
-	// 2回目。既に true なので何も書かない。
-	stdout2, code2 := runContinuo(t, env, "trust")
-	if code2 != 0 {
-		t.Errorf("2回目の終了コードが 0 でない: %d\n%s", code2, stdout2)
-	}
-	if got := readFile(t, env.configPath); got != after {
-		t.Errorf("2回目でファイルが変わっている\n1回目:\n%s\n2回目:\n%s", after, got)
-	}
-	if names := backupNames(t, env.home); len(names) != 1 {
-		t.Errorf("2回目でバックアップが増えている: %v", names)
-	}
 }
 
 // cliEnv は CLI のテストで使う偽の環境である。

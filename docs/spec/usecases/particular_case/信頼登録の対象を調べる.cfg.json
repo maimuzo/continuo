@@ -1,0 +1,1524 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "信頼登録の対象を調べる",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/信頼登録の対象を調べる.rucm.md",
+    "rucm_block_sha256": "4c5fcae82ccd03ccc1c702c5b6ef46204ebd5aa896d3395f3423fc10a83b29a5"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。"
+    },
+    "調べられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3,
+          5,
+          8,
+          10
+        ]
+      },
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。"
+    },
+    "cloneを取ってくる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "利用者は dry-run オプションを指定していない。いま調べるリポジトリの clone がローカルにある。取ってくることと取得した clone の絶対パスは標準出力に出ている。"
+    },
+    "cloneを取れない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "利用者は dry-run オプションを指定していない。ghq は clone の取得に失敗している。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。"
+    },
+    "取ったcloneのパスを引けない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "利用者は dry-run オプションを指定していない。ghq は clone の取得に成功している。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。"
+    },
+    "cloneを取りに行かない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "利用者は dry-run オプションを指定している。システムは clone を取りに行っていない。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。"
+    },
+    "要求内容を確かめられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          12
+        ]
+      },
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。読めた範囲の要求内容は調査結果に残っている。残りのリポジトリの調査は続いている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに信頼登録の対象の調査を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT ghq が失敗せずに応答する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは git に clone の最上位の絶対パスを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは clone の中の設定ファイルから要求内容を読む。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "UNTIL trust.repositories のすべてのリポジトリを調べた"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムはリポジトリごとの調査結果を記録する。"
+    },
+    {
+      "id": "調べられない-1",
+      "type": "action",
+      "flow": "調べられない",
+      "step": 1,
+      "statement": "システムはいま調べるリポジトリに調べられなかった理由を付ける。"
+    },
+    {
+      "id": "調べられない-2",
+      "type": "resume",
+      "flow": "調べられない",
+      "step": 2,
+      "statement": "RESUME STEP 13"
+    },
+    {
+      "id": "cloneを取ってくる-1",
+      "type": "action",
+      "flow": "cloneを取ってくる",
+      "step": 1,
+      "statement": "システムは利用者に clone を取ってくることを応答する。"
+    },
+    {
+      "id": "cloneを取ってくる-2",
+      "type": "action",
+      "flow": "cloneを取ってくる",
+      "step": 2,
+      "statement": "システムは ghq に clone の取得を要求する。"
+    },
+    {
+      "id": "cloneを取ってくる-3",
+      "type": "action",
+      "flow": "cloneを取ってくる",
+      "step": 3,
+      "statement": "システムは ghq に取得した clone の絶対パスを要求する。"
+    },
+    {
+      "id": "cloneを取ってくる-4",
+      "type": "action",
+      "flow": "cloneを取ってくる",
+      "step": 4,
+      "statement": "システムは利用者に取得した clone の絶対パスを応答する。"
+    },
+    {
+      "id": "cloneを取ってくる-5",
+      "type": "resume",
+      "flow": "cloneを取ってくる",
+      "step": 5,
+      "statement": "RESUME STEP 7"
+    },
+    {
+      "id": "cloneを取れない-1",
+      "type": "action",
+      "flow": "cloneを取れない",
+      "step": 1,
+      "statement": "システムは利用者に clone を取ってくることを応答する。"
+    },
+    {
+      "id": "cloneを取れない-2",
+      "type": "action",
+      "flow": "cloneを取れない",
+      "step": 2,
+      "statement": "システムは ghq に clone の取得を要求する。"
+    },
+    {
+      "id": "cloneを取れない-3",
+      "type": "action",
+      "flow": "cloneを取れない",
+      "step": 3,
+      "statement": "システムはいま調べるリポジトリに clone を取れなかった理由を付ける。"
+    },
+    {
+      "id": "cloneを取れない-4",
+      "type": "resume",
+      "flow": "cloneを取れない",
+      "step": 4,
+      "statement": "RESUME STEP 13"
+    },
+    {
+      "id": "取ったcloneのパスを引けない-1",
+      "type": "action",
+      "flow": "取ったcloneのパスを引けない",
+      "step": 1,
+      "statement": "システムは利用者に clone を取ってくることを応答する。"
+    },
+    {
+      "id": "取ったcloneのパスを引けない-2",
+      "type": "action",
+      "flow": "取ったcloneのパスを引けない",
+      "step": 2,
+      "statement": "システムは ghq に clone の取得を要求する。"
+    },
+    {
+      "id": "取ったcloneのパスを引けない-3",
+      "type": "action",
+      "flow": "取ったcloneのパスを引けない",
+      "step": 3,
+      "statement": "システムは ghq に取得した clone の絶対パスを要求する。"
+    },
+    {
+      "id": "取ったcloneのパスを引けない-4",
+      "type": "action",
+      "flow": "取ったcloneのパスを引けない",
+      "step": 4,
+      "statement": "システムはいま調べるリポジトリに clone を取ったのにパスを引けなかった理由を付ける。"
+    },
+    {
+      "id": "取ったcloneのパスを引けない-5",
+      "type": "resume",
+      "flow": "取ったcloneのパスを引けない",
+      "step": 5,
+      "statement": "RESUME STEP 13"
+    },
+    {
+      "id": "cloneを取りに行かない-1",
+      "type": "action",
+      "flow": "cloneを取りに行かない",
+      "step": 1,
+      "statement": "システムはいま調べるリポジトリに clone がないことを理由として付ける。"
+    },
+    {
+      "id": "cloneを取りに行かない-2",
+      "type": "resume",
+      "flow": "cloneを取りに行かない",
+      "step": 2,
+      "statement": "RESUME STEP 13"
+    },
+    {
+      "id": "要求内容を確かめられない-1",
+      "type": "action",
+      "flow": "要求内容を確かめられない",
+      "step": 1,
+      "statement": "システムはいま調べるリポジトリに要求内容を確かめられなかった理由を付ける。"
+    },
+    {
+      "id": "要求内容を確かめられない-2",
+      "type": "resume",
+      "flow": "要求内容を確かめられない",
+      "step": 2,
+      "statement": "RESUME STEP 13"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "いま調べるリポジトリの名前が owner/repo の形である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "調べられない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの名前が owner/repo の形である"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "ghq が失敗せずに応答する"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "調べられない-1",
+      "kind": "false",
+      "condition": "NOT ghq が失敗せずに応答する"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "いま調べるリポジトリの clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "cloneを取ってくる-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "cloneを取れない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "取ったcloneのパスを引けない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "cloneを取りに行かない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "git が clone の最上位の絶対パスを応答する"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "調べられない-1",
+      "kind": "false",
+      "condition": "NOT git が clone の最上位の絶対パスを応答する"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "いま調べるリポジトリの信頼の状態を判定できる"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "調べられない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの信頼の状態を判定できる"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "true",
+      "condition": "いま調べるリポジトリの要求内容を確かめられる"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "要求内容を確かめられない-1",
+      "kind": "false",
+      "condition": "NOT いま調べるリポジトリの要求内容を確かめられる"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "true",
+      "condition": "trust.repositories のすべてのリポジトリを調べた"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-3",
+      "kind": "loop",
+      "condition": "NOT trust.repositories のすべてのリポジトリを調べた"
+    },
+    {
+      "from": "調べられない-1",
+      "to": "調べられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "調べられない-2",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    },
+    {
+      "from": "cloneを取ってくる-1",
+      "to": "cloneを取ってくる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取ってくる-2",
+      "to": "cloneを取ってくる-3",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取ってくる-3",
+      "to": "cloneを取ってくる-4",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取ってくる-4",
+      "to": "cloneを取ってくる-5",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取ってくる-5",
+      "to": "BASIC FLOW-7",
+      "kind": "resume"
+    },
+    {
+      "from": "cloneを取れない-1",
+      "to": "cloneを取れない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取れない-2",
+      "to": "cloneを取れない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取れない-3",
+      "to": "cloneを取れない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取れない-4",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    },
+    {
+      "from": "取ったcloneのパスを引けない-1",
+      "to": "取ったcloneのパスを引けない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "取ったcloneのパスを引けない-2",
+      "to": "取ったcloneのパスを引けない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "取ったcloneのパスを引けない-3",
+      "to": "取ったcloneのパスを引けない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "取ったcloneのパスを引けない-4",
+      "to": "取ったcloneのパスを引けない-5",
+      "kind": "seq"
+    },
+    {
+      "from": "取ったcloneのパスを引けない-5",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    },
+    {
+      "from": "cloneを取りに行かない-1",
+      "to": "cloneを取りに行かない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneを取りに行かない-2",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    },
+    {
+      "from": "要求内容を確かめられない-1",
+      "to": "要求内容を確かめられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "要求内容を確かめられない-2",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "cycle",
+      "terminal_flow": "",
+      "postcondition": "",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "要求内容を確かめられない-1",
+        "要求内容を確かめられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "CONDITION: NOT いま調べるリポジトリの要求内容を確かめられる",
+        "システムはいま調べるリポジトリに要求内容を確かめられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "cycle",
+      "terminal_flow": "要求内容を確かめられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。読めた範囲の要求内容は調査結果に残っている。残りのリポジトリの調査は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "要求内容を確かめられない-1",
+        "要求内容を確かめられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "CONDITION: NOT いま調べるリポジトリの要求内容を確かめられる",
+        "システムはいま調べるリポジトリに要求内容を確かめられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "CONDITION: NOT いま調べるリポジトリの信頼の状態を判定できる",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "CONDITION: NOT いま調べるリポジトリの信頼の状態を判定できる",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "CONDITION: NOT git が clone の最上位の絶対パスを応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "CONDITION: NOT git が clone の最上位の絶対パスを応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "cycle",
+      "terminal_flow": "cloneを取ってくる",
+      "postcondition": "利用者は dry-run オプションを指定していない。いま調べるリポジトリの clone がローカルにある。取ってくることと取得した clone の絶対パスは標準出力に出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "要求内容を確かめられない-1",
+        "要求内容を確かめられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "CONDITION: NOT いま調べるリポジトリの要求内容を確かめられる",
+        "システムはいま調べるリポジトリに要求内容を確かめられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "cycle",
+      "terminal_flow": "要求内容を確かめられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。読めた範囲の要求内容は調査結果に残っている。残りのリポジトリの調査は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "要求内容を確かめられない-1",
+        "要求内容を確かめられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "システムは clone の中の設定ファイルから要求内容を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの要求内容を確かめられる。",
+        "CONDITION: NOT いま調べるリポジトリの要求内容を確かめられる",
+        "システムはいま調べるリポジトリに要求内容を確かめられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "CONDITION: NOT いま調べるリポジトリの信頼の状態を判定できる",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "システムはホームディレクトリの .claude.json からいま調べるリポジトリの信頼登録の記録を読む。",
+        "システムは VALIDATES THAT いま調べるリポジトリの信頼の状態を判定できる。",
+        "CONDITION: NOT いま調べるリポジトリの信頼の状態を判定できる",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "CONDITION: NOT git が clone の最上位の絶対パスを応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P016",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取ってくる-1",
+        "cloneを取ってくる-2",
+        "cloneを取ってくる-3",
+        "cloneを取ってくる-4",
+        "cloneを取ってくる-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムは利用者に取得した clone の絶対パスを応答する。",
+        "RESUME STEP 7",
+        "システムは git に clone の最上位の絶対パスを要求する。",
+        "システムは VALIDATES THAT git が clone の最上位の絶対パスを応答する。",
+        "CONDITION: NOT git が clone の最上位の絶対パスを応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P017",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取れない-1",
+        "cloneを取れない-2",
+        "cloneを取れない-3",
+        "cloneを取れない-4",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムはいま調べるリポジトリに clone を取れなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P018",
+      "terminal": "cycle",
+      "terminal_flow": "cloneを取れない",
+      "postcondition": "利用者は dry-run オプションを指定していない。ghq は clone の取得に失敗している。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取れない-1",
+        "cloneを取れない-2",
+        "cloneを取れない-3",
+        "cloneを取れない-4",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムはいま調べるリポジトリに clone を取れなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P019",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "取ったcloneのパスを引けない-1",
+        "取ったcloneのパスを引けない-2",
+        "取ったcloneのパスを引けない-3",
+        "取ったcloneのパスを引けない-4",
+        "取ったcloneのパスを引けない-5",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムはいま調べるリポジトリに clone を取ったのにパスを引けなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P020",
+      "terminal": "cycle",
+      "terminal_flow": "取ったcloneのパスを引けない",
+      "postcondition": "利用者は dry-run オプションを指定していない。ghq は clone の取得に成功している。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "取ったcloneのパスを引けない-1",
+        "取ったcloneのパスを引けない-2",
+        "取ったcloneのパスを引けない-3",
+        "取ったcloneのパスを引けない-4",
+        "取ったcloneのパスを引けない-5",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムは利用者に clone を取ってくることを応答する。",
+        "システムは ghq に clone の取得を要求する。",
+        "システムは ghq に取得した clone の絶対パスを要求する。",
+        "システムはいま調べるリポジトリに clone を取ったのにパスを引けなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P021",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取りに行かない-1",
+        "cloneを取りに行かない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムはいま調べるリポジトリに clone がないことを理由として付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P022",
+      "terminal": "cycle",
+      "terminal_flow": "cloneを取りに行かない",
+      "postcondition": "利用者は dry-run オプションを指定している。システムは clone を取りに行っていない。いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "cloneを取りに行かない-1",
+        "cloneを取りに行かない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの clone がローカルにある。",
+        "CONDITION: NOT いま調べるリポジトリの clone がローカルにある",
+        "システムはいま調べるリポジトリに clone がないことを理由として付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P023",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "CONDITION: NOT ghq が失敗せずに応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P024",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "システムは ghq にいま調べるリポジトリの clone の絶対パスを要求する。",
+        "システムは VALIDATES THAT ghq が失敗せずに応答する。",
+        "CONDITION: NOT ghq が失敗せずに応答する",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    },
+    {
+      "id": "P025",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "trust.repositories のすべてのリポジトリに調査結果がある。調べられなかったリポジトリの調査結果には理由が付いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "CONDITION: NOT いま調べるリポジトリの名前が owner/repo の形である",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "システムはリポジトリごとの調査結果を記録する。"
+      ]
+    },
+    {
+      "id": "P026",
+      "terminal": "cycle",
+      "terminal_flow": "調べられない",
+      "postcondition": "いま調べたリポジトリは調べられなかったリポジトリである。残りのリポジトリの調査は続いている。ホームディレクトリの .claude.json は1バイトも変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-3",
+        "調べられない-1",
+        "調べられない-2",
+        "BASIC FLOW-13",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録の対象の調査を要求する。",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。",
+        "CONDITION: NOT いま調べるリポジトリの名前が owner/repo の形である",
+        "システムはいま調べるリポジトリに調べられなかった理由を付ける。",
+        "RESUME STEP 13",
+        "UNTIL trust.repositories のすべてのリポジトリを調べた",
+        "CONDITION: NOT trust.repositories のすべてのリポジトリを調べた",
+        "システムは VALIDATES THAT いま調べるリポジトリの名前が owner/repo の形である。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 33,
+    "nodes_covered": 33,
+    "edges_total": 42,
+    "edges_covered": 42
+  }
+}
