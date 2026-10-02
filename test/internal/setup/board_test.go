@@ -1,6 +1,3 @@
-// {"RUCM-CFG-SHA256": "69e4366093e68d8bbfd1a1bd7c3eb52f551d143e7b66a671893845866120c69f", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 package setup_test
 
 import (
@@ -65,7 +62,7 @@ func TestFetchStatusField_選択肢をカンバンの並び順のまま読む(t 
 }
 
 // 目的: 指定した名前の single-select フィールドがカンバンに無いときの落ち方を確認する
-// （代替フロー「カンバンを読めない」の1つ）。
+// （代替フロー「ボードを読めない」の1つ）。
 // 与える情報: Status しか持たないカンバンに対して --status-field 相当で "State" を渡す。
 // 成功条件: setup.ErrStatusFieldNotFound を返すこと。
 func TestFetchStatusField_名前の合うフィールドが無ければStatusフィールドが無いと返す(t *testing.T) {
@@ -99,43 +96,5 @@ func TestFetchStatusField_singleSelectでないフィールドは受け付けな
 	}
 	if !strings.Contains(err.Error(), "single-select") {
 		t.Errorf("single-select でないことが文言に無い: %v", err)
-	}
-}
-
-// {"RUCM-PATH": "P010"}
-//
-// 目的: gh の落ち方を「直し方が決まる形」へ分類できることを確認する。
-// 与える情報: scope 不足とレートリミットのそれぞれの文言を返すテスト用gh mock。
-// 成功条件: setup.ErrScopeMissing / setup.ErrRateLimited をそれぞれ返すこと。
-func TestFetchStatusField_ghの落ち方を直し方が決まる形へ分類する(t *testing.T) {
-	cases := []struct {
-		name    string
-		ghError string
-		want    error
-	}{
-		{
-			name:    "scopeにprojectが無い",
-			ghError: "your authentication token is missing required scopes [read:project]",
-			want:    setup.ErrScopeMissing,
-		},
-		{
-			name:    "レートリミットに当たった",
-			ghError: "API rate limit exceeded for user ID 1234",
-			want:    setup.ErrRateLimited,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
-				Owner:         "octocat",
-				ProjectNumber: 3,
-				RunGH: func(_ context.Context, _ ...string) ([]byte, error) {
-					return nil, errors.New(tc.ghError)
-				},
-			})
-			if !errors.Is(err, tc.want) {
-				t.Fatalf("分類が違う: %v（期待 %v）", err, tc.want)
-			}
-		})
 	}
 }

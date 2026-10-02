@@ -168,6 +168,13 @@ func WriteApplyResult(w io.Writer, res *ApplyResult) error {
 	for _, c := range res.Changed {
 		b.WriteString(fmt.Sprintf("  ✓ %s → %s\n", c.Repository, c.TrustKey))
 	}
+	if len(res.RevokedSincePlan) > 0 {
+		// **要求内容の応答では「既に信頼済み。触りません」と出した項目である。**
+		// 調べてから書き込むまでの間に登録が外れていたので、読んだ内容と違うことを知らせる。
+		b.WriteString(fmt.Sprintf("! 調べた時点では信頼済みでしたが、書き込む直前には登録が外れていたので登録し直しました: %s\n"+
+			"  Claude Code のセッションが動いていると、この書き換えも失われることがあります。\n",
+			strings.Join(repoNames(res.RevokedSincePlan), ", ")))
+	}
 	if len(res.Skipped) > 0 {
 		b.WriteString(fmt.Sprintf("既に信頼済みだったので触っていません: %s\n", strings.Join(repoNames(res.Skipped), ", ")))
 	}

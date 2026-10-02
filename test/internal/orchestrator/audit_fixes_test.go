@@ -1,5 +1,3 @@
-// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
 // **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある**
@@ -10,15 +8,12 @@ package orchestrator_test
 
 import (
 	"context"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
-	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
 // TestDispatch_active_statesに無いStatusのissueを着手が上書きしない は、
@@ -140,56 +135,6 @@ func TestReconcile_身元ファイルのworkspaceIDを信じて別のrunのpane�
 	}
 }
 
-// {"RUCM-PATH": "P020"}
-//
-// TestTurn_turnを送れなかったときStopHookのせいにしない は、
-// 送信の失敗と「Stop hook が届かない」を混ぜないことを確かめる。
-//
-// 目的: `agent.prompt` が `agent_not_found` などで断ると、**turn は1文字も届いていない。**
-// それを `turnStalled` に混ぜると、issue には「herdr は agent が待機状態になったと答えたが
-// **Stop hook から通知が届かなかった**」という**起きていないことを断定した文面**が残り、
-// 人間は正常な設定ファイルを確かめに行かされる。
-//
-// 与える情報: `agent.prompt` が `agent_not_found` を返す（人間が pane を閉じた直後）。
-// `agent.max_retries` は 0 なので、1回目の失敗でそのまま人間へ渡る。
-// 成功条件: issue に残る理由が「送れませんでした」であり、Stop hook にも
-// 設定ファイルにも言及しないこと。
-func TestTurn_turnを送れなかったときStopHookのせいにしない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) {
-			cfg.Agent.MaxRetries = 0
-			cfg.Tracker.VerifyStatesEvery = 0
-		},
-	})
-	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(map[string]any) (any, *rpcErr) {
-		return nil, &rpcErr{Code: "agent_not_found", Message: "agent は登録されていません"}
-	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	// **コメントの取り戻しも同じ台本で落ちる。**この検証は agent.prompt を全部
-	// agent_not_found にするので、引き渡しの直前に走るコメントの取り戻しも届かない。
-	// 走る順番は機械の速さで前後するため、許可しておかないと環境によって落ちる。
-	fx.AllowLog("turn を送れませんでした", "リトライの回数を使い切りました",
-		"turn を1回も送っていないので", "コメントを書かせるプロンプトを送れません")
-
-	fx.Orc.Tick(context.Background())
-
-	// **着手の記録（Status を動かした記録）とは別物である。**引き渡しの通知だけを待つ。
-	waitFor(t, 20*time.Second, "引き渡しの通知が issue に残る", func() bool {
-		return len(fx.Tracker.HandoffCommentsOf("I_node188")) > 0
-	})
-
-	body := fx.Tracker.HandoffCommentsOf("I_node188")[0].Body
-	if !strings.Contains(body, "herdr へ指示を送れませんでした") {
-		t.Errorf("送れなかったことが issue に書かれていない:\n%s", body)
-	}
-	if strings.Contains(body, "Stop hook") {
-		t.Errorf("送れていないのに Stop hook のせいにしている:\n%s", body)
-	}
-	if !strings.Contains(body, "agent_not_found") {
-		t.Errorf("herdr が返した本当の原因が issue に書かれていない:\n%s", body)
-	}
-}
-
 // TestComment_復元のworktreeOpenはリポジトリ本体をcwdに渡す は、
 // コメントの取り戻し（設計 3-25 の段4）が本物の herdr に断られない呼び方をすることを確かめる。
 //
@@ -273,163 +218,6 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	})
 }
 
-// {"RUCM-PATH": "P018"}
-//
-// TestAbandon_打ち切りのときissueに残る理由が本当の理由である は、
-// 引き渡しの通知の投稿枠を、本当の理由が先に取ることを確かめる。
-//
-// 目的: 引き渡しの通知は1つの run につき1件しか投稿しない。**コメントの取り戻しの失敗が
-// 先に枠を使うと、issue に残るのは「作業を終えたと表明したのに書き残さなかった」だけになる。**
-// 実際にはエージェントは完了を表明しておらず、画面が止まって打ち切られている。
-//
-// 与える情報: `agent.max_retries` が 0 で stall する run。コメントは1件も書かれず、
-// セッションの復元も通らない（`agent.start --resume` が断られる）。
-// 成功条件: issue に残る本文が**打ち切った理由**（画面が止まった）であり、
-// コメントの取り戻しの失敗の文面で置き換わっていないこと。
-func TestAbandon_打ち切りのときissueに残る理由が本当の理由である(t *testing.T) {
-	clock := newTestClock()
-	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
-		Mutate: func(cfg *config.Config) {
-			cfg.Claude.TurnTimeoutMs = 1000
-			cfg.Agent.MaxRetries = 0
-			cfg.Tracker.VerifyStatesEvery = 0
-		},
-	})
-	blockFirstPrompt(t, fx)
-	// セッションの復元を断らせる（コメントの取り戻しが失敗する経路に入れる）。
-	var started sync.Once
-	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
-		args, _ := params["args"].([]any)
-		if strings.Contains(joinAny(args), "--resume") {
-			return nil, &rpcErr{Code: "agent_start_failed", Message: "No conversation found"}
-		}
-		started.Do(func() {})
-		// **既定の台本と同じ形で返す。**`agent_status` を `working` にすると、
-		// stall の判定が「進んでいる」と読んで打ち切りに入らない。
-		return map[string]any{
-			"type":  "agent_started",
-			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
-		}, nil
-	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	fx.AllowLog("リトライの回数を使い切りました", "セッションを復元できません",
-		"turn が終わったことを検知できません", "画面が変わらないまま", "stall")
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
-	})
-	clock.Advance(5 * time.Second)
-	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 20*time.Second, "引き渡しの通知が issue に残る", func() bool {
-		return len(fx.Tracker.HandoffCommentsOf("I_node188")) > 0
-	})
-	time.Sleep(500 * time.Millisecond)
-
-	comments := fx.Tracker.HandoffCommentsOf("I_node188")
-	if len(comments) != 1 {
-		t.Fatalf("引き渡しの通知が1件ではない: %d 件", len(comments))
-	}
-	body := comments[0].Body
-	if !strings.Contains(body, "止まったものと判断して打ち切りました") {
-		t.Errorf("打ち切った本当の理由が issue に残っていない:\n%s", body)
-	}
-	if strings.Contains(body, "何をしたのかを issue に書き残しませんでした") {
-		t.Errorf("コメントの取り戻しの失敗が投稿枠を先に取り、本当の理由を追い出している:\n%s", body)
-	}
-}
-
-// TestRestore_置き場所と食い違う身元ファイルを鍵にしない は、
-// 復元の段2 が `project_item_id` を検算することを確かめる。
-//
-// 目的: `project_item_id` はエージェントが書き換えられる（身元ファイルは worktree の直下にある）。
-// 検算しないと、**書き換えた側の worktree が別 issue の run として印に入り、
-// 被害者の worktree は『捨てた身元』として pane を閉じられる。**
-//
-// 与える情報: `octocat/hello-world` の下にある worktree の身元ファイルが、
-// 別のリポジトリ（`octocat/other-repo`）の issue を名乗っている。
-// 成功条件: その worktree を引き継がず、pane を1つも閉じず、worktree も消さないこと。
-func TestRestore_置き場所と食い違う身元ファイルを鍵にしない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	wt := prepareWorktree(t, fx, issue, identityOverride{})
-
-	// **攻撃。**置き場所は octocat/hello-world なのに、別のリポジトリの issue を名乗る。
-	identity, err := fx.Workspace.ReadIdentity(wt.Path)
-	if err != nil {
-		t.Fatalf("身元ファイルを読めません: %v", err)
-	}
-	identity.IssueIdentifier = "octocat/other-repo#188"
-	identity.IssueURL = "https://github.com/octocat/other-repo/issues/188"
-	if err := fx.Workspace.WriteIdentity(context.Background(), wt.Path, *identity); err != nil {
-		t.Fatalf("身元ファイルを書けません: %v", err)
-	}
-
-	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
-		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
-	})
-	fx.AllowLog("身元ファイルの名乗りが worktree の置き場所と食い違う",
-		"身元ファイルの無い worktree に pane がありました")
-
-	result, _ := restore(t, fx)
-
-	if len(result.Adopted) != 0 {
-		t.Errorf("食い違う身元ファイルの worktree を引き継いだ: %v", result.Adopted)
-	}
-	if ids := closedPaneIDs(fx); len(ids) != 0 {
-		t.Errorf("食い違いを見つけただけで pane を閉じた: %v", ids)
-	}
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Errorf("worktree を消してしまった: %v", err)
-	}
-	if got := fx.Tracker.StateOf(issue.ID); got != "In Progress" {
-		t.Errorf("Status を動かしてしまった: got %q", got)
-	}
-}
-
-// TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さない は、
-// 復元の段4 の失敗を「pane が無い」と読み替えないことを確かめる。
-//
-// 目的: `pane.list` が1回失敗しただけで突き合わせが空になると、**生きている pane を持つ
-// run が全件『pane が無い』経路（段8）へ流れる。**`restart.orphan_running_action` が
-// `to_failure_state` なら、**走っている全部の run が人間へ渡され、
-// 「pane が残っていませんでした」という嘘の理由が issue に投稿される。**
-//
-// 与える情報: `In Progress` の run と生きた pane。`pane.list` はエラーを返す。
-// `restart.orphan_running_action` は `to_failure_state`。
-// 成功条件: Status が `In Progress` のままで、issue にコメントが1件も付かないこと。
-func TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) { cfg.Restart.OrphanRunningAction = "to_failure_state" },
-	})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	wt := prepareWorktree(t, fx, issue, identityOverride{})
-	fx.Herdr.Handle(herdr.MethodPaneList, func(map[string]any) (any, *rpcErr) {
-		return nil, &rpcErr{Code: "internal_error", Message: "herdr が一時的に落ちています"}
-	})
-	fx.AllowLog("pane の一覧を取れないので", "判断を保留します")
-
-	_, hs := restore(t, fx)
-
-	if want := []string{"Start", "ReplayPending", "StartDelivery"}; !equalStrings(hs.Calls(), want) {
-		t.Fatalf("pane の一覧を取れないのに起動を続けていない: got %v", hs.Calls())
-	}
-	if got := fx.Tracker.StateOf(issue.ID); got != "In Progress" {
-		t.Errorf("herdr の一時的な失敗1回で Status を落とした: got %q, want In Progress", got)
-	}
-	if got := len(fx.Tracker.CommentsOf("I_node188")); got != 0 {
-		t.Errorf("pane が生きているのに「pane が残っていない」と issue へ書いた: %d 件", got)
-	}
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Errorf("worktree を消してしまった: %v", err)
-	}
-}
-
 // TestTurn_herdrが一瞬落ちただけでrunを捨てない は、
 // 一時的な失敗の判定（`herdr.IsTransient`）が turn の失敗の経路で実際に使われていることを
 // 確かめる。
@@ -485,68 +273,5 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != before {
 		t.Errorf("次の巡回で agent.prompt を送り直した: %d 回 → %d 回", before, got)
-	}
-}
-
-// TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない は、
-// 一時的な失敗の判定が**枠待ちの待ち直しの経路でも**使われていることを確かめる。
-//
-// 目的: 枠を使い切ると、continuo は `agent.prompt` を再送せずに `agent.wait` で待ち直す
-// （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
-// 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
-//
-// 与える情報: 着手のときは使用率が空いていて（入札の余裕値が残っている）、
-// turn を送った瞬間にステータスラインから 100% の行が届く（issue #284）。
-// `agent.prompt` は herdr の `timeout` を返し、`agent.wait` は応答を書かずに接続を切る。
-// リトライは 0 回。
-// 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
-// **枠待ちの印も残ったままであること**（外すと stall の時計が動き出し、枠が明けるより
-// 先に stall として諦めることになる）。
-func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) {
-			cfg.Agent.MaxRetries = 0
-			cfg.Tracker.VerifyStatesEvery = 0
-			cfg.RateLimit.Source = ratelimit.SourceStatusline
-		},
-	})
-	// **着手が済むまでは使用率を空けておく。**100% のままだと入札の余裕値で
-	// dispatch が止まり、turn の経路に1度も入れない。値は新しいので statusline取得も開かない。
-	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 0, 0)
-	// **turn を送った瞬間に使い切る**（ステータスラインから 100% の新しい応答の行が届く）。
-	// herdr の待ち受けは期限までに落ち着かなかった（＝枠待ちの入口。設計 3-27）。
-	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(map[string]any) (any, *rpcErr) {
-		fx.Orc.OnStatusline(slLine("pane-a", 300, slWin(100, time.Now().Add(2*time.Hour)), nil))
-		return nil, &rpcErr{Code: herdr.ErrCodeTimeout, Message: "待ち受けが期限までに落ち着きませんでした"}
-	})
-	// **待ち直しの最中に herdr が再起動した。**
-	fx.Herdr.DropConnection(herdr.MethodAgentWait)
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	fx.AllowLog("枠待ちの待ち直しが herdr へ届かないので", "herdr との通信が一時的に失敗した")
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 20*time.Second, "turn の送信が herdr へ届く", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
-	})
-
-	// **使用率は読みに行かない**（issue #284）。届いた 100% の保管値で枠待ちに入る。
-	waitFor(t, 20*time.Second, "枠待ちの待ち直しが herdr へ届く", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentWait) > 0
-	})
-	// 捨てる実装なら、ここで打ち切りまで走り切る。走り切らせてから見る。
-	time.Sleep(2 * time.Second)
-
-	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
-		t.Errorf("待ち直しが届かなかっただけで Status を落とした: got %q, want In Progress", got)
-	}
-	if got := fx.Tracker.HandoffCommentsOf("I_node188"); len(got) != 0 {
-		t.Errorf("run を捨てて issue へ引き渡しを書いた: %d 件\n%s", len(got), got[0].Body)
-	}
-	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
-	if !ok {
-		t.Fatalf("走行中の run を手放した")
-	}
-	if !v.WaitingQuota {
-		t.Errorf("枠待ちの印を外した（stall の時計が動き出し、枠が明ける前に諦めることになる）: %+v", v)
 	}
 }

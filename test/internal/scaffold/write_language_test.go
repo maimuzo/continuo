@@ -76,7 +76,7 @@ func TestTemplate_雛形そのものは書く言語の指示を持たない(t *t
 // 与える情報: 言語を切り替えて呼んだ scaffold.TemplateWithValues。
 // 成功条件: 日本語では日本語の指示、英語では英語の指示が入り、目印が残っていないこと。
 func TestTemplate_書く言語はlanguageに連動する(t *testing.T) {
-	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
 
 	cases := []struct {
 		lang i18n.Lang
@@ -107,7 +107,7 @@ func TestTemplate_書く言語はlanguageに連動する(t *testing.T) {
 // 与える情報: 雛形の本文から組み立てた、送る文面の全文。
 // 成功条件: 見出しと、その言語の指示の両方が残っていること。
 func TestTemplate_書く言語の1行は送る文面まで届く(t *testing.T) {
-	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
 	i18n.Use(i18n.LangJA)
 
 	body := bodyOf(t, "雛形", scaffold.TemplateWithValues(scaffold.Values{}))

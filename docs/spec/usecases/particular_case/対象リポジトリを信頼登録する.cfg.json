@@ -3,60 +3,177 @@
   "usecase_name": "対象リポジトリを信頼登録する",
   "source": {
     "file": "docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.rucm.md",
-    "rucm_block_sha256": "35cfb84b1c060452ab49f203ca96bbcfa62bfae1282bd160a6da92d77c52c678"
+    "rucm_block_sha256": "b9202d8aa6cf0d4306f8fd851fefe930070343347f7b32498c41765d04420a66"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "対象リポジトリのすべてが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。continuo doctor の信頼登録の項目は ✓ である。"
+      "postcondition": "trust.repositories のすべてのリポジトリが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。trust.repositories にないリポジトリの記録は変わっていない。応答は標準出力に出ている。終了コード 0 が返っている。"
     },
-    "clone不在": {
+    "使い方の表示": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムは設定ファイルを読んでいない。使い方は標準エラーに出ている。終了コード 0 が返っている。"
+    },
+    "引数指定エラー": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           3
         ]
       },
-      "postcondition": "対象リポジトリの clone がローカルにある。clone が無かった検査では clone の項目が ✗ である。同じ検査では信頼登録の項目が ! である。"
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムは設定ファイルを読んでいない。理由は標準エラーに出ている。終了コード 2 が返っている。"
     },
-    "変えるものが無い": {
+    "調査を始められない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          7
+          4,
+          5
         ]
       },
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。"
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはリポジトリを1件も調べていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
     },
-    "想定と違う形": {
+    "列挙が空": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。システムはリポジトリを1件も調べていない。応答は標準出力に出ている。終了コード 0 が返っている。"
+    },
+    "列挙が空の応答を書き出せない": {
+      "rfs": {
+        "flow": "列挙が空",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "要求内容を書き出せない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "実行せずに確かめる": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           10
         ]
       },
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何が想定と違ったかを読める。"
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。システムは clone を取りに行っていない。利用者は何を許すことになるかを読める。応答は標準出力に出ている。"
+    },
+    "調べられたリポジトリが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          11
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはホームディレクトリの .claude.json を読み直していない。写しは作られていない。応答は標準出力に出ている。終了コード 1 が返っている。"
+    },
+    "調べられたリポジトリが無い応答を書き出せない": {
+      "rfs": {
+        "flow": "調べられたリポジトリが無い",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "書き換えられない記録": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          13,
+          14
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはホームディレクトリの .claude.json を新しく作っていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "変えるものが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          15
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。応答は標準出力に出ている。"
+    },
+    "変えるものが無い応答を書き出せない": {
+      "rfs": {
+        "flow": "変えるものが無い",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "写しを作れない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          16
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "差し替えられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          18
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は読み直した時点の内容のままである。ホームディレクトリに .claude.json の写しがある。一時ファイルは残っていない。理由は標準エラーに出ている。終了コード 3 が返っている。"
     },
     "読み直しで確認できない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          14
+          22
         ]
       },
-      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。確認できなかった項目が表示されている。"
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。確認できなかった項目は標準出力に出ている。終了コード 1 が返っている。"
     },
-    "実行せずに確かめる": {
-      "when": "利用者が dry-run を指定した場合",
-      "branch_from": [
-        {
-          "flow": "BASIC FLOW",
-          "steps": [
-            7
-          ]
-        }
-      ],
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何を許すことになるかを読める。"
+    "確認できない応答を書き出せない": {
+      "rfs": {
+        "flow": "読み直しで確認できない",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "結果を書き出せない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          24
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。理由は標準エラーに出ている。終了コード 3 が返っている。"
+    },
+    "調べられなかったリポジトリが残る": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          25
+        ]
+      },
+      "postcondition": "調べられたリポジトリのすべてが Claude Code に信頼登録されている。調べられなかったリポジトリは登録されていない。ホームディレクトリに .claude.json の写しがある。調べられなかった理由は標準出力に出ている。終了コード 1 が返っている。"
     }
   },
   "nodes": [
@@ -65,194 +182,286 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 1,
-      "statement": "利用者はシステムに信頼登録を要求する。"
+      "statement": "利用者はシステムに対象リポジトリの信頼登録を要求する。"
     },
     {
       "id": "BASIC FLOW-2",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは設定ファイルから対象リポジトリの一覧を読む。"
+      "statement": "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。"
     },
     {
       "id": "BASIC FLOW-3",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。"
+      "statement": "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。"
     },
     {
       "id": "BASIC FLOW-4",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは clone の絶対パスをリポジトリの root へ解決する。"
+      "statement": "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。"
+      "statement": "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。"
     },
     {
       "id": "BASIC FLOW-6",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムは利用者に信頼を登録すると効くようになる設定を応答する。"
+      "statement": "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "condition",
+      "type": "include",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。"
+      "statement": "INCLUDE USE CASE 信頼登録の対象を調べる",
+      "include": "信頼登録の対象を調べる"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムはホームディレクトリの .claude.json の写しを取る。"
+      "statement": "システムは利用者に信頼を登録すると効くようになる設定を応答する。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムはホームディレクトリの .claude.json をもう一度読み直す。"
+      "statement": "システムは VALIDATES THAT 要求内容の応答を書き出せた。"
     },
     {
       "id": "BASIC FLOW-10",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。"
+      "statement": "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。"
     },
     {
       "id": "BASIC FLOW-11",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは一時ファイルに登録済みの記録を書く。"
+      "statement": "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。"
     },
     {
       "id": "BASIC FLOW-12",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。"
+      "statement": "システムはホームディレクトリの .claude.json をもう一度読み直す。"
     },
     {
       "id": "BASIC FLOW-13",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムはホームディレクトリの .claude.json を読み直す。"
+      "statement": "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。"
+      "statement": "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。"
     },
     {
       "id": "BASIC FLOW-15",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 15,
+      "statement": "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "システムはホームディレクトリに .claude.json の写しを取る。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "システムは一時ファイルに登録済みの記録を書く。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
+      "statement": "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。"
+    },
+    {
+      "id": "BASIC FLOW-21",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 21,
+      "statement": "システムはホームディレクトリの .claude.json を読み直す。"
+    },
+    {
+      "id": "BASIC FLOW-22",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 22,
+      "statement": "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。"
+    },
+    {
+      "id": "BASIC FLOW-23",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 23,
       "statement": "システムは利用者に写しの置き場所と登録した項目を応答する。"
     },
     {
-      "id": "clone不在-1",
+      "id": "BASIC FLOW-24",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 24,
+      "statement": "システムは VALIDATES THAT 結果の応答を書き出せた。"
+    },
+    {
+      "id": "BASIC FLOW-25",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 25,
+      "statement": "システムは VALIDATES THAT 調べられなかったリポジトリがない。"
+    },
+    {
+      "id": "BASIC FLOW-26",
       "type": "action",
-      "flow": "clone不在",
+      "flow": "BASIC FLOW",
+      "step": 26,
+      "statement": "システムは終了コード 0 を返す。"
+    },
+    {
+      "id": "使い方の表示-1",
+      "type": "action",
+      "flow": "使い方の表示",
       "step": 1,
-      "statement": "システムは利用者に clone が無いリポジトリの名前を応答する。"
+      "statement": "システムは利用者に continuo trust の使い方を応答する。"
     },
     {
-      "id": "clone不在-2",
-      "type": "action",
-      "flow": "clone不在",
-      "step": 2,
-      "statement": "システムは利用者に clone を置くコマンドを応答する。"
-    },
-    {
-      "id": "clone不在-3",
-      "type": "action",
-      "flow": "clone不在",
-      "step": 3,
-      "statement": "利用者は対象リポジトリの clone をローカルに置く。"
-    },
-    {
-      "id": "clone不在-4",
-      "type": "resume",
-      "flow": "clone不在",
-      "step": 4,
-      "statement": "RESUME STEP 3"
-    },
-    {
-      "id": "変えるものが無い-1",
-      "type": "action",
-      "flow": "変えるものが無い",
-      "step": 1,
-      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
-    },
-    {
-      "id": "変えるものが無い-2",
-      "type": "action",
-      "flow": "変えるものが無い",
-      "step": 2,
-      "statement": "システムはホームディレクトリの .claude.json の写しを取らない。"
-    },
-    {
-      "id": "変えるものが無い-3",
-      "type": "action",
-      "flow": "変えるものが無い",
-      "step": 3,
-      "statement": "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。"
-    },
-    {
-      "id": "変えるものが無い-4",
+      "id": "使い方の表示-2",
       "type": "abort",
-      "flow": "変えるものが無い",
-      "step": 4,
+      "flow": "使い方の表示",
+      "step": 2,
       "statement": "ABORT"
     },
     {
-      "id": "想定と違う形-1",
+      "id": "引数指定エラー-1",
       "type": "action",
-      "flow": "想定と違う形",
+      "flow": "引数指定エラー",
       "step": 1,
-      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
+      "statement": "システムは利用者に引数のどこが受け付けられないかを応答する。"
     },
     {
-      "id": "想定と違う形-2",
-      "type": "action",
-      "flow": "想定と違う形",
-      "step": 2,
-      "statement": "システムは利用者に形が想定と違うことを応答する。"
-    },
-    {
-      "id": "想定と違う形-3",
+      "id": "引数指定エラー-2",
       "type": "abort",
-      "flow": "想定と違う形",
-      "step": 3,
+      "flow": "引数指定エラー",
+      "step": 2,
       "statement": "ABORT"
     },
     {
-      "id": "読み直しで確認できない-1",
+      "id": "調査を始められない-1",
       "type": "action",
-      "flow": "読み直しで確認できない",
+      "flow": "調査を始められない",
       "step": 1,
-      "statement": "システムは利用者に書き込んだのに確認できなかった項目を応答する。"
+      "statement": "システムは利用者に調査を始められない理由を応答する。"
     },
     {
-      "id": "読み直しで確認できない-2",
+      "id": "調査を始められない-2",
       "type": "abort",
-      "flow": "読み直しで確認できない",
+      "flow": "調査を始められない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "列挙が空-1",
+      "type": "action",
+      "flow": "列挙が空",
+      "step": 1,
+      "statement": "システムは利用者に trust.repositories が空であることを応答する。"
+    },
+    {
+      "id": "列挙が空-2",
+      "type": "condition",
+      "flow": "列挙が空",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 空であることの応答を書き出せた。"
+    },
+    {
+      "id": "列挙が空-3",
+      "type": "action",
+      "flow": "列挙が空",
+      "step": 3,
+      "statement": "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。"
+    },
+    {
+      "id": "列挙が空-4",
+      "type": "condition",
+      "flow": "列挙が空",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。"
+    },
+    {
+      "id": "列挙が空-5",
+      "type": "abort",
+      "flow": "列挙が空",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "列挙が空の応答を書き出せない-1",
+      "type": "action",
+      "flow": "列挙が空の応答を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に応答を書き出せない理由を応答する。"
+    },
+    {
+      "id": "列挙が空の応答を書き出せない-2",
+      "type": "abort",
+      "flow": "列挙が空の応答を書き出せない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "要求内容を書き出せない-1",
+      "type": "action",
+      "flow": "要求内容を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に要求内容を書き出せない理由を応答する。"
+    },
+    {
+      "id": "要求内容を書き出せない-2",
+      "type": "abort",
+      "flow": "要求内容を書き出せない",
       "step": 2,
       "statement": "ABORT"
     },
@@ -261,20 +470,265 @@
       "type": "action",
       "flow": "実行せずに確かめる",
       "step": 1,
-      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
-    },
-    {
-      "id": "実行せずに確かめる-2",
-      "type": "action",
-      "flow": "実行せずに確かめる",
-      "step": 2,
       "statement": "システムは利用者に何も書き換えていないことを応答する。"
     },
     {
+      "id": "実行せずに確かめる-2",
+      "type": "condition",
+      "flow": "実行せずに確かめる",
+      "step": 2,
+      "statement": "IF 未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である THEN"
+    },
+    {
       "id": "実行せずに確かめる-3",
-      "type": "abort",
+      "type": "action",
       "flow": "実行せずに確かめる",
       "step": 3,
+      "statement": "システムは終了コード 1 を返す。"
+    },
+    {
+      "id": "実行せずに確かめる-5",
+      "type": "action",
+      "flow": "実行せずに確かめる",
+      "step": 5,
+      "statement": "システムは終了コード 0 を返す。"
+    },
+    {
+      "id": "実行せずに確かめる-7",
+      "type": "abort",
+      "flow": "実行せずに確かめる",
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "調べられたリポジトリが無い-1",
+      "type": "action",
+      "flow": "調べられたリポジトリが無い",
+      "step": 1,
+      "statement": "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。"
+    },
+    {
+      "id": "調べられたリポジトリが無い-2",
+      "type": "condition",
+      "flow": "調べられたリポジトリが無い",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。"
+    },
+    {
+      "id": "調べられたリポジトリが無い-3",
+      "type": "action",
+      "flow": "調べられたリポジトリが無い",
+      "step": 3,
+      "statement": "システムは終了コード 1 を返す。"
+    },
+    {
+      "id": "調べられたリポジトリが無い-4",
+      "type": "abort",
+      "flow": "調べられたリポジトリが無い",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "調べられたリポジトリが無い応答を書き出せない-1",
+      "type": "action",
+      "flow": "調べられたリポジトリが無い応答を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に応答を書き出せない理由を応答する。"
+    },
+    {
+      "id": "調べられたリポジトリが無い応答を書き出せない-2",
+      "type": "abort",
+      "flow": "調べられたリポジトリが無い応答を書き出せない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "書き換えられない記録-1",
+      "type": "action",
+      "flow": "書き換えられない記録",
+      "step": 1,
+      "statement": "システムは利用者にホームディレクトリの .claude.json を書き換えない理由を応答する。"
+    },
+    {
+      "id": "書き換えられない記録-2",
+      "type": "abort",
+      "flow": "書き換えられない記録",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "変えるものが無い-1",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 1,
+      "statement": "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。"
+    },
+    {
+      "id": "変えるものが無い-2",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 2,
+      "statement": "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。"
+    },
+    {
+      "id": "変えるものが無い-3",
+      "type": "condition",
+      "flow": "変えるものが無い",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。"
+    },
+    {
+      "id": "変えるものが無い-4",
+      "type": "condition",
+      "flow": "変えるものが無い",
+      "step": 4,
+      "statement": "IF 調べられなかったリポジトリが1件以上ある THEN"
+    },
+    {
+      "id": "変えるものが無い-5",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 5,
+      "statement": "システムは終了コード 1 を返す。"
+    },
+    {
+      "id": "変えるものが無い-7",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 7,
+      "statement": "システムは終了コード 0 を返す。"
+    },
+    {
+      "id": "変えるものが無い-9",
+      "type": "abort",
+      "flow": "変えるものが無い",
+      "step": 9,
+      "statement": "ABORT"
+    },
+    {
+      "id": "変えるものが無い応答を書き出せない-1",
+      "type": "action",
+      "flow": "変えるものが無い応答を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に応答を書き出せない理由を応答する。"
+    },
+    {
+      "id": "変えるものが無い応答を書き出せない-2",
+      "type": "abort",
+      "flow": "変えるものが無い応答を書き出せない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "写しを作れない-1",
+      "type": "action",
+      "flow": "写しを作れない",
+      "step": 1,
+      "statement": "システムは利用者に写しを作れない理由を応答する。"
+    },
+    {
+      "id": "写しを作れない-2",
+      "type": "abort",
+      "flow": "写しを作れない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "差し替えられない-1",
+      "type": "action",
+      "flow": "差し替えられない",
+      "step": 1,
+      "statement": "システムは利用者に差し替えられない理由と写しの置き場所を応答する。"
+    },
+    {
+      "id": "差し替えられない-2",
+      "type": "abort",
+      "flow": "差し替えられない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "読み直しで確認できない-1",
+      "type": "action",
+      "flow": "読み直しで確認できない",
+      "step": 1,
+      "statement": "システムは利用者に写しの置き場所と登録した項目を応答する。"
+    },
+    {
+      "id": "読み直しで確認できない-2",
+      "type": "action",
+      "flow": "読み直しで確認できない",
+      "step": 2,
+      "statement": "システムは利用者に書き込んだのに確認できなかった項目を応答する。"
+    },
+    {
+      "id": "読み直しで確認できない-3",
+      "type": "action",
+      "flow": "読み直しで確認できない",
+      "step": 3,
+      "statement": "システムは利用者に写しを書き戻す案内を応答する。"
+    },
+    {
+      "id": "読み直しで確認できない-4",
+      "type": "condition",
+      "flow": "読み直しで確認できない",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 確認できなかった項目の応答を書き出せた。"
+    },
+    {
+      "id": "読み直しで確認できない-5",
+      "type": "action",
+      "flow": "読み直しで確認できない",
+      "step": 5,
+      "statement": "システムは終了コード 1 を返す。"
+    },
+    {
+      "id": "読み直しで確認できない-6",
+      "type": "abort",
+      "flow": "読み直しで確認できない",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "確認できない応答を書き出せない-1",
+      "type": "action",
+      "flow": "確認できない応答を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に応答を書き出せない理由を応答する。"
+    },
+    {
+      "id": "確認できない応答を書き出せない-2",
+      "type": "abort",
+      "flow": "確認できない応答を書き出せない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "結果を書き出せない-1",
+      "type": "action",
+      "flow": "結果を書き出せない",
+      "step": 1,
+      "statement": "システムは利用者に結果を書き出せない理由を応答する。"
+    },
+    {
+      "id": "結果を書き出せない-2",
+      "type": "abort",
+      "flow": "結果を書き出せない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "調べられなかったリポジトリが残る-1",
+      "type": "action",
+      "flow": "調べられなかったリポジトリが残る",
+      "step": 1,
+      "statement": "システムは終了コード 1 を返す。"
+    },
+    {
+      "id": "調べられなかったリポジトリが残る-2",
+      "type": "abort",
+      "flow": "調べられなかったリポジトリが残る",
+      "step": 2,
       "statement": "ABORT"
     }
   ],
@@ -287,52 +741,67 @@
     {
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "利用者が使い方の表示を要求していない"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "使い方の表示-1",
+      "kind": "false",
+      "condition": "NOT 利用者が使い方の表示を要求していない"
     },
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
       "kind": "true",
-      "condition": "対象リポジトリのすべての clone がローカルにある"
+      "condition": "利用者が指定した引数が受け付けられる形式である"
     },
     {
       "from": "BASIC FLOW-3",
-      "to": "clone不在-1",
+      "to": "引数指定エラー-1",
       "kind": "false",
-      "condition": "NOT 対象リポジトリのすべての clone がローカルにある"
+      "condition": "NOT 利用者が指定した引数が受け付けられる形式である"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "設定ファイルを読めて front matter が検証を通る"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "調査を始められない-1",
+      "kind": "false",
+      "condition": "NOT 設定ファイルを読めて front matter が検証を通る"
     },
     {
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "ホームディレクトリの絶対パスが決まる"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "調査を始められない-1",
+      "kind": "false",
+      "condition": "NOT ホームディレクトリの絶対パスが決まる"
     },
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "設定ファイルの trust.repositories にリポジトリが1件以上ある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "列挙が空-1",
+      "kind": "false",
+      "condition": "NOT 設定ファイルの trust.repositories にリポジトリが1件以上ある"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
-      "kind": "true",
-      "condition": "登録の対象にできる項目が1つ以上ある"
-    },
-    {
-      "from": "BASIC FLOW-7",
-      "to": "変えるものが無い-1",
-      "kind": "false",
-      "condition": "NOT 登録の対象にできる項目が1つ以上ある"
-    },
-    {
-      "from": "BASIC FLOW-7",
-      "to": "実行せずに確かめる-1",
-      "kind": "global",
-      "condition": "利用者が dry-run を指定した場合"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-8",
@@ -342,24 +811,38 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "要求内容の応答を書き出せた"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "要求内容を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 要求内容の応答を書き出せた"
     },
     {
       "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
       "kind": "true",
-      "condition": "読み直した .claude.json の形が想定どおりである"
+      "condition": "利用者が dry-run オプションを指定していない"
     },
     {
       "from": "BASIC FLOW-10",
-      "to": "想定と違う形-1",
+      "to": "実行せずに確かめる-1",
       "kind": "false",
-      "condition": "NOT 読み直した .claude.json の形が想定どおりである"
+      "condition": "NOT 利用者が dry-run オプションを指定していない"
     },
     {
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "調べられたリポジトリが1件以上ある"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "調べられたリポジトリが無い-1",
+      "kind": "false",
+      "condition": "NOT 調べられたリポジトリが1件以上ある"
     },
     {
       "from": "BASIC FLOW-12",
@@ -369,39 +852,241 @@
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "ホームディレクトリの .claude.json を通常のファイルとして読める"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "書き換えられない記録-1",
+      "kind": "false",
+      "condition": "NOT ホームディレクトリの .claude.json を通常のファイルとして読める"
     },
     {
       "from": "BASIC FLOW-14",
       "to": "BASIC FLOW-15",
       "kind": "true",
-      "condition": "書き込んだ項目のすべてが信頼済みになっている"
+      "condition": "読み直した .claude.json の形が想定どおりである"
     },
     {
       "from": "BASIC FLOW-14",
+      "to": "書き換えられない記録-1",
+      "kind": "false",
+      "condition": "NOT 読み直した .claude.json の形が想定どおりである"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "true",
+      "condition": "読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "変えるものが無い-1",
+      "kind": "false",
+      "condition": "NOT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "true",
+      "condition": "ホームディレクトリに .claude.json の写しを作れる"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "写しを作れない-1",
+      "kind": "false",
+      "condition": "NOT ホームディレクトリに .claude.json の写しを作れる"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
+      "kind": "true",
+      "condition": "ホームディレクトリの .claude.json を差し替えられる"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "差し替えられない-1",
+      "kind": "false",
+      "condition": "NOT ホームディレクトリの .claude.json を差し替えられる"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-22",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "BASIC FLOW-23",
+      "kind": "true",
+      "condition": "書き込んだ項目のすべてが信頼済みになっている"
+    },
+    {
+      "from": "BASIC FLOW-22",
       "to": "読み直しで確認できない-1",
       "kind": "false",
       "condition": "NOT 書き込んだ項目のすべてが信頼済みになっている"
     },
     {
-      "from": "clone不在-1",
-      "to": "clone不在-2",
+      "from": "BASIC FLOW-23",
+      "to": "BASIC FLOW-24",
       "kind": "seq"
     },
     {
-      "from": "clone不在-2",
-      "to": "clone不在-3",
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
+      "kind": "true",
+      "condition": "結果の応答を書き出せた"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "結果を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 結果の応答を書き出せた"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-26",
+      "kind": "true",
+      "condition": "調べられなかったリポジトリがない"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "調べられなかったリポジトリが残る-1",
+      "kind": "false",
+      "condition": "NOT 調べられなかったリポジトリがない"
+    },
+    {
+      "from": "使い方の表示-1",
+      "to": "使い方の表示-2",
       "kind": "seq"
     },
     {
-      "from": "clone不在-3",
-      "to": "clone不在-4",
+      "from": "引数指定エラー-1",
+      "to": "引数指定エラー-2",
       "kind": "seq"
     },
     {
-      "from": "clone不在-4",
-      "to": "BASIC FLOW-3",
-      "kind": "resume"
+      "from": "調査を始められない-1",
+      "to": "調査を始められない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "列挙が空-1",
+      "to": "列挙が空-2",
+      "kind": "seq"
+    },
+    {
+      "from": "列挙が空-2",
+      "to": "列挙が空-3",
+      "kind": "true",
+      "condition": "空であることの応答を書き出せた"
+    },
+    {
+      "from": "列挙が空-2",
+      "to": "列挙が空の応答を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 空であることの応答を書き出せた"
+    },
+    {
+      "from": "列挙が空-3",
+      "to": "列挙が空-4",
+      "kind": "seq"
+    },
+    {
+      "from": "列挙が空-4",
+      "to": "列挙が空-5",
+      "kind": "true",
+      "condition": "書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "列挙が空-4",
+      "to": "列挙が空の応答を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "列挙が空の応答を書き出せない-1",
+      "to": "列挙が空の応答を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "要求内容を書き出せない-1",
+      "to": "要求内容を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "実行せずに確かめる-1",
+      "to": "実行せずに確かめる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "実行せずに確かめる-2",
+      "to": "実行せずに確かめる-3",
+      "kind": "true",
+      "condition": "未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である"
+    },
+    {
+      "from": "実行せずに確かめる-2",
+      "to": "実行せずに確かめる-5",
+      "kind": "false",
+      "condition": "NOT 未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である"
+    },
+    {
+      "from": "実行せずに確かめる-3",
+      "to": "実行せずに確かめる-7",
+      "kind": "seq"
+    },
+    {
+      "from": "実行せずに確かめる-5",
+      "to": "実行せずに確かめる-7",
+      "kind": "seq"
+    },
+    {
+      "from": "調べられたリポジトリが無い-1",
+      "to": "調べられたリポジトリが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "調べられたリポジトリが無い-2",
+      "to": "調べられたリポジトリが無い-3",
+      "kind": "true",
+      "condition": "書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "調べられたリポジトリが無い-2",
+      "to": "調べられたリポジトリが無い応答を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "調べられたリポジトリが無い-3",
+      "to": "調べられたリポジトリが無い-4",
+      "kind": "seq"
+    },
+    {
+      "from": "調べられたリポジトリが無い応答を書き出せない-1",
+      "to": "調べられたリポジトリが無い応答を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書き換えられない記録-1",
+      "to": "書き換えられない記録-2",
+      "kind": "seq"
     },
     {
       "from": "変えるものが無い-1",
@@ -416,16 +1101,50 @@
     {
       "from": "変えるものが無い-3",
       "to": "変えるものが無い-4",
+      "kind": "true",
+      "condition": "書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "変えるものが無い-3",
+      "to": "変えるものが無い応答を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 書き換えていないことの応答を書き出せた"
+    },
+    {
+      "from": "変えるものが無い-4",
+      "to": "変えるものが無い-5",
+      "kind": "true",
+      "condition": "調べられなかったリポジトリが1件以上ある"
+    },
+    {
+      "from": "変えるものが無い-4",
+      "to": "変えるものが無い-7",
+      "kind": "false",
+      "condition": "NOT 調べられなかったリポジトリが1件以上ある"
+    },
+    {
+      "from": "変えるものが無い-5",
+      "to": "変えるものが無い-9",
       "kind": "seq"
     },
     {
-      "from": "想定と違う形-1",
-      "to": "想定と違う形-2",
+      "from": "変えるものが無い-7",
+      "to": "変えるものが無い-9",
       "kind": "seq"
     },
     {
-      "from": "想定と違う形-2",
-      "to": "想定と違う形-3",
+      "from": "変えるものが無い応答を書き出せない-1",
+      "to": "変えるものが無い応答を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "写しを作れない-1",
+      "to": "写しを作れない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "差し替えられない-1",
+      "to": "差し替えられない-2",
       "kind": "seq"
     },
     {
@@ -434,13 +1153,45 @@
       "kind": "seq"
     },
     {
-      "from": "実行せずに確かめる-1",
-      "to": "実行せずに確かめる-2",
+      "from": "読み直しで確認できない-2",
+      "to": "読み直しで確認できない-3",
       "kind": "seq"
     },
     {
-      "from": "実行せずに確かめる-2",
-      "to": "実行せずに確かめる-3",
+      "from": "読み直しで確認できない-3",
+      "to": "読み直しで確認できない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "読み直しで確認できない-4",
+      "to": "読み直しで確認できない-5",
+      "kind": "true",
+      "condition": "確認できなかった項目の応答を書き出せた"
+    },
+    {
+      "from": "読み直しで確認できない-4",
+      "to": "確認できない応答を書き出せない-1",
+      "kind": "false",
+      "condition": "NOT 確認できなかった項目の応答を書き出せた"
+    },
+    {
+      "from": "読み直しで確認できない-5",
+      "to": "読み直しで確認できない-6",
+      "kind": "seq"
+    },
+    {
+      "from": "確認できない応答を書き出せない-1",
+      "to": "確認できない応答を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "結果を書き出せない-1",
+      "to": "結果を書き出せない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "調べられなかったリポジトリが残る-1",
+      "to": "調べられなかったリポジトリが残る-2",
       "kind": "seq"
     }
   ],
@@ -449,7 +1200,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "対象リポジトリのすべてが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。continuo doctor の信頼登録の項目は ✓ である。",
+      "postcondition": "trust.repositories のすべてのリポジトリが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。trust.repositories にないリポジトリの記録は変わっていない。応答は標準出力に出ている。終了コード 0 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -465,31 +1216,53 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "BASIC FLOW-15"
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "システムは clone の絶対パスをリポジトリの root へ解決する。",
-        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
         "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
-        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
-        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
         "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
         "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
         "システムは一時ファイルに登録済みの記録を書く。",
         "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
         "システムはホームディレクトリの .claude.json を読み直す。",
         "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
-        "システムは利用者に写しの置き場所と登録した項目を応答する。"
+        "システムは利用者に写しの置き場所と登録した項目を応答する。",
+        "システムは VALIDATES THAT 結果の応答を書き出せた。",
+        "システムは VALIDATES THAT 調べられなかったリポジトリがない。",
+        "システムは終了コード 0 を返す。"
       ]
     },
     {
       "id": "P002",
       "terminal": "abort",
-      "terminal_flow": "読み直しで確認できない",
-      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。確認できなかった項目が表示されている。",
+      "terminal_flow": "調べられなかったリポジトリが残る",
+      "postcondition": "調べられたリポジトリのすべてが Claude Code に信頼登録されている。調べられなかったリポジトリは登録されていない。ホームディレクトリに .claude.json の写しがある。調べられなかった理由は標準出力に出ている。終了コード 1 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -505,34 +1278,56 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
-        "読み直しで確認できない-1",
-        "読み直しで確認できない-2"
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "調べられなかったリポジトリが残る-1",
+        "調べられなかったリポジトリが残る-2"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "システムは clone の絶対パスをリポジトリの root へ解決する。",
-        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
         "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
-        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
-        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
         "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
         "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
         "システムは一時ファイルに登録済みの記録を書く。",
         "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
         "システムはホームディレクトリの .claude.json を読み直す。",
         "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
-        "CONDITION: NOT 書き込んだ項目のすべてが信頼済みになっている",
-        "システムは利用者に書き込んだのに確認できなかった項目を応答する。",
+        "システムは利用者に写しの置き場所と登録した項目を応答する。",
+        "システムは VALIDATES THAT 結果の応答を書き出せた。",
+        "システムは VALIDATES THAT 調べられなかったリポジトリがない。",
+        "CONDITION: NOT 調べられなかったリポジトリがない",
+        "システムは終了コード 1 を返す。",
         "ABORT"
       ]
     },
     {
       "id": "P003",
       "terminal": "abort",
-      "terminal_flow": "想定と違う形",
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何が想定と違ったかを読める。",
+      "terminal_flow": "結果を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。理由は標準エラーに出ている。終了コード 3 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -544,32 +1339,58 @@
         "BASIC FLOW-8",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
-        "想定と違う形-1",
-        "想定と違う形-2",
-        "想定と違う形-3"
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "結果を書き出せない-1",
+        "結果を書き出せない-2"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "システムは clone の絶対パスをリポジトリの root へ解決する。",
-        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
         "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
-        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
-        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
         "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
         "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
-        "CONDITION: NOT 読み直した .claude.json の形が想定どおりである",
-        "システムはホームディレクトリの .claude.json を書き換えない。",
-        "システムは利用者に形が想定と違うことを応答する。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
+        "システムは一時ファイルに登録済みの記録を書く。",
+        "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
+        "システムはホームディレクトリの .claude.json を読み直す。",
+        "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
+        "システムは利用者に写しの置き場所と登録した項目を応答する。",
+        "システムは VALIDATES THAT 結果の応答を書き出せた。",
+        "CONDITION: NOT 結果の応答を書き出せた",
+        "システムは利用者に結果を書き出せない理由を応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P004",
       "terminal": "abort",
-      "terminal_flow": "変えるものが無い",
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。",
+      "terminal_flow": "読み直しで確認できない",
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。確認できなかった項目は標準出力に出ている。終了コード 1 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -578,31 +1399,65 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "変えるものが無い-1",
-        "変えるものが無い-2",
-        "変えるものが無い-3",
-        "変えるものが無い-4"
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "読み直しで確認できない-1",
+        "読み直しで確認できない-2",
+        "読み直しで確認できない-3",
+        "読み直しで確認できない-4",
+        "読み直しで確認できない-5",
+        "読み直しで確認できない-6"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "システムは clone の絶対パスをリポジトリの root へ解決する。",
-        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
         "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
-        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
-        "CONDITION: NOT 登録の対象にできる項目が1つ以上ある",
-        "システムはホームディレクトリの .claude.json を書き換えない。",
-        "システムはホームディレクトリの .claude.json の写しを取らない。",
-        "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
+        "システムは一時ファイルに登録済みの記録を書く。",
+        "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
+        "システムはホームディレクトリの .claude.json を読み直す。",
+        "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
+        "CONDITION: NOT 書き込んだ項目のすべてが信頼済みになっている",
+        "システムは利用者に写しの置き場所と登録した項目を応答する。",
+        "システムは利用者に書き込んだのに確認できなかった項目を応答する。",
+        "システムは利用者に写しを書き戻す案内を応答する。",
+        "システムは VALIDATES THAT 確認できなかった項目の応答を書き出せた。",
+        "システムは終了コード 1 を返す。",
         "ABORT"
       ]
     },
     {
       "id": "P005",
       "terminal": "abort",
-      "terminal_flow": "実行せずに確かめる",
-      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何を許すことになるかを読める。",
+      "terminal_flow": "確認できない応答を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。ホームディレクトリに .claude.json の写しがある。理由は標準エラーに出ている。終了コード 3 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -611,56 +1466,791 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "実行せずに確かめる-1",
-        "実行せずに確かめる-2",
-        "実行せずに確かめる-3"
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "読み直しで確認できない-1",
+        "読み直しで確認できない-2",
+        "読み直しで確認できない-3",
+        "読み直しで確認できない-4",
+        "確認できない応答を書き出せない-1",
+        "確認できない応答を書き出せない-2"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "システムは clone の絶対パスをリポジトリの root へ解決する。",
-        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
         "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
-        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
-        "CONDITION: 利用者が dry-run を指定した場合",
-        "システムはホームディレクトリの .claude.json を書き換えない。",
-        "システムは利用者に何も書き換えていないことを応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
+        "システムは一時ファイルに登録済みの記録を書く。",
+        "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
+        "システムはホームディレクトリの .claude.json を読み直す。",
+        "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
+        "CONDITION: NOT 書き込んだ項目のすべてが信頼済みになっている",
+        "システムは利用者に写しの置き場所と登録した項目を応答する。",
+        "システムは利用者に書き込んだのに確認できなかった項目を応答する。",
+        "システムは利用者に写しを書き戻す案内を応答する。",
+        "システムは VALIDATES THAT 確認できなかった項目の応答を書き出せた。",
+        "CONDITION: NOT 確認できなかった項目の応答を書き出せた",
+        "システムは利用者に応答を書き出せない理由を応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P006",
-      "terminal": "cycle",
-      "terminal_flow": "clone不在",
-      "postcondition": "対象リポジトリの clone がローカルにある。clone が無かった検査では clone の項目が ✗ である。同じ検査では信頼登録の項目が ! である。",
+      "terminal": "abort",
+      "terminal_flow": "差し替えられない",
+      "postcondition": "ホームディレクトリの .claude.json は読み直した時点の内容のままである。ホームディレクトリに .claude.json の写しがある。一時ファイルは残っていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
-        "clone不在-1",
-        "clone不在-2",
-        "clone不在-3",
-        "clone不在-4",
-        "BASIC FLOW-3"
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "差し替えられない-1",
+        "差し替えられない-2"
       ],
       "steps": [
-        "利用者はシステムに信頼登録を要求する。",
-        "システムは設定ファイルから対象リポジトリの一覧を読む。",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
-        "CONDITION: NOT 対象リポジトリのすべての clone がローカルにある",
-        "システムは利用者に clone が無いリポジトリの名前を応答する。",
-        "システムは利用者に clone を置くコマンドを応答する。",
-        "利用者は対象リポジトリの clone をローカルに置く。",
-        "RESUME STEP 3",
-        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。"
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "システムはホームディレクトリに .claude.json の写しを取る。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を差し替えられる。",
+        "CONDITION: NOT ホームディレクトリの .claude.json を差し替えられる",
+        "システムは利用者に差し替えられない理由と写しの置き場所を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "写しを作れない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "写しを作れない-1",
+        "写しを作れない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "システムは VALIDATES THAT ホームディレクトリに .claude.json の写しを作れる。",
+        "CONDITION: NOT ホームディレクトリに .claude.json の写しを作れる",
+        "システムは利用者に写しを作れない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "変えるものが無い",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。応答は標準出力に出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "変えるものが無い-1",
+        "変えるものが無い-2",
+        "変えるものが無い-3",
+        "変えるものが無い-4",
+        "変えるものが無い-5",
+        "変えるものが無い-9"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "CONDITION: NOT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "IF 調べられなかったリポジトリが1件以上ある THEN",
+        "システムは終了コード 1 を返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "変えるものが無い",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。応答は標準出力に出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "変えるものが無い-1",
+        "変えるものが無い-2",
+        "変えるものが無い-3",
+        "変えるものが無い-4",
+        "変えるものが無い-7",
+        "変えるものが無い-9"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "CONDITION: NOT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "IF 調べられなかったリポジトリが1件以上ある THEN",
+        "CONDITION: NOT 調べられなかったリポジトリが1件以上ある",
+        "システムは終了コード 0 を返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "変えるものが無い応答を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "変えるものが無い-1",
+        "変えるものが無い-2",
+        "変えるものが無い-3",
+        "変えるものが無い応答を書き出せない-1",
+        "変えるものが無い応答を書き出せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは VALIDATES THAT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある。",
+        "CONDITION: NOT 読み直した記録で信頼済みになっていない調べられたリポジトリが1件以上ある",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "CONDITION: NOT 書き換えていないことの応答を書き出せた",
+        "システムは利用者に応答を書き出せない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "abort",
+      "terminal_flow": "書き換えられない記録",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはホームディレクトリの .claude.json を新しく作っていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "書き換えられない記録-1",
+        "書き換えられない記録-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "CONDITION: NOT 読み直した .claude.json の形が想定どおりである",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "書き換えられない記録",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはホームディレクトリの .claude.json を新しく作っていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "書き換えられない記録-1",
+        "書き換えられない記録-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT ホームディレクトリの .claude.json を通常のファイルとして読める。",
+        "CONDITION: NOT ホームディレクトリの .claude.json を通常のファイルとして読める",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "調べられたリポジトリが無い",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはホームディレクトリの .claude.json を読み直していない。写しは作られていない。応答は標準出力に出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "調べられたリポジトリが無い-1",
+        "調べられたリポジトリが無い-2",
+        "調べられたリポジトリが無い-3",
+        "調べられたリポジトリが無い-4"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "CONDITION: NOT 調べられたリポジトリが1件以上ある",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "システムは終了コード 1 を返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "調べられたリポジトリが無い応答を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "調べられたリポジトリが無い-1",
+        "調べられたリポジトリが無い-2",
+        "調べられたリポジトリが無い応答を書き出せない-1",
+        "調べられたリポジトリが無い応答を書き出せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "システムは VALIDATES THAT 調べられたリポジトリが1件以上ある。",
+        "CONDITION: NOT 調べられたリポジトリが1件以上ある",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "CONDITION: NOT 書き換えていないことの応答を書き出せた",
+        "システムは利用者に応答を書き出せない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "実行せずに確かめる",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。システムは clone を取りに行っていない。利用者は何を許すことになるかを読める。応答は標準出力に出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "実行せずに確かめる-1",
+        "実行せずに確かめる-2",
+        "実行せずに確かめる-3",
+        "実行せずに確かめる-7"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "CONDITION: NOT 利用者が dry-run オプションを指定していない",
+        "システムは利用者に何も書き換えていないことを応答する。",
+        "IF 未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である THEN",
+        "システムは終了コード 1 を返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P016",
+      "terminal": "abort",
+      "terminal_flow": "実行せずに確かめる",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。システムは clone を取りに行っていない。利用者は何を許すことになるかを読める。応答は標準出力に出ている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "実行せずに確かめる-1",
+        "実行せずに確かめる-2",
+        "実行せずに確かめる-5",
+        "実行せずに確かめる-7"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "システムは VALIDATES THAT 利用者が dry-run オプションを指定していない。",
+        "CONDITION: NOT 利用者が dry-run オプションを指定していない",
+        "システムは利用者に何も書き換えていないことを応答する。",
+        "IF 未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である THEN",
+        "CONDITION: NOT 未信頼のリポジトリと調べられなかったリポジトリの合計が1件以上である",
+        "システムは終了コード 0 を返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P017",
+      "terminal": "abort",
+      "terminal_flow": "要求内容を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "要求内容を書き出せない-1",
+        "要求内容を書き出せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "INCLUDE USE CASE 信頼登録の対象を調べる",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 要求内容の応答を書き出せた。",
+        "CONDITION: NOT 要求内容の応答を書き出せた",
+        "システムは利用者に要求内容を書き出せない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P018",
+      "terminal": "abort",
+      "terminal_flow": "列挙が空",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。システムはリポジトリを1件も調べていない。応答は標準出力に出ている。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "列挙が空-1",
+        "列挙が空-2",
+        "列挙が空-3",
+        "列挙が空-4",
+        "列挙が空-5"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "CONDITION: NOT 設定ファイルの trust.repositories にリポジトリが1件以上ある",
+        "システムは利用者に trust.repositories が空であることを応答する。",
+        "システムは VALIDATES THAT 空であることの応答を書き出せた。",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P019",
+      "terminal": "abort",
+      "terminal_flow": "列挙が空の応答を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "列挙が空-1",
+        "列挙が空-2",
+        "列挙が空-3",
+        "列挙が空-4",
+        "列挙が空の応答を書き出せない-1",
+        "列挙が空の応答を書き出せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "CONDITION: NOT 設定ファイルの trust.repositories にリポジトリが1件以上ある",
+        "システムは利用者に trust.repositories が空であることを応答する。",
+        "システムは VALIDATES THAT 空であることの応答を書き出せた。",
+        "システムは利用者にホームディレクトリの .claude.json を書き換えていないことを応答する。",
+        "システムは VALIDATES THAT 書き換えていないことの応答を書き出せた。",
+        "CONDITION: NOT 書き換えていないことの応答を書き出せた",
+        "システムは利用者に応答を書き出せない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P020",
+      "terminal": "abort",
+      "terminal_flow": "列挙が空の応答を書き出せない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "列挙が空-1",
+        "列挙が空-2",
+        "列挙が空の応答を書き出せない-1",
+        "列挙が空の応答を書き出せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "システムは VALIDATES THAT 設定ファイルの trust.repositories にリポジトリが1件以上ある。",
+        "CONDITION: NOT 設定ファイルの trust.repositories にリポジトリが1件以上ある",
+        "システムは利用者に trust.repositories が空であることを応答する。",
+        "システムは VALIDATES THAT 空であることの応答を書き出せた。",
+        "CONDITION: NOT 空であることの応答を書き出せた",
+        "システムは利用者に応答を書き出せない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P021",
+      "terminal": "abort",
+      "terminal_flow": "調査を始められない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはリポジトリを1件も調べていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "調査を始められない-1",
+        "調査を始められない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "システムは VALIDATES THAT ホームディレクトリの絶対パスが決まる。",
+        "CONDITION: NOT ホームディレクトリの絶対パスが決まる",
+        "システムは利用者に調査を始められない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P022",
+      "terminal": "abort",
+      "terminal_flow": "調査を始められない",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムはリポジトリを1件も調べていない。理由は標準エラーに出ている。終了コード 3 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "調査を始められない-1",
+        "調査を始められない-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "システムは VALIDATES THAT 設定ファイルを読めて front matter が検証を通る。",
+        "CONDITION: NOT 設定ファイルを読めて front matter が検証を通る",
+        "システムは利用者に調査を始められない理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P023",
+      "terminal": "abort",
+      "terminal_flow": "引数指定エラー",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムは設定ファイルを読んでいない。理由は標準エラーに出ている。終了コード 2 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "引数指定エラー-1",
+        "引数指定エラー-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式である。",
+        "CONDITION: NOT 利用者が指定した引数が受け付けられる形式である",
+        "システムは利用者に引数のどこが受け付けられないかを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P024",
+      "terminal": "abort",
+      "terminal_flow": "使い方の表示",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。システムは設定ファイルを読んでいない。使い方は標準エラーに出ている。終了コード 0 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "使い方の表示-1",
+        "使い方の表示-2"
+      ],
+      "steps": [
+        "利用者はシステムに対象リポジトリの信頼登録を要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "CONDITION: NOT 利用者が使い方の表示を要求していない",
+        "システムは利用者に continuo trust の使い方を応答する。",
+        "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 31,
-    "nodes_covered": 31,
-    "edges_total": 31,
-    "edges_covered": 31
+    "nodes_total": 79,
+    "nodes_covered": 79,
+    "edges_total": 83,
+    "edges_covered": 83
   }
 }

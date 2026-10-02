@@ -1,0 +1,1169 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "issueを着手から片付けまで見届ける",
+  "source": {
+    "file": "docs/spec/usecases/scenario/issueを着手から片付けまで見届ける.rucm.md",
+    "rucm_block_sha256": "169a7095e9f1506d53d94aa0c460ced3b8aa28f2380cc07bf56c74fdace7966c"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "issue の Status は cleanup.on_states の選択肢である。issue にエージェントが書いたコメントが1件以上ある。worktree は置き場所に無い。branch は、設定の cleanup.delete_branch が真であれば無い。印は外れている。herdr の pane は閉じている。"
+    },
+    "片付けの見送り": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          10
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は cleanup.on_states の選択肢のままである。次の巡回が片付けをやり直す。"
+    },
+    "判断の依頼": {
+      "when": "エージェントが応答の最後に判断を仰ぐ表明を書いた場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。worktree と branch は残っている。前の run の herdr の pane は閉じている。"
+    },
+    "回答を待たずに終わる": {
+      "rfs": {
+        "flow": "判断の依頼",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "issue の Status は dispatch_state の選択肢ではない。システムは同じ issue にもう一度着手していない。herdr の pane と印と worktree の状態は、人間に判断を渡す が止まった代替フローの事後条件のとおりである。"
+    },
+    "システムによる引き渡し": {
+      "when": "システムが run を打ち切って issue の Status に failure_state の選択肢を書いた場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に人間へ引き渡す通知のコメントが1件ある。worktree と branch は残っている。前の run の herdr の pane は閉じている。"
+    },
+    "人間が引き取る": {
+      "when": "issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は、利用者が dispatch_state の選択肢を書いた場合は running_state の選択肢であり、そのほかの場合は利用者が書いた選択肢である。herdr の pane は閉じていない。印は残っている。worktree は残っている。run の turn 数は数え直されていない。"
+    },
+    "作業中でないStatusへ戻す": {
+      "rfs": {
+        "flow": "人間が引き取る",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "issue の Status は利用者が書いた選択肢である。run の direct chat の印は下りている。システムは hold のコメントを書いていない。herdr の pane は閉じている。印は外れている。worktree は、利用者が書いた Status が cleanup.on_states に入っていなければ残っている。"
+    },
+    "枠の上限": {
+      "when": "走行中の run が枠を使い切った場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "run は続いている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
+    },
+    "枠待ちからの引き渡し": {
+      "rfs": {
+        "flow": "枠の上限",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に人間へ引き渡す通知のコメントが1件ある。印は外れている。worktree は残っている。利用者が原因を直して Status を dispatch_state の選択肢へ戻すまで、システムは同じ issue に着手しない。"
+    },
+    "常駐の再起動": {
+      "when": "continuo のプロセスが落ちて利用者が continuo を起動し直す場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "引き継いだ issue は印の集合に入っている。issue の Status は running_state の選択肢のままである。worktree は残っている。herdr の pane は閉じていない。"
+    },
+    "引き継がれない再起動": {
+      "rfs": {
+        "flow": "常駐の再起動",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "システムは前回の run を引き継いでいない。continuo が常駐しているかどうかと、herdr の pane と worktree と issue の Status の状態は、再起動して実行中のissueを引き継ぐ が止まった代替フローの事後条件のとおりである。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者は対象リポジトリに issue を作る。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "利用者はボードに issue の item を作る。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "利用者はボードの issue の Status に Ice Box の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "INCLUDE USE CASE issueを1件処理する",
+      "include": "issueを1件処理する"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "利用者は issue のコメントで作業の内容を読む。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "利用者は issue に紐づく pull request の変更をレビューする。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "利用者はボードの issue の Status に cleanup.on_states の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "INCLUDE USE CASE worktreeとbranchを片付ける",
+      "include": "worktreeとbranchを片付ける"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT worktree が置き場所に無い。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは利用者に片付けの結果をログで応答する。"
+    },
+    {
+      "id": "片付けの見送り-1",
+      "type": "action",
+      "flow": "片付けの見送り",
+      "step": 1,
+      "statement": "システムは次の巡回の開始を待つ。"
+    },
+    {
+      "id": "片付けの見送り-2",
+      "type": "resume",
+      "flow": "片付けの見送り",
+      "step": 2,
+      "statement": "RESUME STEP 9"
+    },
+    {
+      "id": "判断の依頼-1",
+      "type": "include",
+      "flow": "判断の依頼",
+      "step": 1,
+      "statement": "INCLUDE USE CASE 人間に判断を渡す",
+      "include": "人間に判断を渡す"
+    },
+    {
+      "id": "判断の依頼-2",
+      "type": "condition",
+      "flow": "判断の依頼",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT issue の Status が dispatch_state の選択肢である。"
+    },
+    {
+      "id": "判断の依頼-3",
+      "type": "resume",
+      "flow": "判断の依頼",
+      "step": 3,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "回答を待たずに終わる-1",
+      "type": "action",
+      "flow": "回答を待たずに終わる",
+      "step": 1,
+      "statement": "システムは同じ issue にもう一度着手しない。"
+    },
+    {
+      "id": "回答を待たずに終わる-2",
+      "type": "abort",
+      "flow": "回答を待たずに終わる",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "システムによる引き渡し-1",
+      "type": "action",
+      "flow": "システムによる引き渡し",
+      "step": 1,
+      "statement": "利用者は issue のコメントで引き渡しの理由を読む。"
+    },
+    {
+      "id": "システムによる引き渡し-2",
+      "type": "action",
+      "flow": "システムによる引き渡し",
+      "step": 2,
+      "statement": "利用者は引き渡しの理由に書かれた原因を直す。"
+    },
+    {
+      "id": "システムによる引き渡し-3",
+      "type": "action",
+      "flow": "システムによる引き渡し",
+      "step": 3,
+      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+    },
+    {
+      "id": "システムによる引き渡し-4",
+      "type": "resume",
+      "flow": "システムによる引き渡し",
+      "step": 4,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "人間が引き取る-1",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 1,
+      "statement": "システムは run に direct chat の印を立てる。"
+    },
+    {
+      "id": "人間が引き取る-2",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 2,
+      "statement": "システムはエージェントへの turn の送信を止める。"
+    },
+    {
+      "id": "人間が引き取る-3",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 3,
+      "statement": "利用者は herdr の pane でエージェントに直接指示する。"
+    },
+    {
+      "id": "人間が引き取る-4",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 4,
+      "statement": "利用者はボードの issue の Status に direct_chat_state 以外の選択肢を書く。"
+    },
+    {
+      "id": "人間が引き取る-5",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 5,
+      "statement": "システムは run の direct chat の印を下ろす。"
+    },
+    {
+      "id": "人間が引き取る-6",
+      "type": "condition",
+      "flow": "人間が引き取る",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT 利用者が書いた Status が active_states に入っている。"
+    },
+    {
+      "id": "人間が引き取る-7",
+      "type": "condition",
+      "flow": "人間が引き取る",
+      "step": 7,
+      "statement": "IF 利用者が書いた Status が dispatch_state の選択肢である THEN"
+    },
+    {
+      "id": "人間が引き取る-8",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 8,
+      "statement": "システムはボードの issue の Status に running_state の選択肢を書く。"
+    },
+    {
+      "id": "人間が引き取る-9",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 9,
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
+    },
+    {
+      "id": "人間が引き取る-11",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 11,
+      "statement": "システムは issue に hold のコメントを書く。"
+    },
+    {
+      "id": "人間が引き取る-12",
+      "type": "action",
+      "flow": "人間が引き取る",
+      "step": 12,
+      "statement": "システムは同じ pane のエージェントに継続の指示を送る。"
+    },
+    {
+      "id": "人間が引き取る-13",
+      "type": "resume",
+      "flow": "人間が引き取る",
+      "step": 13,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "作業中でないStatusへ戻す-1",
+      "type": "action",
+      "flow": "作業中でないStatusへ戻す",
+      "step": 1,
+      "statement": "システムは同じ pane のエージェントに継続の指示を送らない。"
+    },
+    {
+      "id": "作業中でないStatusへ戻す-2",
+      "type": "action",
+      "flow": "作業中でないStatusへ戻す",
+      "step": 2,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "作業中でないStatusへ戻す-3",
+      "type": "action",
+      "flow": "作業中でないStatusへ戻す",
+      "step": 3,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "作業中でないStatusへ戻す-4",
+      "type": "abort",
+      "flow": "作業中でないStatusへ戻す",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "枠の上限-1",
+      "type": "include",
+      "flow": "枠の上限",
+      "step": 1,
+      "statement": "INCLUDE USE CASE レートリミットで待って再開する",
+      "include": "レートリミットで待って再開する"
+    },
+    {
+      "id": "枠の上限-2",
+      "type": "condition",
+      "flow": "枠の上限",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT issue の Status が running_state の選択肢のままである。"
+    },
+    {
+      "id": "枠の上限-3",
+      "type": "resume",
+      "flow": "枠の上限",
+      "step": 3,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "枠待ちからの引き渡し-1",
+      "type": "action",
+      "flow": "枠待ちからの引き渡し",
+      "step": 1,
+      "statement": "利用者は issue のコメントで引き渡しの理由を読む。"
+    },
+    {
+      "id": "枠待ちからの引き渡し-2",
+      "type": "abort",
+      "flow": "枠待ちからの引き渡し",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "常駐の再起動-1",
+      "type": "include",
+      "flow": "常駐の再起動",
+      "step": 1,
+      "statement": "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+      "include": "再起動して実行中のissueを引き継ぐ"
+    },
+    {
+      "id": "常駐の再起動-2",
+      "type": "condition",
+      "flow": "常駐の再起動",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT continuo が常駐していて、issue が印の集合に入っている。"
+    },
+    {
+      "id": "常駐の再起動-3",
+      "type": "resume",
+      "flow": "常駐の再起動",
+      "step": 3,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "引き継がれない再起動-1",
+      "type": "action",
+      "flow": "引き継がれない再起動",
+      "step": 1,
+      "statement": "システムは前回の run に継続の指示を送らない。"
+    },
+    {
+      "id": "引き継がれない再起動-2",
+      "type": "abort",
+      "flow": "引き継がれない再起動",
+      "step": 2,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "判断の依頼-1",
+      "kind": "global",
+      "condition": "エージェントが応答の最後に判断を仰ぐ表明を書いた場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "システムによる引き渡し-1",
+      "kind": "global",
+      "condition": "システムが run を打ち切って issue の Status に failure_state の選択肢を書いた場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "人間が引き取る-1",
+      "kind": "global",
+      "condition": "issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "枠の上限-1",
+      "kind": "global",
+      "condition": "走行中の run が枠を使い切った場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "常駐の再起動-1",
+      "kind": "global",
+      "condition": "continuo のプロセスが落ちて利用者が continuo を起動し直す場合"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "worktree が置き場所に無い"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "片付けの見送り-1",
+      "kind": "false",
+      "condition": "NOT worktree が置き場所に無い"
+    },
+    {
+      "from": "片付けの見送り-1",
+      "to": "片付けの見送り-2",
+      "kind": "seq"
+    },
+    {
+      "from": "片付けの見送り-2",
+      "to": "BASIC FLOW-9",
+      "kind": "resume"
+    },
+    {
+      "from": "判断の依頼-1",
+      "to": "判断の依頼-2",
+      "kind": "seq"
+    },
+    {
+      "from": "判断の依頼-2",
+      "to": "判断の依頼-3",
+      "kind": "true",
+      "condition": "issue の Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "判断の依頼-2",
+      "to": "回答を待たずに終わる-1",
+      "kind": "false",
+      "condition": "NOT issue の Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "判断の依頼-3",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "回答を待たずに終わる-1",
+      "to": "回答を待たずに終わる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "システムによる引き渡し-1",
+      "to": "システムによる引き渡し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "システムによる引き渡し-2",
+      "to": "システムによる引き渡し-3",
+      "kind": "seq"
+    },
+    {
+      "from": "システムによる引き渡し-3",
+      "to": "システムによる引き渡し-4",
+      "kind": "seq"
+    },
+    {
+      "from": "システムによる引き渡し-4",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "人間が引き取る-1",
+      "to": "人間が引き取る-2",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-2",
+      "to": "人間が引き取る-3",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-3",
+      "to": "人間が引き取る-4",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-4",
+      "to": "人間が引き取る-5",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-5",
+      "to": "人間が引き取る-6",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-6",
+      "to": "人間が引き取る-7",
+      "kind": "true",
+      "condition": "利用者が書いた Status が active_states に入っている"
+    },
+    {
+      "from": "人間が引き取る-6",
+      "to": "作業中でないStatusへ戻す-1",
+      "kind": "false",
+      "condition": "NOT 利用者が書いた Status が active_states に入っている"
+    },
+    {
+      "from": "人間が引き取る-7",
+      "to": "人間が引き取る-8",
+      "kind": "true",
+      "condition": "利用者が書いた Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "人間が引き取る-7",
+      "to": "人間が引き取る-11",
+      "kind": "false",
+      "condition": "NOT 利用者が書いた Status が dispatch_state の選択肢である"
+    },
+    {
+      "from": "人間が引き取る-8",
+      "to": "人間が引き取る-9",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-9",
+      "to": "人間が引き取る-11",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-11",
+      "to": "人間が引き取る-12",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-12",
+      "to": "人間が引き取る-13",
+      "kind": "seq"
+    },
+    {
+      "from": "人間が引き取る-13",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "作業中でないStatusへ戻す-1",
+      "to": "作業中でないStatusへ戻す-2",
+      "kind": "seq"
+    },
+    {
+      "from": "作業中でないStatusへ戻す-2",
+      "to": "作業中でないStatusへ戻す-3",
+      "kind": "seq"
+    },
+    {
+      "from": "作業中でないStatusへ戻す-3",
+      "to": "作業中でないStatusへ戻す-4",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の上限-1",
+      "to": "枠の上限-2",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の上限-2",
+      "to": "枠の上限-3",
+      "kind": "true",
+      "condition": "issue の Status が running_state の選択肢のままである"
+    },
+    {
+      "from": "枠の上限-2",
+      "to": "枠待ちからの引き渡し-1",
+      "kind": "false",
+      "condition": "NOT issue の Status が running_state の選択肢のままである"
+    },
+    {
+      "from": "枠の上限-3",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "枠待ちからの引き渡し-1",
+      "to": "枠待ちからの引き渡し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の再起動-1",
+      "to": "常駐の再起動-2",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の再起動-2",
+      "to": "常駐の再起動-3",
+      "kind": "true",
+      "condition": "continuo が常駐していて、issue が印の集合に入っている"
+    },
+    {
+      "from": "常駐の再起動-2",
+      "to": "引き継がれない再起動-1",
+      "kind": "false",
+      "condition": "NOT continuo が常駐していて、issue が印の集合に入っている"
+    },
+    {
+      "from": "常駐の再起動-3",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "引き継がれない再起動-1",
+      "to": "引き継がれない再起動-2",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は cleanup.on_states の選択肢である。issue にエージェントが書いたコメントが1件以上ある。worktree は置き場所に無い。branch は、設定の cleanup.delete_branch が真であれば無い。印は外れている。herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "利用者は issue のコメントで作業の内容を読む。",
+        "利用者は issue に紐づく pull request の変更をレビューする。",
+        "利用者はボードの issue の Status に cleanup.on_states の選択肢を書く。",
+        "INCLUDE USE CASE worktreeとbranchを片付ける",
+        "システムは VALIDATES THAT worktree が置き場所に無い。",
+        "システムは利用者に片付けの結果をログで応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "cycle",
+      "terminal_flow": "片付けの見送り",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は cleanup.on_states の選択肢のままである。次の巡回が片付けをやり直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "片付けの見送り-1",
+        "片付けの見送り-2",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "利用者は issue のコメントで作業の内容を読む。",
+        "利用者は issue に紐づく pull request の変更をレビューする。",
+        "利用者はボードの issue の Status に cleanup.on_states の選択肢を書く。",
+        "INCLUDE USE CASE worktreeとbranchを片付ける",
+        "システムは VALIDATES THAT worktree が置き場所に無い。",
+        "CONDITION: NOT worktree が置き場所に無い",
+        "システムは次の巡回の開始を待つ。",
+        "RESUME STEP 9",
+        "INCLUDE USE CASE worktreeとbranchを片付ける"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "cycle",
+      "terminal_flow": "判断の依頼",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。worktree と branch は残っている。前の run の herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "判断の依頼-1",
+        "判断の依頼-2",
+        "判断の依頼-3",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: エージェントが応答の最後に判断を仰ぐ表明を書いた場合",
+        "INCLUDE USE CASE 人間に判断を渡す",
+        "システムは VALIDATES THAT issue の Status が dispatch_state の選択肢である。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "回答を待たずに終わる",
+      "postcondition": "issue の Status は dispatch_state の選択肢ではない。システムは同じ issue にもう一度着手していない。herdr の pane と印と worktree の状態は、人間に判断を渡す が止まった代替フローの事後条件のとおりである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "判断の依頼-1",
+        "判断の依頼-2",
+        "回答を待たずに終わる-1",
+        "回答を待たずに終わる-2"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: エージェントが応答の最後に判断を仰ぐ表明を書いた場合",
+        "INCLUDE USE CASE 人間に判断を渡す",
+        "システムは VALIDATES THAT issue の Status が dispatch_state の選択肢である。",
+        "CONDITION: NOT issue の Status が dispatch_state の選択肢である",
+        "システムは同じ issue にもう一度着手しない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "cycle",
+      "terminal_flow": "システムによる引き渡し",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に人間へ引き渡す通知のコメントが1件ある。worktree と branch は残っている。前の run の herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "システムによる引き渡し-1",
+        "システムによる引き渡し-2",
+        "システムによる引き渡し-3",
+        "システムによる引き渡し-4",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: システムが run を打ち切って issue の Status に failure_state の選択肢を書いた場合",
+        "利用者は issue のコメントで引き渡しの理由を読む。",
+        "利用者は引き渡しの理由に書かれた原因を直す。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "人間が引き取る",
+      "postcondition": "issue の Status は、利用者が dispatch_state の選択肢を書いた場合は running_state の選択肢であり、そのほかの場合は利用者が書いた選択肢である。herdr の pane は閉じていない。印は残っている。worktree は残っている。run の turn 数は数え直されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "人間が引き取る-1",
+        "人間が引き取る-2",
+        "人間が引き取る-3",
+        "人間が引き取る-4",
+        "人間が引き取る-5",
+        "人間が引き取る-6",
+        "人間が引き取る-7",
+        "人間が引き取る-8",
+        "人間が引き取る-9",
+        "人間が引き取る-11",
+        "人間が引き取る-12",
+        "人間が引き取る-13",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合",
+        "システムは run に direct chat の印を立てる。",
+        "システムはエージェントへの turn の送信を止める。",
+        "利用者は herdr の pane でエージェントに直接指示する。",
+        "利用者はボードの issue の Status に direct_chat_state 以外の選択肢を書く。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは VALIDATES THAT 利用者が書いた Status が active_states に入っている。",
+        "IF 利用者が書いた Status が dispatch_state の選択肢である THEN",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは issue に hold のコメントを書く。",
+        "システムは同じ pane のエージェントに継続の指示を送る。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "cycle",
+      "terminal_flow": "人間が引き取る",
+      "postcondition": "issue の Status は、利用者が dispatch_state の選択肢を書いた場合は running_state の選択肢であり、そのほかの場合は利用者が書いた選択肢である。herdr の pane は閉じていない。印は残っている。worktree は残っている。run の turn 数は数え直されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "人間が引き取る-1",
+        "人間が引き取る-2",
+        "人間が引き取る-3",
+        "人間が引き取る-4",
+        "人間が引き取る-5",
+        "人間が引き取る-6",
+        "人間が引き取る-7",
+        "人間が引き取る-11",
+        "人間が引き取る-12",
+        "人間が引き取る-13",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合",
+        "システムは run に direct chat の印を立てる。",
+        "システムはエージェントへの turn の送信を止める。",
+        "利用者は herdr の pane でエージェントに直接指示する。",
+        "利用者はボードの issue の Status に direct_chat_state 以外の選択肢を書く。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは VALIDATES THAT 利用者が書いた Status が active_states に入っている。",
+        "IF 利用者が書いた Status が dispatch_state の選択肢である THEN",
+        "CONDITION: NOT 利用者が書いた Status が dispatch_state の選択肢である",
+        "システムは issue に hold のコメントを書く。",
+        "システムは同じ pane のエージェントに継続の指示を送る。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "作業中でないStatusへ戻す",
+      "postcondition": "issue の Status は利用者が書いた選択肢である。run の direct chat の印は下りている。システムは hold のコメントを書いていない。herdr の pane は閉じている。印は外れている。worktree は、利用者が書いた Status が cleanup.on_states に入っていなければ残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "人間が引き取る-1",
+        "人間が引き取る-2",
+        "人間が引き取る-3",
+        "人間が引き取る-4",
+        "人間が引き取る-5",
+        "人間が引き取る-6",
+        "作業中でないStatusへ戻す-1",
+        "作業中でないStatusへ戻す-2",
+        "作業中でないStatusへ戻す-3",
+        "作業中でないStatusへ戻す-4"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合",
+        "システムは run に direct chat の印を立てる。",
+        "システムはエージェントへの turn の送信を止める。",
+        "利用者は herdr の pane でエージェントに直接指示する。",
+        "利用者はボードの issue の Status に direct_chat_state 以外の選択肢を書く。",
+        "システムは run の direct chat の印を下ろす。",
+        "システムは VALIDATES THAT 利用者が書いた Status が active_states に入っている。",
+        "CONDITION: NOT 利用者が書いた Status が active_states に入っている",
+        "システムは同じ pane のエージェントに継続の指示を送らない。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "cycle",
+      "terminal_flow": "枠の上限",
+      "postcondition": "run は続いている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "枠の上限-1",
+        "枠の上限-2",
+        "枠の上限-3",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: 走行中の run が枠を使い切った場合",
+        "INCLUDE USE CASE レートリミットで待って再開する",
+        "システムは VALIDATES THAT issue の Status が running_state の選択肢のままである。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "枠待ちからの引き渡し",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に人間へ引き渡す通知のコメントが1件ある。印は外れている。worktree は残っている。利用者が原因を直して Status を dispatch_state の選択肢へ戻すまで、システムは同じ issue に着手しない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "枠の上限-1",
+        "枠の上限-2",
+        "枠待ちからの引き渡し-1",
+        "枠待ちからの引き渡し-2"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: 走行中の run が枠を使い切った場合",
+        "INCLUDE USE CASE レートリミットで待って再開する",
+        "システムは VALIDATES THAT issue の Status が running_state の選択肢のままである。",
+        "CONDITION: NOT issue の Status が running_state の選択肢のままである",
+        "利用者は issue のコメントで引き渡しの理由を読む。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "cycle",
+      "terminal_flow": "常駐の再起動",
+      "postcondition": "引き継いだ issue は印の集合に入っている。issue の Status は running_state の選択肢のままである。worktree は残っている。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "常駐の再起動-1",
+        "常駐の再起動-2",
+        "常駐の再起動-3",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: continuo のプロセスが落ちて利用者が continuo を起動し直す場合",
+        "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+        "システムは VALIDATES THAT continuo が常駐していて、issue が印の集合に入っている。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "引き継がれない再起動",
+      "postcondition": "システムは前回の run を引き継いでいない。continuo が常駐しているかどうかと、herdr の pane と worktree と issue の Status の状態は、再起動して実行中のissueを引き継ぐ が止まった代替フローの事後条件のとおりである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "常駐の再起動-1",
+        "常駐の再起動-2",
+        "引き継がれない再起動-1",
+        "引き継がれない再起動-2"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: continuo のプロセスが落ちて利用者が continuo を起動し直す場合",
+        "INCLUDE USE CASE 再起動して実行中のissueを引き継ぐ",
+        "システムは VALIDATES THAT continuo が常駐していて、issue が印の集合に入っている。",
+        "CONDITION: NOT continuo が常駐していて、issue が印の集合に入っている",
+        "システムは前回の run に継続の指示を送らない。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 48,
+    "nodes_covered": 48,
+    "edges_total": 54,
+    "edges_covered": 54
+  }
+}

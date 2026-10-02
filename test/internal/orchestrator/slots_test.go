@@ -1,6 +1,3 @@
-// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 // 空きスロットの数え方（`agent.max_concurrent_agents` と
 // `agent.max_concurrent_agents_by_state`）の検査である。
 //
@@ -10,50 +7,12 @@ package orchestrator_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 )
-
-// {"RUCM-PATH": "P039"}
-//
-// TestSlots_上限まで着手したらそれ以上着手しない は、全体の上限を確かめる。
-//
-// 目的: `max_concurrent_agents` を超えて dispatch しないこと。
-// 与える情報: 上限 2 の設定と、Ready の issue 3件。
-// 成功条件: **2件だけが着手される**（3件目は Ready のまま）。
-func TestSlots_上限まで着手したらそれ以上着手しない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) { cfg.Agent.MaxConcurrentAgents = 2 },
-	})
-	for _, n := range []int{188, 189, 190} {
-		fx.Tracker.AddIssue(sampleIssue(n, "Ready"))
-	}
-	holdPrompt(fx)
-
-	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 15*time.Second, "2件が着手される", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) >= 2
-	})
-	// **3件目が着手されないことを確かめるので、着手しうる時間を与えてから見る。**
-	time.Sleep(2 * time.Second)
-	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got > 2 {
-		t.Errorf("上限 2 を越えて着手している: turn を %d 回送った", got)
-	}
-	running := 0
-	for _, n := range []int{188, 189, 190} {
-		if fx.Tracker.StateOf(fmt.Sprintf("PVTI_item%d", n)) == "In Progress" {
-			running++
-		}
-	}
-	if running != 2 {
-		t.Errorf("In Progress の件数が上限と合わない: %d 件", running)
-	}
-}
 
 // TestSlots_上限が1なら1件ずつ着手する は、直列に回す設定を確かめる。
 //

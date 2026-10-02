@@ -935,6 +935,12 @@ main() {
 	detect_platform
 	say "見分けました: $GOOS / $GOARCH"
 
+	# **取ってくる道具が無いなら、ここで理由を出して止まる。**
+	# fetch と download も同じ理由で die するが、resolve_version は標準エラーを捨てて
+	# 呼ぶので、その文は画面に届かない（版を指定しない実行では、代わりに
+	# 「まだ配布していません」と、事実と違う案内が出ていた）。
+	have curl || have wget || die "curl も wget もありません。どちらかを入れてください"
+
 	resolve_version
 	# **置き換える前に、いま入っているものへ版を訊く。**あとでは分からない。
 	detect_installed_version

@@ -3,427 +3,322 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "16bfaf0436678fabb32d3f8a94ccdfa92d8a981e2e3cc828299a18e4eee75e86"
+    "rucm_block_sha256": "c8e6f391673b01259ae59bbf9f2c7ad60491098169d6165bcb144a625c11cee2"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。"
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。"
     },
-    "知らない表明": {
+    "取り直しの失敗": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           3
         ]
       },
-      "postcondition": "issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。次の turn の本文に表明を促す1文がある。"
+      "postcondition": "控えてある issue の写しの Status は active_states の選択肢である。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。"
     },
     "完了済みのissue": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは Status を巻き戻していない。印は外れている。取り直した Status が cleanup.on_states に入っている場合、システムは worktree と branch の片付けを済ませている。"
+    },
+    "作業中のまま": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           5
         ]
       },
-      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。"
+      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。"
     },
-    "コメントの取り戻し": {
+    "turnの終わりの書き戻し": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          12
+          6
         ]
       },
-      "postcondition": "issue にエージェントが書いたコメントが1件以上ある。issue の Status は引き渡しの選択肢のままである。Claude Code を閉じた記録は保留したままで、基本フローに戻ってから pane を閉じる段で書く。worktree は残っている。"
+      "postcondition": "エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。worktree は残っている。"
     },
-    "コメントの取り戻しの失敗": {
+    "turnの終わりの知らないStatus": {
       "rfs": {
-        "flow": "コメントの取り戻し",
+        "flow": "BASIC FLOW",
         "steps": [
           7
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。"
+      "postcondition": "issue に止めた理由のコメントが1件ある。システムは動かされた Status を巻き戻していない。印は外れている。"
     },
-    "知らないStatus": {
-      "when": "issue の Status が設定に名前の無い選択肢へ動く場合",
+    "自動化の書き戻し": {
+      "when": "turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
           "steps": [
-            2
+            1
           ]
         }
       ],
-      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。印は外れている。"
+      "postcondition": "herdr の pane は閉じていない。印は残っている。worktree は残っている。Status を戻す先の選択肢へ書き換えた場合、issue に Status を動かした記録のコメントが1件ある。"
     },
-    "自動化の書き戻し": {
+    "知らないStatus": {
+      "when": "turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            1
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。システムは worktree を片付けていない。システムは成果の報告を確かめていない。"
+    },
+    "turnの猶予": {
       "rfs": {
         "flow": "知らないStatus",
         "steps": [
           1
         ]
       },
-      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。"
+      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは増えていない。"
     },
-    "turnの猶予": {
-      "rfs": {
-        "flow": "知らないStatus",
-        "steps": [
-          2
-        ]
-      },
-      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
-    },
-    "レビューの完了": {
-      "when": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
+    "巡回が先に見つけた引き渡し": {
+      "when": "turn が動いている最中の巡回で、取り直した issue の Status が引き渡しの選択肢であり、システムが最後に書いた Status でもボードの自動化が書いた Status でもない場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
           "steps": [
-            17
+            1
           ]
         }
       ],
-      "postcondition": "issue の Status は terminal_states の選択肢である。worktree は置き場所に無い。branch は無い。印は外れている。"
+      "postcondition": "issue の Status は引き渡しの選択肢のままである。herdr の pane は閉じている。印は外れている。worktree は残っている。システムは成果の報告を確かめていない。システムはバックグラウンド処理の申告を待っていない。"
+    },
+    "レビューの完了": {
+      "when": "利用者が判断の回答の代わりに issue の Status を cleanup.on_states の選択肢へ動かす場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            10
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は cleanup.on_states の選択肢である。印は外れている。失うものが残っていない worktree と branch は消えている。"
     }
   },
   "nodes": [
     {
       "id": "BASIC FLOW-1",
-      "type": "action",
+      "type": "include",
       "flow": "BASIC FLOW",
       "step": 1,
-      "statement": "エージェントはシステムに表明の1行を含む最終応答を返す。"
+      "statement": "INCLUDE USE CASE 表明を読んでStatusを動かす",
+      "include": "表明を読んでStatusを動かす"
     },
     {
       "id": "BASIC FLOW-2",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは transcript から表明の行を読む。"
+      "statement": "システムは GitHub Projects v2 に issue の取り直しを要求する。"
     },
     {
       "id": "BASIC FLOW-3",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは VALIDATES THAT 表明の値が status_signal_map にある。"
+      "statement": "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。"
     },
     {
       "id": "BASIC FLOW-4",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムはボードの issue の Status を ID 指定で取り直す。"
+      "statement": "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。"
     },
     {
       "id": "BASIC FLOW-5",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。"
+      "statement": "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "IF 表明の値が blocked である THEN"
+      "statement": "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+      "statement": "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムはバックグラウンド処理の申告が空になるのを待つ。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "action",
+      "type": "include",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムはボードの issue の Status に review の遷移先の選択肢を書く。"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "利用者はボードの issue のコメントを読む。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは Status を動かした記録を issue にコメントする。"
-    },
-    {
-      "id": "BASIC FLOW-12",
-      "type": "condition",
-      "flow": "BASIC FLOW",
-      "step": 12,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
-    },
-    {
-      "id": "BASIC FLOW-13",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 13,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
-    },
-    {
-      "id": "BASIC FLOW-14",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 14,
-      "statement": "システムは herdr の pane を閉じる。"
-    },
-    {
-      "id": "BASIC FLOW-15",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 15,
-      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
-    },
-    {
-      "id": "BASIC FLOW-16",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 16,
-      "statement": "システムは印を外す。"
-    },
-    {
-      "id": "BASIC FLOW-17",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 17,
-      "statement": "利用者はボードの issue のコメントを読む。"
-    },
-    {
-      "id": "BASIC FLOW-18",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 18,
       "statement": "利用者はボードの issue に判断の回答をコメントする。"
     },
     {
-      "id": "BASIC FLOW-19",
+      "id": "BASIC FLOW-12",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 19,
+      "step": 12,
       "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
     },
     {
-      "id": "知らない表明-1",
+      "id": "取り直しの失敗-1",
       "type": "action",
-      "flow": "知らない表明",
+      "flow": "取り直しの失敗",
       "step": 1,
-      "statement": "システムはボードの issue の Status を動かさない。"
+      "statement": "システムは issue を取り直せないことをログに出す。"
     },
     {
-      "id": "知らない表明-2",
+      "id": "取り直しの失敗-2",
       "type": "action",
-      "flow": "知らない表明",
+      "flow": "取り直しの失敗",
       "step": 2,
-      "statement": "システムは次の turn の継続の指示に表明を促す1文を差し込む。"
+      "statement": "システムは控えてある issue の写しの Status で run の行き先を決める。"
     },
     {
-      "id": "知らない表明-3",
-      "type": "abort",
-      "flow": "知らない表明",
+      "id": "取り直しの失敗-3",
+      "type": "action",
+      "flow": "取り直しの失敗",
       "step": 3,
-      "statement": "ABORT"
+      "statement": "システムはエージェントに継続の指示を送る。"
+    },
+    {
+      "id": "取り直しの失敗-4",
+      "type": "resume",
+      "flow": "取り直しの失敗",
+      "step": 4,
+      "statement": "RESUME STEP 1"
     },
     {
       "id": "完了済みのissue-1",
       "type": "action",
       "flow": "完了済みのissue",
       "step": 1,
-      "statement": "システムはボードの issue の Status を書かない。"
+      "statement": "システムはバックグラウンド処理の申告が空になるのを待つ。"
     },
     {
       "id": "完了済みのissue-2",
-      "type": "action",
+      "type": "include",
       "flow": "完了済みのissue",
       "step": 2,
-      "statement": "システムはエージェントが動かした Status をそのまま残す。"
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
       "id": "完了済みのissue-3",
-      "type": "action",
-      "flow": "完了済みのissue",
-      "step": 3,
-      "statement": "システムは herdr の pane を閉じる。"
-    },
-    {
-      "id": "完了済みのissue-4",
-      "type": "action",
-      "flow": "完了済みのissue",
-      "step": 4,
-      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
-    },
-    {
-      "id": "完了済みのissue-5",
-      "type": "action",
-      "flow": "完了済みのissue",
-      "step": 5,
-      "statement": "システムは印を外す。"
-    },
-    {
-      "id": "完了済みのissue-6",
       "type": "abort",
       "flow": "完了済みのissue",
-      "step": 6,
+      "step": 3,
       "statement": "ABORT"
     },
     {
-      "id": "コメントの取り戻し-1",
+      "id": "作業中のまま-1",
       "type": "action",
-      "flow": "コメントの取り戻し",
+      "flow": "作業中のまま",
       "step": 1,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "システムは run が外から動かされた記録を消す。"
     },
     {
-      "id": "コメントの取り戻し-2",
+      "id": "作業中のまま-2",
       "type": "action",
-      "flow": "コメントの取り戻し",
+      "flow": "作業中のまま",
       "step": 2,
-      "statement": "システムは Claude Code を閉じた記録を書かずに保留する。"
+      "statement": "システムはエージェントに継続の指示を送る。"
     },
     {
-      "id": "コメントの取り戻し-3",
-      "type": "action",
-      "flow": "コメントの取り戻し",
-      "step": 3,
-      "statement": "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。"
-    },
-    {
-      "id": "コメントの取り戻し-4",
-      "type": "action",
-      "flow": "コメントの取り戻し",
-      "step": 4,
-      "statement": "システムは pane でエージェントのセッションをセッション UUID で復帰させる。"
-    },
-    {
-      "id": "コメントの取り戻し-5",
-      "type": "action",
-      "flow": "コメントの取り戻し",
-      "step": 5,
-      "statement": "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。"
-    },
-    {
-      "id": "コメントの取り戻し-6",
-      "type": "action",
-      "flow": "コメントの取り戻し",
-      "step": 6,
-      "statement": "システムは issue のコメントを読み直す。"
-    },
-    {
-      "id": "コメントの取り戻し-7",
-      "type": "condition",
-      "flow": "コメントの取り戻し",
-      "step": 7,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
-    },
-    {
-      "id": "コメントの取り戻し-8",
+      "id": "作業中のまま-3",
       "type": "resume",
-      "flow": "コメントの取り戻し",
-      "step": 8,
-      "statement": "RESUME STEP 13"
-    },
-    {
-      "id": "コメントの取り戻しの失敗-1",
-      "type": "action",
-      "flow": "コメントの取り戻しの失敗",
-      "step": 1,
-      "statement": "システムは herdr の pane を閉じる。"
-    },
-    {
-      "id": "コメントの取り戻しの失敗-2",
-      "type": "action",
-      "flow": "コメントの取り戻しの失敗",
-      "step": 2,
-      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
-    },
-    {
-      "id": "コメントの取り戻しの失敗-3",
-      "type": "action",
-      "flow": "コメントの取り戻しの失敗",
+      "flow": "作業中のまま",
       "step": 3,
-      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+      "statement": "RESUME STEP 1"
     },
     {
-      "id": "コメントの取り戻しの失敗-4",
+      "id": "turnの終わりの書き戻し-1",
       "type": "action",
-      "flow": "コメントの取り戻しの失敗",
-      "step": 4,
-      "statement": "システムは issue に引き渡しの通知を1件コメントする。"
-    },
-    {
-      "id": "コメントの取り戻しの失敗-5",
-      "type": "action",
-      "flow": "コメントの取り戻しの失敗",
-      "step": 5,
-      "statement": "システムは印を外す。"
-    },
-    {
-      "id": "コメントの取り戻しの失敗-6",
-      "type": "abort",
-      "flow": "コメントの取り戻しの失敗",
-      "step": 6,
-      "statement": "ABORT"
-    },
-    {
-      "id": "知らないStatus-1",
-      "type": "condition",
-      "flow": "知らないStatus",
+      "flow": "turnの終わりの書き戻し",
       "step": 1,
-      "statement": "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。"
+      "statement": "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。"
     },
     {
-      "id": "知らないStatus-2",
-      "type": "condition",
-      "flow": "知らないStatus",
-      "step": 2,
-      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
-    },
-    {
-      "id": "知らないStatus-3",
+      "id": "turnの終わりの書き戻し-2",
       "type": "action",
-      "flow": "知らないStatus",
+      "flow": "turnの終わりの書き戻し",
+      "step": 2,
+      "statement": "システムはエージェントに継続の指示を送る。"
+    },
+    {
+      "id": "turnの終わりの書き戻し-3",
+      "type": "resume",
+      "flow": "turnの終わりの書き戻し",
       "step": 3,
+      "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "turnの終わりの知らないStatus-1",
+      "type": "action",
+      "flow": "turnの終わりの知らないStatus",
+      "step": 1,
       "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
     },
     {
-      "id": "知らないStatus-4",
+      "id": "turnの終わりの知らないStatus-2",
       "type": "action",
-      "flow": "知らないStatus",
-      "step": 4,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
+      "flow": "turnの終わりの知らないStatus",
+      "step": 2,
+      "statement": "システムはバックグラウンド処理の申告が空になるのを待つ。"
     },
     {
-      "id": "知らないStatus-5",
-      "type": "action",
-      "flow": "知らないStatus",
-      "step": 5,
-      "statement": "システムは herdr の pane を閉じる。"
+      "id": "turnの終わりの知らないStatus-3",
+      "type": "include",
+      "flow": "turnの終わりの知らないStatus",
+      "step": 3,
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
     },
     {
-      "id": "知らないStatus-6",
-      "type": "action",
-      "flow": "知らないStatus",
-      "step": 6,
-      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
-    },
-    {
-      "id": "知らないStatus-7",
-      "type": "action",
-      "flow": "知らないStatus",
-      "step": 7,
-      "statement": "システムは印を外す。"
-    },
-    {
-      "id": "知らないStatus-8",
+      "id": "turnの終わりの知らないStatus-4",
       "type": "abort",
-      "flow": "知らないStatus",
-      "step": 8,
+      "flow": "turnの終わりの知らないStatus",
+      "step": 4,
       "statement": "ABORT"
     },
     {
@@ -431,20 +326,90 @@
       "type": "action",
       "flow": "自動化の書き戻し",
       "step": 1,
-      "statement": "システムはボードの issue の Status に戻す先の選択肢を書く。"
+      "statement": "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。"
     },
     {
       "id": "自動化の書き戻し-2",
-      "type": "action",
+      "type": "condition",
       "flow": "自動化の書き戻し",
       "step": 2,
-      "statement": "システムは Status を動かした記録を issue にコメントする。"
+      "statement": "IF GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた THEN"
     },
     {
       "id": "自動化の書き戻し-3",
-      "type": "abort",
+      "type": "action",
       "flow": "自動化の書き戻し",
       "step": 3,
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
+    },
+    {
+      "id": "自動化の書き戻し-5",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 5,
+      "statement": "システムは戻せなかった回数を1つ増やす。"
+    },
+    {
+      "id": "自動化の書き戻し-7",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 7,
+      "statement": "システムは worker を止めない。"
+    },
+    {
+      "id": "自動化の書き戻し-8",
+      "type": "resume",
+      "flow": "自動化の書き戻し",
+      "step": 8,
+      "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "知らないStatus-1",
+      "type": "condition",
+      "flow": "知らないStatus",
+      "step": 1,
+      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
+    },
+    {
+      "id": "知らないStatus-2",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 2,
+      "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
+    },
+    {
+      "id": "知らないStatus-3",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 3,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "知らないStatus-4",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 4,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "知らないStatus-5",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 5,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "知らないStatus-6",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 6,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "知らないStatus-7",
+      "type": "abort",
+      "flow": "知らないStatus",
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -452,28 +417,71 @@
       "type": "action",
       "flow": "turnの猶予",
       "step": 1,
-      "statement": "システムは worker を止めずに turn の終わりを待つ。"
+      "statement": "システムは worker を止めない。"
     },
     {
       "id": "turnの猶予-2",
       "type": "action",
       "flow": "turnの猶予",
       "step": 2,
-      "statement": "システムは turn の終わりを待っていることを記録に残す。"
+      "statement": "システムは turn の終わりを待っていることをログに出す。"
     },
     {
       "id": "turnの猶予-3",
-      "type": "abort",
+      "type": "action",
       "flow": "turnの猶予",
       "step": 3,
+      "statement": "システムは次の巡回まで待つ。"
+    },
+    {
+      "id": "turnの猶予-4",
+      "type": "resume",
+      "flow": "turnの猶予",
+      "step": 4,
+      "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "巡回が先に見つけた引き渡し-1",
+      "type": "action",
+      "flow": "巡回が先に見つけた引き渡し",
+      "step": 1,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "巡回が先に見つけた引き渡し-2",
+      "type": "action",
+      "flow": "巡回が先に見つけた引き渡し",
+      "step": 2,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "巡回が先に見つけた引き渡し-3",
+      "type": "action",
+      "flow": "巡回が先に見つけた引き渡し",
+      "step": 3,
+      "statement": "システムは Claude Code を閉じた記録を issue に1件コメントする。"
+    },
+    {
+      "id": "巡回が先に見つけた引き渡し-4",
+      "type": "action",
+      "flow": "巡回が先に見つけた引き渡し",
+      "step": 4,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "巡回が先に見つけた引き渡し-5",
+      "type": "abort",
+      "flow": "巡回が先に見つけた引き渡し",
+      "step": 5,
       "statement": "ABORT"
     },
     {
       "id": "レビューの完了-1",
-      "type": "action",
+      "type": "include",
       "flow": "レビューの完了",
       "step": 1,
-      "statement": "システムは worktree と branch を片付ける。"
+      "statement": "INCLUDE USE CASE worktreeとbranchを片付ける",
+      "include": "worktreeとbranchを片付ける"
     },
     {
       "id": "レビューの完了-2",
@@ -490,66 +498,108 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-1",
+      "to": "自動化の書き戻し-1",
+      "kind": "global",
+      "condition": "turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "知らないStatus-1",
+      "kind": "global",
+      "condition": "turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "巡回が先に見つけた引き渡し-1",
+      "kind": "global",
+      "condition": "turn が動いている最中の巡回で、取り直した issue の Status が引き渡しの選択肢であり、システムが最後に書いた Status でもボードの自動化が書いた Status でもない場合"
+    },
+    {
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-2",
-      "to": "知らないStatus-1",
-      "kind": "global",
-      "condition": "issue の Status が設定に名前の無い選択肢へ動く場合"
-    },
-    {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
       "kind": "true",
-      "condition": "表明の値が status_signal_map にある"
+      "condition": "GitHub Projects v2 が issue の取り直しに応答する"
     },
     {
       "from": "BASIC FLOW-3",
-      "to": "知らない表明-1",
+      "to": "取り直しの失敗-1",
       "kind": "false",
-      "condition": "NOT 表明の値が status_signal_map にある"
+      "condition": "NOT GitHub Projects v2 が issue の取り直しに応答する"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-6",
       "kind": "true",
       "condition": "取り直した Status が terminal_states に入っていない"
     },
     {
-      "from": "BASIC FLOW-5",
+      "from": "BASIC FLOW-4",
       "to": "完了済みのissue-1",
       "kind": "false",
       "condition": "NOT 取り直した Status が terminal_states に入っていない"
     },
     {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "取り直した Status が active_states に入っていない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "作業中のまま-1",
+      "kind": "false",
+      "condition": "NOT 取り直した Status が active_states に入っていない"
+    },
+    {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
       "kind": "true",
-      "condition": "表明の値が blocked である"
+      "condition": "取り直した Status が書き戻しの対象ではない"
     },
     {
       "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-9",
+      "to": "turnの終わりの書き戻し-1",
       "kind": "false",
-      "condition": "NOT 表明の値が blocked である"
+      "condition": "NOT 取り直した Status が書き戻しの対象ではない"
     },
     {
       "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-11",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "取り直した Status が設定に名前のある選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "turnの終わりの知らないStatus-1",
+      "kind": "false",
+      "condition": "NOT 取り直した Status が設定に名前のある選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "レビューの完了-1",
+      "kind": "global",
+      "condition": "利用者が判断の回答の代わりに issue の Status を cleanup.on_states の選択肢へ動かす場合"
     },
     {
       "from": "BASIC FLOW-11",
@@ -557,62 +607,24 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-12",
-      "to": "BASIC FLOW-13",
-      "kind": "true",
-      "condition": "issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "コメントの取り戻し-1",
-      "kind": "false",
-      "condition": "NOT issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "BASIC FLOW-13",
-      "to": "BASIC FLOW-14",
+      "from": "取り直しの失敗-1",
+      "to": "取り直しの失敗-2",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-14",
-      "to": "BASIC FLOW-15",
+      "from": "取り直しの失敗-2",
+      "to": "取り直しの失敗-3",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-15",
-      "to": "BASIC FLOW-16",
+      "from": "取り直しの失敗-3",
+      "to": "取り直しの失敗-4",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-16",
-      "to": "BASIC FLOW-17",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-17",
-      "to": "BASIC FLOW-18",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-17",
-      "to": "レビューの完了-1",
-      "kind": "global",
-      "condition": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合"
-    },
-    {
-      "from": "BASIC FLOW-18",
-      "to": "BASIC FLOW-19",
-      "kind": "seq"
-    },
-    {
-      "from": "知らない表明-1",
-      "to": "知らない表明-2",
-      "kind": "seq"
-    },
-    {
-      "from": "知らない表明-2",
-      "to": "知らない表明-3",
-      "kind": "seq"
+      "from": "取り直しの失敗-4",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
     },
     {
       "from": "完了済みのissue-1",
@@ -625,115 +637,103 @@
       "kind": "seq"
     },
     {
-      "from": "完了済みのissue-3",
-      "to": "完了済みのissue-4",
+      "from": "作業中のまま-1",
+      "to": "作業中のまま-2",
       "kind": "seq"
     },
     {
-      "from": "完了済みのissue-4",
-      "to": "完了済みのissue-5",
+      "from": "作業中のまま-2",
+      "to": "作業中のまま-3",
       "kind": "seq"
     },
     {
-      "from": "完了済みのissue-5",
-      "to": "完了済みのissue-6",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-1",
-      "to": "コメントの取り戻し-2",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-2",
-      "to": "コメントの取り戻し-3",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-3",
-      "to": "コメントの取り戻し-4",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-4",
-      "to": "コメントの取り戻し-5",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-5",
-      "to": "コメントの取り戻し-6",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-6",
-      "to": "コメントの取り戻し-7",
-      "kind": "seq"
-    },
-    {
-      "from": "コメントの取り戻し-7",
-      "to": "コメントの取り戻し-8",
-      "kind": "true",
-      "condition": "issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "コメントの取り戻し-7",
-      "to": "コメントの取り戻しの失敗-1",
-      "kind": "false",
-      "condition": "NOT issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "コメントの取り戻し-8",
-      "to": "BASIC FLOW-13",
+      "from": "作業中のまま-3",
+      "to": "BASIC FLOW-1",
       "kind": "resume"
     },
     {
-      "from": "コメントの取り戻しの失敗-1",
-      "to": "コメントの取り戻しの失敗-2",
+      "from": "turnの終わりの書き戻し-1",
+      "to": "turnの終わりの書き戻し-2",
       "kind": "seq"
     },
     {
-      "from": "コメントの取り戻しの失敗-2",
-      "to": "コメントの取り戻しの失敗-3",
+      "from": "turnの終わりの書き戻し-2",
+      "to": "turnの終わりの書き戻し-3",
       "kind": "seq"
     },
     {
-      "from": "コメントの取り戻しの失敗-3",
-      "to": "コメントの取り戻しの失敗-4",
+      "from": "turnの終わりの書き戻し-3",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
+    },
+    {
+      "from": "turnの終わりの知らないStatus-1",
+      "to": "turnの終わりの知らないStatus-2",
       "kind": "seq"
     },
     {
-      "from": "コメントの取り戻しの失敗-4",
-      "to": "コメントの取り戻しの失敗-5",
+      "from": "turnの終わりの知らないStatus-2",
+      "to": "turnの終わりの知らないStatus-3",
       "kind": "seq"
     },
     {
-      "from": "コメントの取り戻しの失敗-5",
-      "to": "コメントの取り戻しの失敗-6",
+      "from": "turnの終わりの知らないStatus-3",
+      "to": "turnの終わりの知らないStatus-4",
       "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-1",
+      "to": "自動化の書き戻し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-2",
+      "to": "自動化の書き戻し-3",
+      "kind": "true",
+      "condition": "GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた"
+    },
+    {
+      "from": "自動化の書き戻し-2",
+      "to": "自動化の書き戻し-5",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた"
+    },
+    {
+      "from": "自動化の書き戻し-3",
+      "to": "自動化の書き戻し-7",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-5",
+      "to": "自動化の書き戻し-7",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-7",
+      "to": "自動化の書き戻し-8",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-8",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
     },
     {
       "from": "知らないStatus-1",
       "to": "知らないStatus-2",
       "kind": "true",
-      "condition": "その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している"
+      "condition": "turn の終わりを待つ猶予が残っていない"
     },
     {
       "from": "知らないStatus-1",
-      "to": "自動化の書き戻し-1",
+      "to": "turnの猶予-1",
       "kind": "false",
-      "condition": "NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している"
+      "condition": "NOT turn の終わりを待つ猶予が残っていない"
     },
     {
       "from": "知らないStatus-2",
       "to": "知らないStatus-3",
-      "kind": "true",
-      "condition": "turn の終わりを待つ猶予が残っていない"
-    },
-    {
-      "from": "知らないStatus-2",
-      "to": "turnの猶予-1",
-      "kind": "false",
-      "condition": "NOT turn の終わりを待つ猶予が残っていない"
+      "kind": "seq"
     },
     {
       "from": "知らないStatus-3",
@@ -756,21 +756,6 @@
       "kind": "seq"
     },
     {
-      "from": "知らないStatus-7",
-      "to": "知らないStatus-8",
-      "kind": "seq"
-    },
-    {
-      "from": "自動化の書き戻し-1",
-      "to": "自動化の書き戻し-2",
-      "kind": "seq"
-    },
-    {
-      "from": "自動化の書き戻し-2",
-      "to": "自動化の書き戻し-3",
-      "kind": "seq"
-    },
-    {
       "from": "turnの猶予-1",
       "to": "turnの猶予-2",
       "kind": "seq"
@@ -778,6 +763,36 @@
     {
       "from": "turnの猶予-2",
       "to": "turnの猶予-3",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-3",
+      "to": "turnの猶予-4",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-4",
+      "to": "知らないStatus-1",
+      "kind": "resume"
+    },
+    {
+      "from": "巡回が先に見つけた引き渡し-1",
+      "to": "巡回が先に見つけた引き渡し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "巡回が先に見つけた引き渡し-2",
+      "to": "巡回が先に見つけた引き渡し-3",
+      "kind": "seq"
+    },
+    {
+      "from": "巡回が先に見つけた引き渡し-3",
+      "to": "巡回が先に見つけた引き渡し-4",
+      "kind": "seq"
+    },
+    {
+      "from": "巡回が先に見つけた引き渡し-4",
+      "to": "巡回が先に見つけた引き渡し-5",
       "kind": "seq"
     },
     {
@@ -791,7 +806,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -800,30 +815,22 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "BASIC FLOW-12"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
+        "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。",
+        "システムはバックグラウンド処理の申告が空になるのを待つ。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "利用者はボードの issue のコメントを読む。",
         "利用者はボードの issue に判断の回答をコメントする。",
         "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
@@ -833,7 +840,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "レビューの完了",
-      "postcondition": "issue の Status は terminal_states の選択肢である。worktree は置き場所に無い。branch は無い。印は外れている。",
+      "postcondition": "issue の Status は cleanup.on_states の選択肢である。印は外れている。失うものが残っていない worktree と branch は消えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -842,41 +849,33 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
+        "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。",
+        "システムはバックグラウンド処理の申告が空になるのを待つ。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
         "利用者はボードの issue のコメントを読む。",
-        "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
-        "システムは worktree と branch を片付ける。",
+        "CONDITION: 利用者が判断の回答の代わりに issue の Status を cleanup.on_states の選択肢へ動かす場合",
+        "INCLUDE USE CASE worktreeとbranchを片付ける",
         "ABORT"
       ]
     },
     {
       "id": "P003",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "terminal": "abort",
+      "terminal_flow": "turnの終わりの知らないStatus",
+      "postcondition": "issue に止めた理由のコメントが1件ある。システムは動かされた Status を巻き戻していない。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -885,57 +884,31 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻し-8",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "turnの終わりの知らないStatus-1",
+        "turnの終わりの知らないStatus-2",
+        "turnの終わりの知らないStatus-3",
+        "turnの終わりの知らないStatus-4"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 13",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "利用者はボードの issue に判断の回答をコメントする。",
-        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
+        "システムは VALIDATES THAT 取り直した Status が設定に名前のある選択肢である。",
+        "CONDITION: NOT 取り直した Status が設定に名前のある選択肢である",
+        "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
+        "システムはバックグラウンド処理の申告が空になるのを待つ。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
+        "ABORT"
       ]
     },
     {
       "id": "P004",
-      "terminal": "abort",
-      "terminal_flow": "レビューの完了",
-      "postcondition": "issue の Status は terminal_states の選択肢である。worktree は置き場所に無い。branch は無い。印は外れている。",
+      "terminal": "cycle",
+      "terminal_flow": "turnの終わりの書き戻し",
+      "postcondition": "エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -943,453 +916,175 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻し-8",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "レビューの完了-1",
-        "レビューの完了-2"
+        "turnの終わりの書き戻し-1",
+        "turnの終わりの書き戻し-2",
+        "turnの終わりの書き戻し-3",
+        "BASIC FLOW-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 13",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
-        "システムは worktree と branch を片付ける。",
-        "ABORT"
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が書き戻しの対象ではない。",
+        "CONDITION: NOT 取り直した Status が書き戻しの対象ではない",
+        "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
+        "システムはエージェントに継続の指示を送る。",
+        "RESUME STEP 1",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
       "id": "P005",
-      "terminal": "abort",
-      "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。",
+      "terminal": "cycle",
+      "terminal_flow": "作業中のまま",
+      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻しの失敗-1",
-        "コメントの取り戻しの失敗-2",
-        "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4",
-        "コメントの取り戻しの失敗-5",
-        "コメントの取り戻しの失敗-6"
+        "作業中のまま-1",
+        "作業中のまま-2",
+        "作業中のまま-3",
+        "BASIC FLOW-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に引き渡しの通知を1件コメントする。",
-        "システムは印を外す。",
-        "ABORT"
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "CONDITION: NOT 取り直した Status が active_states に入っていない",
+        "システムは run が外から動かされた記録を消す。",
+        "システムはエージェントに継続の指示を送る。",
+        "RESUME STEP 1",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
       "id": "P006",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "terminal": "abort",
+      "terminal_flow": "完了済みのissue",
+      "postcondition": "システムは Status を巻き戻していない。印は外れている。取り直した Status が cleanup.on_states に入っている場合、システムは worktree と branch の片付けを済ませている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-9",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "完了済みのissue-1",
+        "完了済みのissue-2",
+        "完了済みのissue-3"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "CONDITION: NOT 表明の値が blocked である",
-        "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "利用者はボードの issue に判断の回答をコメントする。",
-        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+        "CONDITION: NOT 取り直した Status が terminal_states に入っていない",
+        "システムはバックグラウンド処理の申告が空になるのを待つ。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
+        "ABORT"
       ]
     },
     {
       "id": "P007",
-      "terminal": "abort",
-      "terminal_flow": "レビューの完了",
-      "postcondition": "issue の Status は terminal_states の選択肢である。worktree は置き場所に無い。branch は無い。印は外れている。",
+      "terminal": "cycle",
+      "terminal_flow": "取り直しの失敗",
+      "postcondition": "控えてある issue の写しの Status は active_states の選択肢である。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-9",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "レビューの完了-1",
-        "レビューの完了-2"
+        "取り直しの失敗-1",
+        "取り直しの失敗-2",
+        "取り直しの失敗-3",
+        "取り直しの失敗-4",
+        "BASIC FLOW-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "CONDITION: NOT 表明の値が blocked である",
-        "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
-        "システムは worktree と branch を片付ける。",
-        "ABORT"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
+        "CONDITION: NOT GitHub Projects v2 が issue の取り直しに応答する",
+        "システムは issue を取り直せないことをログに出す。",
+        "システムは控えてある issue の写しの Status で run の行き先を決める。",
+        "システムはエージェントに継続の指示を送る。",
+        "RESUME STEP 1",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
       "id": "P008",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は dispatch_state の選択肢である。issue にエージェントのコメントと、Claude Code を閉じた記録のコメントと、閉じた記録より後に書いた利用者の回答のコメントがある。herdr の pane は閉じている。worktree と branch は残っている。印は外れている。",
+      "terminal": "cycle",
+      "terminal_flow": "自動化の書き戻し",
+      "postcondition": "herdr の pane は閉じていない。印は残っている。worktree は残っている。Status を戻す先の選択肢へ書き換えた場合、issue に Status を動かした記録のコメントが1件ある。",
       "node_ids": [
         "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-9",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻し-8",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19"
+        "自動化の書き戻し-1",
+        "自動化の書き戻し-2",
+        "自動化の書き戻し-3",
+        "自動化の書き戻し-7",
+        "自動化の書き戻し-8",
+        "BASIC FLOW-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "CONDITION: NOT 表明の値が blocked である",
-        "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合",
+        "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
+        "IF GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた THEN",
         "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 13",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "利用者はボードの issue に判断の回答をコメントする。",
-        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+        "システムは worker を止めない。",
+        "RESUME STEP 1",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
       "id": "P009",
-      "terminal": "abort",
-      "terminal_flow": "レビューの完了",
-      "postcondition": "issue の Status は terminal_states の選択肢である。worktree は置き場所に無い。branch は無い。印は外れている。",
+      "terminal": "cycle",
+      "terminal_flow": "自動化の書き戻し",
+      "postcondition": "herdr の pane は閉じていない。印は残っている。worktree は残っている。Status を戻す先の選択肢へ書き換えた場合、issue に Status を動かした記録のコメントが1件ある。",
       "node_ids": [
         "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-9",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻し-8",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "レビューの完了-1",
-        "レビューの完了-2"
+        "自動化の書き戻し-1",
+        "自動化の書き戻し-2",
+        "自動化の書き戻し-5",
+        "自動化の書き戻し-7",
+        "自動化の書き戻し-8",
+        "BASIC FLOW-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "CONDITION: NOT 表明の値が blocked である",
-        "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 13",
-        "システムは workspace_hooks の after_run を実行する。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "利用者はボードの issue のコメントを読む。",
-        "CONDITION: 利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
-        "システムは worktree と branch を片付ける。",
-        "ABORT"
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が書き戻しの対象である場合",
+        "システムは GitHub Projects v2 に issue の Status への戻す先の選択肢の書き込みを要求する。",
+        "IF GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた THEN",
+        "CONDITION: NOT GitHub Projects v2 が Status を戻す先の選択肢へ書き換えた",
+        "システムは戻せなかった回数を1つ増やす。",
+        "システムは worker を止めない。",
+        "RESUME STEP 1",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす"
       ]
     },
     {
       "id": "P010",
       "terminal": "abort",
-      "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-9",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻しの失敗-1",
-        "コメントの取り戻しの失敗-2",
-        "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4",
-        "コメントの取り戻しの失敗-5",
-        "コメントの取り戻しの失敗-6"
-      ],
-      "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "IF 表明の値が blocked である THEN",
-        "CONDITION: NOT 表明の値が blocked である",
-        "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を書かずに保留する。",
-        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
-        "システムは pane でエージェントのセッションをセッション UUID で復帰させる。",
-        "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に引き渡しの通知を1件コメントする。",
-        "システムは印を外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P011",
-      "terminal": "abort",
-      "terminal_flow": "完了済みのissue",
-      "postcondition": "issue の Status は terminal_states の選択肢のままである。continuo は Status を巻き戻していない。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "完了済みのissue-1",
-        "完了済みのissue-2",
-        "完了済みのissue-3",
-        "完了済みのissue-4",
-        "完了済みのissue-5",
-        "完了済みのissue-6"
-      ],
-      "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
-        "CONDITION: NOT 取り直した Status が terminal_states に入っていない",
-        "システムはボードの issue の Status を書かない。",
-        "システムはエージェントが動かした Status をそのまま残す。",
-        "システムは herdr の pane を閉じる。",
-        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
-        "システムは印を外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P012",
-      "terminal": "abort",
-      "terminal_flow": "知らない表明",
-      "postcondition": "issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。次の turn の本文に表明を促す1文がある。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "知らない表明-1",
-        "知らない表明-2",
-        "知らない表明-3"
-      ],
-      "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "システムは VALIDATES THAT 表明の値が status_signal_map にある。",
-        "CONDITION: NOT 表明の値が status_signal_map にある",
-        "システムはボードの issue の Status を動かさない。",
-        "システムは次の turn の継続の指示に表明を促す1文を差し込む。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P013",
-      "terminal": "abort",
       "terminal_flow": "知らないStatus",
-      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントが1件増えている。worktree は残っている。印は外れている。",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。システムは worktree を片付けていない。システムは成果の報告を確かめていない。",
       "node_ids": [
         "BASIC FLOW-1",
-        "BASIC FLOW-2",
         "知らないStatus-1",
         "知らないStatus-2",
         "知らないStatus-3",
         "知らないStatus-4",
         "知らないStatus-5",
         "知らないStatus-6",
-        "知らないStatus-7",
-        "知らないStatus-8"
+        "知らないStatus-7"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
         "システムは workspace_hooks の after_run を実行する。",
@@ -1400,60 +1095,59 @@
       ]
     },
     {
-      "id": "P014",
-      "terminal": "abort",
-      "terminal_flow": "turnの猶予",
-      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
+      "id": "P011",
+      "terminal": "cycle",
+      "terminal_flow": "知らないStatus",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。システムは worktree を片付けていない。システムは成果の報告を確かめていない。",
       "node_ids": [
         "BASIC FLOW-1",
-        "BASIC FLOW-2",
         "知らないStatus-1",
-        "知らないStatus-2",
         "turnの猶予-1",
         "turnの猶予-2",
-        "turnの猶予-3"
+        "turnの猶予-3",
+        "turnの猶予-4",
+        "知らないStatus-1"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が設定に名前の無い選択肢であり、書き戻しの対象ではない場合",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
-        "システムは worker を止めずに turn の終わりを待つ。",
-        "システムは turn の終わりを待っていることを記録に残す。",
-        "ABORT"
+        "システムは worker を止めない。",
+        "システムは turn の終わりを待っていることをログに出す。",
+        "システムは次の巡回まで待つ。",
+        "RESUME STEP 1",
+        "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
       ]
     },
     {
-      "id": "P015",
+      "id": "P012",
       "terminal": "abort",
-      "terminal_flow": "自動化の書き戻し",
-      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。",
+      "terminal_flow": "巡回が先に見つけた引き渡し",
+      "postcondition": "issue の Status は引き渡しの選択肢のままである。herdr の pane は閉じている。印は外れている。worktree は残っている。システムは成果の報告を確かめていない。システムはバックグラウンド処理の申告を待っていない。",
       "node_ids": [
         "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "知らないStatus-1",
-        "自動化の書き戻し-1",
-        "自動化の書き戻し-2",
-        "自動化の書き戻し-3"
+        "巡回が先に見つけた引き渡し-1",
+        "巡回が先に見つけた引き渡し-2",
+        "巡回が先に見つけた引き渡し-3",
+        "巡回が先に見つけた引き渡し-4",
+        "巡回が先に見つけた引き渡し-5"
       ],
       "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
-        "CONDITION: NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している",
-        "システムはボードの issue の Status に戻す先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "CONDITION: turn が動いている最中の巡回で、取り直した issue の Status が引き渡しの選択肢であり、システムが最後に書いた Status でもボードの自動化が書いた Status でもない場合",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは Claude Code を閉じた記録を issue に1件コメントする。",
+        "システムは印を外す。",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 56,
-    "nodes_covered": 56,
-    "edges_total": 57,
-    "edges_covered": 57
+    "nodes_total": 53,
+    "nodes_covered": 53,
+    "edges_total": 58,
+    "edges_covered": 58
   }
 }

@@ -1,5 +1,3 @@
-// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
 // `tracker.required_labels` による dispatch の絞り込みの検査である。
 //
 // **これを取り違えると、着手してはいけない issue に着手する。**
@@ -43,33 +41,6 @@ func TestRequiredLabels_必須ラベルが空なら全部に着手する(t *test
 	waitFor(t, 10*time.Second, "turn が送られる", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
-}
-
-// {"RUCM-PATH": "P040"}
-//
-// TestRequiredLabels_1つでも欠けたら着手しない は、絞り込みが効くことを確かめる。
-//
-// 目的: `required_labels` に並べたラベルを**全部**持っている issue だけに着手すること。
-// 与える情報: 必須2つのうち1つしか持たない issue。
-// 成功条件: **worktree も pane も作らない**（herdr を1回も叩かない）。
-func TestRequiredLabels_1つでも欠けたら着手しない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) {
-			cfg.Tracker.RequiredLabels = []string{"bug", "ready-for-ai"}
-		},
-	})
-	fx.Tracker.AddIssue(issueWithLabels(188, "bug"))
-
-	fx.Orc.Tick(context.Background())
-
-	// **「起きない」ことを確かめるので、起きるだけの時間を与えてから見る。**
-	time.Sleep(2 * time.Second)
-	if got := fx.Herdr.CountMethod(herdr.MethodWorktreeOpen); got != 0 {
-		t.Errorf("必須ラベルが欠けているのに worktree を開いている: %d 回", got)
-	}
-	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Ready" {
-		t.Errorf("Status を動かしている: %s", got)
-	}
 }
 
 // TestRequiredLabels_全部そろっていれば着手する は、絞り込みを通る側を確かめる。

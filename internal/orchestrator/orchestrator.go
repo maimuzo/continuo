@@ -454,6 +454,13 @@ type Orchestrator struct {
 	// 戻したときの着手がその pane をそのまま使い、herdr が登録していない生きた Claude Code の
 	// 入力欄へ `claude --resume …` を送る。
 	closeSet map[string]string
+	// deferNoticeTried は「片付けを見送った通知の投稿を、この process が試みた worktree の集合」である
+	// （設計 3-9 の手順2c）。**キーは worktree の絶対パス。mu が守る。メモリだけに持つ。**
+	//
+	// **巡回（`reconcileWorktrees`）からの投稿をやり直さないために持つ。**投稿がエラーを返しても、
+	// 書かれなかったとは限らない（設計 3-85）。成否に関わらず、試みた時点で入れる。
+	// **外すのは2つのときだけである。**その worktree に着手したとき・走査に出てこなくなったとき。
+	deferNoticeTried map[string]struct{}
 	// directChatSetupFailures は、direct chat の用意（設計 3-83d の用意の段2）が落ちた記録である
 	// （キーは project item の ID。**mu が守る。メモリだけに持つ**）。
 	//
@@ -617,6 +624,8 @@ func New(opts Options) (*Orchestrator, error) {
 		failures:     map[string]*failureNote{},
 		tokenLedger:  map[string]tokenLedgerEntry{},
 		closeSet:     map[string]string{},
+		// **片付けを見送った通知を試みた worktree**（設計 3-9 の手順2c）。
+		deferNoticeTried: map[string]struct{}{},
 		// **用意の失敗の記録は、通常の着手の失敗（`failures`）と別に持つ**（設計 3-83d）。
 		directChatSetupFailures: map[string]*directChatSetupFailure{},
 		// **担当者の人数による書き込みの番**（設計 3-83h）。

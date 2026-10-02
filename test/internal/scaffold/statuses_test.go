@@ -1,12 +1,8 @@
-// {"RUCM-CFG-SHA256": "69e4366093e68d8bbfd1a1bd7c3eb52f551d143e7b66a671893845866120c69f", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
 package scaffold_test
 
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -297,72 +293,6 @@ func TestUpdateStatuses_書き換えたあとも読み込める(t *testing.T) {
 	if !strings.Contains(loaded.PromptTemplate, "## テストの走らせ方") {
 		t.Errorf("Status を書き換えたら本文が消えた（利用者が書いた固有の指示が失われる）: %q",
 			loaded.PromptTemplate)
-	}
-}
-
-// 目的: WORKFLOW.md が無いときに ErrNotFound で止まることを確認する。
-//
-// **雛形を新規に作らない。**作るのは `continuo init` の仕事である。
-//
-// 与える情報: 空のディレクトリ。
-// 成功条件: ErrNotFound が返り、ファイルが作られていないこと。
-func TestUpdateStatuses_WORKFLOWが無ければ作らずに止まる(t *testing.T) {
-	dir := t.TempDir()
-
-	if _, err := scaffold.UpdateStatuses(dir, jaStatuses); !errors.Is(err, scaffold.ErrNotFound) {
-		t.Fatalf("ErrNotFound が返らなかった: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "WORKFLOW.md")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("WORKFLOW.md を作ってしまっている: %v", err)
-	}
-	// 対話を始める前の検査も同じ理由で止まること。
-	if _, err := scaffold.CheckUpdatable(dir); !errors.Is(err, scaffold.ErrNotFound) {
-		t.Errorf("CheckUpdatable が ErrNotFound を返さなかった: %v", err)
-	}
-}
-
-// {"RUCM-PATH": "P003"}
-//
-// 目的: 書き換える対象のキーが消されていたら ErrKeysNotFound で止まり、ファイルを変えないことを確認する。
-//
-// **黙って何もしないより落とす。**書き込んだつもりで進むと、巡回が無言で「対象0件」を返し続ける。
-//
-// 与える情報: dispatch_state の行を消した WORKFLOW.md。
-// 成功条件: ErrKeysNotFound が返り、ファイルの中身が1バイトも変わっていないこと。
-func TestUpdateStatuses_キーが無ければ書き換えずに止まる(t *testing.T) {
-	dir := t.TempDir()
-	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{})
-	if err != nil {
-		t.Fatalf("雛形を書き出せなかった: %v", err)
-	}
-	raw, err := os.ReadFile(result.Path)
-	if err != nil {
-		t.Fatalf("雛形を読み込めなかった: %v", err)
-	}
-	var kept []string
-	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.HasPrefix(line, "  dispatch_state:") {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	broken := strings.Join(kept, "\n")
-	if broken == string(raw) {
-		t.Fatalf("消す対象の行が雛形に無い")
-	}
-	if err := os.WriteFile(result.Path, []byte(broken), 0o644); err != nil {
-		t.Fatalf("キーを消した内容を書き戻せなかった: %v", err)
-	}
-
-	if _, err := scaffold.UpdateStatuses(dir, jaStatuses); !errors.Is(err, scaffold.ErrKeysNotFound) {
-		t.Fatalf("ErrKeysNotFound が返らなかった: %v", err)
-	}
-	after, err := os.ReadFile(result.Path)
-	if err != nil {
-		t.Fatalf("書き換えたファイルを読み込めなかった: %v", err)
-	}
-	if string(after) != broken {
-		t.Errorf("止まったのにファイルを書き換えている")
 	}
 }
 

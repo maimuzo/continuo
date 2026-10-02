@@ -1,9 +1,3 @@
-// {"RUCM-CFG-SHA256": "95e8048780f94939c978a444aa8ba2e27646962d3478125e829d52743425908e", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
-//
-// **RUCM のテストパスに対応づけたテストである。**
-// **379本のパスは、引数の指定の組み合わせで爆発したものである。**結末は8通りしかないので、
-// **終端フローごとに代表を1本ずつ**対応づける。組み合わせを全部書いても、
-// 同じ経路を何度も通るだけで新しく守れるものが増えない。
 // Package scaffold_test は internal/scaffold の振る舞いを、公開 API
 // （scaffold.WriteTemplate / scaffold.Template）を通して検証する。
 //
@@ -42,8 +36,6 @@ func wantWorkflowPath(t *testing.T, dir string) string {
 	return filepath.Join(real, "WORKFLOW.md")
 }
 
-// {"RUCM-PATH": "P001"}
-//
 // 目的: 位置引数で渡したディレクトリの直下に WORKFLOW.md が1つだけ置かれることを確認する。
 // 与える情報: 空の一時ディレクトリ。force は偽。
 // 成功条件: エラーにならず、Result.Path が <ディレクトリ>/WORKFLOW.md の絶対パスであり、

@@ -1,5 +1,5 @@
 // Package setup は `continuo setup` の実体である。**既にあるカンバンの Status の選択肢を、
-// continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当てる対話**を行う（RUCM「既存のボードの Status を割り当てる」）。
+// continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当てる対話**を行う（RUCM「既存のボードのStatusを割り当てる」）。
 //
 // **対話するコマンドは continuo setup の1つだけである。**`continuo init` と `continuo trust` は
 // 標準入力を1度も握らない。対話をここへ切り出してあるので、`init` は自動化から叩ける。

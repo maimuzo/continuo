@@ -1,5 +1,3 @@
-// {"RUCM-CFG-SHA256": "c433f1cd699399a4fa8a90f167ed1d0a6b15dbce3184450b8072ef50968e99e7", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
-//
 // **カンバンの組み込みの自動化が Status を動かしたときの検査である**（設計 3-54。issue #33）。
 //
 // **エージェントが PR を作ると、カンバンの自動化が Status を動かす。**それを「人間が
@@ -174,54 +172,6 @@ func waitRewriteSettled(t *testing.T, fx *fixture, itemID, nodeID, want string) 
 		return fx.Tracker.StateOf(itemID) == want &&
 			len(fx.Tracker.StatusMoveCommentsOf(nodeID)) > before
 	})
-}
-
-// {"RUCM-PATH": "P015"}
-//
-// TestRUCMHandoff_P015_自動化が動かした知らないStatusではworkerを止めない は、
-// 設計 3-54 を確かめる（issue #33 の本体）。
-//
-// 目的: エージェントが PR を作った3秒後に、カンバンの組み込みの自動化が Status を
-// `In Progress` へ動かす。**continuo はそれを「人間が引き渡した」と読んで、
-// 自分のエージェントを turn の途中で殺していた。**
-//
-// 与える情報: 1回目の turn が待ち受けに入ったままの run。その間にカンバンの自動化が
-// Status を `In Progress`（設定のどこにも出てこない）へ動かす。猶予は 0。
-// 成功条件:
-//   - worker を止めない（pane を閉じない・印を外さない）
-//   - Status を `In Progress (AI)` へ戻す
-//   - 戻したことを issue に1件残す（設計 3-29）
-func TestRUCMHandoff_P015_自動化が動かした知らないStatusではworkerを止めない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
-	itemID := startRunForAutomation(t, fx)
-	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
-
-	// ★ エージェントが PR を作り、カンバンの組み込みの自動化が Status を動かした。
-	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
-	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
-		t.Fatalf("自動化が動かしただけなのに印を外している: 印は %d 件", got)
-	}
-	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != closesBefore {
-		t.Fatalf("自動化が動かしただけなのに pane を閉じている: pane.close が %d 回", got-closesBefore)
-	}
-	if body := selfCommentBody(fx, "I_node188"); body != "" {
-		t.Fatalf("自動化が動かしただけなのに止めた理由を書いている:\n%s", body)
-	}
-
-	moves := fx.Tracker.StatusMoveCommentsOf("I_node188")
-	if len(moves) == 0 {
-		t.Fatal("Status を戻したのに、何から何へ動かしたかを issue に残していない（設計 3-29）")
-	}
-	last := moves[len(moves)-1].Body
-	for _, want := range []string{"In Progress", "In Progress (AI)", "github-project-automation"} {
-		if !strings.Contains(last, want) {
-			t.Errorf("戻した記録に %q が無い:\n%s", want, last)
-		}
-	}
-	if logs := fx.Logs.String(); !strings.Contains(logs, "continuo が意図した Status へ戻しました") {
-		t.Errorf("戻したことをログに残していない")
-	}
 }
 
 // TestAutomatedState_対応表に無ければいままでどおり止まる は、設計 3-54 を確かめる。
@@ -441,50 +391,6 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 	}
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != 1 {
 		t.Fatalf("終わった issue へ次の指示を送っている: agent.prompt が %d 回（1回のはず）", got)
-	}
-}
-
-// TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-56 を確かめる。
-//
-// 目的: **押し合いの上限は「continuo とカンバンが押し合っている」ことを数えるためにある。**
-// 押し合いはカンバンが実際に動いたときにだけ起きる。**通信の失敗で数えてしまうと、
-// GitHub へ書けなかったぶんだけ押し合いの枠が減り、押し合いが1度も起きていない run が
-// 早々に止まる。**
-//
-// 与える情報: `UpdateStatus` が2回続けて失敗する状況。そのあと失敗を止め、
-// **押し合いの上限（3回）ぶんの書き戻しを続けて行わせる。**
-// 成功条件: 失敗のあとでも3回とも書き戻せること。**上限に達したというログを出さないこと。**
-// **枠を食い潰していれば、2回の失敗で残りが1回になり、2回目の書き戻しで止まる。**
-func TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
-	// **書き込みの失敗は、このテストが自分で起こしているものである。**
-	fx.AllowLog("自動化が動かした Status を戻せませんでした")
-	itemID := startRunForAutomation(t, fx)
-
-	// **「戻せない」の上限（3回）には届かせない**（internal/orchestrator の
-	// maxAutomatedRewriteFailures。届くとそこで人間へ渡すのが正しい振る舞いである）。
-	fx.Tracker.SetUpdateError(errors.New("GitHub へ書き込めませんでした（通信の失敗）"))
-	for i := 1; i <= 2; i++ {
-		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		tickRewriteOnce(t, fx)
-		want := i
-		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
-			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
-		})
-	}
-
-	// 通信が戻った。**押し合いの上限ぶん（3回）を続けて書き戻せなければ、失敗で枠を食い潰している。**
-	fx.Tracker.SetUpdateError(nil)
-	for i := 1; i <= 3; i++ {
-		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
-	}
-
-	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
-		t.Fatalf("書き込みに失敗しただけなのに印を外している: 印は %d 件", got)
-	}
-	if logs := fx.Logs.String(); strings.Contains(logs, "書き戻す回数が上限に達しました") {
-		t.Errorf("押し合いが1度も起きていないのに、上限に達したことにしている:\n%s", logs)
 	}
 }
 

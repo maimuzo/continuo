@@ -1,0 +1,1210 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "配布物を取って置く",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/配布物を取って置く.rucm.md",
+    "rucm_block_sha256": "32b1d5824815bfe0e997813b7a5e7e2a627e792f39bd27c82295632fa6ebfb43"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "置き先に入れる版の continuo の実行ファイルがある。実行ファイルに実行の権限が付いている。一時ディレクトリは残っていない。照合の材料が揃った実行では、照合したことが標準出力に出ている。照合の材料が揃わない実行では、照合できない理由が標準エラーに出ている。置いた場所は標準出力に出ている。システムは終了していない。"
+    },
+    "対応しないOS": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。OS が Windows 系である実行では、利用者は WSL2 の中で実行する案内を読める。残りの OS の実行では、利用者は対応している OS の名前を読める。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "対応しない命令セット": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "取ってくる道具が無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。システムはまだ配布していないことを応答していない。版を指定した実行でも、システムは同じ理由で止まっている。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "版の問い合わせの失敗": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムはまだ配布していないことを応答していない。案内は標準出力に出ている。配布サーバの応答の状態は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "配布がまだ無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。利用者はソースから作る手順を読める。応答は全部が標準出力に出ている。標準エラーには何も出ていない。終了コード 1 が返っている。"
+    },
+    "一時ディレクトリを作れない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに書庫を要求していない。システムは理由も案内も応答していない。システムの応答にエラーで始まる行は無い。一時ディレクトリを作るコマンドが出した文だけが標準エラーに出ている。0 でない終了コードが返っている。"
+    },
+    "書庫を取得できない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          11
+        ]
+      },
+      "postcondition": "システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。取得に失敗した場所は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "照合できずに止まる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          13
+        ]
+      },
+      "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。止まった理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "チェックサムが一致しない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          14
+        ]
+      },
+      "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。照合できなくても続ける指定がある実行でも、システムは止まっている。利用者は取得をやり直す案内を読める。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "展開と配置の失敗": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          16,
+          17
+        ]
+      },
+      "postcondition": "システムは入れる版の実行ファイルを置き終えていない。置き先へ移す操作より前に失敗した実行では、システムは置き先の実行ファイルに触っていない。置き先へ移す操作が失敗した実行では、置き先に前の版の実行ファイルが無傷で残っていることを、システムは保証していない。一時ディレクトリは残っていない。理由は標準エラーに出ている。終了コード 1 が返っている。"
+    },
+    "取得中の中断": {
+      "when": "システムが一時ディレクトリを作ってから実行ファイルを置くまでのあいだに中断のシグナルを受け取る場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            10
+          ]
+        }
+      ],
+      "postcondition": "一時ディレクトリは残っていない。受け取ったシグナルが SIGINT である実行では、終了コード 130 が返っている。受け取ったシグナルが SIGTERM か SIGHUP である実行では、終了コード 143 が返っている。システムは中断について何も応答していない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに配布物の取得と配置を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 利用者の OS が対応している。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT 利用者の命令セットが対応している。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは入れる版を決める。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT 版の問い合わせが失敗していない。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 入れる版が決まっている。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは配布サーバに実行ファイルの書庫を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは VALIDATES THAT 書庫を取得できている。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは書庫のチェックサムの照合を試みる。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムは配布物の出所の確認を試みる。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "システムは VALIDATES THAT 取り出した continuo を置き先へ配れる。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは実行の権限を付けた continuo を置き先へ配る。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
+      "statement": "システムは利用者に実行ファイルを置いた場所を応答する。"
+    },
+    {
+      "id": "対応しないOS-1",
+      "type": "action",
+      "flow": "対応しないOS",
+      "step": 1,
+      "statement": "システムは利用者に OS が対応していないことを応答する。"
+    },
+    {
+      "id": "対応しないOS-2",
+      "type": "abort",
+      "flow": "対応しないOS",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "対応しない命令セット-1",
+      "type": "action",
+      "flow": "対応しない命令セット",
+      "step": 1,
+      "statement": "システムは利用者に対応している命令セットを応答する。"
+    },
+    {
+      "id": "対応しない命令セット-2",
+      "type": "abort",
+      "flow": "対応しない命令セット",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "取ってくる道具が無い-1",
+      "type": "action",
+      "flow": "取ってくる道具が無い",
+      "step": 1,
+      "statement": "システムは利用者に curl も wget も無いことを応答する。"
+    },
+    {
+      "id": "取ってくる道具が無い-2",
+      "type": "abort",
+      "flow": "取ってくる道具が無い",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "版の問い合わせの失敗-1",
+      "type": "action",
+      "flow": "版の問い合わせの失敗",
+      "step": 1,
+      "statement": "システムは利用者に問い合わせ先と問い合わせられない理由の候補を応答する。"
+    },
+    {
+      "id": "版の問い合わせの失敗-2",
+      "type": "action",
+      "flow": "版の問い合わせの失敗",
+      "step": 2,
+      "statement": "システムは利用者に版を指定して実行し直す案内を応答する。"
+    },
+    {
+      "id": "版の問い合わせの失敗-3",
+      "type": "abort",
+      "flow": "版の問い合わせの失敗",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "配布がまだ無い-1",
+      "type": "action",
+      "flow": "配布がまだ無い",
+      "step": 1,
+      "statement": "システムは利用者にまだ配布していないことを応答する。"
+    },
+    {
+      "id": "配布がまだ無い-2",
+      "type": "action",
+      "flow": "配布がまだ無い",
+      "step": 2,
+      "statement": "システムは利用者にソースから作る手順を応答する。"
+    },
+    {
+      "id": "配布がまだ無い-3",
+      "type": "abort",
+      "flow": "配布がまだ無い",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "一時ディレクトリを作れない-1",
+      "type": "action",
+      "flow": "一時ディレクトリを作れない",
+      "step": 1,
+      "statement": "システムは残りの段を行わずに終了する。"
+    },
+    {
+      "id": "一時ディレクトリを作れない-2",
+      "type": "abort",
+      "flow": "一時ディレクトリを作れない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "書庫を取得できない-1",
+      "type": "action",
+      "flow": "書庫を取得できない",
+      "step": 1,
+      "statement": "システムは利用者に入れる版に書庫が無いことと配布している一覧の場所を応答する。"
+    },
+    {
+      "id": "書庫を取得できない-2",
+      "type": "action",
+      "flow": "書庫を取得できない",
+      "step": 2,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "書庫を取得できない-3",
+      "type": "abort",
+      "flow": "書庫を取得できない",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "照合できずに止まる-1",
+      "type": "action",
+      "flow": "照合できずに止まる",
+      "step": 1,
+      "statement": "システムは利用者に照合できない理由を応答する。"
+    },
+    {
+      "id": "照合できずに止まる-2",
+      "type": "action",
+      "flow": "照合できずに止まる",
+      "step": 2,
+      "statement": "システムは利用者に照合できなくても続ける指定の方法を応答する。"
+    },
+    {
+      "id": "照合できずに止まる-3",
+      "type": "action",
+      "flow": "照合できずに止まる",
+      "step": 3,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "照合できずに止まる-4",
+      "type": "abort",
+      "flow": "照合できずに止まる",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "チェックサムが一致しない-1",
+      "type": "action",
+      "flow": "チェックサムが一致しない",
+      "step": 1,
+      "statement": "システムは利用者に期待した値と計算した値を応答する。"
+    },
+    {
+      "id": "チェックサムが一致しない-2",
+      "type": "action",
+      "flow": "チェックサムが一致しない",
+      "step": 2,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "チェックサムが一致しない-3",
+      "type": "abort",
+      "flow": "チェックサムが一致しない",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "展開と配置の失敗-1",
+      "type": "action",
+      "flow": "展開と配置の失敗",
+      "step": 1,
+      "statement": "システムは利用者に展開か配置に失敗した理由を応答する。"
+    },
+    {
+      "id": "展開と配置の失敗-2",
+      "type": "action",
+      "flow": "展開と配置の失敗",
+      "step": 2,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "展開と配置の失敗-3",
+      "type": "abort",
+      "flow": "展開と配置の失敗",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "取得中の中断-1",
+      "type": "action",
+      "flow": "取得中の中断",
+      "step": 1,
+      "statement": "システムは一時ディレクトリを消す。"
+    },
+    {
+      "id": "取得中の中断-2",
+      "type": "abort",
+      "flow": "取得中の中断",
+      "step": 2,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "利用者の OS が対応している"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "対応しないOS-1",
+      "kind": "false",
+      "condition": "NOT 利用者の OS が対応している"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "利用者の命令セットが対応している"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "対応しない命令セット-1",
+      "kind": "false",
+      "condition": "NOT 利用者の命令セットが対応している"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "利用者の手元に curl か wget のどちらかがある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "取ってくる道具が無い-1",
+      "kind": "false",
+      "condition": "NOT 利用者の手元に curl か wget のどちらかがある"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "版の問い合わせが失敗していない"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "版の問い合わせの失敗-1",
+      "kind": "false",
+      "condition": "NOT 版の問い合わせが失敗していない"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "入れる版が決まっている"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "配布がまだ無い-1",
+      "kind": "false",
+      "condition": "NOT 入れる版が決まっている"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "true",
+      "condition": "書庫を置く一時ディレクトリを作れている"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "一時ディレクトリを作れない-1",
+      "kind": "false",
+      "condition": "NOT 書庫を置く一時ディレクトリを作れている"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "取得中の中断-1",
+      "kind": "global",
+      "condition": "システムが一時ディレクトリを作ってから実行ファイルを置くまでのあいだに中断のシグナルを受け取る場合"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "true",
+      "condition": "書庫を取得できている"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "書庫を取得できない-1",
+      "kind": "false",
+      "condition": "NOT 書庫を取得できている"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "true",
+      "condition": "照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "照合できずに止まる-1",
+      "kind": "false",
+      "condition": "NOT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "計算した値が一覧の値と食い違っていない"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "チェックサムが一致しない-1",
+      "kind": "false",
+      "condition": "NOT 計算した値が一覧の値と食い違っていない"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "true",
+      "condition": "書庫から通常のファイルの continuo を取り出せる"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "展開と配置の失敗-1",
+      "kind": "false",
+      "condition": "NOT 書庫から通常のファイルの continuo を取り出せる"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "true",
+      "condition": "取り出した continuo を置き先へ配れる"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "展開と配置の失敗-1",
+      "kind": "false",
+      "condition": "NOT 取り出した continuo を置き先へ配れる"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "対応しないOS-1",
+      "to": "対応しないOS-2",
+      "kind": "seq"
+    },
+    {
+      "from": "対応しない命令セット-1",
+      "to": "対応しない命令セット-2",
+      "kind": "seq"
+    },
+    {
+      "from": "取ってくる道具が無い-1",
+      "to": "取ってくる道具が無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "版の問い合わせの失敗-1",
+      "to": "版の問い合わせの失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "版の問い合わせの失敗-2",
+      "to": "版の問い合わせの失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "配布がまだ無い-1",
+      "to": "配布がまだ無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "配布がまだ無い-2",
+      "to": "配布がまだ無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "一時ディレクトリを作れない-1",
+      "to": "一時ディレクトリを作れない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書庫を取得できない-1",
+      "to": "書庫を取得できない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書庫を取得できない-2",
+      "to": "書庫を取得できない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "照合できずに止まる-1",
+      "to": "照合できずに止まる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "照合できずに止まる-2",
+      "to": "照合できずに止まる-3",
+      "kind": "seq"
+    },
+    {
+      "from": "照合できずに止まる-3",
+      "to": "照合できずに止まる-4",
+      "kind": "seq"
+    },
+    {
+      "from": "チェックサムが一致しない-1",
+      "to": "チェックサムが一致しない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "チェックサムが一致しない-2",
+      "to": "チェックサムが一致しない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "展開と配置の失敗-1",
+      "to": "展開と配置の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "展開と配置の失敗-2",
+      "to": "展開と配置の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "取得中の中断-1",
+      "to": "取得中の中断-2",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "置き先に入れる版の continuo の実行ファイルがある。実行ファイルに実行の権限が付いている。一時ディレクトリは残っていない。照合の材料が揃った実行では、照合したことが標準出力に出ている。照合の材料が揃わない実行では、照合できない理由が標準エラーに出ている。置いた場所は標準出力に出ている。システムは終了していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "システムは書庫のチェックサムの照合を試みる。",
+        "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。",
+        "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。",
+        "システムは配布物の出所の確認を試みる。",
+        "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。",
+        "システムは VALIDATES THAT 取り出した continuo を置き先へ配れる。",
+        "システムは実行の権限を付けた continuo を置き先へ配る。",
+        "システムは一時ディレクトリを消す。",
+        "システムは利用者に実行ファイルを置いた場所を応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "展開と配置の失敗",
+      "postcondition": "システムは入れる版の実行ファイルを置き終えていない。置き先へ移す操作より前に失敗した実行では、システムは置き先の実行ファイルに触っていない。置き先へ移す操作が失敗した実行では、置き先に前の版の実行ファイルが無傷で残っていることを、システムは保証していない。一時ディレクトリは残っていない。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "展開と配置の失敗-1",
+        "展開と配置の失敗-2",
+        "展開と配置の失敗-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "システムは書庫のチェックサムの照合を試みる。",
+        "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。",
+        "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。",
+        "システムは配布物の出所の確認を試みる。",
+        "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。",
+        "システムは VALIDATES THAT 取り出した continuo を置き先へ配れる。",
+        "CONDITION: NOT 取り出した continuo を置き先へ配れる",
+        "システムは利用者に展開か配置に失敗した理由を応答する。",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "展開と配置の失敗",
+      "postcondition": "システムは入れる版の実行ファイルを置き終えていない。置き先へ移す操作より前に失敗した実行では、システムは置き先の実行ファイルに触っていない。置き先へ移す操作が失敗した実行では、置き先に前の版の実行ファイルが無傷で残っていることを、システムは保証していない。一時ディレクトリは残っていない。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "展開と配置の失敗-1",
+        "展開と配置の失敗-2",
+        "展開と配置の失敗-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "システムは書庫のチェックサムの照合を試みる。",
+        "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。",
+        "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。",
+        "システムは配布物の出所の確認を試みる。",
+        "システムは VALIDATES THAT 書庫から通常のファイルの continuo を取り出せる。",
+        "CONDITION: NOT 書庫から通常のファイルの continuo を取り出せる",
+        "システムは利用者に展開か配置に失敗した理由を応答する。",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "チェックサムが一致しない",
+      "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。照合できなくても続ける指定がある実行でも、システムは止まっている。利用者は取得をやり直す案内を読める。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "チェックサムが一致しない-1",
+        "チェックサムが一致しない-2",
+        "チェックサムが一致しない-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "システムは書庫のチェックサムの照合を試みる。",
+        "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。",
+        "システムは VALIDATES THAT 計算した値が一覧の値と食い違っていない。",
+        "CONDITION: NOT 計算した値が一覧の値と食い違っていない",
+        "システムは利用者に期待した値と計算した値を応答する。",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "照合できずに止まる",
+      "postcondition": "システムは書庫を展開していない。システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。止まった理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "照合できずに止まる-1",
+        "照合できずに止まる-2",
+        "照合できずに止まる-3",
+        "照合できずに止まる-4"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "システムは書庫のチェックサムの照合を試みる。",
+        "システムは VALIDATES THAT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている。",
+        "CONDITION: NOT 照合の材料が揃わない実行では利用者が照合できなくても続ける指定をしている",
+        "システムは利用者に照合できない理由を応答する。",
+        "システムは利用者に照合できなくても続ける指定の方法を応答する。",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "書庫を取得できない",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。一時ディレクトリは残っていない。案内は標準出力に出ている。取得に失敗した場所は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "書庫を取得できない-1",
+        "書庫を取得できない-2",
+        "書庫を取得できない-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "システムは VALIDATES THAT 書庫を取得できている。",
+        "CONDITION: NOT 書庫を取得できている",
+        "システムは利用者に入れる版に書庫が無いことと配布している一覧の場所を応答する。",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "取得中の中断",
+      "postcondition": "一時ディレクトリは残っていない。受け取ったシグナルが SIGINT である実行では、終了コード 130 が返っている。受け取ったシグナルが SIGTERM か SIGHUP である実行では、終了コード 143 が返っている。システムは中断について何も応答していない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "取得中の中断-1",
+        "取得中の中断-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "システムは配布サーバに実行ファイルの書庫を要求する。",
+        "CONDITION: システムが一時ディレクトリを作ってから実行ファイルを置くまでのあいだに中断のシグナルを受け取る場合",
+        "システムは一時ディレクトリを消す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "一時ディレクトリを作れない",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに書庫を要求していない。システムは理由も案内も応答していない。システムの応答にエラーで始まる行は無い。一時ディレクトリを作るコマンドが出した文だけが標準エラーに出ている。0 でない終了コードが返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "一時ディレクトリを作れない-1",
+        "一時ディレクトリを作れない-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "システムは置き先にある実行ファイルの版から入れる版までの破壊的変更を調べる。",
+        "システムは VALIDATES THAT 書庫を置く一時ディレクトリを作れている。",
+        "CONDITION: NOT 書庫を置く一時ディレクトリを作れている",
+        "システムは残りの段を行わずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "配布がまだ無い",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。利用者はソースから作る手順を読める。応答は全部が標準出力に出ている。標準エラーには何も出ていない。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "配布がまだ無い-1",
+        "配布がまだ無い-2",
+        "配布がまだ無い-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "システムは VALIDATES THAT 入れる版が決まっている。",
+        "CONDITION: NOT 入れる版が決まっている",
+        "システムは利用者にまだ配布していないことを応答する。",
+        "システムは利用者にソースから作る手順を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "版の問い合わせの失敗",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムはまだ配布していないことを応答していない。案内は標準出力に出ている。配布サーバの応答の状態は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "版の問い合わせの失敗-1",
+        "版の問い合わせの失敗-2",
+        "版の問い合わせの失敗-3"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "システムは入れる版を決める。",
+        "システムは VALIDATES THAT 版の問い合わせが失敗していない。",
+        "CONDITION: NOT 版の問い合わせが失敗していない",
+        "システムは利用者に問い合わせ先と問い合わせられない理由の候補を応答する。",
+        "システムは利用者に版を指定して実行し直す案内を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "abort",
+      "terminal_flow": "取ってくる道具が無い",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。システムはまだ配布していないことを応答していない。版を指定した実行でも、システムは同じ理由で止まっている。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "取ってくる道具が無い-1",
+        "取ってくる道具が無い-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "システムは VALIDATES THAT 利用者の手元に curl か wget のどちらかがある。",
+        "CONDITION: NOT 利用者の手元に curl か wget のどちらかがある",
+        "システムは利用者に curl も wget も無いことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "対応しない命令セット",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "対応しない命令セット-1",
+        "対応しない命令セット-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "システムは VALIDATES THAT 利用者の命令セットが対応している。",
+        "CONDITION: NOT 利用者の命令セットが対応している",
+        "システムは利用者に対応している命令セットを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "対応しないOS",
+      "postcondition": "システムは置き先に実行ファイルを置いていない。システムは配布サーバに何も要求していない。OS が Windows 系である実行では、利用者は WSL2 の中で実行する案内を読める。残りの OS の実行では、利用者は対応している OS の名前を読める。理由は標準エラーに出ている。終了コード 1 が返っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "対応しないOS-1",
+        "対応しないOS-2"
+      ],
+      "steps": [
+        "利用者はシステムに配布物の取得と配置を要求する。",
+        "システムは VALIDATES THAT 利用者の OS が対応している。",
+        "CONDITION: NOT 利用者の OS が対応している",
+        "システムは利用者に OS が対応していないことを応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 49,
+    "nodes_covered": 49,
+    "edges_total": 49,
+    "edges_covered": 49
+  }
+}

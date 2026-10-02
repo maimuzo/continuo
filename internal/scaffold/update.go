@@ -58,7 +58,7 @@ var (
 
 // CheckUpdatable は、Status の割り当てを書き換えられるかだけを確かめる。
 //
-// **`continuo setup` が対話を始める前に呼ぶためにある**（RUCM の基本フロー2）。
+// **`continuo setup` が対話を始める前に呼ぶためにある**（RUCM「既存のボードのStatusを割り当てる」の基本フローの、指定されたパスと WORKFLOW.md を検査する段）。
 // どうせ止まる実行で、先に gh を叩いてカンバンを読む理由が無い。
 //
 // **これは事前の見立てであり、保証ではない。**実際の書き換えは UpdateStatuses が行う。
@@ -98,7 +98,7 @@ func CheckUpdatable(dir string) (Result, error) {
 	return Result{Path: path, Overwritten: true, Owner: owner, ProjectNumber: number}, nil
 }
 
-// UpdateStatuses は、既にある WORKFLOW.md の Status に関する8行だけを書き換える。
+// UpdateStatuses は、既にある WORKFLOW.md の Status に関する9つのキーの行だけを書き換える。
 //
 // **書き換えるのは StatusKeyNames が返すキーの行だけである。**行の右側のコメントは
 // 原文のまま残し、他の行には触れない。YAML を組み立て直さないので、並び順・空行・

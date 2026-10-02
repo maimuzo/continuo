@@ -3,42 +3,61 @@
   "usecase_name": "着手を取り消す",
   "source": {
     "file": "docs/spec/usecases/particular_case/着手を取り消す.rucm.md",
-    "rucm_block_sha256": "6b61a831f0fe02baeed3bf5b1f5ddfbba6d0619b61de49d9aa1b70285ae0141c"
+    "rucm_block_sha256": "76c7fe9ca4ff10ca615ea4d40d07b6585fdb812ebc60f365db2dcd324fdd5379"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。"
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。"
     },
-    "issueURLの解釈不能": {
+    "使い方の表示": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           2
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。終了コードは 1 である。"
+      "postcondition": "システムは設定ファイルを読んでいない。worktree は残っている。branch は残っている。issue の Status は変わっていない。使い方は標準エラーに出ている。終了コードは 0 である。"
+    },
+    "引数指定エラー": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムは設定ファイルを読んでいない。worktree は残っている。branch は残っている。issue の Status は変わっていない。理由は標準エラーに出ている。終了コードは 2 である。"
+    },
+    "issueURLの解釈不能": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "前提を読めない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          3,
           4,
-          9,
-          20
+          6,
+          7,
+          12,
+          27
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "worktreeが無い": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          12
+          15
         ]
       },
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。"
+      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が dry-run を指定せず force を指定していて設定の cleanup.delete_branch が true である実行でだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。応答は標準出力に出ている。終了コードは 0 である。"
     },
     "候補から外したworktreeがある": {
       "rfs": {
@@ -47,7 +66,7 @@
           1
         ]
       },
-      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。終了コードは 1 である。"
+      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。確かめられなかったことは標準エラーに出ている。終了コードは 1 である。"
     },
     "残ったbranchを消せない": {
       "rfs": {
@@ -57,115 +76,126 @@
           9
         ]
       },
-      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。終了コードは 1 である。"
+      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。消していない理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "worktreeが2つ以上": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          12
-        ]
-      },
-      "postcondition": "一致した worktree はすべて残っている。branch はすべて残っている。issue の Status は変わっていない。終了コードは 1 である。"
-    },
-    "parkの先が作業中の状態": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          13
-        ]
-      },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。終了コードは 1 である。"
-    },
-    "書き込む先を確かめられない": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          14
-        ]
-      },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。終了コードは 1 である。"
-    },
-    "手離し先のStatusを読めない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           15
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。継続監視は issue を掴んだままである。終了コードは 1 である。"
+      "postcondition": "一致した worktree はすべて残っている。branch はすべて残っている。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。一覧は標準エラーに出ている。終了コードは 1 である。"
     },
-    "手離しの書き込み失敗": {
+    "directchatのStatusでは取り消せない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          17
+          17,
+          18,
+          20
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は tracker.active_states の値のままである。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。利用者が force を指定している実行でも、システムは何も消していない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
-    "pane待ちを終えられない": {
+    "parkの先が作業中の状態": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           19
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
-    "見せるだけで終わる": {
+    "書き込む先を確かめられない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          23
+          21
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。消すものと失うものの一覧は表示されている。ボードへの書き込みは1回も起きていない。終了コードは 0 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
-    "失うものがある": {
+    "手離し先のStatusを読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          22
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。継続監視は issue を掴んだままである。理由は標準エラーに出ている。終了コードは 1 である。"
+    },
+    "手離しの書き込み失敗": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           24
         ]
       },
-      "postcondition": "worktree は残っている。コミットしていない変更は残っている。push していない commit は残っている。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は tracker.active_states の値のままである。理由は標準エラーに出ている。終了コードは 1 である。"
+    },
+    "pane待ちを終えられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          26
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。理由は標準エラーに出ている。終了コードは 1 である。"
+    },
+    "見せるだけで終わる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          31
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。消すものと失うものの一覧は標準出力に出ている。ボードへの書き込みは1回も起きていない。終了コードは 0 である。"
+    },
+    "失うものがある": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          32
+        ]
+      },
+      "postcondition": "worktree は残っている。branch は残っている。コミットしていない変更は残っている。push していない commit は残っている。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "手を離させていないのにpaneが無いと言えない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          25
+          33
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。pane は1つも消していない。issue の Status は変わっていない。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。pane は1つも消していない。システムは issue の Status を書き換えていない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "片付けの失敗": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          27
+          35
         ]
       },
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は片付けの前の値のままである。終了コードは 1 である。"
+      "postcondition": "worktree のディレクトリは置き場所に残っている。branch は残っている。issue の Status は片付けの前の値のままである。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "片付け後のStatusを読めない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          38
+          46
         ]
       },
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。"
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "片付け後の書き込み失敗": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          39
+          47
         ]
       },
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。"
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。"
     },
     "実行の中断": {
       "when": "利用者が SIGINT または SIGTERM で実行を中断した場合",
@@ -173,11 +203,11 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            19
+            26
           ]
         }
       ],
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。理由は標準エラーに出ている。終了コードは 1 である。"
     }
   },
   "nodes": [
@@ -193,259 +223,343 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。"
+      "statement": "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。"
     },
     {
       "id": "BASIC FLOW-3",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは VALIDATES THAT 設定ファイルを読める。"
+      "statement": "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。"
+      "statement": "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムはロックの獲得の可否から継続監視が動いているかを判定する。"
+      "statement": "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。"
     },
     {
       "id": "BASIC FLOW-6",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムは獲得できたロックを実行が終わるまで握り続ける。"
+      "statement": "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。"
+      "statement": "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。"
+      "statement": "システムはロックの獲得の可否から継続監視が動いているかを判定する。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは VALIDATES THAT worktree の置き場所を走査できる。"
+      "statement": "システムは獲得できたロックを実行が終わるまで握り続ける。"
     },
     {
       "id": "BASIC FLOW-10",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは worktree の中の身元ファイルを読む。"
+      "statement": "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。"
+      "statement": "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。"
     },
     {
       "id": "BASIC FLOW-12",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは VALIDATES THAT 候補の worktree がちょうど1つある。"
+      "statement": "システムは VALIDATES THAT worktree の置き場所を走査できる。"
     },
     {
       "id": "BASIC FLOW-13",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。"
+      "statement": "システムは worktree の中の身元ファイルを読む。"
     },
     {
       "id": "BASIC FLOW-14",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。"
+      "statement": "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。"
+      "statement": "システムは VALIDATES THAT 候補の worktree がちょうど1つある。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。"
+      "statement": "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。"
+      "statement": "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。"
     },
     {
       "id": "BASIC FLOW-18",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。"
+      "statement": "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。"
+      "statement": "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。"
     },
     {
       "id": "BASIC FLOW-20",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。"
+      "statement": "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。"
     },
     {
       "id": "BASIC FLOW-21",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。"
+      "statement": "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。"
     },
     {
       "id": "BASIC FLOW-22",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。"
+      "statement": "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。"
     },
     {
       "id": "BASIC FLOW-23",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "システムは VALIDATES THAT 利用者が dry-run を指定していない。"
+      "statement": "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。"
     },
     {
       "id": "BASIC FLOW-24",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。"
+      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。"
     },
     {
       "id": "BASIC FLOW-25",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い。"
+      "statement": "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。"
     },
     {
       "id": "BASIC FLOW-26",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムは herdr に worktree と pane と herdr の workspace の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。"
+      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムは VALIDATES THAT worktree が置き場所から消えている。"
+      "statement": "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。"
     },
     {
       "id": "BASIC FLOW-28",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 28,
-      "statement": "IF 片付け切れずに残ったものが無い THEN"
+      "statement": "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。"
     },
     {
       "id": "BASIC FLOW-29",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 29,
-      "statement": "IF 身元ファイルに書かれた branch がリポジトリに実在しなかった THEN"
+      "statement": "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。"
     },
     {
       "id": "BASIC FLOW-30",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 30,
-      "statement": "システムは利用者に worktree を消したことと、branch は消す対象が無かったことを応答する。"
+      "statement": "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-31",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 31,
+      "statement": "システムは VALIDATES THAT 利用者が dry-run を指定していない。"
     },
     {
       "id": "BASIC FLOW-32",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 32,
-      "statement": "システムは利用者に worktree と branch を消したことを応答する。"
+      "statement": "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。"
+    },
+    {
+      "id": "BASIC FLOW-33",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 33,
+      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い。"
+    },
+    {
+      "id": "BASIC FLOW-34",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 34,
+      "statement": "システムは herdr に worktree と pane と herdr の workspace の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。"
     },
     {
       "id": "BASIC FLOW-35",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 35,
-      "statement": "システムは利用者に worktree を消したことと、片付け切れずに残ったものを1件ずつ応答する。"
+      "statement": "システムは VALIDATES THAT worktree が置き場所から消えている。"
+    },
+    {
+      "id": "BASIC FLOW-36",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 36,
+      "statement": "IF 片付け切れずに残ったものが無い THEN"
     },
     {
       "id": "BASIC FLOW-37",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 37,
-      "statement": "IF 利用者が片付けたあとの Status の値を指定している THEN"
+      "statement": "IF 身元ファイルに書かれた branch がリポジトリに実在しなかった THEN"
     },
     {
       "id": "BASIC FLOW-38",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 38,
-      "statement": "システムは VALIDATES THAT ボードから issue の project item の ID を引ける。"
-    },
-    {
-      "id": "BASIC FLOW-39",
-      "type": "condition",
-      "flow": "BASIC FLOW",
-      "step": 39,
-      "statement": "システムは VALIDATES THAT ボードの Status を指定された値へ書き換えられる。"
+      "statement": "システムは利用者に worktree を消したことと、branch は消す対象が無かったことを応答する。"
     },
     {
       "id": "BASIC FLOW-40",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 40,
-      "statement": "システムは利用者に動かした先の Status を応答する。"
-    },
-    {
-      "id": "BASIC FLOW-42",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 42,
-      "statement": "システムは手を離させる書き込みを行っていないときだけ、利用者に Status を動かしていないことを応答する。"
+      "statement": "システムは利用者に worktree と branch を消したことを応答する。"
     },
     {
       "id": "BASIC FLOW-43",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 43,
+      "statement": "システムは利用者に worktree を消したことと、片付け切れずに残ったものを1件ずつ応答する。"
+    },
+    {
+      "id": "BASIC FLOW-45",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 45,
+      "statement": "IF 利用者が片付けたあとの Status の値を指定している THEN"
+    },
+    {
+      "id": "BASIC FLOW-46",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 46,
+      "statement": "システムは VALIDATES THAT ボードから issue の project item の ID を引ける。"
+    },
+    {
+      "id": "BASIC FLOW-47",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 47,
+      "statement": "システムは VALIDATES THAT ボードの Status を指定された値へ書き換えられる。"
+    },
+    {
+      "id": "BASIC FLOW-48",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 48,
+      "statement": "システムは利用者に動かした先の Status を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-50",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 50,
+      "statement": "システムは手を離させる書き込みを行っていないときだけ、利用者に Status を動かしていないことを応答する。"
+    },
+    {
+      "id": "BASIC FLOW-51",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 51,
       "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。"
+    },
+    {
+      "id": "使い方の表示-1",
+      "type": "action",
+      "flow": "使い方の表示",
+      "step": 1,
+      "statement": "システムは利用者に continuo abandon の使い方を応答する。"
+    },
+    {
+      "id": "使い方の表示-2",
+      "type": "abort",
+      "flow": "使い方の表示",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "引数指定エラー-1",
+      "type": "action",
+      "flow": "引数指定エラー",
+      "step": 1,
+      "statement": "システムは利用者に引数の受け付けられない箇所か、二重起動防止のロックの置き場所を決められない理由を応答する。"
+    },
+    {
+      "id": "引数指定エラー-2",
+      "type": "abort",
+      "flow": "引数指定エラー",
+      "step": 2,
+      "statement": "ABORT"
     },
     {
       "id": "issueURLの解釈不能-1",
@@ -466,13 +580,20 @@
       "type": "action",
       "flow": "前提を読めない",
       "step": 1,
-      "statement": "システムは利用者に読めなかった対象と理由を応答する。"
+      "statement": "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。"
     },
     {
       "id": "前提を読めない-2",
-      "type": "abort",
+      "type": "action",
       "flow": "前提を読めない",
       "step": 2,
+      "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。"
+    },
+    {
+      "id": "前提を読めない-3",
+      "type": "abort",
+      "flow": "前提を読めない",
+      "step": 3,
       "statement": "ABORT"
     },
     {
@@ -599,7 +720,7 @@
       "type": "action",
       "flow": "残ったbranchを消せない",
       "step": 1,
-      "statement": "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドを応答する。"
+      "statement": "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドか、git が断った理由と手で消すコマンドを応答する。"
     },
     {
       "id": "残ったbranchを消せない-2",
@@ -626,6 +747,20 @@
       "id": "worktreeが2つ以上-2",
       "type": "abort",
       "flow": "worktreeが2つ以上",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "directchatのStatusでは取り消せない-1",
+      "type": "action",
+      "flow": "directchatのStatusでは取り消せない",
+      "step": 1,
+      "statement": "システムは利用者に、issue の Status か、片付けたあとの Status の指定か、park の値が tracker.direct_chat_state の値であることと、direct chat でない値にする案内を応答する。"
+    },
+    {
+      "id": "directchatのStatusでは取り消せない-2",
+      "type": "abort",
+      "flow": "directchatのStatusでは取り消せない",
       "step": 2,
       "statement": "ABORT"
     },
@@ -725,7 +860,7 @@
       "type": "action",
       "flow": "失うものがある",
       "step": 1,
-      "statement": "システムは利用者に force が無い限り消さないことを応答する。"
+      "statement": "システムは利用者に、失うものがあるか失うものを調べ切れていないので、force が無い限り消さないことを応答する。"
     },
     {
       "id": "失うものがある-2",
@@ -767,7 +902,7 @@
       "type": "action",
       "flow": "片付けの失敗",
       "step": 1,
-      "statement": "システムは利用者に片付けを見送った理由の一覧を応答する。"
+      "statement": "システムは利用者に片付けられなかった理由か、片付けを見送った理由の一覧を応答する。"
     },
     {
       "id": "片付けの失敗-2",
@@ -830,7 +965,7 @@
       "type": "action",
       "flow": "実行の中断",
       "step": 2,
-      "statement": "システムは利用者に中断されたことと、残っている pane の ID を応答する。"
+      "statement": "システムは利用者に中断されたことと、残っている pane の ID か herdr が pane の一覧に答えられなかった理由を応答する。"
     },
     {
       "id": "実行の中断-3",
@@ -857,52 +992,73 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "true",
-      "condition": "issue の URL を host と owner とリポジトリ名と issue の番号に分解できる"
+      "condition": "利用者が使い方の表示を要求していない"
     },
     {
       "from": "BASIC FLOW-2",
-      "to": "issueURLの解釈不能-1",
+      "to": "使い方の表示-1",
       "kind": "false",
-      "condition": "NOT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる"
+      "condition": "NOT 利用者が使い方の表示を要求していない"
     },
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
       "kind": "true",
-      "condition": "設定ファイルを読める"
+      "condition": "利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる"
     },
     {
       "from": "BASIC FLOW-3",
-      "to": "前提を読めない-1",
+      "to": "引数指定エラー-1",
       "kind": "false",
-      "condition": "NOT 設定ファイルを読める"
+      "condition": "NOT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
       "kind": "true",
-      "condition": "二重起動防止のロックファイルを開ける"
+      "condition": "設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "前提を読めない-1",
       "kind": "false",
-      "condition": "NOT 二重起動防止のロックファイルを開ける"
+      "condition": "NOT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる"
     },
     {
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "issue の URL を host と owner とリポジトリ名と issue の番号に分解できる"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "issueURLの解釈不能-1",
+      "kind": "false",
+      "condition": "NOT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる"
     },
     {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "二重起動防止のロックファイルを開ける"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT 二重起動防止のロックファイルを開ける"
     },
     {
       "from": "BASIC FLOW-8",
@@ -912,14 +1068,7 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "true",
-      "condition": "worktree の置き場所を走査できる"
-    },
-    {
-      "from": "BASIC FLOW-9",
-      "to": "前提を読めない-1",
-      "kind": "false",
-      "condition": "NOT worktree の置き場所を走査できる"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-10",
@@ -935,55 +1084,41 @@
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
       "kind": "true",
-      "condition": "候補の worktree がちょうど1つある"
+      "condition": "worktree の置き場所を走査できる"
     },
     {
       "from": "BASIC FLOW-12",
-      "to": "worktreeが無い-1",
+      "to": "前提を読めない-1",
       "kind": "false",
-      "condition": "NOT 候補の worktree がちょうど1つある"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "worktreeが2つ以上-1",
-      "kind": "false",
-      "condition": "NOT 候補の worktree がちょうど1つある"
+      "condition": "NOT worktree の置き場所を走査できる"
     },
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
-      "kind": "true",
-      "condition": "継続監視が動いていないか、park の値が tracker.active_states に入っていない"
-    },
-    {
-      "from": "BASIC FLOW-13",
-      "to": "parkの先が作業中の状態-1",
-      "kind": "false",
-      "condition": "NOT 継続監視が動いていないか、park の値が tracker.active_states に入っていない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-14",
       "to": "BASIC FLOW-15",
-      "kind": "true",
-      "condition": "利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある"
-    },
-    {
-      "from": "BASIC FLOW-14",
-      "to": "書き込む先を確かめられない-1",
-      "kind": "false",
-      "condition": "NOT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-15",
       "to": "BASIC FLOW-16",
       "kind": "true",
-      "condition": "手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける"
+      "condition": "候補の worktree がちょうど1つある"
     },
     {
       "from": "BASIC FLOW-15",
-      "to": "手離し先のStatusを読めない-1",
+      "to": "worktreeが無い-1",
       "kind": "false",
-      "condition": "NOT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける"
+      "condition": "NOT 候補の worktree がちょうど1つある"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "worktreeが2つ以上-1",
+      "kind": "false",
+      "condition": "NOT 候補の worktree がちょうど1つある"
     },
     {
       "from": "BASIC FLOW-16",
@@ -994,190 +1129,282 @@
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
       "kind": "true",
-      "condition": "手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる"
+      "condition": "ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない"
     },
     {
       "from": "BASIC FLOW-17",
-      "to": "手離しの書き込み失敗-1",
+      "to": "directchatのStatusでは取り消せない-1",
       "kind": "false",
-      "condition": "NOT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる"
+      "condition": "NOT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない"
     },
     {
       "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-19",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "directchatのStatusでは取り消せない-1",
+      "kind": "false",
+      "condition": "NOT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない"
     },
     {
       "from": "BASIC FLOW-19",
       "to": "BASIC FLOW-20",
       "kind": "true",
-      "condition": "手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる"
+      "condition": "継続監視が動いていないか、park の値が tracker.active_states に入っていない"
     },
     {
       "from": "BASIC FLOW-19",
-      "to": "pane待ちを終えられない-1",
+      "to": "parkの先が作業中の状態-1",
       "kind": "false",
-      "condition": "NOT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる"
-    },
-    {
-      "from": "BASIC FLOW-19",
-      "to": "実行の中断-1",
-      "kind": "global",
-      "condition": "利用者が SIGINT または SIGTERM で実行を中断した場合"
+      "condition": "NOT 継続監視が動いていないか、park の値が tracker.active_states に入っていない"
     },
     {
       "from": "BASIC FLOW-20",
       "to": "BASIC FLOW-21",
       "kind": "true",
-      "condition": "worktree が置き場所の内側にあり身元ファイルを読める"
+      "condition": "継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない"
     },
     {
       "from": "BASIC FLOW-20",
-      "to": "前提を読めない-1",
+      "to": "directchatのStatusでは取り消せない-1",
       "kind": "false",
-      "condition": "NOT worktree が置き場所の内側にあり身元ファイルを読める"
+      "condition": "NOT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない"
     },
     {
       "from": "BASIC FLOW-21",
       "to": "BASIC FLOW-22",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "書き込む先を確かめられない-1",
+      "kind": "false",
+      "condition": "NOT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある"
     },
     {
       "from": "BASIC FLOW-22",
       "to": "BASIC FLOW-23",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "手離し先のStatusを読めない-1",
+      "kind": "false",
+      "condition": "NOT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける"
     },
     {
       "from": "BASIC FLOW-23",
       "to": "BASIC FLOW-24",
-      "kind": "true",
-      "condition": "利用者が dry-run を指定していない"
-    },
-    {
-      "from": "BASIC FLOW-23",
-      "to": "見せるだけで終わる-1",
-      "kind": "false",
-      "condition": "NOT 利用者が dry-run を指定していない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-24",
       "to": "BASIC FLOW-25",
       "kind": "true",
-      "condition": "失うものが無く調べ切れているか、利用者が force を指定している"
+      "condition": "手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる"
     },
     {
       "from": "BASIC FLOW-24",
-      "to": "失うものがある-1",
+      "to": "手離しの書き込み失敗-1",
       "kind": "false",
-      "condition": "NOT 失うものが無く調べ切れているか、利用者が force を指定している"
+      "condition": "NOT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる"
     },
     {
       "from": "BASIC FLOW-25",
       "to": "BASIC FLOW-26",
-      "kind": "true",
-      "condition": "手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い"
-    },
-    {
-      "from": "BASIC FLOW-25",
-      "to": "手を離させていないのにpaneが無いと言えない-1",
-      "kind": "false",
-      "condition": "NOT 手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-26",
       "to": "BASIC FLOW-27",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる"
+    },
+    {
+      "from": "BASIC FLOW-26",
+      "to": "pane待ちを終えられない-1",
+      "kind": "false",
+      "condition": "NOT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる"
+    },
+    {
+      "from": "BASIC FLOW-26",
+      "to": "実行の中断-1",
+      "kind": "global",
+      "condition": "利用者が SIGINT または SIGTERM で実行を中断した場合"
     },
     {
       "from": "BASIC FLOW-27",
       "to": "BASIC FLOW-28",
       "kind": "true",
-      "condition": "worktree が置き場所から消えている"
+      "condition": "worktree が置き場所の内側にあり身元ファイルを読める"
     },
     {
       "from": "BASIC FLOW-27",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT worktree が置き場所の内側にあり身元ファイルを読める"
+    },
+    {
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "BASIC FLOW-32",
+      "kind": "true",
+      "condition": "利用者が dry-run を指定していない"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "見せるだけで終わる-1",
+      "kind": "false",
+      "condition": "NOT 利用者が dry-run を指定していない"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "BASIC FLOW-33",
+      "kind": "true",
+      "condition": "失うものが無く調べ切れているか、利用者が force を指定している"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "失うものがある-1",
+      "kind": "false",
+      "condition": "NOT 失うものが無く調べ切れているか、利用者が force を指定している"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "BASIC FLOW-34",
+      "kind": "true",
+      "condition": "手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "手を離させていないのにpaneが無いと言えない-1",
+      "kind": "false",
+      "condition": "NOT 手を離させる書き込みを行ったか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が1つも無い"
+    },
+    {
+      "from": "BASIC FLOW-34",
+      "to": "BASIC FLOW-35",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-35",
+      "to": "BASIC FLOW-36",
+      "kind": "true",
+      "condition": "worktree が置き場所から消えている"
+    },
+    {
+      "from": "BASIC FLOW-35",
       "to": "片付けの失敗-1",
       "kind": "false",
       "condition": "NOT worktree が置き場所から消えている"
     },
     {
-      "from": "BASIC FLOW-28",
-      "to": "BASIC FLOW-29",
+      "from": "BASIC FLOW-36",
+      "to": "BASIC FLOW-37",
       "kind": "true",
       "condition": "片付け切れずに残ったものが無い"
     },
     {
-      "from": "BASIC FLOW-28",
-      "to": "BASIC FLOW-35",
+      "from": "BASIC FLOW-36",
+      "to": "BASIC FLOW-43",
       "kind": "false",
       "condition": "NOT 片付け切れずに残ったものが無い"
-    },
-    {
-      "from": "BASIC FLOW-29",
-      "to": "BASIC FLOW-30",
-      "kind": "true",
-      "condition": "身元ファイルに書かれた branch がリポジトリに実在しなかった"
-    },
-    {
-      "from": "BASIC FLOW-29",
-      "to": "BASIC FLOW-32",
-      "kind": "false",
-      "condition": "NOT 身元ファイルに書かれた branch がリポジトリに実在しなかった"
-    },
-    {
-      "from": "BASIC FLOW-30",
-      "to": "BASIC FLOW-37",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-32",
-      "to": "BASIC FLOW-37",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-35",
-      "to": "BASIC FLOW-37",
-      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-37",
       "to": "BASIC FLOW-38",
       "kind": "true",
-      "condition": "利用者が片付けたあとの Status の値を指定している"
+      "condition": "身元ファイルに書かれた branch がリポジトリに実在しなかった"
     },
     {
       "from": "BASIC FLOW-37",
-      "to": "BASIC FLOW-42",
+      "to": "BASIC FLOW-40",
+      "kind": "false",
+      "condition": "NOT 身元ファイルに書かれた branch がリポジトリに実在しなかった"
+    },
+    {
+      "from": "BASIC FLOW-38",
+      "to": "BASIC FLOW-45",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-40",
+      "to": "BASIC FLOW-45",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-43",
+      "to": "BASIC FLOW-45",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-45",
+      "to": "BASIC FLOW-46",
+      "kind": "true",
+      "condition": "利用者が片付けたあとの Status の値を指定している"
+    },
+    {
+      "from": "BASIC FLOW-45",
+      "to": "BASIC FLOW-50",
       "kind": "false",
       "condition": "NOT 利用者が片付けたあとの Status の値を指定している"
     },
     {
-      "from": "BASIC FLOW-38",
-      "to": "BASIC FLOW-39",
+      "from": "BASIC FLOW-46",
+      "to": "BASIC FLOW-47",
       "kind": "true",
       "condition": "ボードから issue の project item の ID を引ける"
     },
     {
-      "from": "BASIC FLOW-38",
+      "from": "BASIC FLOW-46",
       "to": "片付け後のStatusを読めない-1",
       "kind": "false",
       "condition": "NOT ボードから issue の project item の ID を引ける"
     },
     {
-      "from": "BASIC FLOW-39",
-      "to": "BASIC FLOW-40",
+      "from": "BASIC FLOW-47",
+      "to": "BASIC FLOW-48",
       "kind": "true",
       "condition": "ボードの Status を指定された値へ書き換えられる"
     },
     {
-      "from": "BASIC FLOW-39",
+      "from": "BASIC FLOW-47",
       "to": "片付け後の書き込み失敗-1",
       "kind": "false",
       "condition": "NOT ボードの Status を指定された値へ書き換えられる"
     },
     {
-      "from": "BASIC FLOW-42",
-      "to": "BASIC FLOW-43",
+      "from": "BASIC FLOW-50",
+      "to": "BASIC FLOW-51",
+      "kind": "seq"
+    },
+    {
+      "from": "使い方の表示-1",
+      "to": "使い方の表示-2",
+      "kind": "seq"
+    },
+    {
+      "from": "引数指定エラー-1",
+      "to": "引数指定エラー-2",
       "kind": "seq"
     },
     {
@@ -1188,6 +1415,11 @@
     {
       "from": "前提を読めない-1",
       "to": "前提を読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "前提を読めない-2",
+      "to": "前提を読めない-3",
       "kind": "seq"
     },
     {
@@ -1316,6 +1548,11 @@
       "kind": "seq"
     },
     {
+      "from": "directchatのStatusでは取り消せない-1",
+      "to": "directchatのStatusでは取り消せない-2",
+      "kind": "seq"
+    },
+    {
       "from": "parkの先が作業中の状態-1",
       "to": "parkの先が作業中の状態-2",
       "kind": "seq"
@@ -1416,7 +1653,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1448,15 +1685,26 @@
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
-        "BASIC FLOW-39",
-        "BASIC FLOW-40"
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1466,15 +1714,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1494,7 +1747,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "片付け後の書き込み失敗",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1526,17 +1779,28 @@
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
-        "BASIC FLOW-39",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
         "片付け後の書き込み失敗-1",
         "片付け後の書き込み失敗-2",
         "片付け後の書き込み失敗-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1546,15 +1810,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1577,7 +1846,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "片付け後のStatusを読めない",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1609,15 +1878,26 @@
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
         "片付け後のStatusを読めない-1",
         "片付け後のStatusを読めない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1627,15 +1907,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1656,7 +1941,7 @@
       "id": "P004",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1688,14 +1973,25 @@
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-38",
+        "BASIC FLOW-45",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1705,15 +2001,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1733,7 +2034,7 @@
       "id": "P005",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1764,16 +2065,27 @@
         "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-38",
-        "BASIC FLOW-39",
-        "BASIC FLOW-40"
+        "BASIC FLOW-40",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1783,15 +2095,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1812,7 +2129,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "片付け後の書き込み失敗",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1843,18 +2160,29 @@
         "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-38",
-        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
         "片付け後の書き込み失敗-1",
         "片付け後の書き込み失敗-2",
         "片付け後の書き込み失敗-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1864,15 +2192,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1896,7 +2229,7 @@
       "id": "P007",
       "terminal": "abort",
       "terminal_flow": "片付け後のStatusを読めない",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1927,16 +2260,27 @@
         "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-38",
+        "BASIC FLOW-40",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
         "片付け後のStatusを読めない-1",
         "片付け後のStatusを読めない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -1946,15 +2290,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -1976,7 +2325,7 @@
       "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2007,15 +2356,26 @@
         "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-40",
+        "BASIC FLOW-45",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2025,15 +2385,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2054,7 +2419,7 @@
       "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2084,16 +2449,27 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
         "BASIC FLOW-35",
-        "BASIC FLOW-37",
-        "BASIC FLOW-38",
-        "BASIC FLOW-39",
-        "BASIC FLOW-40"
+        "BASIC FLOW-36",
+        "BASIC FLOW-43",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2103,15 +2479,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2131,7 +2512,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "片付け後の書き込み失敗",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2161,18 +2542,29 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
         "BASIC FLOW-35",
-        "BASIC FLOW-37",
-        "BASIC FLOW-38",
-        "BASIC FLOW-39",
+        "BASIC FLOW-36",
+        "BASIC FLOW-43",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
         "片付け後の書き込み失敗-1",
         "片付け後の書き込み失敗-2",
         "片付け後の書き込み失敗-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2182,15 +2574,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2213,7 +2610,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "片付け後のStatusを読めない",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。",
+      "postcondition": "worktree は置き場所に無い。issue の Status は利用者が指定した値ではない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2243,16 +2640,27 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
         "BASIC FLOW-35",
-        "BASIC FLOW-37",
-        "BASIC FLOW-38",
+        "BASIC FLOW-36",
+        "BASIC FLOW-43",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
         "片付け後のStatusを読めない-1",
         "片付け後のStatusを読めない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2262,15 +2670,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2291,7 +2704,7 @@
       "id": "P012",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。worktree を作業ディレクトリに持つ pane は無い。issue の Status は利用者が指定したときだけ指定された値へ動いている。終了コードは 0 である。",
+      "postcondition": "worktree は置き場所に無い。片付け切れずに残ったものは、すべて標準出力に出ている。利用者が片付けたあとの Status の値を指定した実行では、issue の Status は指定された値である。指定が無く手を離させる書き込みを行った実行では、issue の Status は park の値である。指定が無く手を離させる書き込みも行っていない実行では、システムは issue の Status を書き換えていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2321,15 +2734,26 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
         "BASIC FLOW-35",
-        "BASIC FLOW-37",
-        "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-36",
+        "BASIC FLOW-43",
+        "BASIC FLOW-45",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2339,15 +2763,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2367,7 +2796,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "片付けの失敗",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は片付けの前の値のままである。終了コードは 1 である。",
+      "postcondition": "worktree のディレクトリは置き場所に残っている。branch は残っている。issue の Status は片付けの前の値のままである。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2396,14 +2825,25 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
         "片付けの失敗-1",
         "片付けの失敗-2",
         "片付けの失敗-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2413,15 +2853,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2429,7 +2874,7 @@
         "システムは herdr に worktree と pane と herdr の workspace の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。",
         "システムは VALIDATES THAT worktree が置き場所から消えている。",
         "CONDITION: NOT worktree が置き場所から消えている",
-        "システムは利用者に片付けを見送った理由の一覧を応答する。",
+        "システムは利用者に片付けられなかった理由か、片付けを見送った理由の一覧を応答する。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
@@ -2438,7 +2883,7 @@
       "id": "P014",
       "terminal": "abort",
       "terminal_flow": "手を離させていないのにpaneが無いと言えない",
-      "postcondition": "worktree は残っている。branch は残っている。pane は1つも消していない。issue の Status は変わっていない。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。pane は1つも消していない。システムは issue の Status を書き換えていない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2465,14 +2910,25 @@
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
         "手を離させていないのにpaneが無いと言えない-1",
         "手を離させていないのにpaneが無いと言えない-2",
         "手を離させていないのにpaneが無いと言えない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2482,15 +2938,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
@@ -2505,7 +2966,7 @@
       "id": "P015",
       "terminal": "abort",
       "terminal_flow": "失うものがある",
-      "postcondition": "worktree は残っている。コミットしていない変更は残っている。push していない commit は残っている。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。コミットしていない変更は残っている。push していない commit は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2531,14 +2992,25 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
         "失うものがある-1",
         "失うものがある-2",
         "失うものがある-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2548,20 +3020,25 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "CONDITION: NOT 失うものが無く調べ切れているか、利用者が force を指定している",
-        "システムは利用者に force が無い限り消さないことを応答する。",
+        "システムは利用者に、失うものがあるか失うものを調べ切れていないので、force が無い限り消さないことを応答する。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
@@ -2570,7 +3047,7 @@
       "id": "P016",
       "terminal": "abort",
       "terminal_flow": "見せるだけで終わる",
-      "postcondition": "worktree は残っている。branch は残っている。消すものと失うものの一覧は表示されている。ボードへの書き込みは1回も起きていない。終了コードは 0 である。",
+      "postcondition": "worktree は残っている。branch は残っている。消すものと失うものの一覧は標準出力に出ている。ボードへの書き込みは1回も起きていない。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2595,13 +3072,24 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "見せるだけで終わる-1",
         "見せるだけで終わる-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2611,15 +3099,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムはボードを1度も読んでいないときに限り、ボードから issue の Status を引く。",
+        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
         "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "CONDITION: NOT 利用者が dry-run を指定していない",
@@ -2631,7 +3124,7 @@
       "id": "P017",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
-      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2653,13 +3146,24 @@
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
         "前提を読めない-1",
-        "前提を読めない-2"
+        "前提を読めない-2",
+        "前提を読めない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2669,16 +3173,21 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
         "CONDITION: NOT worktree が置き場所の内側にあり身元ファイルを読める",
-        "システムは利用者に読めなかった対象と理由を応答する。",
+        "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
@@ -2686,7 +3195,7 @@
       "id": "P018",
       "terminal": "abort",
       "terminal_flow": "pane待ちを終えられない",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2707,14 +3216,24 @@
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
         "pane待ちを終えられない-1",
         "pane待ちを終えられない-2",
         "pane待ちを終えられない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2724,12 +3243,16 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "CONDITION: NOT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる",
         "システムは利用者に、残っている pane の ID と待った上限か、herdr が pane の一覧に答えられない理由と、どちらも force で越えられることを応答する。",
@@ -2741,7 +3264,7 @@
       "id": "P019",
       "terminal": "abort",
       "terminal_flow": "実行の中断",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2762,6 +3285,13 @@
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
         "実行の中断-1",
         "実行の中断-2",
         "実行の中断-3",
@@ -2769,8 +3299,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2780,16 +3313,20 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
-        "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
+        "システムは手を離させる段を通ったときだけ、利用者に手を離させた先の Status か、ボードの Status が tracker.active_states に入っていないので Status を動かさないことを応答する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。",
         "CONDITION: 利用者が SIGINT または SIGTERM で実行を中断した場合",
         "システムは pane が消えるのを待つのをやめる。",
-        "システムは利用者に中断されたことと、残っている pane の ID を応答する。",
+        "システムは利用者に中断されたことと、残っている pane の ID か herdr が pane の一覧に答えられなかった理由を応答する。",
         "システムは利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
@@ -2798,7 +3335,7 @@
       "id": "P020",
       "terminal": "abort",
       "terminal_flow": "手離しの書き込み失敗",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は tracker.active_states の値のままである。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は tracker.active_states の値のままである。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2817,13 +3354,23 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "手離しの書き込み失敗-1",
         "手離しの書き込み失敗-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2833,7 +3380,11 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
@@ -2847,7 +3398,7 @@
       "id": "P021",
       "terminal": "abort",
       "terminal_flow": "手離し先のStatusを読めない",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。継続監視は issue を掴んだままである。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。継続監視は issue を掴んだままである。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2864,13 +3415,23 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "手離し先のStatusを読めない-1",
         "手離し先のStatusを読めない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2880,7 +3441,11 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "システムは VALIDATES THAT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける。",
         "CONDITION: NOT 手を離させる段を通らないか、ボードから issue の Status と project item の ID を引ける",
@@ -2892,7 +3457,7 @@
       "id": "P022",
       "terminal": "abort",
       "terminal_flow": "書き込む先を確かめられない",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2908,13 +3473,23 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
         "書き込む先を確かめられない-1",
         "書き込む先を確かめられない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2924,7 +3499,11 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある。",
         "CONDITION: NOT 利用者が片付けたあとの Status の値を指定しておらず継続監視も動いていないか、書き込みうる Status の値がすべてボードの選択肢にある",
         "システムは利用者にボードへ繋げない理由か、ボードの選択肢に無い Status の値を応答する。",
@@ -2934,8 +3513,8 @@
     {
       "id": "P023",
       "terminal": "abort",
-      "terminal_flow": "parkの先が作業中の状態",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。終了コードは 1 である。",
+      "terminal_flow": "directchatのStatusでは取り消せない",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。利用者が force を指定している実行でも、システムは何も消していない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2950,13 +3529,23 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
-        "parkの先が作業中の状態-1",
-        "parkの先が作業中の状態-2"
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "directchatのStatusでは取り消せない-1",
+        "directchatのStatusでは取り消せない-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -2966,17 +3555,21 @@
         "システムは worktree の中の身元ファイルを読む。",
         "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
         "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
-        "CONDITION: NOT 継続監視が動いていないか、park の値が tracker.active_states に入っていない",
-        "システムは利用者に park の値が tracker.active_states に入っていることを応答する。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない。",
+        "CONDITION: NOT 継続監視が動いていないか、park の値が tracker.direct_chat_state の値でない",
+        "システムは利用者に、issue の Status か、片付けたあとの Status の指定か、park の値が tracker.direct_chat_state の値であることと、direct chat でない値にする案内を応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P024",
       "terminal": "abort",
-      "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
+      "terminal_flow": "parkの先が作業中の状態",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2990,6 +3583,162 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "parkの先が作業中の状態-1",
+        "parkの先が作業中の状態-2"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
+        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
+        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
+        "システムは獲得できたロックを実行が終わるまで握り続ける。",
+        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
+        "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。",
+        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
+        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 継続監視が動いていないか、park の値が tracker.active_states に入っていない。",
+        "CONDITION: NOT 継続監視が動いていないか、park の値が tracker.active_states に入っていない",
+        "システムは利用者に park の値が tracker.active_states に入っていることを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P025",
+      "terminal": "abort",
+      "terminal_flow": "directchatのStatusでは取り消せない",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。利用者が force を指定している実行でも、システムは何も消していない。理由は標準エラーに出ている。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "directchatのStatusでは取り消せない-1",
+        "directchatのStatusでは取り消せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
+        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
+        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
+        "システムは獲得できたロックを実行が終わるまで握り続ける。",
+        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
+        "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。",
+        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
+        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "システムは VALIDATES THAT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない。",
+        "CONDITION: NOT 利用者が片付けたあとの Status の値を指定していないか、指定された値が tracker.direct_chat_state の値でない",
+        "システムは利用者に、issue の Status か、片付けたあとの Status の指定か、park の値が tracker.direct_chat_state の値であることと、direct chat でない値にする案内を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P026",
+      "terminal": "abort",
+      "terminal_flow": "directchatのStatusでは取り消せない",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。ボードへの書き込みは1回も起きていない。利用者が force を指定している実行でも、システムは何も消していない。理由は標準エラーに出ている。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "directchatのStatusでは取り消せない-1",
+        "directchatのStatusでは取り消せない-2"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
+        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
+        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
+        "システムは獲得できたロックを実行が終わるまで握り続ける。",
+        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
+        "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。",
+        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
+        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "システムは設定の tracker.direct_chat_state が空でないときに限り、ボードから issue の Status と project item の ID を引く。",
+        "システムは VALIDATES THAT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない。",
+        "CONDITION: NOT ボードから issue の Status を引けていないか、引けた Status が tracker.direct_chat_state の値でない",
+        "システムは利用者に、issue の Status か、片付けたあとの Status の指定か、park の値が tracker.direct_chat_state の値であることと、direct chat でない値にする案内を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P027",
+      "terminal": "abort",
+      "terminal_flow": "worktreeが無い",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が dry-run を指定せず force を指定していて設定の cleanup.delete_branch が true である実行でだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。応答は標準出力に出ている。終了コードは 0 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "worktreeが無い-2",
         "worktreeが無い-3",
@@ -3005,8 +3754,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3032,10 +3784,10 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P028",
       "terminal": "abort",
       "terminal_flow": "残ったbranchを消せない",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。終了コードは 1 である。",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。消していない理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3049,6 +3801,9 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "worktreeが無い-2",
         "worktreeが無い-3",
@@ -3064,8 +3819,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3086,16 +3844,16 @@
         "システムは VALIDATES THAT 利用者が force を指定している。",
         "システムは VALIDATES THAT git が branch を消せる。",
         "CONDITION: NOT git が branch を消せる",
-        "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドを応答する。",
+        "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドか、git が断った理由と手で消すコマンドを応答する。",
         "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P026",
+      "id": "P029",
       "terminal": "abort",
       "terminal_flow": "残ったbranchを消せない",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。終了コードは 1 である。",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。消していない理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3109,6 +3867,9 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "worktreeが無い-2",
         "worktreeが無い-3",
@@ -3123,8 +3884,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3144,16 +3908,16 @@
         "IF 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である THEN",
         "システムは VALIDATES THAT 利用者が force を指定している。",
         "CONDITION: NOT 利用者が force を指定している",
-        "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドを応答する。",
+        "システムは利用者に branch を消していないことと、force の指定が要ることか、その branch を使っていることになっている worktree の在りかと登録を掃除するコマンドか、git が断った理由と手で消すコマンドを応答する。",
         "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P027",
+      "id": "P030",
       "terminal": "abort",
       "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が dry-run を指定せず force を指定していて設定の cleanup.delete_branch が true である実行でだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。応答は標準出力に出ている。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3167,6 +3931,9 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "worktreeが無い-2",
         "worktreeが無い-3",
@@ -3180,8 +3947,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3206,10 +3976,10 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が dry-run を指定せず force を指定していて設定の cleanup.delete_branch が true である実行でだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。応答は標準出力に出ている。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3223,6 +3993,9 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "worktreeが無い-2",
         "worktreeが無い-3",
@@ -3233,8 +4006,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3256,10 +4032,10 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "候補から外したworktreeがある",
-      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。終了コードは 1 である。",
+      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。確かめられなかったことは標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3273,6 +4049,9 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが無い-1",
         "候補から外したworktreeがある-1",
         "候補から外したworktreeがある-2",
@@ -3280,8 +4059,11 @@
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3300,10 +4082,10 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "worktreeが2つ以上",
-      "postcondition": "一致した worktree はすべて残っている。branch はすべて残っている。issue の Status は変わっていない。終了コードは 1 である。",
+      "postcondition": "一致した worktree はすべて残っている。branch はすべて残っている。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。一覧は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3317,13 +4099,19 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "worktreeが2つ以上-1",
         "worktreeが2つ以上-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3339,10 +4127,10 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
-      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3353,13 +4141,20 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "前提を読めない-1",
-        "前提を読めない-2"
+        "前提を読めない-2",
+        "前提を読めない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
         "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
         "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
         "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
         "システムは獲得できたロックを実行が終わるまで握り続ける。",
@@ -3367,78 +4162,166 @@
         "システムは利用者に継続監視が動いているかどうかと、手を離させる段を通るかどうかを応答する。",
         "システムは VALIDATES THAT worktree の置き場所を走査できる。",
         "CONDITION: NOT worktree の置き場所を走査できる",
-        "システムは利用者に読めなかった対象と理由を応答する。",
+        "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P032",
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
-      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "前提を読めない-1",
+        "前提を読めない-2",
+        "前提を読めない-3"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
+        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
+        "CONDITION: NOT 二重起動防止のロックファイルを開ける",
+        "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P036",
+      "terminal": "abort",
+      "terminal_flow": "前提を読めない",
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "前提を読めない-1",
+        "前提を読めない-2",
+        "前提を読めない-3"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる。",
+        "CONDITION: NOT 設定ファイルを読めて、設定から外部へ繋ぐ処理と二重起動防止のロックの置き場所を用意できる",
+        "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P037",
+      "terminal": "abort",
+      "terminal_flow": "issueURLの解釈不能",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。理由は標準エラーに出ている。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "issueURLの解釈不能-1",
+        "issueURLの解釈不能-2"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "CONDITION: NOT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる",
+        "システムは利用者に issue の URL を解釈できないことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P038",
+      "terminal": "abort",
+      "terminal_flow": "前提を読めない",
+      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。理由は標準エラーに出ている。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "前提を読めない-1",
-        "前提を読めない-2"
+        "前提を読めない-2",
+        "前提を読めない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "CONDITION: NOT 二重起動防止のロックファイルを開ける",
-        "システムは利用者に読めなかった対象と理由を応答する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "システムは VALIDATES THAT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる。",
+        "CONDITION: NOT 設定ファイルの絶対パスと GitHub の GraphQL API の接続先を決められる",
+        "システムは利用者に読めなかったか用意できなかった対象と理由を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P033",
+      "id": "P039",
       "terminal": "abort",
-      "terminal_flow": "前提を読めない",
-      "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
+      "terminal_flow": "引数指定エラー",
+      "postcondition": "システムは設定ファイルを読んでいない。worktree は残っている。branch は残っている。issue の Status は変わっていない。理由は標準エラーに出ている。終了コードは 2 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
-        "前提を読めない-1",
-        "前提を読めない-2"
+        "引数指定エラー-1",
+        "引数指定エラー-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "CONDITION: NOT 設定ファイルを読める",
-        "システムは利用者に読めなかった対象と理由を応答する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "システムは VALIDATES THAT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる。",
+        "CONDITION: NOT 利用者が指定した引数が受け付けられる形式であり、二重起動防止のロックの置き場所を決められる",
+        "システムは利用者に引数の受け付けられない箇所か、二重起動防止のロックの置き場所を決められない理由を応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P034",
+      "id": "P040",
       "terminal": "abort",
-      "terminal_flow": "issueURLの解釈不能",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。終了コードは 1 である。",
+      "terminal_flow": "使い方の表示",
+      "postcondition": "システムは設定ファイルを読んでいない。worktree は残っている。branch は残っている。issue の Status は変わっていない。使い方は標準エラーに出ている。終了コードは 0 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
-        "issueURLの解釈不能-1",
-        "issueURLの解釈不能-2"
+        "使い方の表示-1",
+        "使い方の表示-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "CONDITION: NOT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる",
-        "システムは利用者に issue の URL を解釈できないことを応答する。",
+        "システムは VALIDATES THAT 利用者が使い方の表示を要求していない。",
+        "CONDITION: NOT 利用者が使い方の表示を要求していない",
+        "システムは利用者に continuo abandon の使い方を応答する。",
         "ABORT"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 95,
-    "nodes_covered": 95,
-    "edges_total": 102,
-    "edges_covered": 102
+    "nodes_total": 110,
+    "nodes_covered": 110,
+    "edges_total": 120,
+    "edges_covered": 120
   }
 }

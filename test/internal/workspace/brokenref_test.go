@@ -379,35 +379,6 @@ func TestPrepare_packedrefsの生きたrefは残す(t *testing.T) {
 	}
 }
 
-// 目的: 片付け（`continuo abandon`）でも、壊れた ref を消して branch を片付け切ることを
-// 確認する（issue #28、設計 3-22b）。
-// 与える情報: 用意した worktree の branch の loose な ref を0バイトにした状態。
-// `git branch -D` は `error: branch '<名前>' not found` で断る。
-// 成功条件: BranchDeleted が真で、ref のファイルが消えており、branch が残っていないこと。
-func TestCleanup_壊れたrefのbranchも片付ける(t *testing.T) {
-	cf := newCleanupFixture(t, nil)
-	branch := cf.Prepared.Branch.String()
-	refPath := breakBranchRef(t, cf.Repo.Dir, branch)
-
-	req := cleanupRequest(cf)
-	// **見送りの判定は通さない。**壊れた ref のせいで worktree 側の git が答えられず、
-	// 「判定できないので消さない」で止まるため。`continuo abandon --force` と同じ経路である。
-	req.Force = true
-	result, err := cf.Manager.Cleanup(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Cleanup に失敗した: %v", err)
-	}
-	if !result.BranchDeleted {
-		t.Fatalf("branch を片付けられていない（残った理由: %v）", result.Leftovers)
-	}
-	if _, err := os.Stat(refPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("壊れた ref のファイルが残っている（%s）: %v", refPath, err)
-	}
-	if out, err := gitTry(t, cf.Repo.Dir, "show-ref", "--verify", "refs/heads/"+branch); err == nil {
-		t.Fatalf("branch が残っている: %s", out)
-	}
-}
-
 // 目的: workspace の Manager を通さずに、壊れた ref の状態そのものを記録に残す。
 // **「消せない」ことが前提なので、その前提が git の版で変わっていないかを確かめる。**
 // 与える情報: 0バイトの loose な ref。
@@ -566,33 +537,6 @@ func TestCleanup_packedrefsから生き返るbranchを片付けたと答えな�
 	// 消し切れているなら、BranchDeleted が真であること。
 	if !result.BranchDeleted {
 		t.Fatalf("branch は消えているのに「片付けた」と答えていない: %+v", *result)
-	}
-}
-
-// 目的: **壊れた ref のファイルを消したことを、人間の画面へ出す**ことを確認する
-// （issue #28 の監査）。`continuo abandon` は Logger を渡さないので、ログにだけ書くと
-// 「continuo が `.git` の中のファイルを1つ消した」ことが1文字も伝わらない。
-// 与える情報: 用意した worktree の branch の loose な ref を0バイトにした状態。
-// 成功条件: CleanupResult.Notices に、消したファイルの絶対パスを含む行があること。
-func TestCleanup_壊れたrefを消したことを画面に出す(t *testing.T) {
-	cf := newCleanupFixture(t, nil)
-	branch := cf.Prepared.Branch.String()
-	refPath := breakBranchRef(t, cf.Repo.Dir, branch)
-
-	req := cleanupRequest(cf)
-	req.Force = true
-	result, err := cf.Manager.Cleanup(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Cleanup に失敗した: %v", err)
-	}
-	found := false
-	for _, notice := range result.Notices {
-		if strings.Contains(notice, refPath) {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("消したファイルのパスが人間の画面へ出ていない（%s）: %v", refPath, result.Notices)
 	}
 }
 

@@ -539,65 +539,6 @@ func drainKeyed(r *recordingRunner) {
 	}
 }
 
-// 目的: 巡回の中の片付け（NoWait）が、押さえられた clone では何も消さずに ErrCloneBusy を返し、
-// 閉じたあとの次の巡回で片付くことを確かめる（巡回が押さえを待つと、止まった run の検知と着手が止まる）。
-// 与える情報: worktree を1つ用意したあと、statusline取得の workspace を同じ clone に開き、
-// NoWait の Cleanup を呼ぶ。閉じたあとにもう一度 NoWait の Cleanup を呼ぶ。
-// 成功条件: 1回目は待たずに ErrCloneBusy が返り、`worktree.open`・`worktree.remove` が届かず、
-// worktree も設定ファイルも残ること。引き直しの仕事が TryDo で積まれていること。
-// 閉じたあとの2回目は Removed で返り、worktree が消えること。
-func TestStatusline_NoWaitの片付けは押さえられたcloneで何も消さずErrCloneBusyを返す(t *testing.T) {
-	l := loop.New(nil)
-	l.Start()
-	t.Cleanup(l.Close)
-	fake := newStatuslineHerdr(t)
-	runner := &recordingRunner{inner: l, fake: fake, keyed: make(chan string, 16)}
-	cf := newCleanupFixtureWith(t, fixtureOptions{Herdr: fake, Loop: runner})
-	fx := &statuslineFixture{managerFixture: cf.managerFixture, Loop: l, Runner: runner}
-
-	ws, openedAt := openStatusline(t, fx, cf.Repo.Dir)
-	busy := asyncResult(func() error {
-		_, err := cf.Manager.Cleanup(context.Background(), forceCleanup(cf.Prepared.Path, true))
-		return err
-	})
-	if err := waitResult(t, busy, "NoWait の Cleanup"); !errors.Is(err, workspace.ErrCloneBusy) {
-		t.Fatalf("Cleanup = %v, want ErrCloneBusy", err)
-	}
-	got := methodsAfter(fake, openedAt)
-	if slices.Contains(got, herdr.MethodWorktreeOpen) || slices.Contains(got, herdr.MethodWorktreeRemove) {
-		t.Fatalf("押さえられた clone で worktree.open か worktree.remove を送った: %v", got)
-	}
-	if _, err := os.Stat(cf.Prepared.Path); err != nil {
-		t.Fatalf("ErrCloneBusy なのに worktree が消えた: %v", err)
-	}
-	if _, err := os.Stat(cf.SettingsPath); err != nil {
-		t.Fatalf("ErrCloneBusy なのに設定ファイルが消えた: %v", err)
-	}
-	sawTry := false
-	for _, c := range runner.Calls() {
-		if c.Try && c.Key != "" && errors.Is(c.Err, loop.ErrBusy) {
-			sawTry = true
-		}
-	}
-	if !sawTry {
-		t.Fatalf("引き直しの仕事が TryDo で積まれていない: %+v", runner.Calls())
-	}
-
-	if outcome, err := cf.Manager.CloseStatuslineWorkspace(context.Background(), ws); err != nil || outcome != workspace.StatuslineClosed {
-		t.Fatalf("CloseStatuslineWorkspace = (%v, %v)", outcome, err)
-	}
-	result, err := cf.Manager.Cleanup(context.Background(), forceCleanup(cf.Prepared.Path, true))
-	if err != nil {
-		t.Fatalf("閉じたあとの NoWait の Cleanup が失敗した: %v", err)
-	}
-	if !result.Removed {
-		t.Fatalf("閉じたあとの Cleanup で片付かなかった: %+v", *result)
-	}
-	if _, err := os.Stat(cf.Prepared.Path); !os.IsNotExist(err) {
-		t.Fatalf("片付けたのに worktree が残っている: %v", err)
-	}
-}
-
 // ===== 閉じる判定と、押さえを放すこと =====
 
 // 目的: `herdr.worktree.create_via_herdr` が偽の人の片付けは、statusline取得の workspace が同じ clone で

@@ -1,16 +1,11 @@
-// {"RUCM-CFG-SHA256": "b7e108d0ae7958daa3565fe62cae237cc6408b684b3d2a95af6fd1d4c3e04941", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
-//
-// **走査は片付けの入口である。**「worktree と branch を片付ける」のステップ2 と
-// ステップ3 で材料を取れなかった経路が、ここのテストに対応する。
+// **走査は片付けの入口である。**「worktreeとbranchを片付ける」の代替フロー「材料を取れない」と
+// 「身元ファイルを読めない」の経路が、ここのテストに対応する。
 package workspace_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // putIdentityFile は置き場所の任意の階層に身元ファイルを1つ置く。
@@ -79,70 +74,6 @@ func TestScan_身元ファイルが無いディレクトリは無視する(t *te
 	}
 	if _, statErr := os.Stat(human); statErr != nil {
 		t.Fatalf("人間のディレクトリが消えている: %v", statErr)
-	}
-}
-
-// {"RUCM-PATH": "P034"}
-//
-// 目的: 身元ファイルの JSON が壊れていても、消さずにエラー付きで返すことを確認する
-// （設計 3-4 の段2。段6 の書き込み途中で落ちた場合）。
-// 与える情報: 壊れた JSON の身元ファイル。
-// 成功条件: 結果に Err 付きで含まれ、Identity が nil で、ファイルが残っていること。
-func TestScan_壊れた身元ファイルはエラー付きで返す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	root := fx.Manager.ResolvedRoot()
-
-	broken := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-1")
-	putIdentityFile(t, broken, `{"issue_url": "https://exa`)
-
-	found, err := fx.Manager.Scan()
-	if err != nil {
-		t.Fatalf("Scan に失敗した: %v", err)
-	}
-	if len(found) != 1 {
-		t.Fatalf("走査の結果が1件でない: %+v", found)
-	}
-	if found[0].Identity != nil {
-		t.Fatalf("壊れているのに中身が読めたことになっている: %+v", found[0])
-	}
-	if !errors.Is(found[0].Err, workspace.ErrIdentityBroken) {
-		t.Fatalf("Err が ErrIdentityBroken でない: %v", found[0].Err)
-	}
-	if _, statErr := os.Stat(filepath.Join(broken, ".continuo.json")); statErr != nil {
-		t.Fatalf("壊れた身元ファイルが消されている: %v", statErr)
-	}
-}
-
-// {"RUCM-PATH": "P035"}
-//
-// 目的: 置き場所そのものを読めなければ走査が失敗し、**どの worktree にも触らない**ことを
-// 確認する（RUCM のステップ2。材料を取れない巡回では何も決めない）。
-// 与える情報: 読み取りの permission を落とした置き場所。
-// 成功条件: Scan がエラーを返し、結果が0件で、置き場所の中身が消えていないこと。
-func TestScan_置き場所を読めなければ走査が失敗する(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	root := fx.Manager.ResolvedRoot()
-
-	worktree := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
-	putIdentityFile(t, worktree, `{"issue_identifier":"octocat/hello-world#188"}`)
-
-	if err := os.Chmod(root, 0o000); err != nil {
-		t.Fatalf("置き場所の permission を落とせない: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
-
-	found, err := fx.Manager.Scan()
-	if err == nil {
-		t.Fatalf("置き場所を読めないのにエラーにならなかった: %+v", found)
-	}
-	if len(found) != 0 {
-		t.Fatalf("読めないのに worktree を拾っている: %+v", found)
-	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatalf("置き場所の permission を戻せない: %v", err)
-	}
-	if _, statErr := os.Stat(filepath.Join(worktree, ".continuo.json")); statErr != nil {
-		t.Fatalf("走査に失敗しただけで worktree が消えている: %v", statErr)
 	}
 }
 

@@ -2365,7 +2365,7 @@ func (rs *runState) sessionUUID() string {
 	return rs.SessionUUID
 }
 
-// setPaneID は使う pane の ID を入れる（着手の段8）。
+// setPaneID は使う pane の ID を入れる（着手の段8。continuo が新しく開いた pane は、着手の段3 の直後にも入れる）。
 //
 // paneID: herdr の pane ID。
 func (rs *runState) setPaneID(paneID string) {

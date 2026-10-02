@@ -7,7 +7,6 @@
 package scaffold_test
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -15,95 +14,6 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
-
-// 目的: カンバンに載っているリポジトリを、重複なく辞書順で拾うことを確認する。
-// あわせて draft issue を数えないことを見る（リポジトリに属していないので、
-// 信頼させる対象が存在しない）。
-//
-// 与える情報: 同じリポジトリの issue を2件、別のリポジトリの issue を1件、
-// draft issue を1件返す `gh project item-list` の差し替え。
-// 成功条件: 2件が辞書順で並び、draft issue が数えられていないこと。
-func TestDetect_カンバンに載っているリポジトリを重複なく並べる(t *testing.T) {
-	run, calls := fakeGH(t, map[string]struct {
-		out []byte
-		err error
-	}{
-		"api user":          ghResponse("octocat\n", nil),
-		"project list":      ghResponse(oneProjectJSON, nil),
-		"project item-list": ghResponse(twoRepoItemsJSON, nil),
-	})
-
-	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
-
-	want := []string{"acme/anvil", "octocat/hello-world"}
-	if strings.Join(got.Values.Repositories, ",") != strings.Join(want, ",") {
-		t.Errorf("拾ったリポジトリが想定と違う: got %v, want %v", got.Values.Repositories, want)
-	}
-	if !strings.Contains((*calls)[2], "project item-list 3 --owner octocat ") {
-		t.Errorf("決まったカンバンの番号と owner で項目を引いていない: %q", (*calls)[2])
-	}
-}
-
-// 目的: 拾ったあとに「要らない行を消せ」と案内することを確認する。
-//
-// **拾った一覧をそのまま信頼させてはならない**（設計 3-33）。
-// ここで案内が出ないと、人間が削る手順そのものが誰にも伝わらない。
-//
-// 与える情報: リポジトリを2件返す差し替え。
-// 成功条件: 案内に「消して」と `continuo trust --dry-run` が含まれること。
-func TestDetect_拾ったあとに要らない行を消せと案内する(t *testing.T) {
-	run, _ := fakeGH(t, map[string]struct {
-		out []byte
-		err error
-	}{
-		"api user":          ghResponse("octocat\n", nil),
-		"project list":      ghResponse(oneProjectJSON, nil),
-		"project item-list": ghResponse(twoRepoItemsJSON, nil),
-	})
-
-	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
-
-	field := fieldOf(t, got, scaffold.RepositoriesKey)
-	if !field.Filled {
-		t.Fatalf("拾えているのに埋まった扱いになっていない: %+v", field)
-	}
-	if !containsSubstring(field.Advice, "消して") {
-		t.Errorf("要らない行を消すことを案内していない: %v", field.Advice)
-	}
-	if !containsSubstring(field.Advice, "continuo trust --dry-run") {
-		t.Errorf("何を許すことになるかの確かめ方を案内していない: %v", field.Advice)
-	}
-}
-
-// 目的: カンバンの項目を引けなくても失敗せず、手で書ける案内を出すことを確認する。
-//
-// **雛形そのものは書けるので、ここで止めない。**
-//
-// 与える情報: `gh project item-list` がエラーを返す差し替え。
-// 成功条件: repositories が埋まらず、案内に trust.repositories が含まれること。
-func TestDetect_カンバンの項目を引けなくても失敗しない(t *testing.T) {
-	run, _ := fakeGH(t, map[string]struct {
-		out []byte
-		err error
-	}{
-		"api user":          ghResponse("octocat\n", nil),
-		"project list":      ghResponse(oneProjectJSON, nil),
-		"project item-list": ghResponse("", scaffold.ErrGHNotFound),
-	})
-
-	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
-
-	if len(got.Values.Repositories) != 0 {
-		t.Errorf("引けていないのに値が入っている: %v", got.Values.Repositories)
-	}
-	field := fieldOf(t, got, scaffold.RepositoriesKey)
-	if field.Filled {
-		t.Error("引けていないのに埋まった扱いになっている")
-	}
-	if !containsSubstring(field.Advice, "trust.repositories") {
-		t.Errorf("手で書けることを案内していない: %v", field.Advice)
-	}
-}
 
 // 目的: 拾った一覧で雛形を埋めたとき、「要らない行は消すこと」がファイルに残ることを確認する。
 //

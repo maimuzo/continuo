@@ -45,12 +45,12 @@
 
 | ファイル | 足したフロー |
 | --- | --- |
-| `issue を1件処理する.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 12、RESUME STEP 12）と SPECIFIC `消さないref` |
-| `worktree と branch を片付ける.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 17、RESUME STEP 22）と SPECIFIC `消さないref` |
+| `issueを1件処理する.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 12、RESUME STEP 12）と SPECIFIC `消さないref` |
+| `worktreeとbranchを片付ける.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 17、RESUME STEP 22）と SPECIFIC `消さないref` |
 
 **RUCM → CFG → テストの順で通した。**`rucm_validator.py` はどちらもエラー0件・警告0件。
 CFG を再生成すると path ID が振り直されるので、テストの `RUCM-PATH` マーカーを対応表で書き換えた
-（`issue を1件処理する` は P014 以降が2つ後ろへ、`worktree と branch を片付ける` は
+（`issueを1件処理する` は P014 以降が2つ後ろへ、`worktreeとbranchを片付ける` は
 P002 以降が振り直し）。`sh scripts/check-rucm.sh` は OK。
 mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2ブロックとも Valid。
 
@@ -81,7 +81,7 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 
 ### あわせて直したもの
 
-- RUCM: 着手を取り消す / worktree と branch を片付ける（フローと mermaid の2ブロックずつ）
+- RUCM: 着手を取り消す / worktreeとbranchを片付ける（フローと mermaid の2ブロックずつ）
 - CFG: 両方を `rucm_to_cfg.py` で再生成し、テストの `RUCM-CFG-SHA256` を更新
 - 設計: [docs/plans/continuo_design.md](continuo_design.md) に 3-37-9b / 3-37-9c / 3-37-9d を追加
 - 文言: `internal/i18n/keys.go` と `internal/i18n/messages/ja.json` に8件
@@ -101,7 +101,7 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 | --- | --- |
 | [internal/workspace/cleanup.go](../../internal/workspace/cleanup.go) | `deletableBranch` は、実在の検査が「無い」と答えたら **`brokenRefBranchAt` を先に見てから** `branchAbsent` を返す |
 | [internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) | `gitBranchDelete` の呼び出しに `brokenRefPolicy` を渡す |
-| `worktree と branch を片付ける.rucm.md` | BASIC FLOW の 17〜23（実在の検査）と GLOBAL `壊れたref` の両方を持つ形に書き直し、CFG を再生成した |
+| `worktreeとbranchを片付ける.rucm.md` | BASIC FLOW の 17〜23（実在の検査）と GLOBAL `壊れたref` の両方を持つ形に書き直し、CFG を再生成した |
 | cleanup_test.go / repoworkspace_test.go | 振り直された path ID に `RUCM-PATH` と `RUCM-CFG-SHA256` を貼り直した |
 
 ## issue #113 レビュー結果が貼られていない PR を CI で落とす

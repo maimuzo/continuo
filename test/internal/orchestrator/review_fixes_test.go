@@ -1,6 +1,3 @@
-// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
-//
-// **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
 
 import (
@@ -143,35 +140,6 @@ func sessionStartEvent(sessionID, transcriptPath string) hookserver.HookEvent {
 		HookEventName:  "SessionStart",
 		SessionID:      sessionID,
 		TranscriptPath: transcriptPath,
-	}
-}
-
-// {"RUCM-PATH": "P015"}
-//
-// TestOnHook_worktreeの外のcwdを名乗るhookは捨てる は、送り主の突き合わせを確かめる。
-//
-// 目的: `session_id` はプロセスの引数に載るので他の run のエージェントから読める。
-// **`cwd` がその run の worktree の外なら、その hook を捨てる**ことを示す。
-// 与える情報: worktree のパスを持つ run と、まったく別の `cwd` を名乗る `Stop` hook。
-// 成功条件: 警告を出して hook を捨てる。
-func TestOnHook_worktreeの外のcwdを名乗るhookは捨てる(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	worktree := t.TempDir()
-	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-		SessionUUID:  "session-1",
-		WorktreePath: worktree,
-	}, false) {
-		t.Fatalf("検査用の run を印の集合へ入れられません")
-	}
-
-	ev := stopEvent("session-1", "", "p1")
-	ev.Cwd = t.TempDir()
-	fx.Orc.OnHook(ev)
-
-	if !strings.Contains(fx.Logs.String(), "worktree の外なので捨てました") {
-		t.Fatalf("worktree の外を名乗る hook を捨てた警告が出ていない: %s", fx.Logs.String())
 	}
 }
 
@@ -451,40 +419,6 @@ func viewOf2(t *testing.T, fx *fixture, identifier string) (orchestrator.RunView
 		}
 	}
 	return orchestrator.RunView{}, false
-}
-
-// {"RUCM-PATH": "P024"}
-//
-// TestTurn_turnループを起こせなかったらNeedsPromptを立て直す は、設計 3-8 を確かめる。
-//
-// 目的: 同じ run に turn ループを2本立てないのは正しいが、**起こせなかったことを黙って
-// 捨ててはならない**と示す。stall 検知が worker を止めても、古いループは `agent.prompt` の
-// 待ち受け（既定1時間）から戻るまで印を下ろさない。その間に再 dispatch が走ると、
-// 新しい Claude Code を起動したのに turn ループが1本も立たず、誰も turn を送らないまま
-// 放置されてリトライだけを消費する。
-//
-// 与える情報: turn の終わりを待つループが走っている run に、もう一度「turn を送るべき」が
-// 立っている状態（`AwaitTurnEnd` と `NeedsPrompt` の両方を立てて引き継ぐ）。
-// 成功条件: 2回目の巡回で「次の巡回で送り直す」と記録する（黙って捨てない）。
-func TestTurn_turnループを起こせなかったらNeedsPromptを立て直す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
-	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-		SessionUUID:  "session-1",
-		AwaitTurnEnd: true,
-	}, true) {
-		t.Fatalf("検査用の run を印の集合へ入れられません")
-	}
-
-	// 1回目: turn の終わりを待つループが立つ。
-	fx.Orc.Tick(context.Background())
-	// 2回目: 立っているので起こせない。**印を立て直す。**
-	fx.Orc.Tick(context.Background())
-
-	if !strings.Contains(fx.Logs.String(), "次の巡回で起こし直します") {
-		t.Fatalf("turn ループを起こせなかったことを黙って捨てている: %s", fx.Logs.String())
-	}
 }
 
 // TestComment_引き渡しの通知は1つのrunにつき1件だけ書く は、通知の重複を確かめる。

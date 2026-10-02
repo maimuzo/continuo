@@ -677,7 +677,7 @@ func countLines(s string) int {
 }
 
 // runSetup は `continuo setup` サブコマンドである（設計 3-32 / RUCM
-// docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
+// docs/spec/usecases/particular_case/既存のボードのStatusを割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
 // continuo の6つの役割（6つ目の direct chat は飛ばせる）へ割り当て、`scaffold.StatusKeyNames` が返す9つのキーの行を差し替える。
@@ -687,7 +687,7 @@ func countLines(s string) int {
 // **WORKFLOW.md が無ければ止める。**雛形を置くのは `continuo init` の仕事であり、
 // 2つのコマンドが同じファイルを作れると、どちらが正かが決まらない。
 //
-// **`--force` は無い。**書き換えるのが8行だけになったので、上書きから守るものが無くなった。
+// **`--force` は無い。**書き換えるのが9つのキーの行だけになったので、上書きから守るものが無くなった。
 // 何も守らないフラグを残すと、まだ何かを守っているように読める。
 //
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
@@ -751,7 +751,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		dir = positional[0]
 	}
 
-	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM の基本フロー2）。
+	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM「既存のボードのStatusを割り当てる」の基本フローの、指定されたパスと WORKFLOW.md を検査する段）。
 	// ここで止まる実行では、役割の割り当てを1つも尋ねない。
 	check, err := scaffold.CheckUpdatable(dir)
 	if err != nil {
@@ -839,7 +839,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	// **書き換えるのは Status の8行だけである。**owner / project_number / trust.repositories は
+	// **書き換えるのは Status の9つのキーの行だけである。**owner / project_number / trust.repositories は
 	// `continuo init` が書いた値のまま残す。**Detect が引き直した値で上書きしない。**
 	result, err := scaffold.UpdateStatuses(dir, assignment.Statuses())
 	if err != nil {
@@ -1256,8 +1256,9 @@ func printKeychainFailure(w io.Writer, headline string) {
 // stdout / stderr: 出力先。検査結果は stdout へ出す。
 // 戻り値: 終了コード。**`✗` が1つでもあれば 1、`!` だけなら 0**（設計 3-32）。
 // 引数の指定が誤っていれば 2（--help / -h なら 0）。
-// **検査結果を書き出せなかった場合と、接続先の環境変数が不正な場合は 3**
-// （`✗` があった場合の 1 と区別できるようにする）。
+// **いまいるディレクトリを引けなかった場合・接続先の環境変数が不正な場合・
+// 検査結果を書き出せなかった場合は 3**（`✗` があった場合の 1 と区別できるようにする）。
+// `--missing-keys-patch` の終了コードは runDoctorMissingKeysPatch が決める。
 func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -1285,7 +1286,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	workDir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, err))
-		return 1
+		return doctorInternalErrorExitCode
 	}
 	// **設定ファイルの場所が決まらなくても検査は続ける。**場所が決まらないことは
 	// 「設定ファイルを読めない」の一種であり、doctor はそれも記号で報告する対象である。
@@ -1347,24 +1348,25 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 // path: 読み込む WORKFLOW.md の絶対パス。
 // stdout / stderr: 出力先。差分は stdout へ出す。
 // 戻り値: 終了コード。**足す項目が1つも無ければ、何も出さずに 0 で終わる。**
-// WORKFLOW.md を読めない・front matter を切り出せない場合は 1。
+// **WORKFLOW.md を読めない・front matter を切り出せない・差分を書き出せない場合は 3。**
+// この口は検査をしないので、1（検査で `✗` があった）の意味を持たない。
 func runDoctorMissingKeysPatch(path string, stdout, stderr io.Writer) int {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
-		return 1
+		return doctorInternalErrorExitCode
 	}
 	res, err := scaffold.MissingKeys(path, string(raw))
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
-		return 1
+		return doctorInternalErrorExitCode
 	}
 	if res.Patch == "" {
 		return 0
 	}
 	if _, err := io.WriteString(stdout, res.Patch); err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
-		return 1
+		return doctorInternalErrorExitCode
 	}
 	return 0
 }

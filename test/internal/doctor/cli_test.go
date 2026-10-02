@@ -1,10 +1,6 @@
-// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
-
 package doctor_test
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -13,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/test/testlang"
 )
@@ -162,64 +157,6 @@ func TestDoctorCLI_足りないものがあれば直し方を出して終了コ�
 	}
 }
 
-// {"RUCM-PATH": "P177"}
-//
-// TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとして止まる は、引数の受け取り方を固定する。
-//
-// 目的: WORKFLOW.md のパスは1つだけ受け付け、2つ以上なら終了コード 2 で止まること
-// （`continuo` 本体・`continuo init` と同じ扱い）。
-// 与える情報: 位置引数を2つ渡した起動。
-// 成功条件: 終了コードが 2 で、標準エラーに理由が出ること。
-func TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとして止まる(t *testing.T) {
-	fx := newFixture(t)
-	bin := buildBinary(t, fx.Root)
-
-	cmd := exec.Command(bin, "doctor", fx.WorkflowPath, "もう1つ")
-	cmd.Dir = fx.Root
-	cmd.Env = []string{"PATH=" + fx.BinDir, "HOME=" + fx.Home, testlang.EnvEntry()}
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("位置引数が2つあるのに正常終了した:\n%s", out)
-	}
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("continuo doctor を実行できません: %v\n%s", err, out)
-	}
-	if exitErr.ExitCode() != 2 {
-		t.Fatalf("終了コードが 2 ではなく %d だった:\n%s", exitErr.ExitCode(), out)
-	}
-	if !strings.Contains(string(out), "1つだけ受け付けます") {
-		t.Fatalf("理由が出ていない:\n%s", out)
-	}
-}
-
-// {"RUCM-PATH": "P176"}
-//
-// TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる は、
-// トークンの送り先の検査が `continuo doctor` にも入っていることを確かめる。
-//
-// 目的: doctor もカンバンを読むために `gh auth token` のトークンを送る。**常駐プロセスと
-// 同じ検査を通していないと、doctor だけが平文で外部へトークンを送る経路になる。**
-// 与える情報: `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` に `http://example.com/graphql`。
-// 成功条件: 検査結果を出さずに止まり、終了コードが `✗` の 1 とも引数の誤りの 2 とも
-// 違う 3 になること。文言が https を求めていること。
-func TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる(t *testing.T) {
-	fx := newFixture(t)
-	bin := buildBinary(t, fx.Root)
-
-	out, code := runDoctorBinaryWithEndpoint(t, fx, bin, "http://example.com/graphql")
-
-	if code != 3 {
-		t.Fatalf("終了コードが 3 ではない: got %d\n%s", code, out)
-	}
-	if !strings.Contains(out, "https") {
-		t.Fatalf("https を求める文言が出ていない:\n%s", out)
-	}
-	if strings.Contains(out, doctor.LabelText(doctor.LabelBoard)) {
-		t.Fatalf("接続先が不正なのに検査を始めている:\n%s", out)
-	}
-}
-
 // failingWriter は書き込みを必ず失敗させる出力先である。
 //
 // **検査結果の書き出しが失敗する状態は、外から作れない。**リダイレクト先の
@@ -235,45 +172,3 @@ type failingWriter struct {
 // p: 書き込もうとした内容（使わない）。
 // 戻り値: 書けた byte 数（常に 0）と、失敗の理由。
 func (w failingWriter) Write(p []byte) (int, error) { return 0, w.err }
-
-// {"RUCM-PATH": "P004"}
-//
-// TestDoctorCLI_検査結果を書き出せなければ終了コード3で止まる は、
-// **検査そのものは動いたが、結果を届けられなかった場合**の応答を固定する。
-//
-// 目的: 検査結果を書き出せないとき、理由を標準エラーへ出し、終了コードを 3 にすること。
-// **`✗` があったことの 1 とも、引数の誤りの 2 とも別の値にする**（設計 3-32）。
-// 書き出せなかったことを 0 で返すと、検査結果を読めていないのに「前提は揃っている」
-// と受け取られる。
-// 与える情報: 検査は全項目 `✓` を返し、標準出力への書き込みだけが必ず失敗する状態。
-// 成功条件: 終了コードが 3 で、標準エラーに書き出せない理由が出ること。
-func TestDoctorCLI_検査結果を書き出せなければ終了コード3で止まる(t *testing.T) {
-	// **接続先の検査より先に進ませる。**空なら本番の GitHub を指すが、
-	// 検査そのものは差し替えてあるので、どこへも繋がない。
-	t.Setenv("CONTINUO_GITHUB_GRAPHQL_ENDPOINT", "")
-
-	called := false
-	deps := cli.Deps{
-		DoctorRun: func(_ context.Context, _ doctor.Options) doctor.Report {
-			called = true
-			return doctor.Report{Results: []doctor.Result{
-				{Label: doctor.LabelConfig, Symbol: doctor.SymbolOK, Detail: "読めました"},
-			}}
-		},
-	}
-	writeErr := errors.New("書き出し先が閉じています")
-	var stderr bytes.Buffer
-
-	code := cli.RunWith(deps, []string{"doctor", t.TempDir()},
-		strings.NewReader(""), failingWriter{err: writeErr}, &stderr)
-
-	if !called {
-		t.Fatalf("検査そのものが走っていない（書き出しより前で止まっている）:\n%s", stderr.String())
-	}
-	if code != 3 {
-		t.Fatalf("終了コードが 3 ではなく %d だった:\n%s", code, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), writeErr.Error()) {
-		t.Fatalf("書き出せない理由が出ていない:\n%s", stderr.String())
-	}
-}

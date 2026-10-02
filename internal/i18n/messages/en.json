@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "0581b09c58b01164665bb33334438204517cfc90b9994aa0b5d5366e0f5a5675",
+  "_source_sha256": "cd60c57c88b3dc4df7d43241b6b0693ab0c2424b542a47ce25bd5c82280712f6",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -221,8 +221,8 @@
   "cli.setup.err_too_many_positional": "Error: continuo setup accepts only one positional argument, the directory that has WORKFLOW.md (%d given: %v)",
   "cli.setup.err_would_break_config": "Error: %v. Rewriting it would make it unreadable, so nothing was written to WORKFLOW.md.",
   "cli.setup.err_write_failed": "Error: cannot rewrite WORKFLOW.md: %v",
-  "cli.setup.flag_owner": "GitHub user/organization name of the kanban board to read Status options from (defaults to what gh reports)",
-  "cli.setup.flag_project": "Number of the kanban board to read Status options from (defaults to what gh reports)",
+  "cli.setup.flag_owner": "GitHub user/organization name of the kanban board to read Status options from (defaults to the value in WORKFLOW.md, then to what gh reports)",
+  "cli.setup.flag_project": "Number of the kanban board to read Status options from (defaults to the value in WORKFLOW.md, then to what gh reports)",
   "cli.setup.flag_status_field": "Name of the single-select field that reads and writes Status (default: Status)",
   "cli.setup.key_not_written": "%[1]s is not present in this WORKFLOW.md, so your answer could not be applied: %[2]s\n  Paste the following line as is under tracker:\n%[3]s",
   "cli.setup.updated": "Rewrote the Status mapping in WORKFLOW.md: %s",
