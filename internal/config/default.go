@@ -219,7 +219,7 @@ func DefaultConfig() *Config {
 			PollWaitMs: 30000,
 			SettleMs:   2000,
 			WaitUntil:  []string{"idle", "done", "blocked"},
-			// 画面の版が増えないまま待てる上限。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
+			// hook が来ないまま待てる上限（超えた時点で `agent_status` が `working` なら待ち続ける）。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
 			TurnTimeoutMs: 3600000,
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
@@ -274,9 +274,11 @@ func DefaultConfig() *Config {
 			// **既定は OS で分かれる。**分かれるのはこのキーだけである（defaultRateLimitTokenSource）。
 			TokenSource:       defaultRateLimitTokenSource(),
 			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
-			PauseAbovePercent: 95,
 			PollIntervalMs:    300000,
 			RefreshIntervalMs: 300000,
+			// **1週間のレートリミットが明けるのを待つ上限。300 分（5時間）**（2026-08-26 の人間の決定）。
+			// **0 以下なら上限を設けない。**書かなかった人にはこの既定が入る。
+			WeeklyWaitLimitMinutes: 300,
 		},
 		Trust: TrustConfig{
 			RequireRepoTrusted: true,

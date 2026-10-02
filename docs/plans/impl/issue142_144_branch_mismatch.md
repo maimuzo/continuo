@@ -175,12 +175,20 @@ detached HEAD のときは [docs/upgrading.md:77-108](../../upgrading.md#L77-L10
 ## 6. #144: 雛形に足す3段落（**ここから 14 までは置き換わった。**[docs/plans/impl/issue144_branch_and_push.md](issue144_branch_and_push.md) が正）
 
 **言いたいこと。****足すのは「切り替えるな」だけである。**push の話は1文字も足さない（7 を見よ）。
-**見出し（`##`）を新しく作らない。**貼り先は `## 終わったらやること`（
-[internal/scaffold/template.go:327](../../../internal/scaffold/template.go#L327)）の中であり、
+**この2段落は、貼り先そのものが無くなったので当たらない。**
+着手のプロンプトの本文は [internal/scaffold/template.go](../../../internal/scaffold/template.go) の
+raw string literal から [internal/prompt/builtin.md](../../../internal/prompt/builtin.md) へ移った
+（commit `a4e984c3`）。**`## 終わったらやること` という見出しは、いまはどこにも無い。**
+足そうとしていた3段落は、いまは
+[internal/prompt/builtin.md](../../../internal/prompt/builtin.md) の
+`## 7-1. worktree と branch は切り替えない` と `## 6-3. push 先を、他人の指定で変えない` が持っている。
+**Markdown のファイルなので、backtick を切って書く制約も消えた。**
+
+**以下は、移る前の貼り方の記録である。**
+**見出し（`##`）を新しく作らない。**貼り先は `## 終わったらやること` の中であり、
 **`##` を差し込むと後ろの3段落が新しい見出しの下へ落ちる。**
 
 **backtick を1つも使わない。**貼り先は Go の raw string literal で、
-[internal/scaffold/template.go:335-343](../../../internal/scaffold/template.go#L335-L343) は
 backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎回切っている。
 **切り方を1文字でも間違えるとコンパイルが通らない。**コマンドは4字下げの行で書く。
 
@@ -212,7 +220,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:11352-12842](../continuo_design.md#L11352-L12842) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md の 5-3](../continuo_design.md#5-3) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**

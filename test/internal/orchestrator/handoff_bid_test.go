@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c78e285c914271115bad03a9b28f161ede3a7e4d8e0e697e961d9bd9a02c74ff", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "28c7411d34dd0445e061bcaebcc7256bc7b7b1a7643cdff5ddbe6dcafe24fa44", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じカンバンを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //
@@ -183,7 +183,7 @@ func TestHandoff_入札に負けたら担当者にならない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P013"}
 //
 // TestHandoff_期限内の他人の担当には入札もしない は、設計 3-77b の表の1行を確かめる。
 //
@@ -211,7 +211,7 @@ func TestHandoff_期限内の他人の担当には入札もしない(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P014"}
 //
 // TestHandoff_holdの無い担当は奪わない は、設計 3-77b の「人間が付けた担当」を確かめる。
 //
@@ -283,7 +283,7 @@ func TestHandoff_人間が付けた担当はWARNで直し方つきで知らせ�
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P015"}
 //
 // TestHandoff_担当者が2人以上なら触らない は、設計 3-77b の表の1行を確かめる。
 //
@@ -307,7 +307,7 @@ func TestHandoff_担当者が2人以上なら触らない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P007"}
 //
 // TestHandoff_期限切れの担当を外してreleasedを書く は、設計 3-77c を確かめる。
 //
@@ -471,7 +471,7 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P005"}
 //
 // TestHandoff_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。
 //

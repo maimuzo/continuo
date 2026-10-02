@@ -779,8 +779,8 @@ func build(
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildHerdrSocketUnresolved, err)
 	}
 	// **Turn は「待ちを伴う1回の呼び出しをどれだけ待つか」である。**
-	// `claude.turn_timeout_ms`（画面が変わらないまま待てる時間）をそのまま使う。
-	// これより長く待っても、画面が止まっていれば巡回の stall 検知が run を打ち切る。
+	// `claude.turn_timeout_ms`（進んだ形跡が無いまま待てる時間）をそのまま使う。
+	// これより長く待っても、run が止まっていれば巡回の stall 検知が打ち切る。
 	hc := herdr.New(herdrSocket, herdr.Timeouts{
 		Read:    time.Duration(cfg.Herdr.ReadTimeoutMs) * time.Millisecond,
 		Startup: time.Duration(cfg.Herdr.StartupTimeoutMs) * time.Millisecond,

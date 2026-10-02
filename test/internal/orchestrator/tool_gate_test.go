@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "92ded46d6909f69a05604c9e8f51c65d956f3f77322ad2747742950263cd9d7d", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "4fd9c148056f0c4ac4f158ae84c7bbe27fe95d8740ff6e60ff481cd546510f05", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 package orchestrator_test
 
 import (

@@ -62,7 +62,7 @@ tracker:
                                             # 5時間余裕値 = 100 − 5時間の使用率 − この値
       weekly_margin_percent: 10             # 1週間の枠のうち、continuo のために残しておきたい割合。
                                             # 1週間余裕値 = 100 − 1週間の使用率 − この値。
-                                            # どちらかの余裕値がマイナスなら入札しない
+                                            # どちらかの余裕値が0以下なら入札しない（既定10なら使用率90%から）
       on_assignee_gate: warn_and_comment    # 担当者が付いていて着手できないとき（1人でも2人以上でも）の扱い。
                                             # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
@@ -174,8 +174,8 @@ claude:
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
   wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。書けるのは idle / working / blocked / done / unknown。
                                             # blocked を外すと、確認で止まった turn を時間切れまで拾えない
-  turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
-                                            # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
+  turn_timeout_ms: 3600000                  # hook が届かず、agent の状態も working でない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
+                                            # turn の総実行時間の上限ではない。agent の状態が working である限り何時間でも待つ
   hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る。
                                             # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
@@ -225,7 +225,14 @@ rate_limit:
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
   poll_interval_ms: 300000                  # usage API を読む間隔。読めないときは、この間隔（429 なら Retry-After との長いほう）のあとに試し直す
   refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
-  pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
+  weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
+                                            # 「あと何分以内にリセットされるなら待つか」であって「何分待つか」ではない。
+                                            # 超える issue は、Claude Code が止まってから担当を手放し、入札からやり直させる
+                                            # （worktree は残し、Status も動かさない）。5時間の枠には効かない。
+                                            # 止まったと見なすのは、hook が claude.turn_timeout_ms のあいだ来ていないときである。
+                                            # workspace_hooks.after_run が null のままだと、push せずに手放す。
+                                            # 0 なら上限を設けず、いつまでも待つ（idle_timeout_ms とは 0 の意味が逆）。
+                                            # 複数の機械で見張るなら idle_timeout_ms より短くすること
 
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない

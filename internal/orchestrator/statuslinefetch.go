@@ -78,14 +78,19 @@ const (
 // `source: statusline` か、`source: oauth_usage_api` で usage API から切り替えていて取得止めでなく、
 // 値が新しくなく、statusline取得が走っておらず、前回の試行の開始から新しさの幅を過ぎていて
 // （起動して最初の巡回は前回の試行を問わない）、期限内の保管値に 100 の期間（5時間と1週間全体）が
-// 無く、weekly_scoped が `pause_above_percent` 以下であること。**run の画面から値が届いていれば
+// 無く、weekly_scoped に余裕があること。**run の画面から値が届いていれば
 // 開かない**（値が新しいため）。**期限内の 100 がある間は、上限で断られるだけで値は変わらないので
 // 開かない。**
 //
 // **weekly_scoped は判定を分ける**（issue #284）。ステータスラインが運ばないので、開いても値が
-// 変わらない。`pause_above_percent` を超えていれば、開いても着手の判定が変わらないので開かない。
-// 「100 の期間」からは外す（外さないと、weekly_scoped が 100 のあいだ 5時間と1週間全体を
-// 取り直せない。効くのは `pause_above_percent: 100` のときだけである）。
+// 変わらない。**余裕が無ければ、開いても着手の判定が変わらないので開かない**
+// （`weekly_scoped` に当てる線は、入札の余裕値と同じである。issue #173）。
+// **この関数の中で、線は2通り使う**（実装レビュー3周目の LOW）。
+// **`weekly_scoped` には余裕値**（`handoff.ShortWeekly`）、
+// **`session` と `weekly_all` には「使用率が100の期間が期限内にあるか」**である。
+// **後者は「開いても値が変わらない」の判定で、着手するかどうかの線ではない。**
+// 「100 の期間」の判定からは外し、余裕値の線だけで見る（100 なら余裕値は必ず0以下なので、
+// どちらで見ても開かない）。
 //
 // ctx: 巡回のコンテキスト。
 func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
@@ -129,15 +134,23 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 // statuslineFetchPointless は、開いても着手の判定が変わらないかを返す。o.quotaMu を持って呼ぶ。
 //
 // 期限内の 5時間か1週間全体に 100 がある（上限で断られるだけで値は変わらない）か、
-// weekly_scoped が `pause_above_percent` を超えている（ステータスラインは weekly_scoped を
-// 運ばないので、開いても判定が変わらない）なら true。
+// weekly_scoped に余裕が無い（ステータスラインは weekly_scoped を運ばないので、
+// 開いても判定が変わらない）なら true。
+//
+// **線は入札の余裕値と同じ1本である**（人間の決定。2026-09-06。issue #173）。
+// **`rate_limit.pause_above_percent` は消えた。****ここに別の閾値を置いてはならない。**
+// **置くと、入札が黙る使用率と statusline取得をやめる使用率がずれ、
+// 「入札を見送っているのに値を取り直し続ける」帯と「取り直さないのに入札する」帯ができる。**
 func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
+	// **マージンは `bidMargins` から取る**（実装レビュー1周目の LOW）。
+	// **ここで手で組み立てると、キーを1本増やしたときに片方だけが直る。**
+	shortWeekly := handoff.ShortWeekly(o.bidMargins())
 	for kind, w := range o.quota.windows {
 		if !w.ResetsAt.After(now) {
 			continue
 		}
 		if kind == handoff.LimitKindWeeklyScoped {
-			if w.Percent > o.cfg.RateLimit.PauseAbovePercent {
+			if shortWeekly(ratelimit.Limit{Kind: kind, Percent: w.Percent}) {
 				return true
 			}
 			continue

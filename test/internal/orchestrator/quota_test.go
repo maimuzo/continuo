@@ -1,7 +1,10 @@
-// {"RUCM-CFG-SHA256": "2a1c54482760e88463bbc6fed6232228428fa271b5ecdabf4b2b4436fc408815", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4b38a9791ef09fdddfd89a5ff014dcf0d970a16a6375f34b95bbde6083fd670c", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
-// 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
+// 11本のパスは、9通りの終端フロー（と、どのフローにも属さない周回1本）の組み合わせである。
+// **終端フローごとに代表を1本ずつ**対応づける。
+// **件数は `.cfg.json` を数えた実測である**（2026-09-29。実装レビュー3周目の MEDIUM で直した。
+// **以前は「15本・6通り」と書いていたが、それは `origin/main` の時点の値である**）。
 package orchestrator_test
 
 import (
@@ -72,22 +75,26 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// TestQuota_余裕値が0以下なら新規のdispatchだけを止める は、
+// 「新規を止める線」と「この run は枠待ちである」を分けていることを確かめる。
 //
-// TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める は、
-// 「新規を止める閾値」と「この run は枠待ちである」を分けていることを確かめる。
-//
-// 目的: 設計 3-27 の「`pause_above_percent`（既定95%）を超えただけでは、枠待ちとみなさない。
+// 目的: 設計 3-27 の「使用率が 100 に達していなければ枠待ちとみなさない。
 // **走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
+//
+// **新規を止める線は入札の余裕値1本だけである**（人間の決定。2026-09-06。issue #173）。
+// 使用率96・マージン既定10なので、5時間余裕値は `100 − 96 − 10 = −6` で0以下になる。
+// **`rate_limit.pause_above_percent` はキーごと消えた**（この test は触らない）。
+//
+// **RUCM のパス印は付けない。**この判定は「issue の担当を入札で決める」の側にあり、
+// この file の SOURCE（レートリミットで待って再開する）のパスには当たらない。
 //
 // 与える情報: ステータスラインから届いた使用率が 96%（100 には達していない。issue #284）。
 // `Ready` の issue が1件。
 // 成功条件: 新規の dispatch が起きず、既にある run は枠待ちにならない。
-func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める(t *testing.T) {
+func TestQuota_余裕値が0以下なら新規のdispatchだけを止める(t *testing.T) {
 	fx := newStubFixture(t, stubFixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = ratelimit.SourceStatusline
-			cfg.RateLimit.PauseAbovePercent = 95
 			cfg.Trust.RequireRepoTrusted = false
 		},
 	})
@@ -100,10 +107,10 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#190" {
-			t.Fatalf("閾値を超えているのに新規を dispatch している: %+v", v)
+			t.Fatalf("余裕値が0以下なのに新規を dispatch している: %+v", v)
 		}
 		if v.Identifier == running.Identifier && v.WaitingQuota {
-			t.Fatalf("95%%を超えただけで走行中の run の時計を止めている: %+v", v)
+			t.Fatalf("使用率が 100 に達していないのに走行中の run の時計を止めている: %+v", v)
 		}
 	}
 }
@@ -144,7 +151,7 @@ func TestQuota_source_noneなら使用率を読まずに0として入札に参�
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の指示を送らない は、
 // 二重投入の防止を確かめる。

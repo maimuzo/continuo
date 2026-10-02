@@ -251,10 +251,10 @@ tracker:
 agent:
   max_concurrent_agents: 2        # 同時に動かす issue の数
 claude:
-  turn_timeout_ms: 3600000        # 画面が変わらないまま何ミリ秒たったら打ち切るか
+  turn_timeout_ms: 3600000        # 進んだ形跡が無いまま何ミリ秒たったら打ち切るか
 ```
 
-**`turn_timeout_ms` は turn の総時間ではありません。**herdr が見ている画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
+**`turn_timeout_ms` は turn の総時間ではありません。**herdr が返す agent の状態が `working` である限り、1つの指示に何時間かかっても打ち切りません。打ち切るのは、Claude Code から hook が1件も届かない時間がこれを超え、かつ状態が `working` でないときだけです。
 
 **「終わったら `CONTINUO-STATUS: review` と書け」「その前に commit して push しろ」といった依頼は、本文に書きません。**continuo が持っている組み込みの指示書に書いてあります。
 

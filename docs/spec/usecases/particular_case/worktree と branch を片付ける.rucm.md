@@ -274,7 +274,8 @@ detached でもない」ときに限り、壊れた ref の判定を検算の答
 `cwd` に渡したリポジトリのぶん（**リポジトリの親 workspace**）である。
 **`worktree.remove` は後者を閉じない**ので、閉じるのは continuo の仕事になる。
 
-**`cwd` を外す案は採れない。**herdr が `worktree_not_found` で断る（実測: 2026-08-25、
+**`cwd` を外す案は採れない。**herdr が断る（**返るコードは版で変わる。**0.8.x は
+`worktree_not_found`、0.9.1 は `linked_worktree_source`。実測: 2026-08-25 と 2026-09-29、
 [test/live/herdr_test.go](test/live/herdr_test.go)）。`cwd` に worktree のパスを渡す案も
 `linked_worktree_source` で断られる。**親は herdr の必須の親である。**
 

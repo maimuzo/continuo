@@ -935,7 +935,6 @@ func (o *Orchestrator) decideOne(
 			Base:             base,
 			SettingsPath:     c.Identity.SettingsPath,
 			HerdrWorkspaceID: c.Identity.HerdrWorkspaceID,
-			Revision:         pane.Revision,
 			AwaitTurnEnd:     awaitTurnEnd && !directChat,
 			DirectChat:       directChat,
 		},

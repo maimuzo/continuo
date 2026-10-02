@@ -254,7 +254,6 @@ type runState struct {
     PromptID     string    // 直前に投げたプロンプトの ID（Stop hook の prompt_id と突き合わせる）
     TurnCount    int       // continuo が送ったプロンプトの回数
     LastSeenAt   time.Time // 最後に「動いている」のを見た時刻（打ち切りの時計）
-    LastRevision uint64    // 最後に見た pane の revision（画面の版）
 }
 ```
 
@@ -400,18 +399,30 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 **言いたいこと。**枠に当たったら**新規の dispatch だけを止め、走行中の turn は止めない。**
 **リセット時刻を過ぎたら、継続の指示を1回送って生死を確かめる。**
 **待っている間は時計を止める。**止めないと、待っているだけの worker を「固まった」とみなして殺す。
+**手放しの線は、枠待ちの記録とは別に走る**（下の図で `usage` から分かれる3本目である）。
+**枠待ちの記録は使用率100でしか立たないが、手放しは余裕値0以下で走る**ので、
+**使用率90〜99の帯では、枠待ちの記録が無いまま手放しだけが成立する。**
+**手放しを枠待ちの下流に置くと、その帯で1度も走らない。**
 
 ```mermaid
 flowchart TB
     poll["巡回（30秒ごと。値が届いた知らせでも回る）"] --> usage["保管値を読む<br/>usage API とステータスラインから届いた使用率"]
-    usage --> over{"どれかの枠が<br/>pause_above_percent を超えたか"}
-    over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
-    over -->|"超えていない"| normal["ふつうに dispatch する"]
+    usage --> over{"余裕値が0以下の<br/>枠があるか"}
+    over -->|"0以下"| stop["入札の要る issue を取らない<br/>担当が自分の issue は取る<br/>走行中の turn は止めない"]
+    over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
-    stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
+    usage --> full{"使用率が100の<br/>枠があるか"}
+    full -->|"無い"| nowait["枠待ちにしない<br/>打ち切りの判定は続ける"]
+    full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]
+
+    usage --> limit{"1週間の枠の余裕値が0以下で<br/>明けるまでが待つ上限を超えたか"}
+    limit -->|"超えた"| gates{"門を全部通るか<br/>人間が引き取っていない・画面を持っている<br/>止まっている…（設計 3-27）"}
+    gates -->|"通る"| letgo["担当を手放す<br/>after_run を走らせ pane を閉じる<br/>worktree と Status はそのまま"]
+    gates -->|"1つでも当たる"| keep["手放さない<br/>次の巡回でやり直す"]
+    limit -->|"超えていない"| keep
 
     probe --> resp{"応答が返るか"}
     resp -->|"返った"| resume["そのまま継続する<br/>時計を動かし直す"]
@@ -421,6 +432,38 @@ flowchart TB
     resume --> normal
     redispatch --> normal
 ```
+
+**問いは2つで、線も2本である**（設計 3-27）。**混ぜてはならない。**
+**手放しは、2本目の線（余裕値）を1週間の枠に当てたものである。**下の表は、その3つの使い分けを並べたものである。
+
+| 何を決めるか | 線 | 何が起きるか |
+| --- | --- | --- |
+| **新しい issue を取るか** | **どちらかの枠の余裕値が0以下**（`100 − 使用率 − マージン`。マージンは既定10なので使用率90%から） | 入札の要る issue を取らない。担当が既に自分にある issue は取る。走行中の turn は止めない |
+| **この run は枠待ちか** | **使用率が100** | 打ち切りの時計を止める。**余裕値へ広げた時期があったが取り下げた**（使用率90%では Claude Code は普通に応答するので、本当に固まった run が最大6時間殺されない） |
+| **この run の担当を手放すか** | **1週間の枠の余裕値が0以下で、明けるまでが `weekly_wait_limit_minutes` を超えている** | `after_run` を走らせ、担当者から自分を外し、`released` を1件書き、pane を閉じる。**worktree と Status はそのまま。****枠待ちの印は見ない**ので、使用率90〜99 の帯では印が立たないまま手放しだけが成立する |
+
+**手放しは、上の2本に加えていくつもの門を通る**（人間が引き取っていないか・画面を持っているか・止まっているか…）。
+**門の一覧は設計 3-27 の「段0 へ入る前に外すもの」が持つ。ここには写さない。**
+
+### 9-1. 1週間の枠を待つ上限
+
+**1週間ぶんのレートリミットは、最長で7日先までリセットされない。**
+**待つ上限が無いと、その issue を抱えたまま何日も止まる。**
+
+```yaml
+rate_limit:
+  weekly_wait_limit_minutes: 300   # 既定。300 分 = 5時間。0 なら上限を設けない
+```
+
+**「何分待つか」ではない。「あと何分以内にリセットされるなら待つか」である。**
+**5時間ぶんのレートリミットには効かない。**
+
+**超えたら担当を手放す。**`workspace_hooks.after_run` を走らせ、issue の担当者から自分を外し、
+`released` のコメントを1件書き、pane を閉じる。**worktree と Status はそのままである。**
+
+**手放す前にいくつもの門を通す。**人間が pane で作業している（direct chat）run は手放さない。
+`agent_status` が `working` の run も手放さない。`state_change_seq` が2回続けて同じでなければ手放さない。
+画面の状態を読めないうちは手放さない。**確かめられないのに pane を閉じて担当を外す道は無い。**
 
 **2段構えにする。**
 
@@ -643,7 +686,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | `read_timeout_ms` の相手が違う | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
 | **issue の中身をプロンプトに埋め込まない** | owner / repo / 番号だけを渡し、`gh` の JSON 出力で直接読ませる。例外は、信頼できる人間のコメントだけを最初のメッセージに埋め込む relay（詳細版 3-85） |
-| 無音の測り方 | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
+| 無音の測り方 | app-server の出力ではなく、herdr の `agent_status` が `working` かで測る |
 | `tracker` に仕様外のキーを足す | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | 再起動後は引き渡し状態の worker を止めない | pane を残して人間に見せる |
 
@@ -662,7 +705,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 
 | キー | 仕様のどこ | なぜ持たないか |
 | --- | --- | --- |
-| `codex.stall_timeout_ms` | 5.3.6 | 観測点は pane の `revision`（画面の版）1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
+| `codex.stall_timeout_ms` | 5.3.6 | 観測点は herdr の `agent_status` 1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
 | `claude.liveness_hooks` | 仕様に無い | 読むコードが1行も無かった |
 | `tracker.write_interval_ms` | 仕様に無い | 読むコードが無い。書き込みはもともと間隔が空く（閉じた記録は Status の書き込み・引き渡しの通知と続けて書かれることがあるが、pane を閉じるたびに1件だけ） |
 | `workspace.layout` | 仕様に無い | `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い |

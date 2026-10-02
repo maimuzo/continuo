@@ -34,7 +34,7 @@
 | c5 | 門5 空きスロット → **Debug**、`clearGate` は外へ | WARN | 済 |
 | c6 | 門6 `preflight` | 形は合う | 済 |
 | c7 | 門7 用意の失敗の間隔（専用の記録） | 無い | 済 |
-| c8 | 通さない門：`pause_above_percent`・`handoffGate`・`skipByFailure`・`required_labels`・`Dispatchable` | `handoffGate` を通している | 済 |
+| c8 | 通さない門：**入札の余裕値**（この表を書いた時点では `pause_above_percent`。issue #173 でキーごと消えた）・`handoffGate`・`skipByFailure`・`required_labels`・`Dispatchable` | `handoffGate` を通している | 済 |
 | c9 | 門1 の表の段4：`redispatch` の着手の段2 が `direct_chat_state` を見たら担当者を消し戻さない（入札直後の着手では消す）。段2 は取り直した Status を返す | 消し戻す。Status を返さない | 済 |
 
 ### 3-83d 用意の段1〜段3
@@ -53,7 +53,7 @@
 | e1 | 9箇所に `protectedStates()` | 済（数え直して確かめる） | 済 |
 | e2 | 書く経路：拒否リストは選択肢のうち `direct_chat_state` 以外全部。未設定（空）なら書かない。写しが空なら WARN して書かない | 無い | 済 |
 
-### 3-83f 印を外す道と、門だけでは足りない13箇所
+### 3-83f 印を外す道と、門だけでは足りない箇所（**件数は設計 3-83f の表が持つ。ここには書かない**）
 
 | # | 設計 | 着手前のコード | 直したか |
 | --- | --- | --- | --- |

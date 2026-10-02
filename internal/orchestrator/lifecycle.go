@@ -548,6 +548,11 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 		issues, err = o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{rs.IssueID})
 	}
 	if err != nil {
+		// **ここに1回きりの札を付けてはならない**（issue #173。9周目の6段で削除した）。
+		// **この `Warn` は `origin/main` から在る既存のログである。**
+		// **`refreshIssue` は4箇所から呼ばれ、枠の経路はそのうち1つでしかない。**
+		// 枠の話のために、残る3つの経路のログの出方まで変えることになる。
+		// **資料の 4-5 の #4 も、この症状を「直すものが無い」と結論している。**
 		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
 		return rs.issue(), true, false
 	}
@@ -1057,7 +1062,7 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closedRecordMode) bool {
 	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-83）。
 	//
-	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは13箇所あり、
+	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは14箇所あり、
 	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
 	// 最大 `claude.turn_timeout_ms`（既定1時間）待っている間 / 「issue がカンバンから
 	// 見えなくなった」ループ / 担当が別の機械へ移ったとき）。**1箇所でも漏らすと、
@@ -1089,11 +1094,12 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closed
 	// 通知の出どころを、人間が辿れない。**
 	//
 	// **`waitForBackgroundTasks` ではなくここに置く。**`stopWorker` の呼び出しは
-	// **13箇所・11関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
+	// **14箇所・12関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
 	// `finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
 	// `ensureAgentComment` の段2 / `failCommentRecovery` / `failCommentRecoveryBusy` /
 	// コメントが書けたので閉じる道 / 知らない Status / 担当が移った（`stopBecauseHandoffLost`）/
-	// direct chat の担当者が替わった（`letGoOfDirectChatAsync`）/ 着手をやめた）。
+	// direct chat の担当者が替わった（`letGoOfDirectChatAsync`）/
+	// 枠の上限で担当を手放した（`releaseBecauseQuotaWaitClaimed`。設計 3-27）/ 着手をやめた）。
 	// **direct chat の用意に失敗した道は、ここを通らない**（`closeDirectChatSetupPane` が
 	// pane ID を直接閉じる。設計 3-83）。
 	// **待つのは1つだけだが、道連れにするのは全部だからである。**
@@ -1139,14 +1145,101 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState, mode closed
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
+	o.runAfterRunOK(ctx, rs)
+}
+
+// afterRunSkip は `workspace_hooks.after_run` を走らせなかった理由である（issue #197）。
+//
+// **`released` のコメントは「`after_run` で push できたことを確かめられませんでした
+// （理由はログに出ています）」と書く。****本文では理由を並べない**（理由は下の4つあり、
+// 並べると、当たらない理由で来た利用者が存在しないものを探す）。
+// **黙って偽を返すと、その約束が果たされない**（実装レビュー2周目の MEDIUM）。
+// **既定の `WORKFLOW.md` は `after_run` を持たないので、未設定のほうが普通の状態である。**
+// 利用者は存在しないログを探すことになる。
+//
+// **判定そのものは `internal/workspace` に置いたままにする。**ここが返すのは語だけである。
+// **判定を写すと、あちらが「設定されている」の規則を変えたときに、この1行だけが古い規則で答え続ける。**
+const (
+	// afterRunSkipNone は、走らせて成功した（か、既に走らせてあった）ことを表す。
+	afterRunSkipNone = ""
+	// afterRunSkipNoWorktree は、走らせる相手が無かった（worktree のパスが空）ことを表す。
+	afterRunSkipNoWorktree = "worktree のパスを持っていません"
+	// afterRunSkipNotConfigured は、`workspace_hooks.after_run` が書かれていないことを表す。
+	afterRunSkipNotConfigured = "workspace_hooks.after_run が設定されていません"
+	// afterRunSkipFailed は、走ったが失敗したことを表す。**その詳細は別の WARN に出ている。**
+	afterRunSkipFailed = "workspace_hooks.after_run が失敗しました"
+	// afterRunSkipAlreadyRan は、**この worktree で既に走っていた**ことを表す。
+	//
+	// **成功したとは言えない。**印を立てるのは実行の前なので、
+	// **前に走った回が失敗していても印は残る。**だから偽を返す。
+	afterRunSkipAlreadyRan = "workspace_hooks.after_run は、この worktree で既に走っていました"
+)
+
+// runAfterRunOK は `workspace_hooks.after_run` を走らせ、**成功したかどうかを返す。**
+//
+// **`released` のコメントは「`after_run` は実行済みです」と断言する**（設計 3-27）。
+// **失敗したのに断言すると、次に拾う機械が「remote の続きから始めてください」に従い、
+// 入っていない commit の続きから始める。**手元の作業が黙って取り残される。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値の1つ目: `after_run` が走って成功したら true。
+// **走らせる相手が無かったとき（worktree のパスが空）も false である。**
+// 戻り値の2つ目: 走らせなかった理由（`afterRunSkip…` のどれか）。**成功したときは空である。**
+func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) (bool, string) {
 	snap := rs.snapshot()
 	if snap.WorktreePath == "" {
-		return
+		return false, afterRunSkipNoWorktree
 	}
-	if _, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath); err != nil {
-		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
+	// **設定されていないときは、走らせたと言ってはならない**（issue #197）。
+	// **`RunAfterRunOnce` は「この worktree で初めて呼ばれたか」を返すだけで、
+	// コマンドが空でも真を返す**（`RunHook` は設定が無ければ nil を返して終わる）。
+	// **既定の `WORKFLOW.md` は `after_run` を持たない。**
+	// **そのまま真として扱うと、1バイトも push していないのに
+	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	// **次に拾う機械は remote から worktree を作り直すので、push していない commit がその機械に見えない**
+	// （この機械の worktree には残る）。
+	// **判定は `internal/workspace` に持たせる**（issue #173）。
+	// **ここへ写すと、あちらが「設定されている」の規則を変えたときに、
+	// この1行だけが古い規則で答え続ける。**
+	if !o.ws.HookConfigured(workspace.HookAfterRun) {
+		return false, afterRunSkipNotConfigured
+	}
+	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
+	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
+	// **走らせ切ったことを run が覚えている**（issue #197）。
+	// **やり直しのために要る。**担当を外すのに失敗して次の巡回でやり直すと、
+	// `RunAfterRunOnce` は「走らせていない」を返すので、
+	// **既に push してあるのに「remote に続きが入っていないことがあります」と issue へ書く。**
+	//
+	// **この段を2つ書いてはならない**（issue #173）。
+	// **6周目のレビューが「`ran` をそのまま返している」と挙げたので同じ段を足したが、
+	// この段が既にそれを塞いでいた**（`2a2e60d` から在る）。**2つ目は到達しない。**
+	if rs.afterRunDone() {
+		return true, afterRunSkipNone
+	}
+	// **`ran` は「この worktree で初めて呼ばれたか」であって、成否ではない。**
+	// **走って失敗したときも真が返る。**
+	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
+	if err != nil {
+		// **走ったが失敗した。**偽を返す。**remote に続きが入っていない恐れがあるためである。**
+		//
+		// **「issue のコメントにこう出ます」とは書かない**（issue #173）。
+		// **この関数は2つの経路から呼ばれる。**枠の上限で手放す経路はコメントを書くが、
+		// **ふつうの完了の経路（`finishRun`）は書かない。**
+		// **書いてあると、利用者が存在しない文字列を issue の中で探すことになる。**
+		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
+			"（remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
+		return false, afterRunSkipFailed
 	}
+	if ran {
+		rs.markAfterRunDone()
+		return true, afterRunSkipNone
+	}
+	// **`ran` が偽になるのは「既に走らせてあった」ときだけである。**
+	// 上の `rs.afterRunDone()` が先に受けるので、ここへ来るのは、前の回の `after_run` が失敗して印だけが残った run である（印は `workspace.Manager` のメモリにあり、再起動で消える）。
+	return false, afterRunSkipAlreadyRan
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。

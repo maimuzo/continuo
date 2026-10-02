@@ -284,7 +284,8 @@ func TestQuotaStore_resets_atを過ぎたら入札は読めず閾値と回復待
 		seven := slWin(30, now.Add(72*time.Hour))
 		fx.Orc.OnStatusline(slLine("a", 100, five, seven))
 		fx.Orc.OnStatusline(slLine("a", 200, five, seven))
-		if !fx.Orc.QuotaSnapshotForTest().AtFullPercent() {
+		// **`AtFullPercent` は消えた**（issue #173 / #197）。**述語を渡す形へ移った。**
+		if !fx.Orc.QuotaSnapshotForTest().AnySelected(handoff.Full()) {
 			t.Fatal("前提: 100% の期間が上限として読めていない")
 		}
 
@@ -293,7 +294,7 @@ func TestQuotaStore_resets_atを過ぎたら入札は読めず閾値と回復待
 			t.Errorf("resets_at を過ぎた期間があるのに入札が読める: %+v", snap)
 		}
 		snap := fx.Orc.QuotaSnapshotForTest()
-		if snap.AtFullPercent() || percentOf(snap, handoff.LimitKindSession) != -1 {
+		if snap.AnySelected(handoff.Full()) || percentOf(snap, handoff.LimitKindSession) != -1 {
 			t.Errorf("回復待ちと閾値が、明けた期間を読んでいる: %+v", snap)
 		}
 		if percentOf(snap, handoff.LimitKindWeeklyAll) != 30 {

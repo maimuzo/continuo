@@ -521,6 +521,31 @@ func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
 	return snapshotOf(o.quota.windows, now, o.quota.freshAt)
 }
 
+// quotaForPoll は、巡回が使う2つの写しを1回のロックで返す（設計 3-27。issue #173。
+// 実装レビュー6周目の MEDIUM）。
+//
+// **2回に分けて読んではならない。**`OnStatusline` は statusline の受け口の goroutine から
+// 同じ mutex を取って保管値を差し替えるので、**2回のあいだに差し替わると、
+// 片方が「余裕が無い」と控えた時刻を、もう片方が「余裕がある」で消しうる。**
+// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
+//
+// **`checkStalls` はこれを1回だけ呼ぶ。**`quotaSnapshot` と `quotaForBid` を続けて
+// 呼ぶ形へ戻してはならない。
+//
+// 戻り値の1つ目: **新しさを問わない写し。**回復待ちと閾値の判定が読む（設計 3-77i）。
+// 戻り値の2つ目: **新しさを問う写し。**手放しと、その起点の記録が読む（設計 3-27）。
+// **新しくなければ nil。**
+func (o *Orchestrator) quotaForPoll() (*ratelimit.Snapshot, *ratelimit.Snapshot) {
+	now := o.now()
+	o.quotaMu.Lock()
+	defer o.quotaMu.Unlock()
+	stale := snapshotOf(o.quota.windows, now, o.quota.freshAt)
+	if !o.quotaFreshLocked(now) {
+		return stale, nil
+	}
+	return stale, snapshotOf(o.quota.windows, now, now)
+}
+
 // snapshotOf は保管値から、期限内の期間だけの写しを作る。
 //
 // 戻り値: 写し。期限内の期間が無ければ nil。
@@ -538,8 +563,26 @@ func snapshotOf(windows map[string]quotaWindow, now, fetchedAt time.Time) *ratel
 	snap := &ratelimit.Snapshot{FetchedAt: fetchedAt}
 	for _, kind := range kinds {
 		w := windows[kind]
-		resetsAt := w.ResetsAt
-		snap.Limits = append(snap.Limits, ratelimit.Limit{Kind: kind, Percent: w.Percent, ResetsAt: &resetsAt})
+		lim := ratelimit.Limit{Kind: kind, Percent: w.Percent}
+		// **仮の期限は写しへ出さない**（issue #197）。
+		//
+		// **usage API が `resets_at: null` を返した期間には、continuo が仮の期限を付ける**
+		// （`OnAPISnapshot` の `nullExpiry`）。**あれは「次の読み取りまで見える」ことを表すための
+		// 内側の値であって、「いつ明けるか」ではない。**
+		//
+		// **写しへ本物の期限として出すと、1週間の枠を待つ上限が1度も効かなくなる。**
+		// `weeklyWaitExceededWith` は「リセット時刻 − 現在時刻 > 上限」で手放すかを決めるので、
+		// **30秒ほど先の仮の期限を渡されると「待てばすぐ明ける」と読み、永久に手放さない。**
+		// **`resets_at` を読めない機械で上限を測る唯一の道は経過であり、その道が閉じる。**
+		//
+		// **nil にすれば、期限を見る判定は揃って「この枠は判定から外す」へ倒れる**
+		// （設計 3-27 の「`resets_at` が null の枠は判定から外す」）。
+		// **写しに載せること自体は続ける。**使用率は本物なので、閾値と回復待ちの判定には要る。
+		if !w.Standin {
+			resetsAt := w.ResetsAt
+			lim.ResetsAt = &resetsAt
+		}
+		snap.Limits = append(snap.Limits, lim)
 	}
 	return snap
 }

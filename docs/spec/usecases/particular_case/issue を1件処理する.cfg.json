@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "fc83aed80fbf1d3b3b76be7799de40570b9b6d81824c37abf698509c435d93c9"
+    "rucm_block_sha256": "2a55c5bf194ce381e4a9c962d1d60a1ca04b67d4a0f7aacebd2526d2833a511b"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -324,7 +324,7 @@
       "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
     },
     "無音の打ち切り": {
-      "when": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合",
+      "when": "turn_timeout_ms のあいだ hook が1件も届かず、agent_status も working にならない場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -1795,7 +1795,7 @@
       "type": "action",
       "flow": "無音の打ち切り",
       "step": 1,
-      "statement": "システムは herdr に agent_status と pane の画面の版を要求する。"
+      "statement": "システムは herdr に agent_status を要求する。"
     },
     {
       "id": "無音の打ち切り-2",
@@ -2193,7 +2193,7 @@
       "from": "BASIC FLOW-33",
       "to": "無音の打ち切り-1",
       "kind": "global",
-      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合"
+      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、agent_status も working にならない場合"
     },
     {
       "from": "BASIC FLOW-34",
@@ -4846,8 +4846,8 @@
         "システムは Claude Code に turn の本文を送る。",
         "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。",
         "システムは Claude Code の Stop hook を受ける。",
-        "CONDITION: turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合",
-        "システムは herdr に agent_status と pane の画面の版を要求する。",
+        "CONDITION: turn_timeout_ms のあいだ hook が1件も届かず、agent_status も working にならない場合",
+        "システムは herdr に agent_status を要求する。",
         "システムは herdr の pane を閉じる。",
         "システムは Claude Code を閉じた記録を issue に1件コメントする。",
         "システムはリトライの回数を1つ増やす。",

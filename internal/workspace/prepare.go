@@ -384,8 +384,10 @@ func (m *Manager) openWorktreeInHerdr(
 	//
 	// **`cwd` はリポジトリ本体を渡す。外せない。**worktree のパスを渡すと herdr は
 	// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
-	// で断り、`cwd` を省くと `worktree_not_found: worktree path not found` で断る
-	// （実測: 2026-08-25、test/live）。**リポジトリの親 workspace は herdr の必須の親である。**
+	// で断り、`cwd` を省いても断る（**返るコードは版で変わる。**herdr 0.8.x は
+	// `worktree_not_found: worktree path not found`（実測: 2026-08-25）、
+	// herdr 0.9.1 は同じ `linked_worktree_source`（実測: 2026-09-29）。test/live）。
+	// **リポジトリの親 workspace は herdr の必須の親である。**
 	//
 	// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
 	// 組み立ては herdr.IssueLabel に寄せてある（orchestrator 側と形がずれないため）。

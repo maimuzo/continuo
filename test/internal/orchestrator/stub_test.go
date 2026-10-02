@@ -36,8 +36,14 @@ type stubHerdr struct {
 	// status は AgentGet / AgentWait が返す agent の状態である。
 	status herdr.AgentStatus
 	// revision は AgentGet が返す画面の版である（herdr の pane の revision）。
-	// **stall の判定はこの値が増えるかどうかで決まる**（設計 3-21）。
+	// **stall の判定は、この値を見ない**（設計 3-21。以前は見ていた。`agent.get` の応答の形として残してある）。
 	revision uint64
+	// stateSeq は AgentGet が返す state_change_seq である
+	// （agent の状態が変わるたびに増える連番。issue #173）。
+	//
+	// **手放しの判定（`paneStopped`）はこれを見る。**
+	// **打ち切りの判定（`checkStalls`）は `agent_status` を見る。**
+	stateSeq uint64
 	// closedPanes は PaneClose に渡された pane の ID である。
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
@@ -96,7 +102,7 @@ func isSLName(name string) bool {
 // status: AgentGet / AgentWait が返す状態。
 // 戻り値: 組み立てた stub。
 func newStubHerdr(status herdr.AgentStatus) *stubHerdr {
-	return &stubHerdr{status: status}
+	return &stubHerdr{status: status, stateSeq: 1}
 }
 
 // SetStatus は AgentGet が返す状態を差し替える。
@@ -113,6 +119,26 @@ func (s *stubHerdr) BumpRevision() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.revision++
+}
+
+// ClearStateSeq は AgentGet が返す state_change_seq を 0 にする（issue #173）。
+//
+// **`state_change_seq` を返さない herdr の版の再現である。**
+// `omitempty` なので、欄が無ければ Go 側では 0 になる。
+func (s *stubHerdr) ClearStateSeq() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateSeq = 0
+}
+
+// BumpStateSeq は AgentGet が返す state_change_seq を1つ増やす（issue #173）。
+//
+// **「エージェントの状態が変わった」ことの再現である。**
+// herdr は、その agent の状態が実際に変わったときだけこの連番を刻み直す。
+func (s *stubHerdr) BumpStateSeq() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateSeq++
 }
 
 // ClosedPanes は閉じた pane の ID を返す。
@@ -238,9 +264,10 @@ func (s *stubHerdr) AgentGet(ctx context.Context, params herdr.AgentGetParams) (
 	return &herdr.AgentGetResult{
 		Type: "agent_info",
 		Agent: herdr.Agent{
-			Name:        params.Target.String(),
-			AgentStatus: s.status,
-			Revision:    s.revision,
+			Name:           params.Target.String(),
+			AgentStatus:    s.status,
+			Revision:       s.revision,
+			StateChangeSeq: s.stateSeq,
 		},
 	}, nil
 }
@@ -286,6 +313,11 @@ type stubFixtureOptions struct {
 	AgentStatus herdr.AgentStatus
 	// Logs を真にすると、ログを syncLog へ溜める（stubFixture.Logs）。偽なら捨てる。
 	Logs bool
+	// Now は Orchestrator に渡す時計である（issue #197）。
+	//
+	// **空なら `time.Now` を使う。**分の単位で進めたい検査のために置く
+	// （`rate_limit.weekly_wait_limit_minutes` は分で指定するので、実時間では待てない）。
+	Now func() time.Time
 	// Root は実行時ディレクトリである。空なら t.TempDir() を使う。
 	// **2つの fixture で同じ quota.json を読み書きするときに渡す**（issue #284）。
 	Root string
@@ -396,6 +428,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		HookSocketPath:       filepath.Join(root, "hooks.sock"),
 		ContinuoPath:         "/opt/continuo/bin/continuo",
 		Logger:               logger,
+		Now:                  opts.Now,
 		GHAuthCheck:          opts.GHAuthCheck,
 		// **本物の `gh` を起動させない**（設計 3-65）。
 		GHLogin: ghLoginForTest(opts.GHLogin),

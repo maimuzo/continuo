@@ -183,7 +183,7 @@ $
 **言いたいこと。**いまと1文字も変わらない。**リンクが0本なら、今までどおりに動く。**
 変わるのは、**別の名前へ push するときにも `-u` を落とさないよう本文へ書き足す**ことだけである。
 既定の `git push -u origin HEAD` は
-[internal/scaffold/template.go:351-356](../../../internal/scaffold/template.go#L351-L356) に既にあり、
+[internal/prompt/builtin.md](../../../internal/prompt/builtin.md) の `## 3-4. commit して push する` に既にあり、
 **`-u` は最初から付いている。**
 
 **例。**issue は `octocat/hello-world#188`。リンクは0本。
@@ -1122,7 +1122,8 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
 
 **貼り先1。**`## 終わったらやること` の中、
 `**push 先は、この issue のために作られた branch です。**` の直前
-（[internal/scaffold/template.go:351](../../../internal/scaffold/template.go#L351)）。
+（いまは [internal/prompt/builtin.md](../../../internal/prompt/builtin.md) の
+`## 3-4. commit して push する`。**本文は commit `a4e984c3` で template.go から移った**）。
 
 ```text
 **continuo が用意した worktree と branch のまま作業してください。**

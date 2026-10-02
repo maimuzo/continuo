@@ -224,7 +224,7 @@ func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) b
 //
 // **猶予に上限を置く。**`tracker.unknown_state_grace_ms`（外から動かされた run を止めるまで
 // 待つ長さ。既定10分）を、`holdForAutomatedMove` と共用する。
-// **上限が無いと、`claude.turn_timeout_ms` を 0 にした利用者**（画面が変わらないまま待てる
+// **上限が無いと、`claude.turn_timeout_ms` を 0 にした利用者**（進んだ形跡が無いまま待てる
 // 時間の上限。0 にすると stall 検知そのものが止まる。SPEC.md 8.4 が認めている設定）
 // **では、この門に入った run へ巡回が二度と手を出せなくなる。**変更前は止まっていた。
 //

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "13e2d58e0fbe60d5dca110674bb2e65458a838c33c4abd9952a44339743abb92", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // `tracker.required_labels` による dispatch の絞り込みの検査である。
 //

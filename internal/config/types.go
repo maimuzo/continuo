@@ -150,14 +150,17 @@ type TrackerProviderHandoffConfig struct {
 	//
 	//	5時間余裕値 = 100 − 5時間の使用率 − FiveHourMarginPercent
 	//
-	// **余裕値がマイナスになったら入札しない**（処理する余裕が無いという意味である）。
+	// **余裕値が 0 以下になったら入札しない**（処理する余裕が無いという意味である）。
+	// **0 も含めるのは人間の決定である**（2026-09-06。issue #173）。マージンをちょうど食い潰した
+	// 状態から着手すると、人間のための取り置きへ食い込む。
 	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
 	// WeeklyMarginPercent は1週間の枠のうち continuo のために残しておきたい割合（%）である。
 	//
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//
 	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
+	// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、
+	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
@@ -527,8 +530,12 @@ type ClaudeConfig struct {
 	// と定めている。1回の指示に数時間かかることは普通にあるので、総時間で測ってはならない。
 	//
 	// **continuo には app-server が無い。**「app-server の出力」に相当するのは
-	// 「端末の画面が変わったこと」であり、herdr はそれを pane の revision（画面の版）で表す。
-	// **版が増えていれば何時間かかっても待ち続け、版がこの時間だけ増えなければ打ち切る**（3-21）。
+	// **herdr の `agent_status` が `working` であること**である（3-21。issue #173）。
+	// **hook がこの時間だけ来なかった時点で `agent_status` を1回読む。`working` なら何時間かかっても待ち続け、`working` でなければ打ち切る。**
+	//
+	// **pane の `revision`（画面の版）では測らない。**herdr が増やすのは端末タイトルの本文が
+	// 変わったときだけで、**continuo の pane では issue の識別子で固定されるので永久に動かない**
+	// （実測。docs/spec/turn_end_detect_mechanizm.md の 3-2）。
 	//
 	// **0 以下で打ち切りを行わない**（`SPEC.md` 8.4 の
 	// *"If stall_timeout_ms <= 0, skip stall detection entirely"* に合わせる）。
@@ -638,8 +645,17 @@ type RateLimitConfig struct {
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
 	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
 	TokenEnv string `yaml:"token_env"`
-	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
-	PauseAbovePercent int `yaml:"pause_above_percent"`
+	// **`PauseAbovePercent` は消えた**（人間の決定。2026-09-06。issue #173）。
+	//
+	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+	// **仕事を取るかどうかを決めるのは `tracker.provider.handoff` の2つのマージンだけである**
+	// （`internal/handoff/handoff.go` の `Evaluate`）。
+	// **statusline取得を開くかの判定も同じ線を使う**（`statuslineFetchPointless`）。
+	//
+	// **`WORKFLOW.md` に残っている人は、起動時の検査が弾く**
+	// （`internal/config/validate.go` の知らないキーの検査。移行の手順は
+	// [docs/upgrading.md](../../docs/upgrading.md) にある）。
 	// PollIntervalMs は usage API を読む間隔（ミリ秒）である（source が oauth_usage_api のとき。
 	// 既定 300000 = 5分）。usage API が誤りのあいだは、次に試してよい時刻までの長さにもなる。
 	PollIntervalMs int `yaml:"poll_interval_ms"`
@@ -651,6 +667,46 @@ type RateLimitConfig struct {
 	// （起動時に WARN を1回出す）。短いと巡回のたびに statusline取得が走る。
 	// **走行中は読み直さない**（reload.go）。
 	RefreshIntervalMs int `yaml:"refresh_interval_ms"`
+	// WeeklyWaitLimitMinutes は1週間の枠が明けるのを待つ上限（分）である（設計 3-27。issue #197）。
+	//
+	// **単位は分である。**ミリ秒ではない（人間が「分数を指定できることとし」と決めた。2026-08-26）。
+	// **既定は 300（5時間）。**
+	//
+	// **これを超えて待つことになる run は、リセットを待たずに、pane が止まってから担当を手放す。**worker を止め、
+	// 自分の assignee を外し、`<!-- continuo:released -->` を1件書く（3-77c の引き渡し）。
+	// **worktree は残す。カンバンの Status も動かさない。**
+	//
+	// **「何分待つか」ではない。**「**あと何分以内にリセットされるなら待つか**」の線である。
+	// 判定は `リセット時刻 − いま > この値` で、**1週間の枠は最長7日先までリセットされない**ので、
+	// **余裕が無くなった時点でこの式はたいてい真になる。**つまり**この分数ぶん待つことは、ほとんど無い**（手放すのは pane が止まってからで、下のとおり `claude.turn_timeout_ms` に縛られる）。
+	// **それが人間の決定である**（2026-09-06。「待ってもリセットされない時は…止まったらすぐに担当を変更して」）。
+	//
+	// **実際に手放す時刻は、`claude.turn_timeout_ms` にも縛られる**（issue #173）。
+	//
+	//	既定（claude.turn_timeout_ms が正）… run が黙ってから claude.turn_timeout_ms（既定1時間）
+	//	打ち切りを切っている（0以下）      … 余裕が無くなってから weekly_wait_limit_minutes（既定300分）
+	//
+	// **同じ `rate_limit` の設定でも、2つの機械で待ち時間が変わる。**
+	// **既定の機械で「もっと早く手放したい」なら、見るのは `claude.turn_timeout_ms` のほうである。**
+	// **実際に「この分数だけ待つ」ように働くのは、余裕の無い1週間の枠のうち
+	// 1つでも `resets_at` を持たないときである。**
+	// （`LatestResetForWaitLimit` は、1つでも読めなければ「読めない」と答える。
+	// **1つも読めないときだけ、ではない。**）
+	// （使っていない `weekly_scoped` の `resets_at` は `null` で返る。使い切ったときにどうなるかは測っていない。issue #199）。
+	// **そのときは、余裕が無くなってからの経過がこの値を超えたら手放す。**
+	//
+	// **5時間の枠には効かない。**余裕の無い枠が `session` だけなら、いつまでも待つ
+	// （**「使い切っている」ではない。**線は「余裕値が0以下」である。設計 3-27）
+	// （2026-08-26 の人間の決定「5時間枠 → 待つ。担当は変えない」）。
+	//
+	// **0 なら上限を設けない**（負の値は起動時の検査が弾く）。`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向きである
+	// （`idle_timeout_ms` の「0 なら既定へ倒す」とは逆なので、雛形のコメントで断っている）。
+	//
+	// **複数の機械で見張るなら `tracker.provider.handoff.idle_timeout_ms`（既定18時間）より
+	// 短くすること。**長いと、別の機械が先に担当を外すので、この値は一度も効かない。
+	// **弾かないのは、1台で動かしている人には他の機械がいないためである。**
+	WeeklyWaitLimitMinutes int `yaml:"weekly_wait_limit_minutes"`
 }
 
 // TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 3-33 / 4-3）。

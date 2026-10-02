@@ -56,7 +56,7 @@ const (
 	DefaultStartupTimeout = 60 * time.Second
 	// DefaultTurnTimeout は待ちを伴う1回の呼び出しの上限である
 	// （claude.turn_timeout_ms = 3600000）。agent.prompt を待機ありで呼ぶときに使う。
-	// **turn の総実行時間の上限ではない**（画面が変わり続けている限り、呼び出し側が待ち直す）。
+	// **turn の総実行時間の上限ではない**（agent の状態が `working` である限り、呼び出し側が待ち直す）。
 	DefaultTurnTimeout = time.Hour
 )
 

@@ -176,8 +176,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	// 段4: worktree を herdr の workspace として開き直し、その中の pane を引く。
 	//
 	// **`worktree.open` を自分で呼ばず、着手の段3 と同じ `workspace.Manager.Prepare` を通す。**
-	// `worktree.open` は `cwd` にリポジトリ本体を渡さないと
-	// `worktree_not_found: worktree path not found` で断る（実測: 2026-08-25、test/live。
+	// `worktree.open` は `cwd` にリポジトリ本体を渡さないと断る
+	// （**返るコードは版で変わる。**herdr 0.8.x は `worktree_not_found: worktree path not found`、
+	// herdr 0.9.1 は `linked_worktree_source`。実測: 2026-08-25 と 2026-09-29、test/live。
 	// 設計 6-10 の表）。**その `cwd` に渡す clone の場所を知っているのは Prepare だけである。**
 	// Prepare を通せば `focus: false`・`label`（`owner/repo/issues/N`）・
 	// 開いたものが本当にこの worktree かの検算・**continuo が開かせたリポジトリの親 workspace の
@@ -307,7 +308,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 
 	// 段7: 「コメントに書いてください」とだけ送る。**turn 数に数えない。**
 	//
-	// **待ちの上限には `claude.turn_timeout_ms` を使う**（画面が変わらないまま待てる時間）。
+	// **待ちの上限には `claude.turn_timeout_ms` を使う**（進んだ形跡が無いまま待てる時間）。
 	// **この run はもう印から外れる途中なので、巡回の stall 検知は見ていない。**
 	// 返らなければこの上限で切り上げて段8（コメントの読み直し）へ進む。
 	if _, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{

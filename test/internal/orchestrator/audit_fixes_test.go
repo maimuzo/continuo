@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "13e2d58e0fbe60d5dca110674bb2e65458a838c33c4abd9952a44339743abb92", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "1d15605e1db312bc7ff623432df37b78caeebd326841d60fb56a2db9c8e43c9c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -193,8 +193,11 @@ func TestTurn_turnを送れなかったときStopHookのせいにしない(t *te
 // TestComment_復元のworktreeOpenはリポジトリ本体をcwdに渡す は、
 // コメントの取り戻し（設計 3-25 の段4）が本物の herdr に断られない呼び方をすることを確かめる。
 //
-// 目的: `worktree.open` は `cwd` にリポジトリ本体を渡さないと
-// `worktree_not_found: worktree path not found` で断る（実測: 2026-08-25、test/live）。
+// 目的: `worktree.open` は `cwd` にリポジトリ本体を渡さないと断る
+// （実測: 2026-08-25 の herdr 0.8.x は `worktree_not_found: worktree path not found`、
+//
+//	2026-09-29 の herdr 0.9.1 は `linked_worktree_source`。test/live）。
+//
 // **`cwd` が無いと、エージェントに成果を書かせる最後の砦が本番で1度も働かない。**
 //
 // 与える情報: `worktree.open` を「`cwd` が空なら本物と同じく断る」台本に差し替えた上で、
@@ -247,8 +250,11 @@ func TestComment_復元のworktreeOpenはリポジトリ本体をcwdに渡す(t 
 
 // requireCwdOnWorktreeOpen は、テスト用herdr mock の `worktree.open` を本物と同じ厳しさにする。
 //
-// **本物の herdr は `cwd` を省くと `worktree_not_found: worktree path not found` で断る**
-// （実測: 2026-08-25、test/live。設計 6-10 の表）。テスト用herdr mock が `cwd` を見ないままだと、
+// **本物の herdr は `cwd` を省くと断る。**返すコードは版で変わり、herdr 0.8.x は
+// `worktree_not_found: worktree path not found`（実測: 2026-08-25）、**herdr 0.9.1 は
+// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`**
+// （実測: 2026-09-29）である。test/live。設計 6-10 の表。
+// **台本はいまの版に合わせる。**テスト用herdr mock が `cwd` を見ないままだと、
 // **本番で1度も通らない呼び方をテストが通してしまう。**
 //
 // t: 呼び出し元のテスト。
@@ -258,7 +264,10 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	inner := fx.Herdr.HandlerOf(herdr.MethodWorktreeOpen)
 	fx.Herdr.Handle(herdr.MethodWorktreeOpen, func(params map[string]any) (any, *rpcErr) {
 		if cwd, _ := params["cwd"].(string); strings.TrimSpace(cwd) == "" {
-			return nil, &rpcErr{Code: "worktree_not_found", Message: "worktree path not found"}
+			return nil, &rpcErr{
+				Code:    "linked_worktree_source",
+				Message: "New and open worktree actions start from the repo parent workspace.",
+			}
 		}
 		return inner(params)
 	})
@@ -296,8 +305,8 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 			return nil, &rpcErr{Code: "agent_start_failed", Message: "No conversation found"}
 		}
 		started.Do(func() {})
-		// **既定の台本と同じ形で返す。**画面の版を勝手に載せると、stall の判定が
-		// 「版が動いた」と読んで打ち切りに入らない。
+		// **既定の台本と同じ形で返す。**`agent_status` を `working` にすると、
+		// stall の判定が「進んでいる」と読んで打ち切りに入らない。
 		return map[string]any{
 			"type":  "agent_started",
 			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
@@ -486,7 +495,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは使用率が空いていて（`pause_above_percent` に掛からない）、
+// 与える情報: 着手のときは使用率が空いていて（入札の余裕値が残っている）、
 // turn を送った瞬間にステータスラインから 100% の行が届く（issue #284）。
 // `agent.prompt` は herdr の `timeout` を返し、`agent.wait` は応答を書かずに接続を切る。
 // リトライは 0 回。
@@ -501,7 +510,7 @@ func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨て�
 			cfg.RateLimit.Source = ratelimit.SourceStatusline
 		},
 	})
-	// **着手が済むまでは使用率を空けておく。**100% のままだと `pause_above_percent` で
+	// **着手が済むまでは使用率を空けておく。**100% のままだと入札の余裕値で
 	// dispatch が止まり、turn の経路に1度も入れない。値は新しいので statusline取得も開かない。
 	feedFreshQuota(fx.Orc, "pane-a", time.Now(), 0, 0)
 	// **turn を送った瞬間に使い切る**（ステータスラインから 100% の新しい応答の行が届く）。
