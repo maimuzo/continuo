@@ -534,7 +534,9 @@ diff /tmp/continuo-ci-new/continuo-ci.yaml .github/workflows/continuo-ci.yaml
 | --- | --- |
 | `https://ghe.example.com`・`ghe.example.com/api/graphql` | 起動時に「ホスト名だけを書くこと」で止まります |
 | `ghe.example.com:8443` | 同じく止まります。**ポート番号は書けません** |
-| `claude.env` に、`host` と違う値の `GH_HOST` | 起動時に「claude.env の GH_HOST が tracker.provider.host と違います」で止まります。`claude.env` のその行を消すか、同じ値にします |
+| `""`（空文字） | 起動時に「ホスト名が空です」で止まります。`github.com` のままでよいなら、`host: github.com` と書きます。**`host:` とだけ書いて右を空にしたときは止まらず、`github.com` へ繋ぎます。**GitHub Enterprise のつもりでホスト名を書き忘れても、起動は通ります |
+| `-ghe.example.com`・`ghe.example.com.`（先頭か末尾が `-` か `.`） | 起動時に「ホスト名の先頭と末尾に "-" と "." は置けません」で止まります |
+| `claude.env` に、`host` と違う値の `GH_HOST` | 起動時に「claude.env の GH_HOST（"<書いた値>"）が tracker.provider.host（"<接続先>"）と違います」で止まります。`claude.env` のその行を消すか、同じ値にします |
 
 **利用者が書いた hook（`workspace_hooks` の `after_create` など）の環境には、continuo は `GH_HOST` を足しません。**
 hook の中で `gh` を叩くなら、hook の中で `GH_HOST` を置いてください。
@@ -1776,9 +1778,9 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
 
-### v0.2.0 から次の版へ上げるとき
+### v0.2.0 から v0.2.1 へ上げるとき
 
-#### 次の版で、何もしないと動かなくなるものは？
+#### v0.2.1 で、何もしないと動かなくなるものは？
 
 **原因。**接続先の GitHub を `WORKFLOW.md` の `tracker.provider.host` で選べるようになり（既定は `github.com`）、
 それに合わせて clone の引き方が変わりました。
@@ -1786,11 +1788,38 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 | 当たる人 | 何もしないとどうなるか | 直し方 |
 | --- | --- | --- |
 | **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone など） | **その issue に着手しません**（`clone がありません`） | `continuo trust` で取り直すか、`<ghq の root>/github.com/<owner>/<repo>` へ手で clone を置く |
-| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません** | `tracker.provider.host` を同じ値にするか、その行を消す |
+| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません**（`claude.env の GH_HOST（"<書いた値>"）が tracker.provider.host（"<接続先>"）と違います`） | `tracker.provider.host` を同じ値にするか、その行を消す |
 | 全員 | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（起動は止まりません） | `provider:` の下へ `host: github.com` を足す |
 
-**確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.0 から次の版へ」にあります。**
+**確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.0 から v0.2.1 へ」にあります。**
 **GitHub Enterprise で使う手順は、「目的別使用例」の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」にあります。**
+
+#### v0.2.1 から v0.2.0 へ戻すには？
+
+**原因。**v0.2.0 は v0.2.1 で増えたキー（`tracker.provider.host`）を知らないので、書いてあると `unknown field "host"` で起動しません。
+
+**直し方。**下の表を上から順に行ってください。**1 と 2 は、当たる人だけです。**
+
+| 順 | 誰が | 何をするか |
+| --- | --- | --- |
+| 1 | **`host:` に `github.com` 以外を書いていた人** | **実行ファイルを入れ替える前に**、「目的別使用例」の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」の「戻すとき。」を済ませます。v0.2.0 が繋ぐ先は `github.com` だけなので、GitHub Enterprise 側の worktree の片付けは v0.2.1 のうちに行い、`owner`・`project_number`・`trust.repositories` を `github.com` 側の値へ戻します。**`claude.env` に `GH_HOST` を書いていたなら、その行も消します。**v0.2.0 は `claude.env` の `GH_HOST` と接続先の食い違いを確かめないので、残すと、continuo は `github.com` を見張るのに、エージェントの `gh` は `GH_HOST` の先を向きます |
+| 2 | **v0.2.1 へ上げたときに clone を取り直した人** | 同じ名前の clone が2つ在ります（元の場所と、`<ghq の root>/github.com/<owner>/<repo>`）。v0.2.0 は clone を `<owner>/<repo>` だけで引き、2行返ると1行目を採ります。どちらが採られるかは、確かめていません。**v0.2.1 が作った worktree に push していない commit が在れば、戻す前に push してください。**worktree の commit は、切った元の clone の中に在ります |
+| 3 | 全員 | continuo を止めます |
+| 4 | 全員 | `WORKFLOW.md` の `provider:` の下の `host:` の行を消します |
+| 5 | 全員 | v0.2.0 を入れ直します |
+
+**4 の確かめ方。**次のコマンドの出力に、`provider:` の下の `host:` の行が無ければ、v0.2.0 が読めない行は残っていません。
+（ファイルの全体を見るので、下半分のプロンプトに `host:` で始まる行を書いていると、それも出ます。そちらは消さなくてかまいません。）
+
+```bash
+grep -n -E "^ *host:" ~/continuo-work/WORKFLOW.md
+```
+
+**5 のコマンド。**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.2.0
+```
 
 ### v0.1.15 から v0.2.0 へ上げるとき
 
