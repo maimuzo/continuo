@@ -80,6 +80,16 @@ type TrackerCommentsConfig struct {
 // TrackerProviderConfig は GitHub Projects v2 アダプタが所有する設定である。
 // 仕様はこの中身を規定しないので、continuo 独自の構造で持つ。
 type TrackerProviderConfig struct {
+	// Host は接続先の GitHub のホスト名である（設計 3-86）。既定は "github.com"。
+	//
+	// **GitHub Enterprise を使うときに書き換える。**自社のサーバ（GitHub Enterprise Server）なら
+	// そのホスト名、GitHub が運営する版なら `<名前>.ghe.com` を書く。
+	// **continuo 自身の GraphQL・continuo が起こす `gh` と `ghq`・エージェントが叩く `gh` の
+	// 宛先を、全部この1つから決める。**
+	//
+	// **走っている最中には読み直さない**（`internal/config/reload.go` の読み直す項目に入れていない）。
+	// 変えたら continuo を再起動する。
+	Host string `yaml:"host"`
 	// Owner は project を所有する GitHub organization / user 名である。
 	Owner string `yaml:"owner"`
 	// ProjectNumber は project #3 のような番号である。

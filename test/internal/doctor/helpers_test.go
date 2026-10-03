@@ -563,7 +563,7 @@ type fixture struct {
 	// Env は doctor が引く環境変数である（Options.LookupEnv がこれを引く）。
 	Env map[string]string
 	// GhqPaths は注入する `ghq list` の結果である（鍵は `<owner>/<repo>`）。
-	// **nil なら本物の RunGhqList を使う**（PATH のテスト用ghq mock が答える）。
+	// **nil なら本物の GhqListForHost を使う**（PATH のテスト用ghq mock が答える）。
 	GhqPaths map[string]string
 	// CheckTimeout は外部に触る検査1つあたりの上限である。
 	// **0 なら doctor の既定（10秒）を使う。**返ってこない外部コマンドを待たずに

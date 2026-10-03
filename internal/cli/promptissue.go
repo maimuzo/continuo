@@ -31,13 +31,15 @@ const promptFetchTimeout = 30 * time.Second
 // `internal/abandon` の検査に及ぶ。**`internal/cli` は既に `internal/abandon` を import している。**
 //
 // raw: 利用者が渡した issue の URL。
-// 戻り値: `<owner>/<repo>#<番号>` の形の識別子と、URL として読めなかった理由。
-func promptIssueIdentifier(raw string) (string, error) {
+// 戻り値の1つ目: 分解した URL（ホストの照合に使う。設計 3-86）。
+// 戻り値の2つ目: `<owner>/<repo>#<番号>` の形の識別子。
+// 戻り値の3つ目: URL として読めなかった理由。
+func promptIssueIdentifier(raw string) (abandon.IssueRef, string, error) {
 	ref, err := abandon.ParseIssueURL(raw)
 	if err != nil {
-		return "", err
+		return abandon.IssueRef{}, "", err
 	}
-	return ref.Identifier(), nil
+	return ref, ref.Identifier(), nil
 }
 
 // fetchIssueForPrompt は、識別子でカンバンから issue を1件引く（設計 5-3f）。

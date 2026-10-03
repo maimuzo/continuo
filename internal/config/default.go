@@ -105,6 +105,7 @@ func DefaultConfig() *Config {
 		Tracker: TrackerConfig{
 			Kind: "github_projects_v2",
 			Provider: TrackerProviderConfig{
+				Host:        DefaultHost,
 				TokenSource: "gh_auth",
 				TokenEnv:    "GITHUB_TOKEN",
 				Comments: TrackerProviderCommentsConfig{

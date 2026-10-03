@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -553,12 +554,16 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 // 検査せずに `!` にして理由を出す。読む値そのものは設定に無い（ホストは github.com に固定）が、
 // **依存の図と「上流が `✗` か `!` なら下流を `!` にする」の規則を実装で曲げない。**
 //
+// **検査する相手は接続先ホスト（`tracker.provider.host`）である**（設計 3-86）。
+// 直し方の案内と合格の文面にも、そのホストを入れる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
+// cfg: 読めた場合の設定（接続先ホストを引く）。
 // opts: `gh auth status` の差し替え口を含む入力。
 // configSymbol: 上流（設定ファイル）の記号。
 // 戻り値: 検査結果。gh が無い場合・未ログインの場合・scope が足りない場合は `✗`。
 // 設定ファイルが `✓` でなければ `!`。
-func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result {
+func checkGHAuth(ctx context.Context, cfg loadedConfig, opts Options, configSymbol Symbol) Result {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelGHAuth,
@@ -577,7 +582,8 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 			Remedies: []string{i18n.T(i18n.KeyDoctorGHAuthRemedyInstall)},
 		}
 	}
-	if err := tracker.CheckGHProjectScope(ctx, opts.GHAuthStatus); err != nil {
+	host := tracker.NormalizedHost(cfg.Config.Tracker.Provider.Host)
+	if err := tracker.CheckGHProjectScope(ctx, host, opts.GHAuthStatus); err != nil {
 		if timedOut(ctx, err) {
 			return Result{
 				Label:    LabelGHAuth,
@@ -591,14 +597,14 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 			Symbol: SymbolMissing,
 			Detail: fmt.Sprintf("%v", err),
 			Remedies: []string{
-				i18n.T(i18n.KeyDoctorGHAuthRemedyLogin),
+				i18n.T(i18n.KeyDoctorGHAuthRemedyLogin, host, host),
 			},
 		}
 	}
 	return Result{
 		Label:  LabelGHAuth,
 		Symbol: SymbolOK,
-		Detail: i18n.T(i18n.KeyDoctorGHAuthOK),
+		Detail: i18n.T(i18n.KeyDoctorGHAuthOK, host),
 	}
 }
 
@@ -681,14 +687,39 @@ func checkBoard(
 		}, nil, nil, nil
 	}
 
+	host := tracker.NormalizedHost(cfg.Config.Tracker.Provider.Host)
+
+	// **接続先が github.com でないときだけ、先にスキーマを照会する**（設計 3-86。issue #86）。
+	//
+	// **GitHub Enterprise Server は 3.19 以下だと、continuo の問い合わせに要る要素を持たない。**
+	// 照会せずに Bootstrap へ進むと、利用者に見えるのは「Unknown argument」のような
+	// GraphQL の誤りだけで、**版が古いことが原因だとは読めない。**
+	//
+	// **新しい見出し語は立てない。**github.com の利用者には何も増やさないためである
+	// （人間の指示は「GHE を使っている場合は」）。足りなければ `カンバン` を `✗` にする。
+	// **足りないと分かったら Bootstrap は叩かない。**叩いても同じ理由で落ちるだけである。
+	//
+	// **照会そのものの失敗は、Bootstrap の失敗と同じ振り分けに渡す**（boardFailure）。
+	// レートリミットと期限切れだけ `!`、通信の失敗やトークンの失効は `✗` である。
+	// ここだけ `!` にすると、繋がっていないのに doctor が終了コード 0 で終わる。
+	if host != config.DefaultHost {
+		missing, err := adapter.MissingSchemaElements(ctx)
+		if err != nil {
+			return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatSchema), err, opts.GraphQLEndpoint, host), nil, nil, nil
+		}
+		if len(missing) > 0 {
+			return schemaUnsupported(host, missing, opts.GraphQLEndpoint), nil, nil, nil
+		}
+	}
+
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint, host), nil, nil, nil
 	}
 	boardStates := adapter.StatusOptionNames()
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint, host), nil, nil, nil
 	}
 
 	// **自動化はいちばん最後に読む**（見出し語 `自動化`。issue #209）。
@@ -753,7 +784,7 @@ func endpointNote(endpoint string) string {
 // err: 落ちた原因。
 // endpoint: 差し替えた接続先（空なら本番の GitHub）。
 // 戻り値: 検査結果。
-func boardFailure(ctx context.Context, what string, err error, endpoint string) Result {
+func boardFailure(ctx context.Context, what string, err error, endpoint, host string) Result {
 	if timedOut(ctx, err) {
 		return Result{
 			Label:    LabelBoard,
@@ -775,7 +806,7 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 	case tracker.IsCategory(err, tracker.CategoryInvalidConfig):
 		remedy = i18n.T(i18n.KeyDoctorBoardRemedyStatusOptions)
 	case tracker.IsCategory(err, tracker.CategoryMissingSecret):
-		remedy = i18n.T(i18n.KeyDoctorBoardRemedyTokenInvalid)
+		remedy = i18n.T(i18n.KeyDoctorBoardRemedyTokenInvalid, host)
 	}
 	return Result{
 		Label:    LabelBoard,
@@ -785,13 +816,39 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 	}
 }
 
+// schemaUnsupported は、接続先が continuo の問い合わせに要る要素を持っていないときの
+// カンバンの検査結果を組み立てる（設計 3-86）。
+//
+// **`<名前>.ghe.com` の接続先では版に触れない。**GitHub が運営していて、利用者は版を上げられない。
+// それ以外（GitHub Enterprise Server）では「3.20 以上が要る」を添える。
+// **「3.20 以上なら動く」とは書かない。**確かめてあるのは、公開スキーマの上で要る要素が
+// 揃うことだけである（実機では確かめていない）。
+//
+// host: 接続先ホスト。
+// missing: 足りない要素の名前（tracker.SchemaElement… の定数）。
+// endpoint: 環境変数で差し替えた宛先（差し替えていなければ空）。
+// 戻り値: `✗` の検査結果。
+func schemaUnsupported(host string, missing []string, endpoint string) Result {
+	remedy := i18n.T(i18n.KeyDoctorBoardRemedySchemaGHES, host)
+	if tracker.IsTenancyHost(host) {
+		remedy = i18n.T(i18n.KeyDoctorBoardRemedySchemaTenancy, host)
+	}
+	return Result{
+		Label:    LabelBoard,
+		Symbol:   SymbolMissing,
+		Detail:   i18n.T(i18n.KeyDoctorBoardSchemaUnsupported, host, strings.Join(missing, " / "), endpointNote(endpoint)),
+		Remedies: []string{remedy},
+	}
+}
+
 // checkClone は対象リポジトリの clone が手元にあるかを検査する（見出し語 `clone`）。
 //
-// **`ghq list -p -e <owner>/<repo>` の出力が空でないかで判定する**（設計 3-6 の3段と同じ呼び方）。
+// **`ghq list -p -e <ホスト>/<owner>/<repo>` の出力が空でないかで判定する**（設計 3-6 の3段と同じ呼び方）。
 // **exit code は存在の有無にかかわらず 0 を返す**（実測）ので、出力の有無だけを見る。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // opts: `ghq list` の差し替え口を含む入力。
+// host: 接続先ホスト（直し方の案内に入れる。設計 3-86）。
 // repos: カンバンから集めた対象リポジトリ。
 // boardSymbol: 上流（カンバン）の記号。
 // 戻り値の1つ目: 検査結果。
@@ -799,6 +856,7 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 func checkClone(
 	ctx context.Context,
 	opts Options,
+	host string,
 	repos []Repo,
 	boardSymbol Symbol,
 ) (Result, map[string]string) {
@@ -849,7 +907,13 @@ func checkClone(
 			symbol = worse(symbol, SymbolMissing)
 			missing++
 			notes = append(notes, i18n.T(i18n.KeyDoctorCloneNoteMissing, repo))
-			remedies = append(remedies, i18n.T(i18n.KeyDoctorCloneRemedyGhqGet, repo))
+			// **案内は `continuo trust` が実際に叩く形と同じにする**（設計 3-86）。
+			// ホストを省くと、案内どおりに叩いて github.com から取ってくる。
+			cloneURL, urlErr := workspace.GhqCloneURL(host, repo.Owner, repo.Name)
+			if urlErr != nil {
+				cloneURL = repo.String()
+			}
+			remedies = append(remedies, i18n.T(i18n.KeyDoctorCloneRemedyGhqGet, cloneURL))
 		default:
 			paths[repo.String()] = path
 			notes = append(notes, i18n.T(i18n.KeyDoctorCloneNoteFound, repo, path))

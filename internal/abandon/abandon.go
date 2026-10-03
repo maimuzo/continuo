@@ -212,6 +212,14 @@ func Run(ctx context.Context, opts Options) int {
 		return ExitStopped
 	}
 
+	// **URL のホストが接続先ホストと違えば、何もせずに止まる**（設計 3-86）。
+	// **worktree を探すより前に見る。**探してから断ると、「見つかったのに消さない」理由が
+	// 2つ（ホストが違う・検算が食い違う）に割れる。
+	if err := issue.CheckHost(loaded.Config.Tracker.Provider.Host); err != nil {
+		fmt.Fprintln(errOut, err)
+		return ExitStopped
+	}
+
 	// **常駐している側と同じ関数からロックの置き場所を導く**（設計 3-17b）。
 	// **`internal/cli` が解決済みのものを渡してくる。**
 	// 渡されていなければ既定の1本を解決する。

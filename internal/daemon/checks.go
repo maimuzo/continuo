@@ -66,10 +66,11 @@ func runStartupChecks(
 	if err := tracker.CheckGHAvailable(); err != nil {
 		return err
 	}
-	if err := tracker.CheckGHProjectScope(ctx, nil); err != nil {
+	if err := tracker.CheckGHProjectScope(ctx, cfg.Tracker.Provider.Host, nil); err != nil {
 		return err
 	}
-	logger.Info("gh の認証と scope を確かめました", "scope", "project")
+	logger.Info("gh の認証と scope を確かめました", "scope", "project",
+		"host", tracker.NormalizedHost(cfg.Tracker.Provider.Host))
 
 	ping, err := d.Herdr.CheckProtocol(ctx, cfg.Herdr.Protocol)
 	if err != nil {
@@ -78,6 +79,13 @@ func runStartupChecks(
 	logger.Info("herdr の socket に到達しました", "protocol", ping.Protocol)
 
 	if err := d.Tracker.Bootstrap(ctx, cfg.Tracker); err != nil {
+		// **接続先が github.com でないときは、`continuo doctor` へ案内する**（設計 3-86）。
+		// スキーマの照会は doctor にしか置いていない（人間の決定。issue #86）。
+		// GitHub Enterprise Server 3.19 以下では Bootstrap が GraphQL の誤りで落ちるので、
+		// 「Status の選択肢名が一致しません」だけを出すと、利用者は Status の名前を直しに行く。
+		if host := tracker.NormalizedHost(cfg.Tracker.Provider.Host); host != config.DefaultHost {
+			return i18n.Errorf(i18n.KeyDaemonRunStartupChecksBootstrapFailedOnHost, host, err)
+		}
 		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksStatusOptionMismatch, err)
 	}
 	return nil

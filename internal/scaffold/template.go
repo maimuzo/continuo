@@ -34,6 +34,8 @@ const workflowTemplate = `---
 tracker:
   kind: github_projects_v2                  # 見張る先の種類。いまは GitHub Projects v2 だけ
   provider:                                 # ここから下は GitHub Projects v2 に固有の設定
+    host: github.com                        # 接続先の GitHub のホスト名。GitHub Enterprise を使うなら、そのホスト名に書き換える
+                                            # （例: ghe.example.com）。https:// やパスは付けない。変えたら continuo を再起動する
     owner: __FILL_ME__                      # ここを埋めること。例: https://github.com/octocat なら octocat
     project_number: 0                       # ここを埋めること。例: https://github.com/users/octocat/projects/3 なら 3
     status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前

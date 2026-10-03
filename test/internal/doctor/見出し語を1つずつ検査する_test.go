@@ -118,9 +118,9 @@ func Test_見出し語を1つずつ検査する_P013_設定ファイルを読め
 // 未ログインの検出と直し方の提示を確かめる。
 //
 // 目的: `Active account: true` のブロックが1つも無ければ `✗` にし、
-// 「`gh auth login -s project` を実行してください」と出すこと。
+// 「`gh auth login --hostname github.com -s project` を実行してください」と出すこと。
 // 与える情報: `gh auth status` が未ログインの出力を返し、終了コード 1 で終わる。
-// 成功条件: `gh の認証` が `✗`、直し方に `gh auth login -s project` が入り、
+// 成功条件: `gh の認証` が `✗`、直し方に `gh auth login --hostname github.com -s project` が入り、
 // 下流（カンバン・clone・信頼登録）が `!` になり、終了コードが 1 になること。
 func Test_見出し語を1つずつ検査する_P007_ghが未ログインなら足りないと出しログインの手順を出す(t *testing.T) {
 	fx := newFixture(t)
@@ -129,8 +129,8 @@ func Test_見出し語を1つずつ検査する_P007_ghが未ログインなら�
 	report := fx.Run(t)
 
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolMissing)
-	if !strings.Contains(strings.Join(gh.Remedies, "\n"), "gh auth login -s project") {
-		t.Fatalf("直し方に `gh auth login -s project` が無い: %v", gh.Remedies)
+	if !strings.Contains(strings.Join(gh.Remedies, "\n"), "gh auth login --hostname github.com -s project") {
+		t.Fatalf("直し方に `gh auth login --hostname github.com -s project` が無い: %v", gh.Remedies)
 	}
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolUnknown)
@@ -240,7 +240,7 @@ func Test_見出し語を1つずつ検査する_P007_cloneが無ければ足り�
 	report := fx.Run(t)
 
 	clone := assertSymbol(t, report, doctor.LabelClone, doctor.SymbolMissing)
-	if !strings.Contains(strings.Join(clone.Remedies, "\n"), "ghq get octocat/hello-world") {
+	if !strings.Contains(strings.Join(clone.Remedies, "\n"), "ghq get --vcs git https://github.com/octocat/hello-world") {
 		t.Fatalf("直し方に `ghq get` が無い: %v", clone.Remedies)
 	}
 	trust := assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)

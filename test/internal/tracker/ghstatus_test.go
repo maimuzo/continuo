@@ -28,7 +28,7 @@ const ghAuthStatusOutput = `github.com
 //
 // 成功条件: エラーを返さない。
 func TestCheckGHProjectScope_有効なアカウントにprojectがあれば通る(t *testing.T) {
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return ghAuthStatusOutput, nil
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestCheckGHProjectScope_read_projectだけでは落ちる(t *testing.T) {
 		"'gist', 'project', 'read:org', 'repo', 'workflow'",
 		"'gist', 'read:project', 'repo'", 1)
 
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return out, nil
 	})
 	if err == nil {
@@ -78,7 +78,7 @@ func TestCheckGHProjectScope_有効でないアカウントのscopeは読まな�
   - Active account: true
   - Token scopes: 'repo'
 `
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return out, nil
 	})
 	if err == nil {
@@ -95,13 +95,13 @@ func TestCheckGHProjectScope_有効でないアカウントのscopeは読まな�
 //
 // 成功条件: エラーを返し、文面に `gh auth login -s project` が入っている。
 func TestCheckGHProjectScope_未ログインならログインの案内を出す(t *testing.T) {
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return "You are not logged into any GitHub hosts. To log in, run: gh auth login\n", nil
 	})
 	if err == nil {
 		t.Fatalf("未ログインなのに合格した")
 	}
-	if !strings.Contains(err.Error(), "gh auth login -s project") {
+	if !strings.Contains(err.Error(), "gh auth login --hostname github.com -s project") {
 		t.Fatalf("ログインの案内が出ていない: %v", err)
 	}
 }
@@ -116,7 +116,7 @@ func TestCheckGHProjectScope_未ログインならログインの案内を出す
 // 成功条件: 返したエラーがそのまま伝わる。
 func TestCheckGHProjectScope_ghを起動できなければそのまま落ちる(t *testing.T) {
 	want := errors.New("gh を起動できません")
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return "", want
 	})
 	if !errors.Is(err, want) {
@@ -150,7 +150,7 @@ const ghAuthStatusTokenInvalidOutput = `github.com
 // 指すこと。**`gh auth login` を案内しないこと。**gh 自身が書いた理由
 // （`The token in keyring is invalid.`）が文面に残っていること。
 func TestCheckGHProjectScope_トークンを検証できないだけなら未ログインと言わない(t *testing.T) {
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return ghAuthStatusTokenInvalidOutput, nil
 	})
 	if err == nil {
@@ -178,7 +178,7 @@ func TestCheckGHProjectScope_トークンを検証できないだけなら未ロ
 // 成功条件: エラー文に `gh auth status` の出力がそのまま含まれること。
 func TestCheckGHProjectScope_未ログインのときもghの出力を隠さない(t *testing.T) {
 	const out = "You are not logged into any GitHub hosts. To log in, run: gh auth login\n"
-	err := tracker.CheckGHProjectScope(context.Background(), func(context.Context) (string, error) {
+	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return out, nil
 	})
 	if err == nil {

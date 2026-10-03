@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -119,6 +120,30 @@ func ParseIssueURL(raw string) (IssueRef, error) {
 		Repo:   repo,
 		Number: number,
 	}, nil
+}
+
+// CheckHost は、issue の URL のホストが接続先ホストと同じかを確かめる（設計 3-86）。
+//
+// **違えば誤りにして、何もさせない。**`continuo abandon` は Status を
+// `<owner>/<repo>#<番号>` だけで接続先のカンバンから引く。接続先を切り替えたあとに
+// 古いホストの URL を渡すと、**接続先のカンバンに在る、同じ番号の別の issue の Status を動かす。**
+// `continuo prompt --show --url` も同じ引き方をするので、別の issue の文面を出す。
+//
+// **誤りの文面に次の手を書く。**片付けられなかった worktree の案内は、置き場所のホストから
+// 組んだ URL で `continuo abandon` を勧める。断るだけだと、利用者は案内どおりに叩いて
+// 行き止まりになる。
+//
+// host: 接続先ホスト（`tracker.provider.host`）。空文字なら github.com。
+// 戻り値: ホストが違う場合のエラー。
+func (r IssueRef) CheckHost(host string) error {
+	want := strings.ToLower(strings.TrimSpace(host))
+	if want == "" {
+		want = config.DefaultHost
+	}
+	if r.Host == want {
+		return nil
+	}
+	return i18n.Errorf(i18n.KeyAbandonIssueURLHostMismatch, r.URL, r.Host, want)
 }
 
 // isPlainNumber は、10進の数字だけで書かれていて先頭が 0 でないかを返す。

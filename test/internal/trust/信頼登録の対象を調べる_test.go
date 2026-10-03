@@ -149,7 +149,7 @@ func Test_信頼登録の対象を調べる_P021_cloneが無ければ登録の�
 	if got.Actionable() {
 		t.Fatalf("clone が無いのに登録の対象になっている: %+v", got)
 	}
-	if !strings.Contains(got.Problem, "ghq list -p -e octocat/nowhere") {
+	if !strings.Contains(got.Problem, "ghq list -p -e github.com/octocat/nowhere") {
 		t.Errorf("clone が無いことを引いたコマンドつきで説明していない: %q", got.Problem)
 	}
 	if len(report.Pending()) != 0 {

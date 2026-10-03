@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/statuslineclient"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // claudeConfigDirEnv は Claude Code の利用者の設定ディレクトリを変える環境変数である（設計 3-84a）。
@@ -112,6 +114,7 @@ func (o *Orchestrator) statuslineForwardCommand(worktree string) string {
 //
 // **`claude.env` の map をそのまま書き換えない。**写した新しい map に書く（着手は並行に走るので、
 // ある issue の転送先が別の issue の設定ファイルへ漏れる）。
+// **接続先ホスト（`GH_HOST`）は、どの着手でも書く**（設計 3-86）。
 // **statusLine を書かない着手（`rate_limit.source: none` など）では、転送先も書かない。**
 // 書くときは、見つからなくても空文字で書く（pane が受け継いだ同じ名前の変数を拾わないため）。
 //
@@ -119,13 +122,22 @@ func (o *Orchestrator) statuslineForwardCommand(worktree string) string {
 // worktree: issue の worktree の絶対パス。
 // 戻り値: 設定ファイルの `env`。
 func (o *Orchestrator) issueSettingsEnv(statusLine *statusLineSetting, worktree string) map[string]string {
-	if statusLine == nil {
-		return o.cfg.Claude.Env
-	}
-	env := make(map[string]string, len(o.cfg.Claude.Env)+1)
+	env := make(map[string]string, len(o.cfg.Claude.Env)+2)
 	for k, v := range o.cfg.Claude.Env {
 		env[k] = v
 	}
-	env[statuslineclient.EnvForwardCommand] = o.statuslineForwardCommand(worktree)
+	// **エージェントの `gh` の宛先を、接続先ホストにする**（設計 3-86）。
+	//
+	// 組み込みの指示書と WORKFLOW.md の本文は、`gh issue view --repo <owner>/<repo>` や
+	// `gh api repos/…` のように、ホストを書かずに `gh` を叩かせる。**`GH_HOST` を置けば、
+	// それらが全部このホストへ向く**（`--repo <owner>/<repo>` も従う。gh 2.100.0 で実測）。
+	// **github.com のときも書く。**書かないと、宛先が機械ごとの gh の既定で決まる。
+	// **statusLine を書かない着手でも書く。**だからこの関数は、どの枝でも写した map を返す。
+	// **利用者が `claude.env` に書いた GH_HOST とは食い違わない。**食い違う設定は、
+	// 読み込みの時点で誤りにしてある（config の validateHost）。
+	env[config.EnvGHHost] = tracker.NormalizedHost(o.cfg.Tracker.Provider.Host)
+	if statusLine != nil {
+		env[statuslineclient.EnvForwardCommand] = o.statuslineForwardCommand(worktree)
+	}
 	return env
 }

@@ -48,6 +48,11 @@ type Result struct {
 	// WriteTemplateWithValues では force が真のときだけ真になりうる。
 	// UpdateStatuses は既にあるファイルしか対象にしないので常に真である。
 	Overwritten bool
+	// Host は、既にある WORKFLOW.md に書かれていた `tracker.provider.host` である（設計 3-86）。
+	//
+	// **CheckUpdatable だけが埋める。**`continuo setup` が gh へ `GH_HOST` として渡す。
+	// `host:` の行が無ければ github.com である。
+	Host string
 	// Owner は、既にある WORKFLOW.md に書かれていた `tracker.provider.owner` である。
 	//
 	// **CheckUpdatable だけが埋める。**`continuo setup` が「どのカンバンを読むか」を

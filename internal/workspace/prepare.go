@@ -222,7 +222,9 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		// 人間がコピーしても叩けない（設計 3-34b）。
 		return nil, i18n.Errorf(
 			i18n.KeyWorkspacePrepareCloneNotFound,
-			ErrCloneNotFound, issue.Owner, issue.Repo, issue.Owner, issue.Repo)
+			ErrCloneNotFound,
+			GhqListTarget(m.cfg.Tracker.Provider.Host, issue.Owner, issue.Repo),
+			issue.Owner, issue.Repo)
 	}
 
 	// 段1: 「登録は残っているが実体が消えている」を先に解消する。

@@ -55,6 +55,9 @@ func validate(cfg *Config) error {
 	if cfg.Tracker.Provider.StatusField == "" {
 		return requiredValueError("tracker.provider.status_field")
 	}
+	if err := validateHost(cfg); err != nil {
+		return err
+	}
 	switch cfg.Tracker.Provider.TokenSource {
 	case "gh_auth":
 		// gh のログイン情報を使う。token_env は参照しない。

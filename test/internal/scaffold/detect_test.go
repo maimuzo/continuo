@@ -86,7 +86,7 @@ const twoRepoItemsJSON = `{"items":[` +
 func TestRunGH_ghが無ければErrGHNotFoundを返す(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	_, err := scaffold.RunGH(context.Background(), "api", "user")
+	_, err := scaffold.RunGHForHost("github.com")(context.Background(), "api", "user")
 	if !errors.Is(err, scaffold.ErrGHNotFound) {
 		t.Fatalf("gh が無いことを表すエラーが返っていない: %v", err)
 	}

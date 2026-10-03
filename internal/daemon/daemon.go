@@ -878,7 +878,9 @@ func build(
 		Logger:               logger,
 		// **巡回ごとの `gh` の認証の検査は `tracker.verify_states_every` の頻度で走る**
 		// （毎巡回で外部プロセスを起動しない。設計 3-6）。
-		GHAuthCheck: func(ctx context.Context) error { return tracker.CheckGHProjectScope(ctx, nil) },
+		GHAuthCheck: func(ctx context.Context) error {
+			return tracker.CheckGHProjectScope(ctx, cfg.Tracker.Provider.Host, nil)
+		},
 	})
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildOrchestratorFailed, err)

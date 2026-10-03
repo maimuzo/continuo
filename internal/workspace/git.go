@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
@@ -958,7 +959,14 @@ func gitWorktreeRemove(ctx context.Context, repoDir, worktreePath string) error 
 // **これ以外の非 0 は本当の失敗として扱う**（clone が無いことに丸めない）。
 const ghqNotFoundExitCode = 1
 
-// ghqTarget は `ghq list` / `ghq get` へ渡す `<owner>/<repo>` を組み立てる。
+// ghqTarget は `ghq list` へ渡す `<ホスト>/<owner>/<repo>` を組み立てる（設計 3-22 / 3-86）。
+//
+// **ホストを必ず付ける。**`ghq list -e` は末尾側の部分パスとの完全一致で引くので、
+// `<owner>/<repo>` の2要素だと、ghq の root の下の1階層目（ホスト）が何であっても当たる。
+// 同じ名前の clone が github.com と GitHub Enterprise の両方に在ると2行返り、
+// **1行目を採ると、別のホストの clone から worktree を切る**（ghq 1.10.1 で実測。2026-10-03）。
+// **2要素で引き直すこともしない。**接続先の clone が無く別のホストの同名の clone だけが
+// 在る機械で、それを返してしまう。
 //
 // **正規化（3-7）を通してはならない。**normalize.Normalize は**置き場所の
 // ディレクトリ名を作るための変換**であり、要素の先頭のドットを `_` に、
@@ -974,18 +982,76 @@ const ghqNotFoundExitCode = 1
 // それ以外が混ざったら組み立てずにエラーにする（**別名に直さない**）。
 // **先頭の `-` は弾く。**そのまま渡すと ghq のオプションとして解釈される。
 //
+// host: 接続先ホスト（`tracker.provider.host`）。空文字なら github.com。
 // owner: リポジトリの所有者名。
 // repo: リポジトリ名。
-// 戻り値の1つ目: `<owner>/<repo>`。
-// 戻り値の2つ目: どちらかが上の形に合わない場合のエラー。
-func ghqTarget(owner, repo string) (string, error) {
+// 戻り値の1つ目: `<ホスト>/<owner>/<repo>`。
+// 戻り値の2つ目: どれかが上の形に合わない場合のエラー。
+func ghqTarget(host, owner, repo string) (string, error) {
+	h, err := ghqHost(host)
+	if err != nil {
+		return "", err
+	}
 	if err := checkGhqName(owner); err != nil {
 		return "", err
 	}
 	if err := checkGhqName(repo); err != nil {
 		return "", err
 	}
-	return owner + "/" + repo, nil
+	return h + "/" + owner + "/" + repo, nil
+}
+
+// ghqHost は ghq へ渡すホスト名を検査して返す（設計 3-86）。
+//
+// **設定の検査（config.NormalizeHost）と同じ関数を通す。**設定を通らずに組み立てた値
+// （テストなど）でも、`-` で始まる値を ghq のオプションとして渡さないためである。
+//
+// host: 接続先ホスト。空文字なら github.com。
+// 戻り値: 小文字にしたホスト名と、形が合わない場合のエラー。
+func ghqHost(host string) (string, error) {
+	if strings.TrimSpace(host) == "" {
+		return config.DefaultHost, nil
+	}
+	h, err := config.NormalizeHost(host)
+	if err != nil {
+		return "", i18n.Errorf(i18n.KeyWorkspaceGhqNameInvalid, host)
+	}
+	return h, nil
+}
+
+// GhqCloneURL は `ghq get` へ渡す clone 元の URL を組み立てる（設計 3-22 / 3-86）。
+//
+// **`https://<ホスト>/<owner>/<repo>` の形で渡す。**`<ホスト>/<owner>/<repo>` の形だと、
+// ghq は1要素目が「ドットのあとに英字だけが続く」形のときだけホストと読み、それ以外
+// （ドットの無い名前・最後のラベルに数字かハイフンを含む名前）は github.com の下のパスと読む
+// （ghq の公開ソースの `url.go` を読んだ結果。実行しては確かめていない）。
+// **人間へ出す案内にも、同じ形を使う。**案内どおりに叩いて別の場所から取ってこさせないためである。
+//
+// host: 接続先ホスト。空文字なら github.com。
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値の1つ目: clone 元の URL。
+// 戻り値の2つ目: どれかが ghq へ渡せない形の場合のエラー。
+func GhqCloneURL(host, owner, repo string) (string, error) {
+	target, err := ghqTarget(host, owner, repo)
+	if err != nil {
+		return "", err
+	}
+	return "https://" + target, nil
+}
+
+// GhqListTarget は `ghq list -p -e` へ渡す名前を返す（人間へ出す案内に使う）。
+//
+// host: 接続先ホスト。空文字なら github.com。
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値: `<ホスト>/<owner>/<repo>`。**形が合わない値は、検査せずにそのまま繋いで返す**
+// （案内の文面に出すだけで、コマンドとしては実行しないため）。
+func GhqListTarget(host, owner, repo string) string {
+	if target, err := ghqTarget(host, owner, repo); err == nil {
+		return target
+	}
+	return host + "/" + owner + "/" + repo
 }
 
 // checkGhqName は ghq へ渡す名前1つ分を検査する。
@@ -1008,20 +1074,31 @@ func checkGhqName(name string) error {
 	return nil
 }
 
-// RunGhqList は実際に `ghq list -p -e <owner>/<repo>` を実行し、clone の絶対パスを返す。
+// GhqListForHost は、接続先ホストの clone の絶対パスを
+// `ghq list -p -e <ホスト>/<owner>/<repo>` で引く関数を返す（設計 3-22 / 3-86）。
 //
 // **ghq に worktree を作る機能は無い**（サブコマンドは6つだけ。実測）。
 // ここで引くのは「どのリポジトリから worktree を切るか」と「信頼を引く鍵の元」である。
 //
-// ctx: 実行に適用するコンテキスト。
-// owner: リポジトリの所有者名。
-// repo: リポジトリ名。
-// 戻り値の1つ目: clone の絶対パス。**clone が無ければ空文字を返す**（エラーにしない）。
-// 複数行返った場合は1行目を採る。
-// 戻り値の2つ目: ghq を起動できなかった場合・**該当が無いこと以外の理由で非 0 で
-// 終わった場合**のエラー（標準エラー出力の内容を含める）。
-func RunGhqList(ctx context.Context, owner, repo string) (string, error) {
-	target, err := ghqTarget(owner, repo)
+// **関数の形 `(ctx, owner, repo)` は変えない。**`continuo trust`・statusline取得の clone 選び・
+// 片付けの検算は issue の URL を持たないので、ホストを引数で渡せない。
+// **1つのプロセスが見る接続先は1つで、走っている最中には変わらない**ので、
+// ホストはここで閉じ込める。
+//
+// host: 接続先ホスト（`tracker.provider.host`）。空文字なら github.com。
+// 戻り値: clone のパスを引く関数。その関数の戻り値の1つ目は clone の絶対パスで、
+// **clone が無ければ空文字を返す**（エラーにしない）。複数行返った場合は1行目を採る。
+// 2つ目は、ghq を起動できなかった場合・**該当が無いこと以外の理由で非 0 で終わった場合**・
+// 名前が ghq へ渡せない形の場合のエラー（標準エラー出力の内容を含める）。
+func GhqListForHost(host string) GhqListFunc {
+	return func(ctx context.Context, owner, repo string) (string, error) {
+		return runGhqList(ctx, host, owner, repo)
+	}
+}
+
+// runGhqList は GhqListForHost の実体である。
+func runGhqList(ctx context.Context, host, owner, repo string) (string, error) {
+	target, err := ghqTarget(host, owner, repo)
 	if err != nil {
 		return "", err
 	}
@@ -1110,24 +1187,36 @@ func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, 
 	return branches, nil
 }
 
-// RunGhqGet は `ghq get <owner>/<repo>` を実行して clone を取ってくる。
+// GhqGetForHost は、接続先ホストから clone を取ってくる関数を返す
+// （`ghq get --vcs git https://<ホスト>/<owner>/<repo>`。設計 3-22 / 3-86）。
 //
 // **これは書き込みを伴う唯一の ghq の呼び出しである。**呼ぶのは `continuo trust` の
 // 本番実行だけで、`--dry-run` と巡回のループからは呼ばない（設計 3-22 / 3-33）。
 // **巡回から呼ぶと、カンバンに載っただけのリポジトリを無断で clone することになる。**
 //
-// ctx: 呼び出しに適用するコンテキスト（タイムアウトを含める）。
-// owner: リポジトリの所有者名。
-// repo: リポジトリ名。
-// 戻り値: ghq を起動できなかった場合・非 0 で終わった場合のエラー
-// （標準エラー出力の内容を含める）。成功したら nil。
-func RunGhqGet(ctx context.Context, owner, repo string) error {
-	target, err := ghqTarget(owner, repo)
+// **`--vcs git` を付ける。**付けないと、ghq は github.com 以外のホストで
+// `https://<ホスト>/<owner>/<repo>?go-get=1` を取りに行って VCS の判定から入る
+// （ghq 1.10.1 で実測。2026-10-03）。GitHub Enterprise の実機でその判定が通るかを
+// 確かめられないので、判定そのものを飛ばす。
+//
+// host: 接続先ホスト（`tracker.provider.host`）。空文字なら github.com。
+// 戻り値: clone を取ってくる関数。その関数は、ghq を起動できなかった場合・非 0 で終わった場合・
+// 名前が ghq へ渡せない形の場合にエラーを返す（標準エラー出力の内容を含める）。成功したら nil。
+// **その関数へは、タイムアウトを含めた ctx を渡すこと。**
+func GhqGetForHost(host string) func(ctx context.Context, owner, repo string) error {
+	return func(ctx context.Context, owner, repo string) error {
+		return runGhqGet(ctx, host, owner, repo)
+	}
+}
+
+// runGhqGet は GhqGetForHost の実体である。
+func runGhqGet(ctx context.Context, host, owner, repo string) error {
+	target, err := GhqCloneURL(host, owner, repo)
 	if err != nil {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, ghqBinary, "get", target)
+	cmd := exec.CommandContext(ctx, ghqBinary, "get", "--vcs", "git", target)
 	stderr := newCappedBuffer(gitStderrLimit)
 	// **標準出力は捨てる。**ghq は進捗を出すが、continuo の画面に混ぜても読めない。
 	cmd.Stdout = io.Discard

@@ -12,10 +12,69 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
 )
 
-// defaultGraphQLEndpoint は GitHub の GraphQL API v4 のエンドポイントである。
+// defaultGraphQLEndpoint は github.com の GraphQL API v4 のエンドポイントである。
 const defaultGraphQLEndpoint = "https://api.github.com/graphql"
+
+// tenancyHostSuffix は、GitHub が運営する GitHub Enterprise（データレジデンシー版）の
+// ホスト名の終わりである（`<名前>.ghe.com`）。
+const tenancyHostSuffix = ".ghe.com"
+
+// NormalizedHost は接続先ホストの値を、比較と組み立てに使える形にして返す（設計 3-86）。
+//
+// **空文字は github.com として扱う。**設定の既定値（`config.DefaultConfig`）を通らずに
+// 組み立てた設定（テストなど）でも、いままでと同じ宛先になるようにするためである。
+//
+// host: `tracker.provider.host` の値。
+// 戻り値: 前後の空白を落として小文字にしたホスト名。空なら `config.DefaultHost`。
+func NormalizedHost(host string) string {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if h == "" {
+		return config.DefaultHost
+	}
+	return h
+}
+
+// IsTenancyHost は接続先ホストが `<名前>.ghe.com` の形かどうかを返す（設計 3-86）。
+//
+// **この形の接続先は版番号を持たない。**GitHub が運営しているので、利用者は版を上げられない。
+//
+// host: `tracker.provider.host` の値。
+// 戻り値: `.ghe.com` で終わるなら true。
+func IsTenancyHost(host string) bool {
+	return strings.HasSuffix(NormalizedHost(host), tenancyHostSuffix)
+}
+
+// GraphQLEndpointForHost は接続先ホストから GraphQL API の URL を導く（設計 3-86）。
+//
+// **宛先を決める規則はここにしか書かない。**常駐プロセス・`continuo doctor`・
+// `continuo abandon`・`continuo prompt` は、どれも NewAdapter を通ってここへ来る。
+// 1箇所でも別の規則で組み立てると、接続先のトークンを別のホストへ送ることになる。
+//
+// 規則は `gh` 本体と同じである（gh 2.100.0 の `GH_DEBUG=api` で宛先を実測。2026-10-03）。
+//
+//	github.com          … https://api.github.com/graphql
+//	<名前>.ghe.com      … https://api.<名前>.ghe.com/graphql
+//	それ以外（GHES）    … https://<ホスト名>/api/graphql
+//
+// **https で繋がる接続先だけを対象にする。**トークンを Authorization ヘッダに載せるためである。
+//
+// host: `tracker.provider.host` の値。空なら github.com として扱う。
+// 戻り値: GraphQL API の URL。
+func GraphQLEndpointForHost(host string) string {
+	h := NormalizedHost(host)
+	switch {
+	case h == config.DefaultHost:
+		return defaultGraphQLEndpoint
+	case strings.HasSuffix(h, tenancyHostSuffix):
+		return "https://api." + h + "/graphql"
+	default:
+		return "https://" + h + "/api/graphql"
+	}
+}
 
 // defaultHTTPTimeout は httpClient を渡されなかったときに組み立てるクライアントの
 // 全体の待ち時間である。

@@ -147,7 +147,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
 // **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い
-// （対象のホストは github.com に固定）が、**依存の図と「上流が `✗` か `!` なら下流は `!`」の
+// （対象のホストは接続先ホスト。設計 3-86）が、**依存の図と「上流が `✗` か `!` なら下流は `!`」の
 // 規則を実装で曲げない。**設定ファイルが `✗` か `!` なら、`gh の認証` も `!` になる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -159,9 +159,6 @@ func Run(ctx context.Context, opts Options) Report {
 	}
 	if opts.LookupEnv == nil {
 		opts.LookupEnv = os.LookupEnv
-	}
-	if opts.GhqList == nil {
-		opts.GhqList = workspace.RunGhqList
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = DefaultTimeout
@@ -196,6 +193,12 @@ func Run(ctx context.Context, opts Options) Report {
 	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
 	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
+	// **clone を引く相手は接続先ホストである**（設計 3-86）。設定を読んでからでないと決まらない。
+	// 設定を読めなかったときは github.com で引くが、そのときは clone の検査まで進まない。
+	if opts.GhqList == nil {
+		opts.GhqList = workspace.GhqListForHost(cfg.Config.Tracker.Provider.Host)
+	}
+
 	// 段1d: プロンプトの変数。**ここもカンバンを1バイトも読まない。**
 	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
 	report.add(checkPromptVariables(cfg, configResult.Symbol))
@@ -227,7 +230,7 @@ func Run(ctx context.Context, opts Options) Report {
 
 	// 段4: gh の認証。設定ファイルの下流である（設計 3-32 の依存の図）。
 	ghResult := withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
-		return checkGHAuth(ctx, opts, configResult.Symbol)
+		return checkGHAuth(ctx, cfg, opts, configResult.Symbol)
 	})
 	report.add(ghResult)
 
@@ -243,7 +246,14 @@ func Run(ctx context.Context, opts Options) Report {
 	var repos []Repo
 	var boardStates []string
 	var workflows []tracker.ProjectWorkflow
-	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
+	// **接続先が github.com でないときだけ、1本ぶん足す**（設計 3-86）。そのときは Bootstrap の前に
+	// スキーマの照会が1本入る。足さないと、応答の遅い接続先で照会が残り時間を食い、
+	// カンバンが `!` になる。github.com のときは照会しないので、いままでと同じ2本ぶんである。
+	boardTimeout := 2 * opts.CheckTimeout
+	if cfg.OK && tracker.NormalizedHost(cfg.Config.Tracker.Provider.Host) != config.DefaultHost {
+		boardTimeout += opts.CheckTimeout
+	}
+	boardResult = withCheckTimeout(ctx, boardTimeout, func(ctx context.Context) Result {
 		var res Result
 		res, repos, boardStates, workflows = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
@@ -276,7 +286,7 @@ func Run(ctx context.Context, opts Options) Report {
 	var clonePaths map[string]string
 	cloneResult = withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, clonePaths = checkClone(ctx, opts, repos, boardResult.Symbol)
+		res, clonePaths = checkClone(ctx, opts, cfg.Config.Tracker.Provider.Host, repos, boardResult.Symbol)
 		return res
 	})
 	report.add(cloneResult)

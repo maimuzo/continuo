@@ -266,7 +266,7 @@ type Options struct {
 	GHAuthCheck GHAuthCheckFunc
 	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	//
-	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
+	// **nil なら `gh api --hostname <接続先ホスト> user --jq .login`（tracker.GHAPIUserLoginForHost）を使う。**
 	// **テストは偽の関数を渡して外部プロセスの起動を避けること。**
 	GHLogin tracker.GHLoginFunc
 	// TranscriptRoot は hook が渡す `transcript_path` を受け入れる根である。
@@ -580,7 +580,7 @@ func New(opts Options) (*Orchestrator, error) {
 	// アカウント1つにつき continuo は1つである。
 	ghLogin := opts.GHLogin
 	if ghLogin == nil {
-		ghLogin = tracker.RunGHAPIUserLogin
+		ghLogin = tracker.GHAPIUserLoginForHost(opts.Config.Tracker.Provider.Host)
 	}
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 

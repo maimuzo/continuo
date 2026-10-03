@@ -57,9 +57,9 @@ type HerdrClient interface {
 	WorkspaceCreate(ctx context.Context, params herdr.WorkspaceCreateParams) (*herdr.WorkspaceCreateResult, error)
 }
 
-// GhqListFunc は `ghq list -p -e <owner>/<repo>` 相当の処理を行う関数の型である。
+// GhqListFunc は `ghq list -p -e <ホスト>/<owner>/<repo>` 相当の処理を行う関数の型である。
 //
-// 本番は RunGhqList を使う。テストでは ghq を実際に実行せずに済むよう、別の関数を
+// 本番は GhqListForHost が返す関数を使う（ホストはその中に閉じ込めてある。設計 3-86）。テストでは ghq を実際に実行せずに済むよう、別の関数を
 // 差し替えて渡す（internal/tracker の GHAuthTokenFunc と同じ考え方で、
 // グローバル変数ではなく Options で差し替える）。
 //
@@ -93,7 +93,7 @@ type Options struct {
 	// HomeDir は `~/.claude.json` を探すホームディレクトリである。
 	// 空なら os.UserHomeDir() の結果を使う。テストが一時ディレクトリを渡せるようにしてある。
 	HomeDir string
-	// GhqList は clone のパスを引く関数である。nil なら RunGhqList（本物の ghq 実行）を使う。
+	// GhqList は clone のパスを引く関数である。nil なら GhqListForHost(Config の接続先ホスト)（本物の ghq 実行）を使う。
 	GhqList GhqListFunc
 	// SettingsRoot は issue ごとの Claude Code の設定ファイルを置くディレクトリである
 	// （3-12 の `<実行時ディレクトリ>/issues`）。
@@ -207,7 +207,9 @@ func New(opts Options) (*Manager, error) {
 	}
 	ghqList := opts.GhqList
 	if ghqList == nil {
-		ghqList = RunGhqList
+		// **接続先ホストは設定から取る**（設計 3-86）。Manager を組み立てる3箇所
+		// （常駐・`continuo abandon`・`continuo doctor`）は、どれも Config を渡している。
+		ghqList = GhqListForHost(opts.Config.Tracker.Provider.Host)
 	}
 	homeDir := opts.HomeDir
 	if homeDir == "" {

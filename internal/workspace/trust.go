@@ -75,7 +75,8 @@ func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
 		return false, "", err
 	}
 	if clonePath == "" {
-		return false, i18n.T(i18n.KeyWorkspaceCheckTrustCloneMissing, owner, repo, owner, repo), nil
+		return false, i18n.T(i18n.KeyWorkspaceCheckTrustCloneMissing, owner, repo,
+			GhqListTarget(m.cfg.Tracker.Provider.Host, owner, repo)), nil
 	}
 
 	return CheckTrustForClonePath(clonePath, m.homeDir)
