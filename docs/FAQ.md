@@ -1721,11 +1721,14 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 | 7 | **前提を確かめる** | `cd ~/continuo-work && continuo doctor` |
 | 8 | **起動する** | `cd ~/continuo-work && continuo` |
 
-**6 で直す行は、次のコマンドで探せます。**1行でも出たら、上の表のとおりに直してください。
+**6 で、起動を断られる3つ（破壊的変更の表）は、次のコマンドで探せます。**1行でも出たら、その表のとおりに直してください。何も出なければ、その3つは残っていません。
+**`Direct Chat` の行だけは、`direct_chat_state:` の行も一緒に出ていれば直してあります**（その行を足すのが直し方です）。
 
 ```bash
-cd ~/continuo-work && grep -nE 'pause_above_percent|margin_percent: *100|Direct Chat|protocol:|permission_mode|weekly_wait_limit_minutes|source:' WORKFLOW.md
+cd ~/continuo-work && grep -nE 'pause_above_percent|margin_percent: *100|Direct Chat|direct_chat_state:' WORKFLOW.md
 ```
+
+**手が要る人の表は、行が在るかではなく、使い方で決まります**（herdr を上げたか・API キーの機械か・待ち続けたいか など）。当てはまる行だけ直してください。herdr の protocol が合っているかは、7 の `continuo doctor` の `herdr` の行に出ます。
 
 **7 で `未記入の項目` に4つ出るのは正常です。**雛形に増えた `tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes` です。
 書かなくても動きます（`weekly_wait_limit_minutes` だけは上の表のとおり既定で手放すようになります）。足すなら、次のコマンドで差分を読んでから当ててください。
