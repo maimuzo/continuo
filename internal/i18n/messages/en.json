@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "8753d60c8f272791519091f938536a58ba50229b978ae9c4ec2a157e4613ec83",
+  "_source_sha256": "64e608fe710b81de4f594bf8a16969077ff97b3da2ba16367a2ff8bf330f957b",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -976,8 +976,8 @@
   "workspace.resolve_base.default_branch_missing": "%w. `herdr.worktree.base` in WORKFLOW.md is empty, and the issue pulled from the kanban board (%s) also had no default branch information.\nHow to check: Look at `herdr.worktree.base` in WORKFLOW.md.\nWhat to do: Write a branch name, like `base: \"main\"`. **If you leave it unset, continuo falls back to the default branch the kanban board reports, but that could not be obtained this time.**",
   "workspace.resolve_base.default_branch_not_string": "%w: the issue's NativeRef[%q] is not a string (%s, value %v)",
   "workspace.resolve_workspace_id.path_mismatch": "the worktree path %[1]q herdr reported does not match the one being deleted, %[2]q (nothing was deleted)",
-  "workspace.run_ghq_get.exit_failed": "`ghq get %[1]s` failed with exit code %[2]d (stderr: %[3]s)",
-  "workspace.run_ghq_get.start_failed": "cannot start `ghq get %[1]s` (stderr: %[2]s): %[3]w",
+  "workspace.run_ghq_get.exit_failed": "`ghq get --vcs git %[1]s` exited with code %[2]d (stderr: %[3]s)",
+  "workspace.run_ghq_get.start_failed": "cannot start `ghq get --vcs git %[1]s` (stderr: %[2]s): %[3]w",
   "workspace.run_ghq_list.exit_failed": "`ghq list -p -e %[1]s` failed with exit code %[2]d (stderr: %[3]s)",
   "workspace.run_ghq_list.start_failed": "cannot start `ghq list -p -e %[1]s` (stderr: %[2]s): %[3]w",
   "workspace.run_git.output_too_large": "the output of `git %s` exceeded %d bytes (a truncated output cannot be used to judge this)",

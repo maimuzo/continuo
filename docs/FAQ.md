@@ -440,6 +440,103 @@ gh project list --owner <owner>
 continuo setup --owner <owner> --project <番号> ~/continuo-work
 ```
 
+### GitHub Enterprise で使いたいとき・github.com から乗り換えるとき
+
+**接続先は `WORKFLOW.md` の `tracker.provider.host` に、ホスト名で書きます。**書かなければ `github.com` です。
+
+```yaml
+tracker:
+  provider:
+    host: ghe.example.com      # https:// やパスやポート番号は付けない
+```
+
+**continuo 自身の GraphQL・continuo が起こす `gh` と `ghq`・エージェントが叩く `gh` の宛先が、全部この1つで決まります。**
+エージェントへは、issue ごとの設定ファイルの `env` に `GH_HOST=<そのホスト名>` として渡ります。
+
+| 何 | 中身 |
+| --- | --- |
+| **対象** | `github.com`・GitHub Enterprise Server（自社のサーバ）・`<名前>.ghe.com`（GitHub が運営する版）。**`https` で繋がる接続先だけです** |
+| **GitHub Enterprise Server の版** | **3.20 以上が要ります。**3.19 以下の公開スキーマには、continuo の問い合わせに要る要素がありません（下の「`✗ カンバン  接続先 … は、continuo の問い合わせに要る要素を持っていません`」） |
+| **新しく作るとき** | `continuo init --host <ホスト名>`。`--host` を省くと、環境変数 `GH_HOST` が在ればその値、無ければ `github.com` になります |
+| **変えたあと** | **continuo を再起動します。**`host` は走っている最中には読み直しません |
+
+> **GitHub Enterprise の実機では、動くことを確かめていません。**
+> 確かめてあるのは次の3つだけです。continuo が送る問い合わせ13本が、GitHub Enterprise Server 3.20・3.21・3.22 の
+> **公開スキーマの上で**通ること。`gh` と `ghq` へ、書いたホストが渡ること。`continuo doctor` の照会が、
+> github.com の応答を正しく読めること。
+> **確かめられていないもの。**実機が公開スキーマと同じ答えを返すか。カンバンを Status で絞る検索の書き方が
+> github.com と同じか。組織のポリシーで Projects が止められていないか。`ghq get` が実機から clone できるか。
+> CI の検査ファイルが GitHub Enterprise Server の Actions で動くか。
+
+#### github.com から GitHub Enterprise へ乗り換える手順
+
+**github.com 側の worktree は移しません。**github.com 側で作業を push してから捨て、移った先で作り直します。
+
+| 順 | 何をするか |
+| --- | --- |
+| 1 | **github.com 側で、切りの良いところまで作業させて push します** |
+| 2 | **接続先が github.com のうちに、残っている worktree を片付けます。**終わった issue は continuo の片付けに任せ、残ったものは `continuo abandon <issue の URL>` で消します |
+| 3 | **continuo を止めます** |
+| 4 | リポジトリとカンバンを GitHub Enterprise へ移します |
+| 5 | `gh auth login --hostname <ホスト名> -s project` でログインします |
+| 6 | `WORKFLOW.md` の `tracker.provider.host` を書き換え、`owner`・`project_number`・`trust.repositories` を移った先の値にします |
+| 7 | **`continuo init` が置いた CI の検査ファイルを、新しい版の雛形で置き直します**（下の「CI の検査ファイル」） |
+| 8 | `continuo trust` を叩きます。**移った先から clone を取り、承認し直します。**clone の置き場所が `<ghq の root>/<ホスト名>/<owner>/<repo>` に変わるためです |
+| 9 | `continuo doctor` を通します |
+| 10 | continuo を起動します。worktree は新しく作り直されます |
+
+**`continuo doctor` で分かるのは、「continuo の問い合わせに要る要素が、接続先のスキーマに在るか」までです。**
+**「動くか」までは分かりません。**最初の1件は、人が見ているところで通してください。
+
+**トークンを環境変数で渡すとき。**`gh` は、GitHub Enterprise Server では `GH_ENTERPRISE_TOKEN`、
+`github.com` と `<名前>.ghe.com` では `GH_TOKEN` を読みます。取り違えると、設定したトークンが黙って無視されます。
+
+**片付け忘れた worktree が残ったとき。**接続先を切り替えたあとは、continuo は古いホストの worktree を消しません
+（消す前の検算で、clone が食い違うと分かって止まります）。次のどちらかで消します。
+
+```bash
+# どちらか一方
+# 一、WORKFLOW.md の tracker.provider.host・owner・project_number を古い側の値へ戻してから
+continuo abandon <古いホストの issue の URL> ~/continuo-work
+# 二、手で消す（古いホストの clone の中で）
+git -C <古いホストの clone> worktree remove <worktree のパス>
+```
+
+**戻すとき。**GitHub Enterprise 側の worktree を同じ手順で片付けてから、`host`・`owner`・`project_number`・
+`trust.repositories` を元の値へ戻し、`continuo trust` をやり直します。
+**GitHub Enterprise 側で進めた作業は、GitHub Enterprise の remote にしかありません。**
+
+#### CI の検査ファイル（`continuo-ci.yaml`）
+
+**`continuo init` は、既にある `continuo-ci.yaml` を書き換えません。**リポジトリを移すと、古い検査ファイルも一緒に移ります。
+**古い検査ファイルは issue の URL を `https://github.com/` で始まるものと決め打ちしているので、
+GitHub Enterprise では「紐づく issue が1件もありません」で必ず落ちます。**
+
+**直し方。**新しい版の雛形を別のディレクトリへ書き出し、`.github/workflows/` の検査ファイルと差し替えます。
+
+```bash
+mkdir -p /tmp/continuo-ci-new && continuo init /tmp/continuo-ci-new
+diff /tmp/continuo-ci-new/continuo-ci.yaml .github/workflows/continuo-ci.yaml
+```
+
+**GitHub Enterprise Server では、GitHub が提供する runner が使えません。**雛形は `runs-on: ubuntu-latest` です。
+公式文書は *"GitHub Enterprise Server users should use self-hosted runners. GitHub-hosted runners are not supported."*
+（**訳:** GitHub Enterprise Server の利用者は self-hosted runner を使うこと。**GitHub が提供する runner には対応していない**）と書いています。
+**`runs-on` を、自分たちの self-hosted runner のラベルに書き換えてください。**その runner には `gh` と `jq` が要ります。
+**書き換えないと job が始まらず、エージェントが検査の完了を待ったまま止まります。**
+（公式文書の記述です。GitHub Enterprise Server の実機では確かめていません。）
+
+#### `tracker.provider.host` に書けない値
+
+| 書いた値 | どうなるか |
+| --- | --- |
+| `https://ghe.example.com`・`ghe.example.com/api/graphql` | 起動時に「ホスト名だけを書くこと」で止まります |
+| `ghe.example.com:8443` | 同じく止まります。**ポート番号は書けません** |
+| `claude.env` に、`host` と違う値の `GH_HOST` | 起動時に「claude.env の GH_HOST が tracker.provider.host と違います」で止まります。`claude.env` のその行を消すか、同じ値にします |
+
+**利用者が書いた hook（`workspace_hooks` の `after_create` など）の環境には、continuo は `GH_HOST` を足しません。**
+hook の中で `gh` を叩くなら、hook の中で `GH_HOST` を置いてください。
+
 ### カンバンの Status を標準と違う名前にしたいとき
 
 **`continuo doctor` が出す警告の読み方は、「トラブルシューティング」の
@@ -1677,6 +1774,22 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
 
+### v0.2.0 から次の版へ上げるとき
+
+#### 次の版で、何もしないと動かなくなるものは？
+
+**原因。**接続先の GitHub を `WORKFLOW.md` の `tracker.provider.host` で選べるようになり（既定は `github.com`）、
+それに合わせて clone の引き方が変わりました。
+
+| 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- |
+| **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone など） | **その issue に着手しません**（`clone がありません`） | `continuo trust` で取り直す |
+| **`claude.env` に `GH_HOST` を書いている人** | **起動しません** | `tracker.provider.host` を同じ値にするか、その行を消す |
+| 全員 | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（起動は止まりません） | `provider:` の下へ `host: github.com` を足す |
+
+**確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.0 から次の版へ」にあります。**
+**GitHub Enterprise で使う手順は、「目的別使用例」の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」にあります。**
+
 ### v0.1.15 から v0.2.0 へ上げるとき
 
 #### v0.2.0 で、何もしないと動かなくなるものは？
@@ -2006,15 +2119,53 @@ continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
 **直し方。**
 
 ```bash
-gh auth refresh -h github.com -s project   # 既にログイン済みならこちら
-gh auth login -s project                   # 未ログインならこちら
+gh auth refresh -h github.com -s project           # 既にログイン済みならこちら
+gh auth login --hostname github.com -s project     # 未ログインならこちら
 ```
+
+**`github.com` のところは、`WORKFLOW.md` の `tracker.provider.host` に書いたホスト名にします。**
+continuo が検査するのは、そのホストのログインです。画面に出る直し方には、そのホスト名が入っています。
 
 確かめるなら次を叩きます。`project` が単独で並んでいれば通ります。
 
 ```bash
-gh auth status
+gh auth status --hostname github.com
 ```
+
+#### `✗ カンバン  接続先 … は、continuo の問い合わせに要る要素を持っていません`
+
+**原因。**`tracker.provider.host` が `github.com` でないとき、`continuo doctor` はカンバンを読む前に、
+接続先のスキーマへ「continuo の問い合わせに要る要素が在るか」を訊きます。**カンバンにもデータにも触りません。**
+訊くのは次の4つで、足りないものが画面に並びます。
+
+| 画面に出る名前 | 何に使うか |
+| --- | --- |
+| `ProjectV2.items(query:)` | カンバンの issue を Status で絞る |
+| `ProjectV2ItemStatusChangedEvent` と `IssueTimelineItemsItemType.PROJECT_V2_ITEM_STATUS_CHANGED_EVENT` | 誰が Status を動かしたかを読む |
+| `Issue.blockedBy` | ブロックされている issue を読む |
+
+**GitHub Enterprise Server 3.19 以下の公開スキーマには、このうち3つか4つがありません。**
+
+**直し方。**版を確かめます。**3.20 以上へ上げるまで、その接続先では continuo を使えません。**
+
+```bash
+gh api --hostname <ホスト名> /meta --jq .installed_version
+```
+
+`<名前>.ghe.com` でこの表示が出たときは、`tracker.provider.host` の綴りを確かめてください。
+
+**`✓` になっても、分かるのは「要る要素がスキーマに在る」ことまでです。**その接続先で動くことまでは分かりません。
+
+#### 起動時に `接続先 … のカンバンを読めません` で止まる
+
+**原因。**`tracker.provider.host` が `github.com` でないときに、起動時のカンバンの読み取りが落ちました。原因は2つのどちらかです。
+
+| 原因 | 見分け方 |
+| --- | --- |
+| **Status の選択肢名が設定と一致しない** | `continuo doctor` の「カンバン」に、足りない Status の名前が出ます |
+| **接続先が continuo の問い合わせに対応していない** | `continuo doctor` の「カンバン」に「要る要素を持っていません」が出ます（すぐ上の項） |
+
+**直し方。**`continuo doctor` を叩いて、どちらなのかを見ます。**起動時には接続先のスキーマを訊きません。**訊くのは `continuo doctor` だけです。
 
 #### `✗ clone  ghq が PATH にありません`
 
@@ -2037,11 +2188,14 @@ cd ~/continuo-work && continuo doctor
 `continuo trust` を叩きます。**clone の取得と信頼の登録をまとめて行います。**
 
 ```bash
-ghq list -p -e <owner>/<repo>       # 0行なら手元にありません
+ghq list -p -e github.com/<owner>/<repo>       # 0行なら手元にありません
 continuo trust ~/continuo-work
 ```
 
-clone だけ取るなら `ghq get <owner>/<repo>` です。
+**`github.com` のところは、`tracker.provider.host` に書いたホスト名にします。**continuo はホスト名を付けて引きます。
+`<owner>/<repo>` だけで引くと、別のホストの同じ名前の clone も当たるためです。
+
+clone だけ取るなら `ghq get --vcs git https://github.com/<owner>/<repo>` です（ホスト名は同じく読み替えます）。
 
 #### `✗ 信頼登録  対象 N件のうち M件が未承認です`
 
@@ -3876,6 +4030,16 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 「間違えて着手したとき」にあります。
 
 ### 作業をやめて後片付けしたいとき
+
+#### `continuo abandon` が「issue の URL … のホスト … は、WORKFLOW.md の tracker.provider.host … と違います」で止まる
+
+**原因。**渡した URL のホストが、`WORKFLOW.md` の `tracker.provider.host` と違います。
+`continuo abandon` は issue を `<owner>/<repo>#<番号>` で接続先のカンバンから引くので、
+**そのまま進めると、接続先のカンバンに在る同じ番号の別の issue の Status を動かします。**だから何もせずに止まります。
+
+**直し方。**接続先を切り替えたあとに古いホストの worktree を消したいときは、
+「目的別使用例」の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」の
+「片付け忘れた worktree が残ったとき」のどちらかで消します。
 
 #### `continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）
 

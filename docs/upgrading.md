@@ -106,6 +106,86 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.2.0 から次の版へ
+
+**要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.2.0 から次の版へ上げるとき」を先に読んでください。**
+
+### 接続先の GitHub を `WORKFLOW.md` で選べるようになりました（GitHub Enterprise）
+
+**`tracker.provider.host` というキーが増えました。既定値は `github.com` です。**
+**書かなければ、起動はいままでと変わりません。**GitHub Enterprise を使うときだけ、そのホスト名を書きます。
+使い方と乗り換えの手順は [FAQ.md](FAQ.md) の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」にあります。
+
+```yaml
+tracker:
+  provider:
+    host: github.com        # GitHub Enterprise を使うなら、そのホスト名（例: ghe.example.com）
+```
+
+**当たる人は4通りです。**上の2つは、何もしないと着手か起動が止まります。
+
+| 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- |
+| **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone・手で置いた clone） | **その issue に着手しません。**`<owner>/<repo> の clone がありません` と出ます | 下の「clone の引き方が変わりました」 |
+| **`claude.env` に `GH_HOST` を書いている人** | **起動しません。**`claude.env の GH_HOST が tracker.provider.host と違います` と出ます | `tracker.provider.host` を同じ値にするか、`claude.env` のその行を消す |
+| **全員** | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（`!`。起動は止まりません） | `continuo doctor --missing-keys-patch` の差分を当てるか、`provider:` の下へ `host: github.com` を1行足す |
+| **`continuo init` が置いた CI の検査ファイルを GitHub Enterprise で使う人** | 古い検査ファイルは `https://github.com/` を決め打ちしているので、検査が必ず落ちます | [FAQ.md](FAQ.md) の「CI の検査ファイル（`continuo-ci.yaml`）」 |
+
+#### clone の引き方が変わりました
+
+**continuo は clone を `ghq list -p -e <ホスト名>/<owner>/<repo>` で引くようになりました。**
+いままでは `<owner>/<repo>` だけで引いていました。
+
+**なぜ変えたか。**`<owner>/<repo>` だけだと、`ghq` の置き場所の1階層目（ホスト名のディレクトリ）が何であっても当たります。
+同じ名前のリポジトリの clone が github.com と GitHub Enterprise の両方に在ると2行返り、
+**continuo は1行目を採るので、別のホストの clone から worktree を切っていました。**
+
+**当たるかどうかの確かめ方。**`trust.repositories` に書いたリポジトリごとに叩きます。
+
+```bash
+ghq list -p -e github.com/<owner>/<repo>     # 1行返れば、何もしなくてよい
+ghq list -p -e <owner>/<repo>                # 上が0行でこちらが返るなら、当たっています
+```
+
+**直し方。**`continuo trust` を叩きます。`<ghq の root>/github.com/<owner>/<repo>` へ clone を取り直し、承認し直します。
+
+```bash
+continuo trust ~/continuo-work
+```
+
+**古い場所の clone は、continuo はもう見ません。**そこに worktree が残っているなら、push してから片付けてください。
+
+#### 古い continuo で新しい `WORKFLOW.md` は読めません
+
+**`host:` の行を書き足したら、continuo も一緒に上げてください。**
+設定の読み込みは知らないキーをエラーにするので、古い実行ファイルで起動すると `unknown field "host"` で止まります。
+**古い版へ戻すときは、`host:` の行を消します。**
+
+#### 画面に出る直し方が変わりました — 設定に足すものはありません
+
+**`gh` と `ghq` を案内する文面に、接続先のホスト名が入るようになりました。**
+
+| いままで | これから |
+| --- | --- |
+| `gh auth login -s project` | `gh auth login --hostname github.com -s project` |
+| `ghq list -p -e <owner>/<repo>` | `ghq list -p -e github.com/<owner>/<repo>` |
+| `ghq get <owner>/<repo>` | `ghq get --vcs git https://github.com/<owner>/<repo>` |
+
+**`continuo doctor` の出力を文字列で見ているスクリプトがあれば、直してください。**
+
+#### エージェントの環境に `GH_HOST` が入るようになりました
+
+**continuo は、issue ごとの設定ファイルの `env` に `GH_HOST=<tracker.provider.host の値>` を書きます。**
+接続先が `github.com` のときも書きます。**エージェントが叩く `gh` の宛先が、機械ごとの `gh` の既定に左右されなくなります。**
+
+**利用者が書いた hook（`workspace_hooks`）の環境には足しません。**
+
+#### `continuo abandon` と `continuo prompt --show --url` が、接続先と違うホストの URL を断ります
+
+**issue の URL のホストが `tracker.provider.host` と違うと、何もせずに止まります。**
+どちらも issue を `<owner>/<repo>#<番号>` で接続先のカンバンから引くので、
+断らないと、接続先のカンバンに在る同じ番号の別の issue を扱うためです。
+
 ## v0.1.15 から v0.2.0 へ
 
 **要点と上げる順番だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.1.15 から v0.2.0 へ上げるとき」を先に読んでください。**

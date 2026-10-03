@@ -650,7 +650,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | herdr が動いているか | **socket の `ping` を呼び、応答の `protocol` が設定の値と一致するか**（`herdr status` の CLI は使わない） |
 | `gh` の認証と scope | `gh auth status` の出力に `project` が含まれるか |
 | リポジトリの信頼登録 | `~/.claude.json` の `hasTrustDialogAccepted` が `true` か |
-| ローカルの clone | `ghq list -p -e <owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
+| ローカルの clone | `ghq list -p -e <接続先ホスト>/<owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか |
 | 片付ける Status | `cleanup.on_states` の値が `tracker.terminal_states` に全部あるか（記号は `!` まで。3-9e） |
 | Claude の資格情報 | `rate_limit.source` が `oauth_usage_api` のときだけ、`rate_limit.token_source` が指す先から取れるか（macOS の既定は Keychain） |

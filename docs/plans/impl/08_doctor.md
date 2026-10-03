@@ -62,7 +62,7 @@
 - [ ] **`gh` の認証と scope。**`gh auth status` の `Token scopes:` の行を読み、
       **`'project'` が単独の scope として並んでいるか**を見る（`read:project` だけでは書き込めない）
   - **`--show-scopes` というフラグは存在しない**（gh 2.97.0 で確認）。既定の出力に scope が入っている
-  - **対象のホストは `github.com` に固定する**（設定から引かない）
+  - **対象のホストは接続先ホスト（`tracker.provider.host`。既定 `github.com`）である**（設計 3-86。かつての「`github.com` に固定する」は取り下げた）
   - **読むのは `Active account: true` の行を持つブロックだけ**（同じホストに複数のアカウントを持てる）
   - **カンマで区切り、各要素の前後の空白と引用符を落としてから照合する**
   - **該当ブロックが1つも無ければ `✗`**（未ログイン）。「`gh auth login -s project` を実行してください」と出す
@@ -74,7 +74,7 @@
 - [ ] **対象リポジトリが0件のとき、`clone` と `信頼登録` は `!` にする。**終了コードには影響しない
   - **カンバンが空なのは設定の誤りではない**（設計 3-32）
 - [ ] **リポジトリの信頼登録。**`~/.claude.json` の `hasTrustDialogAccepted` が `true` か（**読むだけ**）
-- [ ] **ローカルの clone。**`ghq list -p -e <owner>/<repo>` の**出力が空でないか**
+- [ ] **ローカルの clone。**`ghq list -p -e <接続先ホスト>/<owner>/<repo>` の**出力が空でないか**（設計 3-86b）
   - **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する
 - [ ] **設定ファイル。**`WORKFLOW.md` が読めて、front matter が検証を通るか
 - [ ] **カンバンを読めるか。**`Bootstrap` を呼び、`active_states` の選択肢名が全部あるかを照合する
@@ -90,7 +90,7 @@
 - [ ] **`rate_limit.token_source` が `env` なら、`token_env` の環境変数を見る。**無ければ `✗`（設計 3-32）
 - [ ] **カンバンを読めなかったときの記号は落ち方で分ける**（設計 3-32）。**レートリミットだけ `!`、他は `✗`**
 - [ ] **上流が `✗` か `!` なら、下流を `!` にして理由を出す**（設計 3-32 の依存の表）
-- [ ] **`ghq list -p -e <owner>/<repo>` を使う**（`-p` でパスを出す。設計 3-6 の3段と同じ呼び方）
+- [ ] **`ghq list -p -e <接続先ホスト>/<owner>/<repo>` を使う**（`-p` でパスを出す。設計 3-6 の3段と同じ呼び方）
 - [ ] **draft issue は対象から外す**（`Owner` / `Repo` が空。リポジトリを持たない）
 
 ## 実装の記録
@@ -122,7 +122,7 @@
 | 対応表のキー | `config.RewriteKeysOutsideBoard`（**起動時の警告と同じ関数を呼ぶ。**カンバンを読んだときの応答を使い回す） |
 | 自動化 | `tracker.Adapter.FetchProjectWorkflows`（**ここだけリクエストが1本増える。**起動時の検査のクエリへ混ぜると、`workflows` を読めない環境で**常駐プロセスが起動しなくなる**） |
 | 未記入の項目 | `scaffold.MissingKeys`（**`continuo doctor --missing-keys-patch` と同じ関数を呼ぶ。**カンバンは読まない） |
-| clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
+| clone | `workspace.GhqListForHost`（`ghq list -p -e <接続先ホスト>/<owner>/<repo>`。設計 3-86b） |
 | 信頼登録 | `workspace.CheckTrustForClonePath` |
 | 資格情報 | `ratelimit` の定数（`SourceNone` / `TokenSourceEnv` / `CredentialsRelPath`） |
 

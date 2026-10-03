@@ -114,7 +114,9 @@ mise を使っていない場合は、[go.dev/dl](https://go.dev/dl/) で入れ�
 ```text
 Usage of continuo init:
   -force
-    	既に WORKFLOW.md があっても上書きする
+    	既にあっても上書きする（WORKFLOW.md と continuo-ci.yaml の2枚とも。手で直した中身は残りません）
+  -host string
+    	tracker.provider.host に書く接続先の GitHub のホスト名。GitHub Enterprise を使うときに指定する（省略すると、環境変数 GH_HOST が在ればその値、無ければ github.com）
   -owner string
     	tracker.provider.owner に書く GitHub の user / organization 名（省略すると gh から引く）
   -project int
@@ -346,7 +348,8 @@ WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 ! tracker.provider.owner: 埋められませんでした（gh コマンドが見つかりませんでした）
-  → gh を入れて `gh auth login -s project` でログインしてください
+  → gh を入れて `gh auth login --hostname github.com -s project` でログインしてください
+  → いまの接続先は github.com です。GitHub Enterprise を使うなら `continuo init --host <ホスト名>` で指定してください
   → または `continuo init --owner <名前>` でもう一度実行してください
   → https://github.com/octocat なら octocat の位置が owner です
 ! tracker.provider.project_number: 埋められませんでした（owner が決まらないので、カンバンの候補を引けませんでした）
@@ -409,6 +412,7 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 > **`continuo setup` は、どのカンバンを読むかを次の順で決める。**
 > `--owner` / `--project` → `WORKFLOW.md` に書いてある `tracker.provider.owner` / `project_number` → `gh`。
 > **段3 で `WORKFLOW.md` に値が入っていれば、フラグは要らない。**
+> **どのホストのカンバンを読むかは、`WORKFLOW.md` の `tracker.provider.host` で決まる**（フラグは無い。書いていなければ `github.com`）。
 > **決めたカンバンは、出力の1行目（「使うカンバン: …」）に出る。**
 > フラグで渡した値は、どのカンバンを読むかにだけ使い、`WORKFLOW.md` へは書かない。
 > 次の場合はフラグで指定する。
@@ -682,7 +686,7 @@ level=INFO msg="dispatch できない issue を候補に含めました" identif
 >
 > ```text
 > ✗ <REPO>
->     clone がありません（`ghq list -p -e <REPO>` の出力が空。--dry-run では取りに行きません）
+>     clone がありません（`ghq list -p -e github.com/<REPO>` の出力が空。--dry-run では取りに行きません）
 > ```
 >
 > **これは失敗ではない。**次の「登録する」で `continuo trust` を叩けば取ってくる。
@@ -934,7 +938,7 @@ Claude Code は SessionStart hook を走らせる前にそこへ書き、continu
 | --- | --- |
 | `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがカンバンに無い。段2 で確かめた綴りに合わせる |
 | `カンバンの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**この状態では段8 の起動時検査が止めるので、無言で進むことはない** |
-| `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
+| `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する（`github.com` のところは、`WORKFLOW.md` の `tracker.provider.host` に書いたホスト名） |
 | `front matter が不正です: unknown field "…"` | **設定のキーが増減したときに出る。**`continuo` を更新したら雛形も変わっている。出たキーの行を `WORKFLOW.md` から消す（**`continuo init --force` は使わない。**段4 の割り当てが消える） |
 | `✗ clone  ghq が PATH にありません` | `ghq` か `git` が入っていない。**この2つは巡回が worktree を作るときに起動する**ので、無いと段8 で必ず落ちる。入れて PATH を通す |
 | `read-only file system` / `input/output error` | **設定ではなくファイルシステムが壊れている。**下の「WSL でファイルシステムが壊れたとき」を見る |
