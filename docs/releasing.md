@@ -308,8 +308,8 @@ design-review-result
 prev=$(git describe --tags --abbrev=0 origin/main)   # 前の版
 git log --oneline "$prev"..origin/main
 git diff --stat "$prev"..origin/main -- internal/scaffold/template.go
-git diff "$prev"..origin/main -- internal/config/validate.go \
-  | grep '^+' | grep -E "invalidValueError|requiredValueError"
+git diff "$prev"..origin/main -- internal/config/ \
+  | grep '^+' | grep -E "invalidValueError|requiredValueError|i18n\.Errorf"
 ```
 
 | 何を見ているか | 何が分かるか |
@@ -317,9 +317,18 @@ git diff "$prev"..origin/main -- internal/config/validate.go \
 | **雛形が変わったか** | 新しく `continuo init` する人と、既に設定を持つ人とで、見えるものが違ってくる |
 | **弾く検査が増えたか** | **既存の設定が起動しなくなる。**利用者に必ず伝える必要がある |
 
-**設定を弾くのは `invalidValueError` と `requiredValueError` の2つだけである**
-（[internal/config/validate.go](../internal/config/validate.go)）。
+**設定を弾く検査は、`invalidValueError` か `requiredValueError` か `i18n.Errorf` のどれかで誤りを返す。**
+**[internal/config/validate.go](../internal/config/validate.go) の外にも在る**ので、`internal/config/` の全体を見る。
+v0.2.1 では、`claude.env` の `GH_HOST` の食い違いで起動を断る検査が
+[internal/config/host.go](../internal/config/host.go) に入り、`validate.go` だけを見るコマンドは0行を返した（実測: 2026-10-03）。
 **`required` という語では当たらない。**弾く条件の側にその語が出ないためである。
+
+**出た行を1行ずつ読み、既存の設定が起動しなくなるものかを判定する。**新しいキーの値の形を見るだけの検査も、同じ語で当たる。
+
+**このコマンドが拾うのは `internal/config/` の中だけである。**
+**設定を変えなくても動きが変わる箇所は、ここには出ない。**
+v0.2.1 の clone の引き方の変更（`internal/workspace/git.go`）がそうだった。
+**そちらは、上の `git log` に並んだ pull request の本文と、対の issue の説明から拾う。**
 
 ## 4. 版を決める
 

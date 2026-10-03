@@ -106,9 +106,9 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
-## v0.2.0 から次の版へ
+## v0.2.0 から v0.2.1 へ
 
-**要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.2.0 から次の版へ上げるとき」を先に読んでください。**
+**要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.2.0 から v0.2.1 へ上げるとき」を先に読んでください。**
 
 ### 接続先の GitHub を `WORKFLOW.md` で選べるようになりました（GitHub Enterprise）
 
@@ -127,7 +127,7 @@ tracker:
 | 当たる人 | 何もしないとどうなるか | 直し方 |
 | --- | --- | --- |
 | **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone・手で置いた clone） | **その issue に着手しません。**`<owner>/<repo> の clone がありません` と出ます | 下の「clone の引き方が変わりました」 |
-| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません。**`claude.env の GH_HOST が tracker.provider.host と違います` と出ます。同じ値なら止まりません | `tracker.provider.host` を同じ値にするか、`claude.env` のその行を消す |
+| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません。**`claude.env の GH_HOST（"<書いた値>"）が tracker.provider.host（"<接続先>"）と違います` と出ます。同じ値なら止まりません | `tracker.provider.host` を同じ値にするか、`claude.env` のその行を消す |
 | **全員** | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（`!`。起動は止まりません） | `continuo doctor --missing-keys-patch` の差分を当てるか、`provider:` の下へ `host: github.com` を1行足す |
 | **`continuo init` が置いた CI の検査ファイルを GitHub Enterprise で使う人** | 古い検査ファイルは `gh` の宛先を決めておらず、`https://github.com/` を決め打ちしているので、検査が通りません（どの段で落ちるかは、実機が無いので確かめていません） | [FAQ.md](FAQ.md) の「CI の検査ファイル（`continuo-ci.yaml`）」 |
 

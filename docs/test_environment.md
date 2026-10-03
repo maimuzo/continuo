@@ -126,7 +126,11 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 
 ```bash
 # continuo を止める（pane は閉じないので、必要なら自分で閉じる）
-kill -INT "$(pgrep -f 'continuo$' | head -1)"
+# **`--id e2e` を付けて起動したものだけに当てる。**`pgrep -f 'continuo$'` は使わない。
+# コマンド行が `continuo` で終わるものを探すので、`--id e2e .` で起動した検証用には当たらず、
+# 引数なしで起動した本番の continuo には当たる
+pid="$(pgrep -f 'continuo --id e2e' | head -1)"
+[ -n "$pid" ] && kill -INT "$pid"
 
 # worktree と branch と herdr の workspace をまとめて消す
 # --id は起動したときと同じ名前を渡す。渡さないと、空いている既定のロックを見て
