@@ -1676,6 +1676,91 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 ---
 
+## 版を上げるとき
+
+**版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
+
+### v0.1.15 から v0.2.0 へ上げるとき
+
+#### v0.2.0 で、何もしないと動かなくなるものは？
+
+**原因。**v0.2.0 には破壊的変更が4つあります。3つは `WORKFLOW.md` をそのままにしていると起動を断り、1つはカンバンの見え方を変えます。
+
+| 何が変わったか | 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- | --- |
+| **`rate_limit.pause_above_percent` が無くなった** | **ほぼ全員。**`continuo init` の雛形がずっと書いていました | **起動しません**（知らないキーとして断ります） | その1行を消す |
+| **`five_hour_margin_percent` と `weekly_margin_percent` に `100` を書けなくなった** | `100` を書いている人 | **起動しません** | `99` 以下へ下げる。行ごと消すと既定の `10` |
+| **`tracker.direct_chat_state` が増え、既定値が `"Direct Chat"` になった** | 他の役割（`active_states` など7つ）に `Direct Chat` と書いている人 | **起動しません**（名前の重なりを断ります） | `tracker:` の下へ `direct_chat_state: ""` を足す。別の名前にすれば機能は使えます |
+| **同上** | カンバンに `Direct Chat` という列を既に持っている人 | その列のカードを、担当者が0人か2人以上なら `Blocked` へ動かしてコメントを書きます。担当者がその PC のアカウント1人なら、pane を開いたまま同時実行の数（`agent.max_concurrent_agents`）を1つ使い続けます | 同上 |
+
+**破壊的変更ではありませんが、次の人も手が要ります。**
+
+| 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- |
+| **herdr を 0.9.1 へ上げる人** | **起動しません。**herdr の protocol の番号が `herdr.protocol` と合わないためです | `herdr.protocol` を `22` へ直す。**herdr 0.8.2 のままだと、長い指示の Enter が届かずエージェントが黙ることがあるので、0.9.1 へ上げてください** |
+| **API キーで Claude Code を動かしている機械** | 起動するたびに haiku の会話が最大1回、従量で課金されます | `rate_limit.source: none` にする |
+| **1週間のレートリミットが明けるのを待ち続けたい人** | `rate_limit.weekly_wait_limit_minutes` を書いていないと既定の `300` が入り、5時間より長く待つことになる issue の担当を手放します | `rate_limit.weekly_wait_limit_minutes: 0` を書く（v0.1.15 と同じく手放しません） |
+| **`continuo doctor` の終了コードを `1` と名指しで見ているスクリプト** | doctor そのものが動けなかったときに `3` が返るので、失敗を見落とします | `0` 以外を失敗と見る形へ直す |
+| **`permission_mode` の行を `WORKFLOW.md` から消している人** | 既定の `auto` で起動します。**古い Claude Code はこのフラグを知らず、起動に失敗します**（2.1.266 で確認） | `claude --version` を確かめ、古ければ Claude Code を上げる |
+
+**理由と、表に書ききれない細かい条件は [upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」にあります。**
+
+#### どの順で上げればいい？
+
+**原因。**順番を間違えると止まります。**新しいキーを書いた `WORKFLOW.md` は、古い実行ファイルでは `unknown field` で起動しません。**
+逆に、`pause_above_percent` を残したままの `WORKFLOW.md` は、新しい実行ファイルでは起動しません。
+
+**直し方。**次の順で進めてください。`~/continuo-work` は `WORKFLOW.md` を置いたディレクトリに読み替えてください。
+
+| 順 | 何をするか | コマンド |
+| --- | --- | --- |
+| 1 | **`WORKFLOW.md` の控えを取る** | `cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak` |
+| 2 | **動いている continuo を止める。**走っている run があるなら、終わってからのほうが安全です（下の「走っている run があるまま上げると？」） | 端末で `Ctrl+C`。残っていないかは `pgrep -fl continuo` |
+| 3 | **実行ファイルを入れ替える** | `curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh \| sh` |
+| 4 | **版を確かめる** | `continuo version` |
+| 5 | **herdr を 0.9.1 へ上げる**（上げたら、6 で `herdr.protocol` を `22` へ直す） | herdr の入れ方に従う |
+| 6 | **`WORKFLOW.md` を直す**（下の確かめのコマンドで当たる行を探す） | 下のコマンド |
+| 7 | **前提を確かめる** | `cd ~/continuo-work && continuo doctor` |
+| 8 | **起動する** | `cd ~/continuo-work && continuo` |
+
+**6 で直す行は、次のコマンドで探せます。**1行でも出たら、上の表のとおりに直してください。
+
+```bash
+cd ~/continuo-work && grep -nE 'pause_above_percent|margin_percent: *100|Direct Chat|protocol:|permission_mode|weekly_wait_limit_minutes|source:' WORKFLOW.md
+```
+
+**7 で `未記入の項目` に4つ出るのは正常です。**雛形に増えた `tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes` です。
+書かなくても動きます（`weekly_wait_limit_minutes` だけは上の表のとおり既定で手放すようになります）。足すなら、次のコマンドで差分を読んでから当ててください。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
+```
+
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てと、本文に書いたエージェントへの指示が全部消えます。
+
+#### 走っている run があるまま上げると？
+
+**原因。**版を上げる前から走っている run は、Claude Code を起動したときの設定のまま動き続けます。
+その設定には v0.2.0 で増えたステータスラインの行が無いので、その run の pane からは使用率が届きません。
+
+**困るのは、usage API が誤りを返しているあいだにその run がレートリミットの上限に当たったときだけです。**回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。
+
+**直し方。**気になるなら、走っている run が終わってから上げてください。
+
+#### v0.2.0 から v0.1.15 へ戻すには？
+
+**原因。**v0.1.15 は v0.2.0 で増えたキーを知らないので、書いてあると起動しません。
+
+**直し方。**実行ファイルを戻す前に、`WORKFLOW.md` から v0.2.0 で足したキー（`rate_limit.refresh_interval_ms` / `tracker.direct_chat_state` など）を消してください。`rate_limit.source: statusline` にしていたなら `oauth_usage_api` か `none` へ戻します。
+**1 で取った控えがあれば、それへ戻すのがいちばん確かです。**
+
+```bash
+cp ~/continuo-work/WORKFLOW.md.bak ~/continuo-work/WORKFLOW.md
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.1.15
+```
+
+---
+
 ## トラブルシューティング
 
 **ここに無いときは、次の3つも見てください。**

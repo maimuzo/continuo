@@ -108,6 +108,8 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.2.0 へ
 
+**要点と上げる順番だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.1.15 から v0.2.0 へ上げるとき」を先に読んでください。**
+
 **破壊的変更が4つあります。**
 **2つは `Direct Chat` という名前に当たるもので、設定かカンバンで既に使っている人だけが当たります。**
 **残る2つは `rate_limit.pause_above_percent` が無くなったことと、2本のマージンに `100` を書けなくなったことです。**
