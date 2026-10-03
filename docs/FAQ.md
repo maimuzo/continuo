@@ -1697,7 +1697,7 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 | **herdr を 0.9.1 へ上げる人** | **起動しません。**herdr の protocol の番号が `herdr.protocol` と合わないためです | `herdr.protocol` を `22` へ直す。**herdr 0.8.2 のままだと、長い指示の Enter が届かずエージェントが黙ることがあるので、0.9.1 へ上げてください** |
 | **API キーで Claude Code を動かしている機械** | 起動するたびに haiku の会話が最大1回、従量で課金されます | `rate_limit.source: none` にする |
 | **1週間のレートリミットが明けるのを待ち続けたい人** | `rate_limit.weekly_wait_limit_minutes` を書いていないと既定の `300` が入り、5時間より長く待つことになる issue の担当を手放します | `rate_limit.weekly_wait_limit_minutes: 0` を書く（v0.1.15 と同じく手放しません） |
-| **`continuo doctor` の終了コードを `1` と名指しで見ているスクリプト** | doctor そのものが動けなかったときに `3` が返るので、失敗を見落とします | `0` 以外を失敗と見る形へ直す |
+| **`continuo doctor` の終了コードを `1` と名指しで見ているスクリプト** | doctor そのものが動けなかった場面のうち4つ（いまいるディレクトリを引けない・`--missing-keys-patch` の3つ）が `1` から `3` に変わったので、それを見落とします | `0` 以外を失敗と見る形へ直す |
 | **`permission_mode` の行を `WORKFLOW.md` から消している人** | 既定の `auto` で起動します。**古い Claude Code はこのフラグを知らず、起動に失敗します**（2.1.266 で確認） | `claude --version` を確かめ、古ければ Claude Code を上げる |
 | **エージェントが作った pull request を draft のまま受け取りたい人** | 実装レビューが収まると、エージェントが draft を必ず外します。誰が draft で作ったかは問いません | `WORKFLOW.md` の本文に「draft のまま人間へ渡す」とはっきり書く。**「draft で作る」とだけ書いてあると外します** |
 
@@ -1760,7 +1760,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 **次のコマンドで何も出なければ、v0.1.15 が読めない行は残っていません。**
 
 ```bash
-grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *"?auto|source: *"?statusline)' ~/continuo-work/WORKFLOW.md
+grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *["']?auto|source: *["']?statusline)' ~/continuo-work/WORKFLOW.md
 ```
 
 **1 で取った控えがあれば、それへ戻すのがいちばん確かです。**

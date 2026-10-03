@@ -510,7 +510,7 @@ curl -fsSL https://raw.githubusercontent.com/<owner>/continuo/main/install.sh \
 **入れ替えは自動では起きない。**動いているものは古いバイナリのままである。
 
 ```bash
-pgrep -fl continuo
+pgrep -lx continuo
 ```
 
 **止めて起動し直すのは人間の判断である。**勝手に止めない。
