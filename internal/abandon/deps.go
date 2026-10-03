@@ -127,7 +127,7 @@ type Deps struct {
 //
 // cfg: 検証済みの設定。
 // inst: `--id` から導いたロックの置き場所。**常駐している側と同じ Layout である**（3-17b）。
-// endpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
+// endpoint: GitHub の GraphQL API の接続先（検査済み）。空なら、設定の接続先ホストから導いた宛先（設計 3-86）。
 // logger: ログの出力先。
 // 戻り値: すべてのフィールドが埋まった Deps と、組み立てに失敗した場合のエラー。
 func (d Deps) resolve(
@@ -239,7 +239,7 @@ func resolveSettingsRoot(cfg config.Config) (string, error) {
 //
 // ctx: トークンの取得に適用するコンテキスト。
 // cfg: 検証済みの設定。
-// endpoint: GraphQL API の接続先。空なら本番の GitHub。
+// endpoint: GraphQL API の接続先。空なら、設定の接続先ホストから導いた宛先（設計 3-86）。
 // logger: ログの出力先。
 // 戻り値: 組み立てたアダプタと、`gh` が無い場合・トークンを引けない場合のエラー。
 func newTracker(

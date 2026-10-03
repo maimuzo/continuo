@@ -114,7 +114,8 @@ type Options struct {
 	// **同じ名前で2度 Resolve しない。**
 	Instance *instance.Layout
 	// GraphQLEndpoint は GitHub の GraphQL API の接続先である。
-	// **空なら本番の GitHub を使う。**テストは httptest.Server の URL を渡すこと。
+	// **空なら、設定の接続先ホスト（`tracker.provider.host`）から導いた宛先を使う**（設計 3-86）。
+	// テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
 	// Out は人間に見せる出力先である。nil なら os.Stdout。
 	Out io.Writer

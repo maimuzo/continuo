@@ -1548,7 +1548,7 @@ const (
 	KeyHerdrAgentSendKeysEmpty Key = "herdr.agent.send_keys_empty"
 )
 
-// カンバンを読み書きするためのトークンの取得（internal/tracker の RunGHAuthToken）の文言。
+// カンバンを読み書きするためのトークンの取得（internal/tracker の GHAuthTokenForHost）の文言。
 const (
 	// KeyTrackerGHAuthTokenRunFailed は `gh auth token` の実行そのものが失敗したときに出る。
 	KeyTrackerGHAuthTokenRunFailed Key = "tracker.gh_auth_token.run_failed"
@@ -1556,7 +1556,7 @@ const (
 	KeyTrackerGHAuthTokenEmptyOutput Key = "tracker.gh_auth_token.empty_output"
 )
 
-// 「continuo が使う gh の持ち主」の取得（internal/tracker の RunGHAPIUserLogin）の文言。
+// 「continuo が使う gh の持ち主」の取得（internal/tracker の GHAPIUserLoginForHost）の文言。
 const (
 	// KeyTrackerGHAPIUserRunFailed は `gh api user --jq .login` の実行が失敗したときに出る。
 	KeyTrackerGHAPIUserRunFailed Key = "tracker.gh_api_user.run_failed"
@@ -1564,7 +1564,7 @@ const (
 	KeyTrackerGHAPIUserEmptyOutput Key = "tracker.gh_api_user.empty_output"
 )
 
-// gh の有無と scope の検査（internal/tracker の RunGHAuthStatus / CheckGHAvailable /
+// gh の有無と scope の検査（internal/tracker の GHAuthStatusForHost / CheckGHAvailable /
 // CheckGHProjectScope）の文言。
 const (
 	// KeyTrackerGHAuthStatusStartFailed は `gh auth status` を起動できなかったときに出る。
@@ -2544,6 +2544,8 @@ const (
 	KeyDaemonRunStartupChecksStatusOptionMismatch Key = "daemon.run_startup_checks.status_option_mismatch"
 	// KeyDaemonRunStartupChecksBootstrapFailedOnHost は、接続先が github.com でないときに起動時の Bootstrap が落ちたら出る（設計 3-86）。
 	KeyDaemonRunStartupChecksBootstrapFailedOnHost Key = "daemon.run_startup_checks.bootstrap_failed_on_host"
+	// KeyDaemonRunStartupChecksBootstrapFailedOnTenancy は、接続先が <名前>.ghe.com のときに起動時の Bootstrap が落ちたら出る（設計 3-86c）。版には触れない。
+	KeyDaemonRunStartupChecksBootstrapFailedOnTenancy Key = "daemon.run_startup_checks.bootstrap_failed_on_tenancy"
 	// KeyDaemonRunStartupChecksNotWritable は起動時の検査で書けなければならない場所に書けなかったときに出る。
 	KeyDaemonRunStartupChecksNotWritable Key = "daemon.run_startup_checks.not_writable"
 	// KeyDaemonValidateGraphQLEndpointURLUnparsable はGraphQL の接続先を差し替える環境変数の値が URL として読めなかったときに出る。
@@ -3632,6 +3634,7 @@ var allKeys = []Key{
 	KeyDaemonRunStartupChecksHerdrUnreachable,
 	KeyDaemonRunStartupChecksStatusOptionMismatch,
 	KeyDaemonRunStartupChecksBootstrapFailedOnHost,
+	KeyDaemonRunStartupChecksBootstrapFailedOnTenancy,
 	KeyDaemonRunStartupChecksNotWritable,
 	KeyDaemonValidateGraphQLEndpointURLUnparsable,
 	KeyDaemonValidateGraphQLEndpointHostMissing,

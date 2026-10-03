@@ -59,7 +59,7 @@ func promptIssueIdentifier(raw string) (abandon.IssueRef, string, error) {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // cfg: `WORKFLOW.md` の front matter の tracker セクション。
-// endpoint: GraphQL API の接続先。空なら本番の GitHub。**呼び出し側が検査してある。**
+// endpoint: GraphQL API の接続先。空なら、設定の接続先ホストから導いた宛先（設計 3-86）。**呼び出し側が検査してある。**
 // identifier: `<owner>/<repo>#<番号>` の形の識別子。
 // 戻り値の1つ目: 見つかった issue。
 // 戻り値の2つ目: カンバンに載っていて、issue として組み立てられたなら true。

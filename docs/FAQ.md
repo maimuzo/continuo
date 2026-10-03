@@ -491,8 +491,10 @@ tracker:
 **トークンを環境変数で渡すとき。**`gh` は、GitHub Enterprise Server では `GH_ENTERPRISE_TOKEN`、
 `github.com` と `<名前>.ghe.com` では `GH_TOKEN` を読みます。取り違えると、設定したトークンが黙って無視されます。
 
-**片付け忘れた worktree が残ったとき。**接続先を切り替えたあとは、continuo は古いホストの worktree を消しません
-（消す前の検算で、clone が食い違うと分かって止まります）。次のどちらかで消します。
+**片付け忘れた worktree が残ったとき。**接続先を切り替えたあとに古いホストの worktree を continuo がどう扱うかは、**確かめていません。**
+移った先に同じ `<owner>/<repo>` の clone が在れば、消す前の検算で clone が食い違うと分かって、消さずに止まります。
+**clone がまだ無ければ、branch に触らずに worktree だけを片付ける経路へ進むことがあります**（push していない commit が在れば見送ります）。
+**だから、接続先を切り替える前に片付けてください。**残ってしまったら、次のどちらかで消します。
 
 ```bash
 # どちらか一方
@@ -509,8 +511,8 @@ git -C <古いホストの clone> worktree remove <worktree のパス>
 #### CI の検査ファイル（`continuo-ci.yaml`）
 
 **`continuo init` は、既にある `continuo-ci.yaml` を書き換えません。**リポジトリを移すと、古い検査ファイルも一緒に移ります。
-**古い検査ファイルは issue の URL を `https://github.com/` で始まるものと決め打ちしているので、
-GitHub Enterprise では「紐づく issue が1件もありません」で必ず落ちます。**
+**古い検査ファイルは、`gh` の宛先を決めておらず、issue の URL も `https://github.com/` で始まるものと決め打ちしています。
+GitHub Enterprise では検査が通りません。**（どの段で、どの文面で落ちるかは、実機が無いので確かめていません。）
 
 **直し方。**新しい版の雛形を別のディレクトリへ書き出し、`.github/workflows/` の検査ファイルと差し替えます。
 
@@ -1185,7 +1187,7 @@ GitHub アカウントだけ**だからです。**同じアカウントなら、
 **3. 2台目で、そのアカウントでログインする。**
 
 ```bash
-gh auth login -s project
+gh auth login -s project      # GitHub Enterprise なら --hostname <tracker.provider.host の値> を足す
 ```
 
 **4. `WORKFLOW.md` の `tracker.provider.owner` は、カンバンの持ち主のままにする。**
@@ -1783,8 +1785,8 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 | 当たる人 | 何もしないとどうなるか | 直し方 |
 | --- | --- | --- |
-| **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone など） | **その issue に着手しません**（`clone がありません`） | `continuo trust` で取り直す |
-| **`claude.env` に `GH_HOST` を書いている人** | **起動しません** | `tracker.provider.host` を同じ値にするか、その行を消す |
+| **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone など） | **その issue に着手しません**（`clone がありません`） | `continuo trust` で取り直すか、`<ghq の root>/github.com/<owner>/<repo>` へ手で clone を置く |
+| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません** | `tracker.provider.host` を同じ値にするか、その行を消す |
 | 全員 | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（起動は止まりません） | `provider:` の下へ `host: github.com` を足す |
 
 **確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.0 から次の版へ」にあります。**

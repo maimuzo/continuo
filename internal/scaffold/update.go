@@ -210,33 +210,49 @@ var (
 	providerProjectRe = regexp.MustCompile(`(?m)^[ \t]*project_number:[ \t]*([0-9]+)`)
 )
 
-// providerHostRe は front matter に書かれた接続先ホスト（`tracker.provider.host`）を拾う（設計 3-86）。
-//
-// **`provider:` の下の字下げ（空白4つ）に限る。**front matter には、ほかに `host` という名前の
-// キーは無いが、本文（プロンプト）に `host:` で始まる行を書く利用者はいる。
-var providerHostRe = regexp.MustCompile(`(?m)^    host:[ \t]*([^\s#]*)`)
+// providerHostPath は接続先ホストのキーの、ルートからの並びである（設計 3-86）。
+var providerHostPath = []string{"tracker", "provider", "host"}
 
-// readProviderHost は WORKFLOW.md の原文から接続先ホストを拾う（設計 3-86）。
+// readProviderHost は WORKFLOW.md の原文から接続先ホスト（`tracker.provider.host`）を拾う（設計 3-86b）。
 //
 // **設定として読み込まない。**readProviderValues と同じ理由である（プレースホルダが残った
 // WORKFLOW.md でも読めなければならない）。
 //
-// **引用符は外して読む。**`host: "ghe.example.com"` は YAML として正しい書き方である。
-// 外さないと形の検査に落ちる。
+// **front matter の中だけを、キーの入れ子で辿って探す**（findKeyLine）。
+// 字下げの幅は問わない。**本文（プロンプト）は見ない。**本文に `host:` で始まる行を書く利用者はいる。
+// 行頭の空白の数を決め打ちした正規表現で全文から探すと、字下げの違う WORKFLOW.md で見つけられずに
+// **断りなく github.com のカンバンを読みに行き**、本文の行を接続先として拾う。
 //
-// **行が在るのに形が合わなければ、誤りにする。**黙って github.com に倒すと、
-// `continuo setup` が断りなく github.com のカンバンを読みに行く。
+// **引用符は外して読む。**`host: "ghe.example.com"` は YAML として正しい書き方である。
+//
+// **値の無い `host:` は github.com にする。**常駐の読み込み（config.Load）が、
+// 値の無いキーを既定値のまま読むためである（2026-10-03 に実測）。ここだけ誤りにすると、
+// `continuo doctor` は通るのに `continuo setup` だけが止まる。
+// **引用符つきの空（`host: ""`）と、形の合わない値は誤りにする。**こちらは常駐の読み込みも誤りにする。
+// 黙って github.com に倒すと、`continuo setup` が断りなく github.com のカンバンを読みに行く。
 //
 // raw: WORKFLOW.md の全文。
-// 戻り値の1つ目: 接続先ホスト。`host:` の行が無ければ github.com。
-// 戻り値の2つ目: 行が在るのに形が合わないときのエラー。
+// 戻り値の1つ目: 接続先ホスト。`host:` の行が無いか、値が無ければ github.com。
+// 戻り値の2つ目: 値が在るのに形が合わないときのエラー。
 func readProviderHost(raw string) (string, error) {
-	m := providerHostRe.FindStringSubmatch(raw)
-	if len(m) != 2 {
+	lines := strings.Split(raw, "\n")
+	start, end, ok := frontMatterRange(lines)
+	if !ok {
 		return config.DefaultHost, nil
 	}
-	v := strings.Trim(strings.TrimSpace(m[1]), `"'`)
-	return config.NormalizeHost(v)
+	idx, found := findKeyLine(lines, start, end, providerHostPath)
+	if !found {
+		return config.DefaultHost, nil
+	}
+	_, _, rest := splitKeyValue(strings.TrimLeft(trimEOL(lines[idx]), " \t"))
+	value := strings.TrimSpace(stripComment(rest))
+	if value == "" {
+		return config.DefaultHost, nil
+	}
+	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
+		value = value[1 : len(value)-1]
+	}
+	return config.NormalizeHost(value)
 }
 
 // readProviderValues は front matter から owner とカンバンの番号を拾う。

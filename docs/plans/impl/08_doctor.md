@@ -65,7 +65,7 @@
   - **対象のホストは接続先ホスト（`tracker.provider.host`。既定 `github.com`）である**（設計 3-86。かつての「`github.com` に固定する」は取り下げた）
   - **読むのは `Active account: true` の行を持つブロックだけ**（同じホストに複数のアカウントを持てる）
   - **カンマで区切り、各要素の前後の空白と引用符を落としてから照合する**
-  - **該当ブロックが1つも無ければ `✗`**（未ログイン）。「`gh auth login -s project` を実行してください」と出す
+  - **該当ブロックが1つも無ければ `✗`**（未ログイン）。「`gh auth login --hostname <接続先ホスト> -s project` を実行してください」と出す
 - [ ] **資格情報。**`rate_limit.source` と `token_source` に応じて記号を分ける（設計 3-32 の表）
   - **`source` が `statusline` か `none` なら `✓`**（`token_source` は見ない）
   - **`token_source` が `env` で環境変数が無ければ `✗`**、`claude_credentials` でファイルが無ければ `!`

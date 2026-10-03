@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "64e608fe710b81de4f594bf8a16969077ff97b3da2ba16367a2ff8bf330f957b",
+  "_source_sha256": "095baec90069b5e0767452cf6ea92f74c38fe8cd41f1686097c13fe0f4737e74",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -303,6 +303,7 @@
   "daemon.run_startup_checks.not_writable": "cannot write to a location that must be writable: %w",
   "daemon.run_startup_checks.status_option_mismatch": "the kanban board's Status option names do not match the config (this prevents silently continuing with zero matching issues): %w",
   "daemon.run_startup_checks.bootstrap_failed_on_host": "cannot read the kanban board on %s. Either the Status option names do not match the config, or the host does not support continuo's queries. `continuo doctor` tells which under \"kanban board\" (GitHub Enterprise Server 3.20 or later is required): %w",
+  "daemon.run_startup_checks.bootstrap_failed_on_tenancy": "cannot read the kanban board on %s. Either the Status option names do not match the config, or the host does not support continuo's queries. `continuo doctor` tells which under \"kanban board\": %w",
   "daemon.validate_graphql_endpoint.host_missing": "the value of %s has no host name (%q)",
   "daemon.validate_graphql_endpoint.plain_http": "write an https URL for %s (%q is http to a non-loopback host, so the GitHub token would travel in plain text)",
   "daemon.validate_graphql_endpoint.scheme_not_https": "the scheme for %s is not https (%q). Only https, or http to loopback, is accepted",

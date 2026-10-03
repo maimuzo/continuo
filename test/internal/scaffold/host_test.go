@@ -56,6 +56,9 @@ func TestCheckUpdatable_既に書かれている接続先ホストを返す(t *t
 		{"    host: ghe.example.com", "ghe.example.com"},
 		{`    host: "ghe.example.com"`, "ghe.example.com"},
 		{"    host: 'Octocorp.GHE.com'   # 接続先", "octocorp.ghe.com"},
+		// **値の無い `host:` は github.com にする。**常駐の読み込みが、値の無いキーを既定値のまま読むためである。
+		{"    host:", "github.com"},
+		{"    host:      # あとで書く", "github.com"},
 	}
 	for _, tc := range cases {
 		got, err := scaffold.CheckUpdatable(writeWorkflow(t, tc.line))
@@ -69,14 +72,77 @@ func TestCheckUpdatable_既に書かれている接続先ホストを返す(t *t
 }
 
 // 目的: `host:` の行が在るのに形が合わないとき、黙って github.com に倒さないことを確認する。
-// 与える情報: `host:` に URL を書いた WORKFLOW.md と、値を空にした WORKFLOW.md。
+// 与える情報: `host:` に URL を書いた WORKFLOW.md と、引用符つきの空（`host: ""`）を書いた WORKFLOW.md。
 // 成功条件: errors.Is で ErrHostInvalid と判定できるエラーが返ること。
 func TestCheckUpdatable_接続先ホストの形が合わなければ止める(t *testing.T) {
-	for _, line := range []string{"    host: https://ghe.example.com", "    host:"} {
+	for _, line := range []string{"    host: https://ghe.example.com", `    host: ""`} {
 		_, err := scaffold.CheckUpdatable(writeWorkflow(t, line))
 		if !errors.Is(err, scaffold.ErrHostInvalid) {
 			t.Errorf("%q で ErrHostInvalid が返っていない: %v", line, err)
 		}
+	}
+}
+
+// 目的: 接続先ホストを、front matter の中の `tracker.provider.host` からだけ拾うことを確認する。
+//
+// **字下げの幅を問わない。**空白2つの字下げで書いた WORKFLOW.md は YAML として正しく、常駐は
+// そのホストを読む。`continuo setup` だけが見つけられないと、断りなく github.com のカンバンを読む。
+// **本文は見ない。**front matter に `host:` を書いていない利用者が、本文に同じ形の行を
+// 書いていても、それを接続先として拾わない。
+//
+// 与える情報: (1) front matter を空白2つの字下げで書いた WORKFLOW.md。
+// (2) front matter に `host:` が無く、本文に空白4つの字下げの `host: evil.example.com` が在る WORKFLOW.md。
+// 成功条件: (1) は書いたホスト名、(2) は github.com が Result.Host に入ること。
+func TestCheckUpdatable_接続先ホストはfront_matterのキーだけから拾う(t *testing.T) {
+	// (1) 雛形の字下げ（空白2つずつ）を、空白1つずつへ詰める。front matter の中だけを書き換える。
+	tmpl := scaffold.TemplateWithValues(scaffold.Values{Host: "ghe.example.com", Owner: "octocat", ProjectNumber: 3})
+	parts := strings.SplitN(tmpl, "\n---\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("雛形を front matter と本文に分けられない")
+	}
+	var narrow []string
+	for _, line := range strings.Split(parts[0], "\n") {
+		trimmed := strings.TrimLeft(line, " ")
+		indent := len(line) - len(trimmed)
+		if strings.HasPrefix(trimmed, "#") || trimmed == "" || indent%2 != 0 {
+			narrow = append(narrow, line)
+			continue
+		}
+		narrow = append(narrow, strings.Repeat(" ", indent/2)+trimmed)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "WORKFLOW.md"),
+		[]byte(strings.Join(narrow, "\n")+"\n---\n"+parts[1]), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+	got, err := scaffold.CheckUpdatable(dir)
+	if err != nil {
+		t.Fatalf("字下げを詰めた WORKFLOW.md を読めなかった: %v", err)
+	}
+	if got.Host != "ghe.example.com" || got.Owner != "octocat" {
+		t.Errorf("字下げを詰めると拾えない: host=%q owner=%q", got.Host, got.Owner)
+	}
+
+	// (2) front matter から host の行を落とし、本文へ同じ形の行を置く。
+	tmpl = scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 3})
+	var kept []string
+	for _, line := range strings.Split(tmpl, "\n") {
+		if strings.HasPrefix(line, "    host: github.com") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	dir = t.TempDir()
+	body := strings.Join(kept, "\n") + "\n\n    host: evil.example.com\n"
+	if err := os.WriteFile(filepath.Join(dir, "WORKFLOW.md"), []byte(body), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+	got, err = scaffold.CheckUpdatable(dir)
+	if err != nil {
+		t.Fatalf("host の行が無い WORKFLOW.md を読めなかった: %v", err)
+	}
+	if got.Host != "github.com" {
+		t.Errorf("本文の行を接続先として拾った: %q", got.Host)
 	}
 }
 

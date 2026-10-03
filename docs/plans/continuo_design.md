@@ -3189,7 +3189,7 @@ ghq list -p -e <接続先ホスト>/<owner>/<repo>
 **カンバンに載っただけのリポジトリを無断で clone することになるからである。**
 issue を足せる人は、カンバンに載るリポジトリの集合を変えられる（3-33）。
 
-> **`continuo trust` の本番実行だけは clone を取ってくる**（`workspace.RunGhqGet`）。
+> **`continuo trust` の本番実行だけは clone を取ってくる**（`workspace.GhqGetForHost`。`ghq get --vcs git https://<接続先ホスト>/<owner>/<repo>`。3-86b）。
 > **対象は人間が `trust.repositories` に書いたものだけ**なので、無断にはならない。
 > **`--dry-run` では取らない。**読むだけのつもりで叩いた人のディスクを使わないため。
 > 制限時間は10分にしてある（他の外部コマンドの既定では大きなリポジトリが必ず切れる）。
@@ -5337,7 +5337,8 @@ $ continuo doctor
 | `--owner` / `--project` が渡された | **その値を使う。**gh を叩かない |
 | カンバンの候補が**複数** | **選ばせない。**候補を番号・名前・URL で並べ、`--project <番号>` で再実行しろと出す |
 | カンバンの候補が**0件** | プレースホルダのまま残し、カンバンの作り方を出す（3-34） |
-| **gh が無い・認証が無い・scope が足りない** | プレースホルダのまま残し、`gh auth login -s project` を案内する |
+| **gh が無い・認証が無い・scope が足りない** | プレースホルダのまま残し、`gh auth login --hostname <接続先ホスト> -s project` を案内する。接続先が違うなら `--host` で指定できることも添える（3-86b） |
+| `--host` が渡された | **その値を接続先ホストにして、gh へ環境変数 `GH_HOST` で渡し、`WORKFLOW.md` の `host:` に書く。**省くと、環境変数 `GH_HOST` が在ればその値、無ければ `github.com`。ホスト名として受け付けられない値は、終了コード 2 で断る（3-86b） |
 
 **対話で選ばせない。**標準入力を握ると、`continuo init` を自動で叩く経路（設定の作り直しなど）が止まる。
 
@@ -8225,7 +8226,7 @@ issue をまたいで使い回さない。**開き印と閉じ印の両方に同
 
 | 何を | 内容 |
 | --- | --- |
-| **取り方** | `gh api user --jq .login` を実行し、`octocat` のような1行を得る（[internal/tracker/ghuser.go](../../internal/tracker/ghuser.go) の `RunGHAPIUserLogin`） |
+| **取り方** | `gh api --hostname <接続先ホスト> user --jq .login` を実行し、`octocat` のような1行を得る（[internal/tracker/ghuser.go](../../internal/tracker/ghuser.go) の `GHAPIUserLoginForHost`。ホストを渡すのは 3-86b） |
 | **どこに持つか** | `Orchestrator.selfLogin string`（メモリ上だけ。**ファイルにも設定にも書かない**） |
 | **誰がいつ取るか** | 巡回（`Tick`）の先頭と、コメントを確かめる直前（`hasRunComment`） |
 
@@ -11497,9 +11498,12 @@ sequenceDiagram
 ```json
 "env": {
   "CLAUDE_CODE_RETRY_WATCHDOG": "1",
-  "CONTINUO_STATUSLINE_COMMAND": "~/.claude/my-statusline.sh"
+  "CONTINUO_STATUSLINE_COMMAND": "~/.claude/my-statusline.sh",
+  "GH_HOST": "github.com"
 }
 ```
+
+**`GH_HOST` は接続先ホスト（`tracker.provider.host`）である**（3-86b）。statusLine を書かない着手でも、これだけは書く。
 
 **env は `claude.env` を写した新しい map に書く。**`claude.env` の map をそのまま書き換えない（着手は並行に走るので、ある issue の転送先が別の issue の設定ファイルへ漏れる）。
 **見つからなくても空文字で書く。**書かないと、pane が受け継いだ同じ名前の変数を拾いうる。`claude.env` に同じ名前があっても continuo の値で上書きする。
@@ -11946,7 +11950,7 @@ issue を1件作ってよい。
 clone のパスのキャッシュの鍵（`<owner>/<repo>`）にホストを入れなくても混ざらない。
 
 **`github.com` のときに `<owner>/<repo>` の2要素で引き直すことはしない。**github.com の clone が無く、別のホストの同名の clone だけが在る機械で、それを返してしまう。
-**その結果、`ghq` の置き場所の1階層目が `github.com` でない clone（SSH の別名のホストで取ったものなど）は当たらなくなる。**破壊的変更として `docs/upgrading.md` に書いた（`continuo trust` で取り直す）。
+**その結果、`ghq` の置き場所の1階層目が `github.com` でない clone（SSH の別名のホストで取ったものなど）は当たらなくなる。**破壊的変更として `docs/upgrading.md` に書いた（`continuo trust` で取り直すか、同じ場所へ手で clone を置く。**別名のホストを使っている利用者が `continuo trust` だけで取り直せるかは、確かめていない**）。
 
 **`ghq get` は URL の形で渡し、`--vcs git` を付ける。**`<ホスト>/<owner>/<repo>` の形だと、ghq は1要素目が「ドットのあとに英字だけが続く」形のときだけホストと読む
 （ghq の公開ソースを読んだ結果。実行しては確かめていない）。`--vcs git` を付けないと、ghq は github.com 以外のホストで `?go-get=1` を取りに行って VCS の判定から入る（ghq 1.10.1 で実測）。
@@ -11958,8 +11962,9 @@ clone のパスのキャッシュの鍵（`<owner>/<repo>`）にホストを入�
 
 **`continuo init` は `--host` を持つ。**省くと、環境変数 `GH_HOST` が在ればその値、無ければ `github.com`。かつて `init` は `gh` の環境を組まなかったので、
 シェルに `GH_HOST` を置いた機械で、いまと同じホストを引くためである。**決まった値を `WORKFLOW.md` の `host:` に書く**ので、どのホストを引いたかが目に見える。
-**`continuo setup` はフラグを持たない。**`WORKFLOW.md` の原文から `host:` を拾う（owner と番号と同じ仕組み。プレースホルダが残っていても読める）。
-行が在るのに形が合わなければ止める。黙って `github.com` のカンバンを読みに行かない。
+**`continuo setup` はフラグを持たない。**`WORKFLOW.md` の原文から `tracker.provider.host` を拾う（設定として読み込まないので、プレースホルダが残っていても読める）。
+**front matter の中だけを、キーの入れ子で辿って探す。**字下げの幅は問わず、本文は見ない。値の無い `host:` は、常駐の読み込みと同じく `github.com` にする。
+値が在るのに形が合わなければ止める。黙って `github.com` のカンバンを読みに行かない。
 
 **`continuo abandon <URL>` と `continuo prompt --show --url <URL>` は、URL のホストが接続先ホストと違えば断る。**どちらも issue を `<owner>/<repo>#<番号>` で
 接続先のカンバンから引くので、断らないと、接続先のカンバンに在る同じ番号の別の issue を扱う。
@@ -11979,8 +11984,8 @@ continuo の問い合わせに要る4要素が1つでも無ければ、`カン�
 | いつ照会するか | 接続先が `github.com` でないときだけ | github.com の利用者のリクエストを1本も増やさない |
 | 足りないとき | `カンバン` を `✗`。`Bootstrap` は叩かない。`.ghe.com` で終わる接続先では版に触れず、それ以外では「3.20 以上が要る」を添える | `<名前>.ghe.com` は GitHub が運営していて、利用者は版を上げられない |
 | 照会そのものの失敗 | いまの `カンバン` の検査と同じ振り分け（`boardFailure`）。レートリミットと期限切れだけ `!` | ここだけ `!` にすると、繋がっていないのに doctor が終了コード 0 で終わる |
-| 期限 | 照会するときだけ、`カンバン` の検査の期限を1本ぶん足す（2本ぶん → 3本ぶん） | 応答の遅い接続先で、照会が残り時間を食う |
-| 起動時 | **照会しない。**`Bootstrap` が落ち、接続先が `github.com` でないときは、誤りに「`continuo doctor` で確かめる」案内を添える | 人間の指示が「continuo doctor で」である。案内が無いと、利用者は「Status の選択肢名が一致しません」を読んで Status の名前を直しに行く |
+| 期限 | **変えない。**照会は、`カンバン` の検査の期限（2本ぶん）の中で走る | 3本ぶんにすると、`カンバン` だけで全体の上限（30秒）を使い切れてしまい、clone・信頼登録・資格情報が巻き添えで `!` になる（3-32 が自動化のぶんを足さないと決めたのと同じ理由）。応答の遅い接続先では `カンバン` が `!` になるが、叩き直せば通る |
+| 起動時 | **照会しない。**`Bootstrap` が落ち、接続先が `github.com` でないときは、誤りに「`continuo doctor` で確かめる」案内を添える（`.ghe.com` で終わる接続先では、版に触れない文面にする） | 人間の指示が「continuo doctor で」である。案内が無いと、利用者は「Status の選択肢名が一致しません」を読んで Status の名前を直しに行く |
 
 **照会するのは次の4要素である。**
 
@@ -14655,6 +14660,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 | **`--url` の形が issue の URL でない** | **終了コード 2。**GitHub を叩く前に断る。**`WORKFLOW.md` を読む前でもある**（引数の形の誤りが、設定の壊れに隠されてはならない） |
 | **`--builtin` と `--url` を同時に指定** | **終了コード 2。**下の「同時に指定できない理由」 |
 | **`--attempt` を `--url` 無しで指定** | **終了コード 2。**変数を展開しないので何にも効かない。**黙って捨てると、利用者は「効いた」と思ったまま違う文面を読む** |
+| **`--url` のホストが、設定の接続先ホスト（`tracker.provider.host`）と違う** | **何も出さずに終了コード 1。**URL から作る識別子はホストを持たないので、断らないと、接続先のカンバンに在る同じ番号の別の issue の文面を出す（3-86b）。**設定を読んだあとでないと比べられないので、2 ではなく 1 である** |
 | **カンバンを読めない・issue を組み立てられない** | **何も出さずに終了コード 1。**下の「展開できなかったら断る」 |
 | **変数展開に失敗した** | **何も出さずに終了コード 1。**本文の `{{if}}` の閉じ忘れがここで落ちる。**このコマンドが最初の網ではない**（常駐は起動時に、`continuo doctor` は `prompt vars` で落とす） |
 

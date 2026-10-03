@@ -72,7 +72,7 @@ import (
 // EnvGraphQLEndpoint は GitHub の GraphQL API の URL を差し替える環境変数である。
 //
 // **運用者の逃げ道であり、テストの接続先でもある**（`CONTINUO_RUNTIME_DIR` と同じ位置づけ）。
-// **空なら本番の GitHub GraphQL API を使う。**設定ファイルには置かない
+// **空なら、設定の接続先ホスト（`tracker.provider.host`）から導いた宛先を使う**（設計 3-86）。設定ファイルには置かない
 // （設計 5-2 に無いキーを勝手に足さない）。
 const EnvGraphQLEndpoint = "CONTINUO_GITHUB_GRAPHQL_ENDPOINT"
 
@@ -758,7 +758,7 @@ func isLoopbackHost(host string) bool {
 // sockPath: 解決済みの hook の socket の絶対パス。
 // runtimeDir: 実行時ディレクトリ（`filepath.Dir(sockPath)`）。
 // continuoPath: `continuo hook` を起動する実行ファイルのパス。空なら os.Executable()。
-// graphqlEndpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
+// graphqlEndpoint: GitHub の GraphQL API の接続先（検査済み）。空なら、設定の接続先ホストから導いた宛先（設計 3-86）。
 // trackerTimeout: GraphQL の1リクエストの上限。0 なら DefaultTrackerTimeout。
 // tokenTimeout: トークンの取得（`gh auth token`）の上限。0 以下なら
 // DefaultStartupCheckTimeout。

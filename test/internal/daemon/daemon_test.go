@@ -542,40 +542,57 @@ func TestDaemon_hookの受け口はherdrのread_timeout_msで接続を切らな�
 }
 
 // 目的: 接続先が github.com でないときに起動時のカンバンの読み取りが落ちたら、
-// `continuo doctor` へ案内することを確認する（設計 3-86。issue #86）。
+// `continuo doctor` へ案内することを確認する（設計 3-86c。issue #86）。
 //
 // **スキーマの照会は `continuo doctor` にしか置いていない**（人間の決定）。
 // GitHub Enterprise Server 3.19 以下では、起動時の最初の問い合わせが GraphQL の誤りで落ちる。
 // 「Status の選択肢名が設定と一致しません」だけを出すと、利用者は Status の名前を直しに行く。
+// **`<名前>.ghe.com` の接続先では、版に触れない。**GitHub が運営していて、利用者は版を上げられない。
 //
-// 与える情報: `tracker.provider.host` が `ghe.example.com` で、カンバンに無い Status 名を
-// `failure_state` に書いた設定（起動時のカンバンの読み取りが落ちる）。
-// 成功条件: 終了コード 1 で起動を止め、出力に接続先ホストと `continuo doctor` と「3.20」が出ること。
+// 与える情報: `tracker.provider.host` が `ghe.example.com`（GitHub Enterprise Server）か
+// `octocorp.ghe.com`（GitHub が運営する版）で、カンバンに無い Status 名を `failure_state` に書いた設定
+// （起動時のカンバンの読み取りが落ちる）。
+// 成功条件: どちらも終了コード 1 で起動を止め、出力に接続先ホストと `continuo doctor` が出ること。
+// 「3.20」は、前者にだけ出ること。
 func TestDaemon_接続先がGHEで起動時にカンバンを読めなければdoctorへ案内する(t *testing.T) {
-	env := newDaemonEnv(t)
-	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
-	raw, err := os.ReadFile(env.WorkflowPath)
-	if err != nil {
-		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	cases := []struct {
+		host        string
+		wantVersion bool
+	}{
+		{"ghe.example.com", true},
+		{"octocorp.ghe.com", false},
 	}
-	content := strings.Replace(string(raw), "    status_field: Status\n",
-		"    status_field: Status\n    host: ghe.example.com\n", 1)
-	content = strings.Replace(content, "polling:\n", "  failure_state: カンバンに無い名前\npolling:\n", 1)
-	if err := os.WriteFile(env.WorkflowPath, []byte(content), 0o600); err != nil {
-		t.Fatalf("WORKFLOW.md を書けません: %v", err)
-	}
+	for _, tc := range cases {
+		t.Run(tc.host, func(t *testing.T) {
+			env := newDaemonEnv(t)
+			env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
+			raw, err := os.ReadFile(env.WorkflowPath)
+			if err != nil {
+				t.Fatalf("WORKFLOW.md を読めません: %v", err)
+			}
+			content := strings.Replace(string(raw), "    status_field: Status\n",
+				"    status_field: Status\n    host: "+tc.host+"\n", 1)
+			content = strings.Replace(content, "polling:\n", "  failure_state: カンバンに無い名前\npolling:\n", 1)
+			if err := os.WriteFile(env.WorkflowPath, []byte(content), 0o600); err != nil {
+				t.Fatalf("WORKFLOW.md を書けません: %v", err)
+			}
 
-	cmd, logs := env.start(t)
-	code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
-	if !finished {
-		t.Fatalf("起動時の検査に落ちたのに終了しなかった\n%s", logs.String())
-	}
-	if code != 1 {
-		t.Fatalf("終了コードが 1 ではない: got %d\n%s", code, logs.String())
-	}
-	for _, want := range []string{"ghe.example.com", "continuo doctor", "3.20"} {
-		if !strings.Contains(logs.String(), want) {
-			t.Errorf("出力に %q が無い:\n%s", want, logs.String())
-		}
+			cmd, logs := env.start(t)
+			code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+			if !finished {
+				t.Fatalf("起動時の検査に落ちたのに終了しなかった\n%s", logs.String())
+			}
+			if code != 1 {
+				t.Fatalf("終了コードが 1 ではない: got %d\n%s", code, logs.String())
+			}
+			for _, want := range []string{tc.host, "continuo doctor"} {
+				if !strings.Contains(logs.String(), want) {
+					t.Errorf("出力に %q が無い:\n%s", want, logs.String())
+				}
+			}
+			if got := strings.Contains(logs.String(), "3.20"); got != tc.wantVersion {
+				t.Errorf("版（3.20）の案内の有無が違う: got %v, want %v\n%s", got, tc.wantVersion, logs.String())
+			}
+		})
 	}
 }

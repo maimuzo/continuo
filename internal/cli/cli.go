@@ -1347,7 +1347,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 
 	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
-	// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
+	// 空なら、設定の接続先ホストから導いた宛先を読む（読み取りだけである。設計 3-86）。
 	// **常駐プロセスと同じ検査を通す。**ここへ `gh auth token` のトークンが送られるので、
 	// 宛先を確かめずに使わない。
 	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)

@@ -89,11 +89,11 @@ func TestCheckGHProjectScope_有効でないアカウントのscopeは読まな�
 // TestCheckGHProjectScope_未ログインならログインの案内を出す は、
 // アカウントが1つも無いときの扱いを確かめる。
 //
-// 目的: 設計 3-32。該当ブロックが1つも無いときは落とし、`gh auth login -s project` を案内する。
+// 目的: 設計 3-32。該当ブロックが1つも無いときは落とし、`gh auth login --hostname github.com -s project` を案内する。
 //
 // 与える情報: 未ログインの出力。
 //
-// 成功条件: エラーを返し、文面に `gh auth login -s project` が入っている。
+// 成功条件: エラーを返し、文面に `gh auth login --hostname github.com -s project` が入っている。
 func TestCheckGHProjectScope_未ログインならログインの案内を出す(t *testing.T) {
 	err := tracker.CheckGHProjectScope(context.Background(), "github.com", func(context.Context) (string, error) {
 		return "You are not logged into any GitHub hosts. To log in, run: gh auth login\n", nil

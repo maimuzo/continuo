@@ -83,7 +83,12 @@ func runStartupChecks(
 		// スキーマの照会は doctor にしか置いていない（人間の決定。issue #86）。
 		// GitHub Enterprise Server 3.19 以下では Bootstrap が GraphQL の誤りで落ちるので、
 		// 「Status の選択肢名が一致しません」だけを出すと、利用者は Status の名前を直しに行く。
+		// **`<名前>.ghe.com` の接続先では、版に触れない。**GitHub が運営していて、利用者は版を上げられない
+		// （`continuo doctor` の直し方と同じ分け方。internal/doctor の schemaUnsupported）。
 		if host := tracker.NormalizedHost(cfg.Tracker.Provider.Host); host != config.DefaultHost {
+			if tracker.IsTenancyHost(host) {
+				return i18n.Errorf(i18n.KeyDaemonRunStartupChecksBootstrapFailedOnTenancy, host, err)
+			}
 			return i18n.Errorf(i18n.KeyDaemonRunStartupChecksBootstrapFailedOnHost, host, err)
 		}
 		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksStatusOptionMismatch, err)

@@ -127,9 +127,9 @@ tracker:
 | 当たる人 | 何もしないとどうなるか | 直し方 |
 | --- | --- | --- |
 | **`ghq` の置き場所の1階層目が `github.com` でない clone を使っている人**（SSH の別名のホストで取った clone・手で置いた clone） | **その issue に着手しません。**`<owner>/<repo> の clone がありません` と出ます | 下の「clone の引き方が変わりました」 |
-| **`claude.env` に `GH_HOST` を書いている人** | **起動しません。**`claude.env の GH_HOST が tracker.provider.host と違います` と出ます | `tracker.provider.host` を同じ値にするか、`claude.env` のその行を消す |
+| **`claude.env` に、`tracker.provider.host`（書いていなければ `github.com`）と違う値の `GH_HOST` を書いている人** | **起動しません。**`claude.env の GH_HOST が tracker.provider.host と違います` と出ます。同じ値なら止まりません | `tracker.provider.host` を同じ値にするか、`claude.env` のその行を消す |
 | **全員** | `continuo doctor` の「未記入の項目」に `tracker.provider.host` が1行出ます（`!`。起動は止まりません） | `continuo doctor --missing-keys-patch` の差分を当てるか、`provider:` の下へ `host: github.com` を1行足す |
-| **`continuo init` が置いた CI の検査ファイルを GitHub Enterprise で使う人** | 古い検査ファイルは `https://github.com/` を決め打ちしているので、検査が必ず落ちます | [FAQ.md](FAQ.md) の「CI の検査ファイル（`continuo-ci.yaml`）」 |
+| **`continuo init` が置いた CI の検査ファイルを GitHub Enterprise で使う人** | 古い検査ファイルは `gh` の宛先を決めておらず、`https://github.com/` を決め打ちしているので、検査が通りません（どの段で落ちるかは、実機が無いので確かめていません） | [FAQ.md](FAQ.md) の「CI の検査ファイル（`continuo-ci.yaml`）」 |
 
 #### clone の引き方が変わりました
 
@@ -147,9 +147,18 @@ ghq list -p -e github.com/<owner>/<repo>     # 1行返れば、何もしなく�
 ghq list -p -e <owner>/<repo>                # 上が0行でこちらが返るなら、当たっています
 ```
 
-**直し方。**`continuo trust` を叩きます。`<ghq の root>/github.com/<owner>/<repo>` へ clone を取り直し、承認し直します。
+**直し方。**`continuo trust` を叩きます。`ghq get --vcs git https://github.com/<owner>/<repo>` で
+`<ghq の root>/github.com/<owner>/<repo>` へ clone を取り、承認し直します。
 
 ```bash
+continuo trust ~/continuo-work
+```
+
+**`https://github.com/…` から取れないとき**（SSH の別名のホストを、アカウントの使い分けのために使っている場合など）は、
+同じ場所へ手で clone を置いてから `continuo trust` を叩きます。**この場合に `continuo trust` だけで通るかは、確かめていません。**
+
+```bash
+git clone <いま使っている clone の remote の URL> "$(ghq root)/github.com/<owner>/<repo>"
 continuo trust ~/continuo-work
 ```
 

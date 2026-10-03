@@ -73,17 +73,17 @@ func TestRunGhqList_cloneのパスを返す(t *testing.T) {
 
 	path, err := workspace.GhqListForHost("github.com")(context.Background(), "octocat", "hello-world")
 	if err != nil {
-		t.Fatalf("RunGhqList に失敗した: %v", err)
+		t.Fatalf("ghq list に失敗した: %v", err)
 	}
 	if path != "/tmp/ghq/github.com/octocat/hello-world" {
 		t.Fatalf("clone のパスが返っていない: %q", path)
 	}
 }
 
-// 目的: `ghq get` を実際に起動し、引数がそのまま渡ることを確認する（設計 3-22）。
+// 目的: `ghq get` を実際に起動し、owner とリポジトリ名を書き換えずに、接続先ホストを付けた URL で渡すことを確認する（設計 3-22 / 3-86b）。
 // 与える情報: 引数をファイルへ書き出すテスト用ghq mock。
-// 成功条件: エラーにならず、`get <owner>/<repo>` の形で呼ばれていること。
-func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
+// 成功条件: エラーにならず、`get --vcs git https://github.com/<owner>/<repo>` の形で呼ばれていること。
+func TestRunGhqGet_接続先ホストを付けたURLで起動する(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "args.txt")
 	fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")
 
@@ -111,14 +111,14 @@ func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
 // continuo だけが「無い」と言い続ける。**
 //
 // 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、リポジトリ名 `.github`。
-// 成功条件: `list -p -e octocat/.github` の形で呼ばれていること。
+// 成功条件: `list -p -e github.com/octocat/.github` の形で呼ばれていること。
 func TestRunGhqList_正規化で変わる名前もそのまま渡す(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "args.txt")
 	fakeGhq(t, "echo \"$@\" > "+out+"\necho /tmp/ghq/github.com/octocat/.github")
 
 	path, err := workspace.GhqListForHost("github.com")(context.Background(), "octocat", ".github")
 	if err != nil {
-		t.Fatalf("RunGhqList に失敗した: %v", err)
+		t.Fatalf("ghq list に失敗した: %v", err)
 	}
 	if path != "/tmp/ghq/github.com/octocat/.github" {
 		t.Fatalf("clone のパスが返っていない: %q", path)
@@ -139,7 +139,7 @@ func TestRunGhqList_正規化で変わる名前もそのまま渡す(t *testing.
 // 案内された対処そのものが「存在しないリポジトリ」を取りに行って失敗する。
 //
 // 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、リポジトリ名 `.github`。
-// 成功条件: `get octocat/.github` の形で呼ばれていること。
+// 成功条件: `get --vcs git https://github.com/octocat/.github` の形で呼ばれていること。
 func TestRunGhqGet_正規化で変わる名前もそのまま渡す(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "args.txt")
 	fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")

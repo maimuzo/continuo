@@ -384,7 +384,7 @@ func gitWorktreePaths(ctx context.Context, repoDir string) ([]string, error) {
 // **これ以外の非 0 を「無い」に丸めてはならない。**リポジトリ側の異常
 // （`fatal: not a git repository` など）の終了コードは 128 であり、それを「無い」と
 // 答えると、**調べられなかっただけの branch が「もう無い」ものとして扱われる。**
-// RunGhqList が ghq の終了コードでしているのと同じ区別である。
+// runGhqList が ghq の終了コードでしているのと同じ区別である。
 const gitShowRefMissingExitCode = 1
 
 // gitBranchExists は branch が既にあるかを返す。

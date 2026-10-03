@@ -546,13 +546,13 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 // checkGHAuth は `gh` の有無と `gh auth status` の scope を検査する（見出し語 `gh の認証`）。
 //
 // 読み方は internal/tracker の CheckGHProjectScope が1つに決めてある（設計 3-32）。
-// **対象のホストは github.com に固定**し、**`Active account: true` の行を持つブロックだけ**を読み、
+// **対象のホストは接続先ホスト（`tracker.provider.host`。設計 3-86）**で、**`Active account: true` の行を持つブロックだけ**を読み、
 // **`Token scopes:` をカンマで区切って前後の空白と引用符を落とし**、**`project` が1つの要素として
 // 在ること**を合格とする。`read:project` は不可である。
 //
 // **設定ファイルの下流である**（設計 3-32 の依存の図）。上流が `✗` か `!` なら
-// 検査せずに `!` にして理由を出す。読む値そのものは設定に無い（ホストは github.com に固定）が、
-// **依存の図と「上流が `✗` か `!` なら下流を `!` にする」の規則を実装で曲げない。**
+// 検査せずに `!` にして理由を出す。**検査する相手のホストを設定から読む**ので、
+// 設定を読めなければ、どのホストを検査すればよいかも決まらない。
 //
 // **検査する相手は接続先ホスト（`tracker.provider.host`）である**（設計 3-86）。
 // 直し方の案内と合格の文面にも、そのホストを入れる。
@@ -759,7 +759,7 @@ func checkBoard(
 // トークンが送られる。出力に出さないと、本物の GitHub でない宛先に繋いだことに
 // 人間が気づけない。
 //
-// endpoint: 差し替えた接続先（空なら本番の GitHub）。
+// endpoint: 環境変数で差し替えた接続先（空なら、接続先ホストから導いた宛先を使っている。設計 3-86）。
 // 戻り値: 添える文字列（差し替えていなければ空）。
 func endpointNote(endpoint string) string {
 	if endpoint == "" {
@@ -782,7 +782,7 @@ func endpointNote(endpoint string) string {
 // ctx: 検査に渡したコンテキスト（期限切れの判定に使う）。
 // what: 何をしようとして落ちたかの説明。
 // err: 落ちた原因。
-// endpoint: 差し替えた接続先（空なら本番の GitHub）。
+// endpoint: 環境変数で差し替えた接続先（空なら、接続先ホストから導いた宛先を使っている。設計 3-86）。
 // 戻り値: 検査結果。
 func boardFailure(ctx context.Context, what string, err error, endpoint, host string) Result {
 	if timedOut(ctx, err) {
@@ -829,7 +829,7 @@ func boardFailure(ctx context.Context, what string, err error, endpoint, host st
 // endpoint: 環境変数で差し替えた宛先（差し替えていなければ空）。
 // 戻り値: `✗` の検査結果。
 func schemaUnsupported(host string, missing []string, endpoint string) Result {
-	remedy := i18n.T(i18n.KeyDoctorBoardRemedySchemaGHES, host)
+	remedy := i18n.T(i18n.KeyDoctorBoardRemedySchemaGHES, host, host)
 	if tracker.IsTenancyHost(host) {
 		remedy = i18n.T(i18n.KeyDoctorBoardRemedySchemaTenancy, host)
 	}

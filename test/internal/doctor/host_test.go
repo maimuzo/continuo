@@ -58,8 +58,8 @@ func TestDoctor_接続先がGHEで要素が揃っていればカンバンの検�
 // 版が古いことが原因だと読めない。照会で先に見分け、足りない要素と要る版を出す。
 // **足りないと分かったら Bootstrap は叩かない。**
 // 与える情報: `ghe.example.com` の設定と、3.19 と同じ3要素が無いと答える偽カンバン。
-// 成功条件: `カンバン` が `✗`、説明に足りない要素の名前が3つとも出て、直し方に「3.20」が入り、
-// Bootstrap のクエリが届いていないこと。
+// 成功条件: `カンバン` が `✗`、説明に足りない要素の名前が3つとも出て、直し方に「3.20」と、
+// 接続先ホストを入れた版の確かめ方のコマンドが入り、Bootstrap のクエリが届いていないこと。
 func TestDoctor_GHESに要素が足りなければカンバンを足りないにして版を案内する(t *testing.T) {
 	fx := newFixture(t)
 	fx.SetHost(t, "ghe.example.com")
@@ -85,8 +85,17 @@ func TestDoctor_GHESに要素が足りなければカンバンを足りないに
 	if strings.Contains(board.Detail, tracker.SchemaElementBlockedBy) {
 		t.Errorf("在る要素（%s）まで足りないと出している: %q", tracker.SchemaElementBlockedBy, board.Detail)
 	}
-	if !strings.Contains(strings.Join(board.Remedies, "\n"), "3.20") {
+	remedies := strings.Join(board.Remedies, "\n")
+	if !strings.Contains(remedies, "3.20") {
 		t.Errorf("直し方に要る版（3.20）が無い: %v", board.Remedies)
+	}
+	// **版の確かめ方は、貼って叩けるコマンドで出す。**書式の穴と引数の数が食い違うと、
+	// ホスト名のところが `%!s(MISSING)` になる（実際にそうなっていた。実装レビュー1周目）。
+	if !strings.Contains(remedies, "gh api --hostname ghe.example.com /meta --jq .installed_version") {
+		t.Errorf("版の確かめ方のコマンドに接続先ホストが入っていない: %v", board.Remedies)
+	}
+	if strings.Contains(remedies+board.Detail, "%!") {
+		t.Errorf("文言の書式と引数の数が食い違っている: %q / %v", board.Detail, board.Remedies)
 	}
 	if slices.Contains(fx.GitHub.Queries(), "bootstrap") {
 		t.Errorf("足りないと分かったのに Bootstrap を叩いた: %v", fx.GitHub.Queries())
@@ -107,8 +116,12 @@ func TestDoctor_ghe_comの接続先では版に触れない(t *testing.T) {
 	report := fx.Run(t)
 
 	board := assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolMissing)
-	if strings.Contains(strings.Join(board.Remedies, "\n"), "3.20") {
+	remedies := strings.Join(board.Remedies, "\n")
+	if strings.Contains(remedies, "3.20") {
 		t.Fatalf("版を持たない接続先に版を案内している: %v", board.Remedies)
+	}
+	if !strings.Contains(remedies, "octocorp.ghe.com") || strings.Contains(remedies+board.Detail, "%!") {
+		t.Fatalf("直し方に接続先ホストが入っていないか、書式と引数の数が食い違っている: %q / %v", board.Detail, board.Remedies)
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 )
 
 // GHAuthTokenFunc は `gh auth token` 相当の処理を行う関数の型である。
-// 本番は RunGHAuthToken を使う。テストではコマンドを実際に実行せずに済むよう、
+// 本番は GHAuthTokenForHost が返す関数を使う。テストではコマンドを実際に実行せずに済むよう、
 // 別の関数を差し替えて渡す（herdr パッケージの AgentStartWithRetry と同じく、
 // グローバル変数ではなく引数で差し替える設計にしてある）。
 type GHAuthTokenFunc func(ctx context.Context) (string, error)

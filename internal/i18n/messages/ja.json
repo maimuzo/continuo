@@ -302,6 +302,7 @@
   "daemon.run_startup_checks.not_writable": "書けなければならない場所に書けません: %w",
   "daemon.run_startup_checks.status_option_mismatch": "カンバンの Status の選択肢名が設定と一致しません（対象0件が無言で続くのを防ぎます）: %w",
   "daemon.run_startup_checks.bootstrap_failed_on_host": "接続先 %s のカンバンを読めません。Status の選択肢名が設定と一致しないか、接続先が continuo の問い合わせに対応していません。どちらなのかは `continuo doctor` の「カンバン」で分かります（GitHub Enterprise Server は 3.20 以上が要ります）: %w",
+  "daemon.run_startup_checks.bootstrap_failed_on_tenancy": "接続先 %s のカンバンを読めません。Status の選択肢名が設定と一致しないか、接続先が continuo の問い合わせに対応していません。どちらなのかは `continuo doctor` の「カンバン」で分かります: %w",
   "daemon.validate_graphql_endpoint.host_missing": "%s の値にホスト名がありません（%q）",
   "daemon.validate_graphql_endpoint.plain_http": "%s には https の URL を書いてください（%q はループバック以外の http なので、GitHub のトークンが平文で流れます）",
   "daemon.validate_graphql_endpoint.scheme_not_https": "%s の scheme が https ではありません（%q）。https か、ループバック宛の http だけを受け付けます",
