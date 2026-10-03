@@ -29,7 +29,7 @@ func rateLimitFrontMatter(intervalMs int, rateLimit string) string {
 
 // v0115RateLimit は v0.1.15 の雛形（`continuo init`）が書いた rate_limit の節である（値とキーをそのまま写した）。
 //
-// **`pause_above_percent` を含む。**このキーは v0.1.16 で消えたので、
+// **`pause_above_percent` を含む。**このキーは v0.2.0 で消えたので、
 // **この節をそのまま渡すと起動が止まる**（issue #173 の破壊的変更）。
 const v0115RateLimit = "rate_limit:\n" +
 	"  source: oauth_usage_api\n" +

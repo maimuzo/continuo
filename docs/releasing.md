@@ -323,7 +323,7 @@ git diff "$prev"..origin/main -- internal/config/validate.go \
 
 ## 4. 版を決める
 
-**このリポジトリは `v0.1.x` である。**
+**このリポジトリは `v0.x.y` である。**v0.1.15 の次は、破壊的変更が重なったので人間が v0.2.0 と決めた。
 
 | 何が入ったか | どう上げるか |
 | --- | --- |
@@ -510,7 +510,7 @@ curl -fsSL https://raw.githubusercontent.com/<owner>/continuo/main/install.sh \
 **入れ替えは自動では起きない。**動いているものは古いバイナリのままである。
 
 ```bash
-pgrep -fl continuo
+pgrep -lx continuo
 ```
 
 **止めて起動し直すのは人間の判断である。**勝手に止めない。

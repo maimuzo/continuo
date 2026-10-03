@@ -106,7 +106,9 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
-## v0.1.15 から v0.1.16 へ
+## v0.1.15 から v0.2.0 へ
+
+**要点と上げる順番だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.1.15 から v0.2.0 へ上げるとき」を先に読んでください。**
 
 **破壊的変更が4つあります。**
 **2つは `Direct Chat` という名前に当たるもので、設定かカンバンで既に使っている人だけが当たります。**
@@ -205,7 +207,7 @@ continuo doctor --missing-keys-patch ~/continuo-work
 **この版から、usage API が誤りを返すあいだ（どの誤りでも）は、Claude Code のステータスラインから使用率を受け取ります。**
 usage API はいままでどおり主に使い、読めるようになれば戻ります。**v0.1.15 の `WORKFLOW.md` のまま起動します。**
 
-| 何 | v0.1.15 まで | v0.1.16 から |
+| 何 | v0.1.15 まで | v0.2.0 から |
 | --- | --- | --- |
 | **usage API が誤りのとき** | 資格情報の誤り・401・403 では枠の判定を諦める。429・5xx は巡回のたび（30秒ごと）に叩き直す | **Claude Code のステータスラインへ切り替える。**`rate_limit.poll_interval_ms` と `Retry-After` の長いほうのあとに読み直し、読めたら戻る |
 | **`rate_limit.source` の値** | `oauth_usage_api`（既定）/ `none` | **`oauth_usage_api`（既定）/ `statusline` / `none`**。`statusline` は usage API を読まず、ステータスラインだけを使う |
@@ -292,13 +294,15 @@ statusline取得ができません（使える clone が無い: trust.repositori
 
 #### 古い版へ戻すとき
 
-**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit.refresh_interval_ms` の行を消してください。**
-古い版はこのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
+**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` から v0.2.0 で増えたキー4つ（`tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes`）の行を消してください。**
+古い版はこれらのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
+**`claude.permission_mode: auto` にしていたなら、`dontAsk` へ戻してください。**v0.1.15 は `dontAsk` しか通しません。
+**herdr を 0.9.1 へ上げていたら、`herdr.protocol` も herdr の版に合わせてください**（v0.1.15 が herdr 0.9.1 の上で動くかは確かめていません）。
 
 **確かめ方。**
 
 ```bash
-grep -n -E 'refresh_interval_ms|source: statusline' ~/continuo-work/WORKFLOW.md
+grep -n -E "^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *[\"']?auto|source: *[\"']?statusline)" ~/continuo-work/WORKFLOW.md
 ```
 
 **何も出なければ、v0.1.15 が読めない行は残っていません。**
@@ -450,7 +454,7 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 Claude Code を閉じました。このコメントより後に OWNER / MEMBER / COLLABORATOR が新しく書いたコメント（AI の目印の無いもの）を、次に Claude Code を起動したときに渡します。
 ```
 
-| 何 | v0.1.15 まで | v0.1.16 から |
+| 何 | v0.1.15 まで | v0.2.0 から |
 | --- | --- | --- |
 | **issue のコメントで出した許可** | 判定役に届かなかった | **「閉じました」より後に新しく書いたものは、次の起動の最初のメッセージに付けて届く** |
 | **issue のコメントの数** | — | **Claude Code を閉じるたびに1件増える。**いちばん下が「閉じました」になるので、次の run は進捗の報告を新しく1件作る |
@@ -659,7 +663,7 @@ gh issue comment <issue の URL> --body-file "$F"
 
 **`docs/plans/continuo_design.md` の 3-78b を写して、`WORKFLOW.md` の本文に「コードが別のリポジトリにあるとき」を置いている場合は、そこも直してください。**
 v0.1.15 の見本は `commit -am "<何を直したか>"` と `--title "<何を直したか>"` でした。
-v0.1.16 の見本は、メッセージを一時ファイルへ書き、`git -C <clone のパス> commit -a -F "$M"` と `--title "$(cat "$M")"` で渡します。
+v0.2.0 の見本は、メッセージを一時ファイルへ書き、`git -C <clone のパス> commit -a -F "$M"` と `--title "$(cat "$M")"` で渡します。
 **直さないと、メッセージや題名に書いた backtick が、その `WORKFLOW.md` を使う全部の run で実行され続けます。**continuo は `WORKFLOW.md` を書き換えません。
 
 ### AI の印が付いたコメントを、エージェントが命令として扱わなくなりました — 設定に足すものはありません
@@ -673,7 +677,7 @@ v0.1.16 の見本は、メッセージを一時ファイルへ書き、`git -C <
 
 **変わったこと。**
 
-| 何 | v0.1.15 まで | v0.1.16 から |
+| 何 | v0.1.15 まで | v0.2.0 から |
 | --- | --- | --- |
 | **`OWNER` が書いた、AI の印付きのコメント** | 命令として扱った | **分析や記録として読む** |
 | **pull request の本文** | 書いた人の立場で決めた | **命令として扱わない** |
@@ -734,7 +738,7 @@ grep -c 'OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と' ~/co
 **v0.1.15 まで、使用率が 91〜95% の帯では1行も出ませんでした。**
 新規着手を止める判定が2つあり、**先に効くほうが `Debug` の1行しか出さなかった**ためです。
 
-**v0.1.16 からは、この帯でも `Info` で1行出ます。**
+**v0.2.0 からは、この帯でも `Info` で1行出ます。**
 
 ```
 枠に余裕が無いので、入札の要る issue には着手しません（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。…
@@ -742,7 +746,7 @@ grep -c 'OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と' ~/co
   5時間の枠の閾値="90% に達したら止まります" 1週間の枠の閾値="90% に達したら止まります"
 ```
 
-**v0.1.16 で、出る行は1巡回につき1行になりました。**
+**v0.2.0 で、出る行は1巡回につき1行になりました。**
 「枠が閾値を超えているので新規の dispatch を止めます」は、その判定ごと消えています。
 
 **文面は理由ごとに3通りあります**（枠に余裕が無い／枠を使い切っている／枠を読めない）。
@@ -926,7 +930,7 @@ grep -nE 'five_hour_margin_percent|weekly_margin_percent' WORKFLOW.md
 **「96%から90%へ」ではありません。**`v0.1.15` でも**91%から**担当者のいない issue は取っていませんでした。
 **96% は、消したキー（`rate_limit.pause_above_percent`）の閾値です。**下の表の3行目と4行目を見てください。
 
-| 使用率 | v0.1.15 まで | v0.1.16 から |
+| 使用率 | v0.1.15 まで | v0.2.0 から |
 | --- | --- | --- |
 | 〜89% | 取る | 取る |
 | **90%** | 取る | **担当者のいない issue を取らない** |
@@ -1134,7 +1138,7 @@ continuo version
 **`WORKFLOW.md` の本文にテンプレートを書いた人は、それが正しく展開されるかを事前に確かめられませんでした。**
 **間違いに気づくのは、エージェントが動き出したあとでした。**
 
-**v0.1.15 から。**`--url` に issue の URL を渡すと、**その issue の値で展開した全文が出ます。**（v0.1.16 から最初のメッセージに付く、人間のコメントの節は出ません）
+**v0.1.15 から。**`--url` に issue の URL を渡すと、**その issue の値で展開した全文が出ます。**（v0.2.0 から最初のメッセージに付く、人間のコメントの節は出ません）
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/hello-world/issues/42
@@ -1599,7 +1603,7 @@ cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
 > **`abandon` は「continuo は動いていません」と判定し、走っている worktree を消しにいきます。**
 >
 > ```bash
-> pgrep -fl continuo     # 動いているものを確かめる
+> pgrep -lx continuo     # 動いているものを確かめる
 > ```
 >
 > **最後の砦は残っています。**その worktree に herdr の pane が生きていれば `abandon` は止まります。
@@ -1923,7 +1927,7 @@ tracker:
 **1つ打ち忘れると、その `<!--` は次に見つかった `-->` までを見出しごと飲み込みます。**
 **画面にはエラーが1つも出ません。**下の確かめ方で、行数を必ず見てください。
 
-**確かめ方。**`continuo prompt --show <ディレクトリ>` を叩くと、実際に送られる全文が出ます（v0.1.16 から最初のメッセージに付く、人間のコメントの節は除く）。
+**確かめ方。**`continuo prompt --show <ディレクトリ>` を叩くと、実際に送られる全文が出ます（v0.2.0 から最初のメッセージに付く、人間のコメントの節は除く）。
 **標準エラーに出る内訳の `WORKFLOW.md の本文` の行数**（画面の言語が英語なら `WORKFLOW.md body`）**が、
 あなたの期待と合っているかを見てください。**
 **本文が案内のコメントだけになった場合は、`WORKFLOW.md に本文はありません`**（英語なら `no body in WORKFLOW.md`）**と出ます。**

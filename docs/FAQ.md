@@ -45,11 +45,13 @@ continuo --help
 
 | コマンド | 何をするか |
 | --- | --- |
-| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
+| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形と `continuo-ci.yaml` を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
+| `continuo prompt --show [ディレクトリ]` | Claude Code へ送る指示の全文を出す。`--builtin` で組み込みの部分だけ、`--url <issue の URL>` でその issue の値で展開する |
+| `continuo version` | 実行ファイルの版を出す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
@@ -114,23 +116,15 @@ cd ~/continuo-work && continuo prompt --show
 
 **原因。**v0.x のうちは設定のキーが増減しうるので、作り直しが要るのかどうかが判断しづらい。
 
-**直し方（v0.1.10 に上げた場合）。****作り直しは要りません。v0.1.9 の `WORKFLOW.md` がそのまま通ります。**
-**ただし、当てるものが3つあります。**
-
-| 何 | v0.1.10 では |
-| --- | --- |
-| **消えたキー** | **ありません** |
-| **名前が変わったキー** | **front matter にはありません**（変わったのは本文です） |
-| **増えたキー** | `claude.tool_gate` の1つだけ。**省略できます** |
-| **本文（プロンプト）その1** | **`blocked` を出す前にも push させる指示が入りました。**当てないと、エージェントは人間へ渡す前に push しません |
-| **本文（プロンプト）その2** | **「## 書いた人によって扱いを変えること」の節が入りました。**v0.1.9 にはこの節がありません。当てないと、エージェントは立場を読めず、**外部の人が書いたコメントを命令として扱いえます** |
+**直し方。****作り直しは要りません。**版ごとに、消えたキー・増えたキー・本文に当てるものだけを手で当てます。
+**v0.1.15 から v0.2.0 へ上げるときは、消さないと起動しないキーがあります**（下の「v0.1.15 から v0.2.0 へ上げるとき」）。
 
 **設定と本文は、当てなかったときに起きることが違います。**
 
 | どこ | 当てないとどうなるか |
 | --- | --- |
-| **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**省略すると既定が効きます。**公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。**元に戻す1行は [upgrading.md](upgrading.md) にあります** |
-| **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
+| **front matter**（先頭の `---` に挟まれた YAML） | **増えたキーは、書かなくても壊れません。**既定の値で動きます。**ただし、消えたキーが残っていると起動しません**（v0.2.0 の `rate_limit.pause_above_percent`） |
+| **本文**（front matter より下） | **あなたが書いた流儀が古いままです。**continuo は本文を書き換えないので、書いていない指示は届きません。**仕組みの指示は実行ファイルの中にあり、版を上げれば新しくなります** |
 
 **`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
 **手で書いた本文も雛形に戻ります**（`--force` は front matter も本文も上書きします）。
@@ -265,7 +259,7 @@ pull request のコメントに、レビュー結果を貼ってください
 
 **この2つの目印の使い方は、組み込みの側が決めます。`CLAUDE.md` へ書き写す必要はありません。**
 
-**v0.1.16 で変わったこと。**組み込みのプロンプトに `## 5-6. レビューの回し方` の節が入りました。
+**v0.2.0 で変わったこと。**組み込みのプロンプトに `## 5-6. レビューの回し方` の節が入りました。
 
 **この節が決めるのは7つです。**
 
@@ -279,9 +273,9 @@ pull request のコメントに、レビュー結果を貼ってください
 | **直す前に何を書くか** | **判断票の、その周の畳んだ中身へ6つ書きます**（別のファイルは作りません）。**とくに「止まるようになるもの」「通るようになるもの」。**直す箇所は全部並べてから、一気に直します |
 | **何周まで回すか** | 収まったら最大1周。**連続10回で止まり、`CONTINUO-STATUS: blocked` を書きます** |
 
-**subagent が毎周2つ立ちます。**レートリミットの減り方と、`WORKFLOW.md` に書く名前の直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
+**subagent が毎周2つ立ちます。**レートリミットの減り方と、`WORKFLOW.md` に書く名前の直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」にあります。
 
-**v0.1.16 で、あわせて6つ変わりました。**
+**v0.2.0 で、あわせて6つ変わりました。**
 
 | 何が変わるか | 何が起きるか |
 | --- | --- |
@@ -613,7 +607,7 @@ tracker:
 
 **「`tracker` の他のキー」は7つです。**`active_states` / `terminal_states` / `running_state` /
 `dispatch_state` / `failure_state` / `direct_chat_state` / `status_signal_map` の遷移先。
-**`direct_chat_state` は `v0.1.16` で増えました**（`internal/config/states.go` の `KnownStates`）。
+**`direct_chat_state` は `v0.2.0` で増えました**（`internal/config/states.go` の `KnownStates`）。
 **`tracker` の外（`cleanup` など）は見ません。**
 
 **足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」にあります。**
@@ -1203,7 +1197,7 @@ grep -E 'usage API|statusline取得' <ログの出力先>
 理由ごとに原因と直し方があります。
 
 **出ていなければ、`入札の要る issue には着手しません` の行を探してください。**
-**既定のログレベル（`info`）で出ます**（v0.1.16 から）。**理由がその行に出ます。**
+**既定のログレベル（`info`）で出ます**（v0.2.0 から）。**理由がその行に出ます。**
 
 **文面は理由ごとに3通りあります**（枠に余裕が無い／枠を使い切っている／枠を読めない）。
 **どれも `入札の要る issue には着手しません` を含むので、そこだけを探してください。**
@@ -1679,6 +1673,111 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 ---
 
+## 版を上げるとき
+
+**版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
+
+### v0.1.15 から v0.2.0 へ上げるとき
+
+#### v0.2.0 で、何もしないと動かなくなるものは？
+
+**原因。**v0.2.0 には破壊的変更が4つあります。3つは `WORKFLOW.md` をそのままにしていると起動を断り、1つはカンバンの見え方を変えます。
+
+| 何が変わったか | 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- | --- |
+| **`rate_limit.pause_above_percent` が無くなった** | **ほぼ全員。**`continuo init` の雛形がずっと書いていました | **起動しません**（知らないキーとして断ります） | その1行を消す |
+| **`five_hour_margin_percent` と `weekly_margin_percent` に `100` を書けなくなった** | `100` を書いている人 | **起動しません** | `99` 以下へ下げる。行ごと消すと既定の `10` |
+| **`tracker.direct_chat_state` が増え、既定値が `"Direct Chat"` になった** | 他の役割（`active_states` など7つ）に `Direct Chat` と書いている人 | **起動しません**（名前の重なりを断ります） | `tracker:` の下へ `direct_chat_state: ""` を足す。別の名前にすれば機能は使えます |
+| **同上** | カンバンに `Direct Chat` という列を既に持っている人 | その列のカードを、担当者が0人か2人以上なら `Blocked` へ動かしてコメントを書きます。担当者がその PC のアカウント1人なら、pane を開いたまま同時実行の数（`agent.max_concurrent_agents`）を1つ使い続けます | 同上 |
+
+**破壊的変更ではありませんが、次の人も手が要ります。**
+
+| 当たる人 | 何もしないとどうなるか | 直し方 |
+| --- | --- | --- |
+| **herdr を 0.9.1 へ上げる人** | **起動しません。**herdr の protocol の番号が `herdr.protocol` と合わないためです | `herdr.protocol` を `22` へ直す。**herdr 0.8.2 のままだと、長い指示の Enter が届かずエージェントが黙ることがあるので、0.9.1 へ上げてください** |
+| **API キーで Claude Code を動かしている機械** | 起動するたびに haiku の会話が最大1回、従量で課金されます | `rate_limit.source: none` にする |
+| **1週間のレートリミットが明けるのを待ち続けたい人** | `rate_limit.weekly_wait_limit_minutes` を書いていないと既定の `300` が入り、5時間より長く待つことになる issue の担当を手放します | `rate_limit.weekly_wait_limit_minutes: 0` を書く（v0.1.15 と同じく手放しません） |
+| **`continuo doctor` の終了コードを `1` と名指しで見ているスクリプト** | doctor そのものが動けなかった場面のうち4つ（いまいるディレクトリを引けない・`--missing-keys-patch` の3つ）が `1` から `3` に変わったので、それを見落とします | `0` 以外を失敗と見る形へ直す |
+| **`permission_mode` の行を `WORKFLOW.md` から消している人** | 既定の `auto` で起動します。**古い Claude Code はこのフラグを知らず、起動に失敗します**（2.1.266 で確認） | `claude --version` を確かめ、古ければ Claude Code を上げる |
+| **エージェントが作った pull request を draft のまま受け取りたい人** | 実装レビューが収まると、エージェントが draft を必ず外します。誰が draft で作ったかは問いません | `WORKFLOW.md` の本文に「draft のまま人間へ渡す」とはっきり書く。**「draft で作る」とだけ書いてあると外します** |
+
+**理由と、表に書ききれない細かい条件は [upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」にあります。**
+
+#### どの順で上げればいい？
+
+**原因。**順番を間違えると止まります。**新しいキーを書いた `WORKFLOW.md` は、古い実行ファイルでは `unknown field` で起動しません。**
+逆に、`pause_above_percent` を残したままの `WORKFLOW.md` は、新しい実行ファイルでは起動しません。
+
+**直し方。**次の順で進めてください。`~/continuo-work` は `WORKFLOW.md` を置いたディレクトリに読み替えてください。
+
+| 順 | 何をするか | コマンド |
+| --- | --- | --- |
+| 1 | **`WORKFLOW.md` の控えを取る** | `cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak` |
+| 2 | **動いている continuo を止める。**走っている run があるなら、終わってからのほうが安全です（下の「走っている run があるまま上げると？」） | 端末で `Ctrl+C`。残っていないかは `pgrep -lx continuo` |
+| 3 | **実行ファイルを入れ替える** | `curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh \| sh` |
+| 4 | **版を確かめる** | `continuo version` |
+| 5 | **herdr を 0.9.1 へ上げる**（上げたら、6 で `herdr.protocol` を `22` へ直す） | herdr の入れ方に従う |
+| 6 | **`WORKFLOW.md` を直す**（下の確かめのコマンドで当たる行を探す） | 下のコマンド |
+| 7 | **前提を確かめる** | `cd ~/continuo-work && continuo doctor` |
+| 8 | **起動する** | `cd ~/continuo-work && continuo` |
+
+**6 で、起動を断られる3つ（破壊的変更の表）は、次のコマンドで探せます。**1行でも出たら、その表のとおりに直してください。何も出なければ、その3つは残っていません。
+**`Direct Chat` の行だけは、`direct_chat_state:` の行も一緒に出ていれば直してあります**（その行を足すのが直し方です）。
+
+```bash
+cd ~/continuo-work && grep -nE 'pause_above_percent|margin_percent: *100|Direct Chat|direct_chat_state:' WORKFLOW.md
+```
+
+**手が要る人の表は、行が在るかではなく、使い方で決まります**（herdr を上げたか・API キーの機械か・待ち続けたいか など）。当てはまる行だけ直してください。herdr の protocol が合っているかは、7 の `continuo doctor` の `herdr` の行に出ます。
+
+**7 で `未記入の項目` に4つ出るのは正常です。**雛形に増えた `tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes` です。
+書かなくても動きます（`weekly_wait_limit_minutes` だけは上の表のとおり既定で手放すようになります）。足すなら、次のコマンドで差分を読んでから当ててください。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
+```
+
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てと、本文に書いたエージェントへの指示が全部消えます。
+
+#### 走っている run があるまま上げると？
+
+**原因。**版を上げる前から走っている run は、Claude Code を起動したときの設定のまま動き続けます。
+その設定には v0.2.0 で増えたステータスラインの行が無いので、その run の pane からは使用率が届きません。
+
+**困るのは、usage API が誤りを返しているあいだにその run がレートリミットの上限に当たったときだけです。**回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められることがあります。
+
+**直し方。**気になるなら、走っている run が終わってから上げてください。
+
+#### v0.2.0 から v0.1.15 へ戻すには？
+
+**原因。**v0.1.15 は v0.2.0 で増えたキーを知らないので、書いてあると起動しません。
+
+**直し方。**実行ファイルを戻す前に、`WORKFLOW.md` を次のとおり直してください。
+
+| 何 | どうするか |
+| --- | --- |
+| v0.2.0 で増えたキー4つ（`tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes`） | 行を消す |
+| `claude.permission_mode: auto` | `dontAsk` へ戻す。v0.1.15 は `dontAsk` しか通しません |
+| `rate_limit.source: statusline` | `oauth_usage_api` か `none` へ戻す |
+
+**次のコマンドで何も出なければ、v0.1.15 が読めない行は残っていません。**
+
+```bash
+grep -n -E "^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *[\"']?auto|source: *[\"']?statusline)" ~/continuo-work/WORKFLOW.md
+```
+
+**1 で取った控えがあれば、それへ戻すのがいちばん確かです。**
+
+**herdr を 0.9.1 へ上げていたら、herdr も 0.8.2 へ戻してください。**控えの `WORKFLOW.md` が v0.1.15 の雛形どおり `herdr.protocol: 20` なら、herdr 0.9.1（protocol 22）のままでは起動の照合で止まります。
+v0.1.15 が herdr 0.9.1 の上で動くかは確かめていません（`herdr.protocol` を `22` にすれば起動の照合は通りますが、それより先は測っていません）。
+
+```bash
+cp ~/continuo-work/WORKFLOW.md.bak ~/continuo-work/WORKFLOW.md
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.1.15
+```
+
+---
+
 ## トラブルシューティング
 
 **ここに無いときは、次の3つも見てください。**
@@ -1873,7 +1972,7 @@ CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 **直し方。**動いている continuo を止めます。
 
 ```bash
-pgrep -fl continuo
+pgrep -lx continuo
 ```
 
 **わざと2本動かしたいときは、`--id <名前>` を付けます。**
@@ -2011,7 +2110,7 @@ continuo allow-keychain-access
 **herdr 0.9.1 と 0.9.0 は protocol 22、0.8.2 は 20、0.8.0 は 19 です。**
 
 **v0.1.15 までの `continuo init` で作った `WORKFLOW.md` には `protocol: 20` が書いてあります。**書いてある値は continuo の既定値より優先されるので、
-**continuo を上げても、この行は手で直す必要があります**（[docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」）。
+**continuo を上げても、この行は手で直す必要があります**（[docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」）。
 
 **版は `herdr --version` ではなく `continuo doctor` の行で確かめてください。**照合するのは、動いている herdr の server が返す値です。
 herdr 0.9.0 以降は client だけを上げて server を古いまま残せるので、`herdr --version` が新しくても server は古いままのことがあります。
@@ -2280,7 +2379,7 @@ workspace を作ってから控えるまでの間に continuo が落ちたとき
 | --- | --- |
 | **上限に当たったとき、ステータスラインが 100 を運ぶか** | **確かめていません。**運ばなければ、回復待ちと判定されず、`claude.turn_timeout_ms` のあとに stall として止められます |
 | **モデル別の週次の上限に当たった** | **ステータスラインはモデル別の週次の上限（`weekly_scoped`）を運びません。**usage API が誤りのあいだ（と `rate_limit.source: statusline`）は、回復待ちと判定されず、stall として止められることがあります |
-| **版を上げる前から走っていた run** | その run は `statusLine` の無い設定のまま動いているので、pane から使用率が届きません（[upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」） |
+| **版を上げる前から走っていた run** | その run は `statusLine` の無い設定のまま動いているので、pane から使用率が届きません（[upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」） |
 
 **直し方。**issue のコメントを読み、期間が明けてから、その issue を `Ready` へ戻してください（「issue が急に `Blocked` になった」）。
 
@@ -2336,7 +2435,7 @@ grep -E '入札の要る issue には着手しません|空きスロットが尽
 **3つとも出ていないときは、まず入札を疑ってください。**
 **usage API か `statusline取得` の `WARN` が出ていれば、枠の使用率が入っていないので入札していないことがあります**（「枠の使用率を読めないとき」）。
 
-**止まる使用率は1つだけです**（v0.1.16 から。それまでは `rate_limit.pause_above_percent` という2本目がありました）。
+**止まる使用率は1つだけです**（v0.2.0 から。それまでは `rate_limit.pause_above_percent` という2本目がありました）。
 
 | いちばん使っている枠の使用率 | 担当者のいない issue を取るか | 担当が自分の issue を取るか |
 | --- | --- | --- |
@@ -2365,7 +2464,7 @@ grep -E '入札の要る issue には着手しません|空きスロットが尽
 
 **v0.1.10 までは、「必須のラベルが揃っていない」だけ1行も出ていませんでした。**
 **v0.1.11 から出ます。**
-**この1行が `Info` で出るのは v0.1.16 からです。**それまでは `Debug` でしか分かりませんでした。
+**この1行が `Info` で出るのは v0.2.0 からです。**それまでは `Debug` でしか分かりませんでした。
 **文面と直し方は、上の「行の先頭ごとの直し方」の表にあります。**
 
 **3つとも WARN ではなく INFO です。**どれも異常ではなく、
@@ -2604,7 +2703,7 @@ git -C <worktree のパス> diff
 grep -n 'permission_mode' ~/continuo-work/WORKFLOW.md
 ```
 
-**`auto` のとき**（v0.1.16 からの既定）**は、判定役が実行の前に確かめます。**
+**`auto` のとき**（v0.2.0 からの既定）**は、判定役が実行の前に確かめます。**
 **エージェントが `gh` で読んだ issue のコメントは、判定役に届きません。**判定役への要求から道具の結果は取り除かれ、
 issue のコメントは `gh` の出力、つまり道具の結果として届くためです
 （公式文書の permission modes のページ。2026-09-18 に取得して確かめました）。
@@ -2858,7 +2957,7 @@ agent:
 #### エージェントが叩いたコマンドが「危ない」と断られる
 
 **原因。**v0.1.10 から、**公開リポジトリの issue では、`Bash` の呼び出しを実行の前に検査します**
-（`claude.tool_gate`。**v0.1.16 から、書いていなければ既定で無効です。**それより前は既定で有効でした）。
+（`claude.tool_gate`。**v0.2.0 から、書いていなければ既定で無効です。**それより前は既定で有効でした）。
 公開の issue とコメントは誰でも書けるので、**外部の人が書いた文がそのままコマンドになる経路**を狭めるためのものです。
 **掛けるには `claude.tool_gate.mode` に `public_only` か `on` を書きます。**
 `public_only` は公開リポジトリの issue にだけ掛けます。
@@ -2905,7 +3004,7 @@ front matter が重複キーになることはありません。
 claude:
   # …（ほかの設定）
   tool_gate:
-    mode: "public_only"   # v0.1.16 からの既定は off。掛けたいならこの値を書き換える
+    mode: "public_only"   # v0.2.0 からの既定は off。掛けたいならこの値を書き換える
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -3194,7 +3293,7 @@ jq -r .base <worktree のパス>/.continuo.json
 
 **印の行は、いままでどおり先頭のままです。**4つの見出しは、その下に入ります。
 
-**v0.1.16 から。**その4つが7つになりました。
+**v0.2.0 から。**その4つが7つになりました。
 
 | 順 | 見出し | 中身 |
 | --- | --- | --- |
@@ -3207,14 +3306,14 @@ jq -r .base <worktree のパス>/.continuo.json
 | 7 | `### 詳細` | 根拠・仕組み・データ |
 
 **引用の置き方も変わりました。**v0.1.15 は節ごとに `### 何に対する返答か` の見出しを立て、その下に引用を置いていました。
-**v0.1.16 からは見出しを付けず、節の先頭に引用を置きます。**
+**v0.2.0 からは見出しを付けず、節の先頭に引用を置きます。**
 
 **あわせて、説明にシーケンス図を多用し、何を渡して何を受け取るかを具体的な値で書きます。**
 **技術用語は英語のまま書きます。**
 **人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊きません。**
 **判断票は、指摘をまとめた表を、その節の `### 詳細` の中に置きます。**
 
-**入っているかは、送る文面で確かめられます。**v0.1.15 と v0.1.16 で見出しが違うので、2本数えます。
+**入っているかは、送る文面で確かめられます。**v0.1.15 と v0.2.0 で見出しが違うので、2本数えます。
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 既存の構造がどうなっているか'
@@ -3225,7 +3324,7 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対�
 
 | 1本目 | 2本目 | 入っている形 |
 | --- | --- | --- |
-| `1` 以上 | 問わない | **v0.1.16 の7つの見出しです** |
+| `1` 以上 | 問わない | **v0.2.0 の7つの見出しです** |
 | `0` | `1` 以上 | **v0.1.15 の4つの見出しです。**この節の症状は直っています |
 | `0` | `0` | **v0.1.14 までの形です。**上げてください |
 
@@ -3233,14 +3332,14 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対�
 
 #### エージェントのコメントで、backtick で囲んだ語が消えている
 
-**v0.1.16 で直りました。**上げてください。**設定に足すものはありません。**
+**v0.2.0 で直りました。**上げてください。**設定に足すものはありません。**
 
 **v0.1.15 まで何が起きていたか。**組み込みの指示書は、コメントや PR の本文を `--body "…"` の二重引用符の中へ直に書かせていました。
 **二重引用符の中では、シェルが backtick と `$( )` をコマンドとして実行します。**
 報告に `` `auto` `` と書くと、`auto` というコマンドが worktree の中で走り、その部分はコマンドの出力（無ければ空）に置き換わります。
 issue から `$(…)` を含む文を引いた場合も同じです。
 
-**v0.1.16 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
+**v0.2.0 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
 計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
 
 **入っているかは、送る文面で確かめられます。**
@@ -3249,9 +3348,9 @@ issue から `$(…)` を含む文を引いた場合も同じです。
 cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-file "$F"'
 ```
 
-**`1` 以上なら v0.1.16 の形です。**`0` なら上げてください。
+**`1` 以上なら v0.2.0 の形です。**`0` なら上げてください。
 
-**`WORKFLOW.md` の本文で `--body "…"` の形を自分で指示している場合は、そこも直してください。**直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
+**`WORKFLOW.md` の本文で `--body "…"` の形を自分で指示している場合は、そこも直してください。**直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.2.0 へ」にあります。
 
 ### issue が勝手に止まる・戻るとき
 
