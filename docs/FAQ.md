@@ -1749,7 +1749,20 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 
 **原因。**v0.1.15 は v0.2.0 で増えたキーを知らないので、書いてあると起動しません。
 
-**直し方。**実行ファイルを戻す前に、`WORKFLOW.md` から v0.2.0 で足したキー（`rate_limit.refresh_interval_ms` / `tracker.direct_chat_state` など）を消してください。`rate_limit.source: statusline` にしていたなら `oauth_usage_api` か `none` へ戻します。
+**直し方。**実行ファイルを戻す前に、`WORKFLOW.md` を次のとおり直してください。
+
+| 何 | どうするか |
+| --- | --- |
+| v0.2.0 で増えたキー4つ（`tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes`） | 行を消す |
+| `claude.permission_mode: auto` | `dontAsk` へ戻す。v0.1.15 は `dontAsk` しか通しません |
+| `rate_limit.source: statusline` | `oauth_usage_api` か `none` へ戻す |
+
+**次のコマンドで何も出なければ、v0.1.15 が読めない行は残っていません。**
+
+```bash
+grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *"?auto|source: *"?statusline)' ~/continuo-work/WORKFLOW.md
+```
+
 **1 で取った控えがあれば、それへ戻すのがいちばん確かです。**
 
 **herdr を 0.9.1 へ上げていたら、herdr も 0.8.2 へ戻してください。**控えの `WORKFLOW.md` が v0.1.15 の雛形どおり `herdr.protocol: 20` なら、herdr 0.9.1（protocol 22）のままでは起動の照合で止まります。

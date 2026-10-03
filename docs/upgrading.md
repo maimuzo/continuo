@@ -294,13 +294,15 @@ statusline取得ができません（使える clone が無い: trust.repositori
 
 #### 古い版へ戻すとき
 
-**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` の `rate_limit.refresh_interval_ms` の行を消してください。**
-古い版はこのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
+**実行ファイルを v0.1.15 以前へ戻すなら、`WORKFLOW.md` から v0.2.0 で増えたキー4つ（`tracker.direct_chat_state` / `agent.relay_trusted_comments` / `rate_limit.refresh_interval_ms` / `rate_limit.weekly_wait_limit_minutes`）の行を消してください。**
+古い版はこれらのキーを知らないので、起動しません。**`source: statusline` にしていたなら、`oauth_usage_api` か `none` へ戻してください。**
+**`claude.permission_mode: auto` にしていたなら、`dontAsk` へ戻してください。**v0.1.15 は `dontAsk` しか通しません。
+**herdr を 0.9.1 へ上げていたら、`herdr.protocol` も herdr の版に合わせてください**（v0.1.15 が herdr 0.9.1 の上で動くかは確かめていません）。
 
 **確かめ方。**
 
 ```bash
-grep -n -E 'refresh_interval_ms|source: statusline' ~/continuo-work/WORKFLOW.md
+grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *"?auto|source: *"?statusline)' ~/continuo-work/WORKFLOW.md
 ```
 
 **何も出なければ、v0.1.15 が読めない行は残っていません。**
