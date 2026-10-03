@@ -534,7 +534,7 @@ diff /tmp/continuo-ci-new/continuo-ci.yaml .github/workflows/continuo-ci.yaml
 | --- | --- |
 | `https://ghe.example.com`・`ghe.example.com/api/graphql` | 起動時に「ホスト名だけを書くこと」で止まります |
 | `ghe.example.com:8443` | 同じく止まります。**ポート番号は書けません** |
-| `""`（空文字） | 起動時に「ホスト名が空です」で止まります。`github.com` のままでよいなら、`host:` の行ごと消すか `host: github.com` と書きます。**`host:` とだけ書いて右を空にしたときは止まりません**（front matter の検証を通ります） |
+| `""`（空文字） | 起動時に「ホスト名が空です」で止まります。`github.com` のままでよいなら、`host: github.com` と書きます。**`host:` とだけ書いて右を空にしたときは止まらず、`github.com` へ繋ぎます。**GitHub Enterprise のつもりでホスト名を書き忘れても、起動は通ります |
 | `-ghe.example.com`・`ghe.example.com.`（先頭か末尾が `-` か `.`） | 起動時に「ホスト名の先頭と末尾に "-" と "." は置けません」で止まります |
 | `claude.env` に、`host` と違う値の `GH_HOST` | 起動時に「claude.env の GH_HOST（"<書いた値>"）が tracker.provider.host（"<接続先>"）と違います」で止まります。`claude.env` のその行を消すか、同じ値にします |
 
@@ -1798,17 +1798,30 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **原因。**v0.2.0 は v0.2.1 で増えたキー（`tracker.provider.host`）を知らないので、書いてあると `unknown field "host"` で起動しません。
 
-**直し方。**実行ファイルを戻す前に、`WORKFLOW.md` の `provider:` の下の `host:` の行を消してください。
+**直し方。**continuo を止め、実行ファイルを戻す前に、`WORKFLOW.md` の `provider:` の下の `host:` の行を消してください。
 
-**次のコマンドで何も出なければ、v0.2.0 が読めない行は残っていません。**
+**次のコマンドの出力に、`provider:` の下の `host:` の行が無ければ、v0.2.0 が読めない行は残っていません。**
+（ファイルの全体を見るので、下半分のプロンプトに `host:` で始まる行を書いていると、それも出ます。そちらは消さなくてかまいません。）
 
 ```bash
 grep -n -E "^ *host:" ~/continuo-work/WORKFLOW.md
 ```
 
+**そのあと、v0.2.0 を入れ直します。**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.2.0
+```
+
 **`host:` に `github.com` 以外を書いていた人は、行を消すだけでは元の接続先へ繋がりません。**
 v0.2.0 が繋ぐ先は `github.com` だけです。`owner`・`project_number`・`trust.repositories` も `github.com` 側の値へ戻してください
 （「目的別使用例」の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」の「戻すとき。」）。
+**`claude.env` に `GH_HOST` を書いていたなら、その行も消してください。**v0.2.0 は、`claude.env` の `GH_HOST` と接続先の食い違いを確かめません。
+残したままだと、continuo は `github.com` を見張るのに、エージェントの `gh` は `GH_HOST` の先を向きます。
+
+**v0.2.1 へ上げたときに clone を取り直した人は、同じ名前の clone が2つ在ります**
+（元の場所と、`<ghq の root>/github.com/<owner>/<repo>`）。v0.2.0 は clone を `<owner>/<repo>` だけで引き、2行返ると1行目を採ります。
+**どちらが採られるかは、確かめていません。**使わないほうの clone を片付けてから戻してください。
 
 ### v0.1.15 から v0.2.0 へ上げるとき
 

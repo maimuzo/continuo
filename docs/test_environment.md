@@ -126,11 +126,22 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 
 ```bash
 # continuo を止める（pane は閉じないので、必要なら自分で閉じる）
-# **`--id e2e` を付けて起動したものだけに当てる。**`pgrep -f 'continuo$'` は使わない。
-# コマンド行が `continuo` で終わるものを探すので、`--id e2e .` で起動した検証用には当たらず、
-# 引数なしで起動した本番の continuo には当たる
-pid="$(pgrep -f 'continuo --id e2e' | head -1)"
-[ -n "$pid" ] && kill -INT "$pid"
+# --id e2e を付けて起動したものだけに当てる。
+# プロセスの名前が continuo のものだけを拾い、その中から、コマンド行に --id e2e を持つものを選ぶ。
+# pgrep -f でコマンド行だけを見て探さない:
+#   - pgrep -f 'continuo$' は、--id e2e . で起動した検証用には当たらず、引数なしで起動した本番の continuo に当たる
+#   - pgrep -f 'continuo --id e2e' は、背後で起動したときのシェル（コマンド行に同じ文字列を持つ）にも当たる
+pid=""
+for p in $(pgrep -x continuo); do
+	if ps -o args= -p "$p" | grep -Eq -- '--id e2e( |$)'; then
+		pid="$p"
+	fi
+done
+if [ -n "$pid" ]; then
+	kill -INT "$pid"
+else
+	echo "--id e2e を付けて起動した continuo は見つかりません（止めていません）"
+fi
 
 # worktree と branch と herdr の workspace をまとめて消す
 # --id は起動したときと同じ名前を渡す。渡さないと、空いている既定のロックを見て

@@ -321,14 +321,20 @@ git diff "$prev"..origin/main -- internal/config/ \
 **[internal/config/validate.go](../internal/config/validate.go) の外にも在る**ので、`internal/config/` の全体を見る。
 v0.2.1 では、`claude.env` の `GH_HOST` の食い違いで起動を断る検査が
 [internal/config/host.go](../internal/config/host.go) に入り、`validate.go` だけを見るコマンドは0行を返した（実測: 2026-10-03）。
-**`required` という語では当たらない。**弾く条件の側にその語が出ないためである。
+`internal/config/` の中で誤りを返しているのは、この3つの語だけである（同じ日の実測で、`fmt.Errorf` と `errors.New` は0件）。
+**探す語を `required` の1語へ縮めないこと。**必須かどうかを見る検査にしか当たらず、値の形で弾く検査を全部落とす。
 
 **出た行を1行ずつ読み、既存の設定が起動しなくなるものかを判定する。**新しいキーの値の形を見るだけの検査も、同じ語で当たる。
 
-**このコマンドが拾うのは `internal/config/` の中だけである。**
-**設定を変えなくても動きが変わる箇所は、ここには出ない。**
-v0.2.1 の clone の引き方の変更（`internal/workspace/git.go`）がそうだった。
-**そちらは、上の `git log` に並んだ pull request の本文と、対の issue の説明から拾う。**
+**0行でも、「起動しなくなる変更は無い」とは言えない。**このコマンドが拾わないものが3つある。
+
+| 拾わないもの | 例 |
+| --- | --- |
+| **弾く条件だけを狭めた変更。**誤りを返す行は変わらないので、`^+` の行に出ない | v0.2.0 で、マージンに `100` を書けなくなった。差分は `> 100` を `>= 100` へ変えた1行で、このコマンドには出ない（`v0.1.15..v0.2.0` へ当てて実測: 2026-10-03） |
+| **`internal/config/` の外で、設定の値を見て起動を断る検査** | `herdr.protocol` の照合（`internal/herdr/`）、起動時の検査（`internal/daemon/checks.go`） |
+| **設定を変えなくても動きが変わる箇所** | v0.2.1 の clone の引き方の変更（`internal/workspace/git.go`） |
+
+**この3つは、上の `git log` に並んだ pull request の本文と、対の issue の説明から拾う。**
 
 ## 4. 版を決める
 
