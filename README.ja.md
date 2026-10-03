@@ -37,8 +37,9 @@ Go で書いており、OpenAI の symphony の仕様を実装しています。
 | `In Review` | continuo | エージェントが作業を終えると自動で移ります。issue を開いて結果を確認してください。**`Done` へ動かすかどうかは、あなたが決めます** |
 | `Blocked` | continuo | エージェントが行き詰まったときと、あなたの回答を待っているときに自動で移ります。issue のコメントに対応方法を書いて、`Ready` へ戻してください |
 | `Done` | **あなた** | ここへ動かすと、continuo が worktree と branch を消します |
+| `Direct Chat`（使うときだけ） | **あなた** | あなたが pane で Claude Code と直接話し続けます。continuo は指示を送りません。**issue の担当者を1人だけにしてください。**その1人は、pane を開きたい PC の continuo が使っている `gh` のアカウントです。切りがついたら `Ready` か `In Progress` へ戻してください |
 
-**Status の名前は、いま使っているものそのままで構いません。**`Ready` でも `Todo` でも、`continuo setup` で5つの役割に一度だけ対応づけます。
+**Status の名前は、いま使っているものそのままで構いません。**`Ready` でも `Todo` でも、`continuo setup` で6つの役割に一度だけ対応づけます（6つ目の direct chat は飛ばせます）。
 
 ## エージェントの状況を確認可能
 
@@ -109,7 +110,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **`continuo doctor` は18の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / **プロンプトの変数** / claude / **agent teams** / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / **自動化** / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
-**`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
+**`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**`continuo doctor` そのものが動けなかったときは 3、引数の誤りは 2 です。
 **ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**
 **カンバンを読めなかったこと**（レートリミットや、検査が時間切れになったとき）**も `!` で出ます。**
 continuo は起動のたびに同じ読み取りを行うので、**その `!` が出ているあいだは起動しません。**
@@ -288,14 +289,14 @@ continuo prompt --show --builtin  # 組み込みのぶんだけ
 **キーを消したり改名したりすると、古い設定ファイルは起動しなくなります。**その変更は release notes に書きます。
 
 **画面に出す文言は英語と日本語を選べます。**`WORKFLOW.md` の `language` で決めます（既定は `auto`。環境変数 `LANG` から決め、決まらなければ英語になります）。
-**まだ日本語だけのもの。**インストーラーの案内・`continuo init` が書く `WORKFLOW.md` の雛形・continuo が issue へ書くコメント・この README 以外の文書。
+**まだ日本語だけのもの。**インストーラーの案内・`continuo init` が書く `WORKFLOW.md` の雛形・continuo がエージェントへ送る組み込みの指示書・continuo が issue へ書くコメント・この README 以外の文書。
 
 ## もっと詳しく
 
 | | |
 | --- | --- |
-| **なぜそう作ったか**（読むならこちら） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md)（634行） |
-| 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
+| **なぜそう作ったか**（読むならこちら） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) |
+| 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
 | **作りの形からくる問題**（コードを直す前に読む） | [docs/bug_details.md](docs/bug_details.md)（繰り返し噛みつく7つと、触るときの注意） |
 | **issue 1件が着手から片付けまでどう進むか** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md)（Status の移り変わり・会話の引き継ぎ・自動化に横取りされた Status の戻し方。図つき） |

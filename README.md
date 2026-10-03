@@ -37,8 +37,9 @@ Put your task in an issue, move it to `Ready`, and continuo takes it from there.
 | `In Review` | continuo | The agent finished. Open the issue and check the result — **moving it to `Done` is yours to decide** |
 | `Blocked` | continuo | The agent got stuck or needs an answer. Reply in an issue comment, then move it back to `Ready` |
 | `Done` | **You** | continuo removes the worktree and the branch |
+| `Direct Chat` (optional) | **You** | You keep talking to Claude Code in the pane yourself, and continuo sends nothing. Assign the issue to exactly one person — the `gh` account of the continuo on the machine that should open the pane. Move it back to `Ready` or `In Progress` when you are done |
 
-**Your Status names do not have to match.** `Ready` or `Todo`, `In Review` or `Needs review` — you map your own option names to these five roles once, with `continuo setup`.
+**Your Status names do not have to match.** `Ready` or `Todo`, `In Review` or `Needs review` — you map your own option names to these roles once, with `continuo setup` (six roles; the sixth, direct chat, can be skipped).
 
 ## You can see what it is doing
 
@@ -103,7 +104,7 @@ How many issues run at once is a setting (two by default).
 
 `continuo doctor` runs eighteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **agent teams**, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, **kanban automations**, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
-**A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
+**A `✗` means the exit code is 1; a `!` on its own leaves it at 0.** Exit code 3 means `continuo doctor` itself could not run, and 2 means the arguments were wrong.
 Exit code 0 is not the same as "continuo will start", though. **Failing to read the kanban board**
 (rate limiting, or the check running out of time) **also shows up as `!`**, and continuo performs
 the same read every time it starts — so while that `!` is there, it will not start.
@@ -250,7 +251,7 @@ claude:
 
 **Do not write things like "write `CONTINUO-STATUS: review` when you are done" or "commit and push before that" in the body.** They already live in the brief built into the continuo binary.
 
-**Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (it ships saying Japanese — change it if you want something else), and so on. Delete any you do not need. **continuo still runs with an empty body.**
+**Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (`continuo init` fills it in from the language it was using on screen — change or delete it), and so on. Delete any you do not need. **continuo still runs with an empty body.**
 
 ```bash
 continuo prompt --show            # the whole text that gets sent (built-in + your body, minus the section that attaches people's comments)
@@ -286,8 +287,8 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 
 | | |
 | --- | --- |
-| **Why it is built this way** (start here) | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) (634 lines) |
-| The full record: reasoning, measurements, rejected alternatives | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) (nearly 4,800 lines) |
+| **Why it is built this way** (start here) | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) |
+| The full record: reasoning, measurements, rejected alternatives | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
 | Use case specifications (RUCM) | [docs/spec/usecases/](docs/spec/usecases/) |
 | **How one issue is driven end to end** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md) — the status transitions, how the agent gets its previous conversation back, and how a status taken over by GitHub automation is put back (Japanese, with diagrams) |
 | **Problems that come from the shape of the design** (read before changing code) | [docs/bug_details.md](docs/bug_details.md) — the seven that keep biting, and what to watch for when you touch them (Japanese) |
