@@ -133,14 +133,14 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 #   - pgrep -f 'continuo --id e2e' は、背後で起動したときのシェル（コマンド行に同じ文字列を持つ）にも当たる
 pid=""
 for p in $(pgrep -x continuo); do
-	if ps -o args= -p "$p" | grep -Eq -- '--id e2e( |$)'; then
-		pid="$p"
-	fi
+    if ps -o args= -p "$p" | grep -Eq -- '--id e2e( |$)'; then
+        pid="$p"
+    fi
 done
 if [ -n "$pid" ]; then
-	kill -INT "$pid"
+    kill -INT "$pid"
 else
-	echo "--id e2e を付けて起動した continuo は見つかりません（止めていません）"
+    echo "--id e2e を付けて起動した continuo は見つかりません（止めていません）"
 fi
 
 # worktree と branch と herdr の workspace をまとめて消す
