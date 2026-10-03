@@ -37,7 +37,7 @@
 | エージェント | the agent | README の "the agent needs something from you"。`worker` `the AI` は使わない |
 | 常駐 | daemon | README の `# start the daemon` |
 | 選択肢（Status の） | option | GitHub 自身が single-select の値をこう呼ぶ |
-| 役割（5つの） / 割り当てる | role / map | README の "you map your own option names to these five roles" |
+| 役割（6つの） / 割り当てる | role / map | README の "you map your own option names to these roles once" |
 | 対応表（`tracker.automated_state_rewrite`） | rewrite table | README の "the rewrite table's keys"。`mapping table` は使わない |
 | 自動化（カンバンの `Settings` → `Workflows` で切り替える組み込みの仕掛け） | automation | **英語で `workflow` と書かない。**このリポジトリには `WORKFLOW.md`（設定ファイル）と GitHub Actions の定義が両方あり、同じ語が3つのものを指すことになる。GraphQL の型名だけは `ProjectV2Workflow` のまま書く（GitHub が付けた名前である） |
 | agent teams | agent teams | **訳さない。**Claude Code の機能の名前である（公式文書の題名が "Orchestrate teams of Claude Code sessions"）。「エージェントチーム」と書かない |
