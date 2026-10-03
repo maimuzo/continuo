@@ -590,8 +590,12 @@ func TestDaemon_接続先がGHEで起動時にカンバンを読めなければd
 					t.Errorf("出力に %q が無い:\n%s", want, logs.String())
 				}
 			}
-			if got := strings.Contains(logs.String(), "3.20"); got != tc.wantVersion {
-				t.Errorf("版（3.20）の案内の有無が違う: got %v, want %v\n%s", got, tc.wantVersion, logs.String())
+			// **「3.20」だけを探さない。**ログの各行には、ミリ秒つきの時刻が付く（`…:13.204+09:00`）。
+			// 「3.20」は時刻の中に偶然現れるので、版に触れていないのに落ちる。
+			// **文面の中にしか現れない形（数字の直後の語まで）で探す。**
+			got := strings.Contains(logs.String(), "3.20 以上") || strings.Contains(logs.String(), "3.20 or later")
+			if got != tc.wantVersion {
+				t.Errorf("版（3.20 以上）の案内の有無が違う: got %v, want %v\n%s", got, tc.wantVersion, logs.String())
 			}
 		})
 	}
