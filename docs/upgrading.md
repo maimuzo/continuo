@@ -302,7 +302,7 @@ statusline取得ができません（使える clone が無い: trust.repositori
 **確かめ方。**
 
 ```bash
-grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *["']?auto|source: *["']?statusline)' ~/continuo-work/WORKFLOW.md
+grep -n -E "^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *[\"']?auto|source: *[\"']?statusline)" ~/continuo-work/WORKFLOW.md
 ```
 
 **何も出なければ、v0.1.15 が読めない行は残っていません。**

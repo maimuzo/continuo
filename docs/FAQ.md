@@ -1760,7 +1760,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 **次のコマンドで何も出なければ、v0.1.15 が読めない行は残っていません。**
 
 ```bash
-grep -n -E '^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *["']?auto|source: *["']?statusline)' ~/continuo-work/WORKFLOW.md
+grep -n -E "^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|weekly_wait_limit_minutes|permission_mode: *[\"']?auto|source: *[\"']?statusline)" ~/continuo-work/WORKFLOW.md
 ```
 
 **1 で取った控えがあれば、それへ戻すのがいちばん確かです。**
