@@ -573,7 +573,9 @@ func TestTemplate_知らせることは応答ではなく報告へ書かせる(t
 //
 // 与える情報: prompt.Builtin() の 3-6 の節の「貼ったら、検査を回し直す」。
 // 成功条件: `--repo` だけでは足りないと書き、出した先の branch 名を `headRefName` で読ませ、
-// 出した先の workflow を contents API で読ませる。
+// 出した先の workflow を、pull request の merge commit（`refs/pull/<PR番号>/merge`）から contents API で読ませる。
+// `ref=` に branch 名を書かせない（push 先は origin なので、その branch はふつう出した先に無く 404 になる）。
+// 読めなかったときは「検査が無い」と扱わせず、3-7 の報告に書いて止まらせる。
 func TestTemplate_別のリポジトリへ出したときは検査のbranchとworkflowも出した先から決めさせる(t *testing.T) {
 	section := sectionOf(t, prompt.Builtin(), changeReviewHeading)
 	checks := section[strings.Index(section, "### 貼ったら、検査を回し直す"):]
@@ -581,13 +583,76 @@ func TestTemplate_別のリポジトリへ出したときは検査のbranchとwo
 		"**`--repo` だけでは足りません。**",
 		"`--branch` には、出した先の pull request の branch 名を書いてください",
 		"gh pr view <PR番号> --repo <出した先> --json headRefName --jq .headRefName",
-		"手元の `.github/workflows/` ではなく、出した先のリポジトリの workflow で決めてください",
-		`gh api "repos/<出した先>/contents/.github/workflows?ref=<branch 名>" --jq '.[].path'`,
-		`gh api "repos/<出した先>/contents/<そのパス>?ref=<branch 名>"`,
+		"手元の `.github/workflows/` ではなく、出した先の pull request の merge commit にある workflow で決めてください",
+		"`pull_request` で走る workflow の定義は、出した先のリポジトリが作る merge commit（`refs/pull/<PR番号>/merge`）から読まれます",
+		"**`ref=` に branch 名を書かないでください。**6-3 のとおり push 先は `origin`（issue のリポジトリ）",
+		`gh api "repos/<出した先>/contents/.github/workflows?ref=refs/pull/<PR番号>/merge" --jq '.[].path'`,
+		`gh api "repos/<出した先>/contents/<そのパス>?ref=refs/pull/<PR番号>/merge"`,
+		"**この2つの `gh api` が失敗したときは、「検索で1件も当たらない」と扱わないでください。**",
+		"読めなかったことと回し直しを飛ばしたことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください",
 	} {
 		if !strings.Contains(checks, want) {
 			t.Errorf("「貼ったら、検査を回し直す」に %q がありません。7-3 のとき手元の branch と workflow を見ます", want)
 		}
+	}
+	if strings.Contains(checks, "?ref=<branch 名>") {
+		t.Error("「貼ったら、検査を回し直す」が、workflow を head の branch 名で読ませています。その branch はふつう出した先に無く 404 になります")
+	}
+}
+
+// 目的: 段0 が出し直す番号を正しく説明させることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**段0 は自分の最新の判断票を拾う。前の判断票が消されても、それより古い判断票が残っていれば、
+// その続きの番号を出す。「1周目と出します」と言い切ると、エージェントは出た番号を疑って自分で1に直す。
+//
+// 与える情報: prompt.Builtin() の 3-2 の節。
+// 成功条件: 「それより前の判断票の続きか、無ければ1周目」と書き、言い切りの旧い文が無い。
+func TestTemplate_消された判断票のあとの段0の番号を言い過ぎない(t *testing.T) {
+	plan := sectionOf(t, prompt.Builtin(), planReviewHeading)
+	if !strings.Contains(plan, "（消されていれば、段0 はそれより前の判断票の続きか、無ければ1周目と出します）") {
+		t.Errorf("%q の節に、段0 が古い判断票の続きを出しうることが書かれていません", planReviewHeading)
+	}
+	if strings.Contains(plan, "（消されていれば、段0 は1周目と出します）") {
+		t.Errorf("%q の節に、段0 が必ず1周目と出すと読める旧い文が残っています", planReviewHeading)
+	}
+}
+
+// 目的: RUCM の記述と判断ログが、指示書と同じく「知らせることは 3-7 の報告へ書く」になっていることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**指示書だけ直すと、記述と判断ログが「応答に書く」のまま残り、
+// 次に記述からテストや指示書を読み直す人が、古い出口を正として扱う。
+//
+// 与える情報: docs/spec/usecases の下の *.rucm.md と *.judge_log.md。
+// 成功条件: 「応答に書」「応答の最後に書」を含む行は、3-1 の「報告を書けなかったときだけ応答」の例外を書いた行だけである。
+// 応答の最後に表明を書く行（「応答の最後に…表明を1行書く」）は、この検査に当たらない。
+func TestTemplate_RUCMの記述も知らせることを報告へ書く(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "docs", "spec", "usecases")
+	re := regexp.MustCompile(`応答に書|応答の最後に書`)
+	n := 0
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !(strings.HasSuffix(path, ".rucm.md") || strings.HasSuffix(path, ".judge_log.md")) {
+			return nil
+		}
+		n++
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if re.MatchString(line) && !strings.Contains(line, "報告を書けなければ") && !strings.Contains(line, "報告を書けなかったときだけ") {
+				t.Errorf("%s:%d が、知らせることを応答に書かせています（3-7 の報告の `### 詳細` へ）: %s", path, i+1, line)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatalf("%s の下に RUCM の記述が1つもありません。検査が素通りしています", root)
 	}
 }
 

@@ -13057,7 +13057,7 @@ fi
 **`ID=` と `NO=` は段0 が出した値のまま、もう一度叩いてください**（実装の判断票なら、`PR=` と `PRREPO=` も確かめます）。
 **`ID=` を空にして叩き直さないでください。**前の判断票の続きが別のコメントに分かれます。
 **叩き直しても `判断票を読めませんでした` と出るときは、段0 からやり直してください。**段0 と段5 のあいだに前の判断票が消されていると、段5 は何度叩いても読めません。
-段0 は前の判断票を探し直し、`ID=` と今回の周の番号を出し直します。**`ID=` は、段0 が出し直した値に従います**（消されていれば、段0 は1周目と出します）。自分の判断で空にするのではありません。
+段0 は前の判断票を探し直し、`ID=` と今回の周の番号を出し直します。**`ID=` は、段0 が出し直した値に従います**（消されていれば、段0 はそれより前の判断票の続きか、無ければ1周目と出します）。自分の判断で空にするのではありません。
 **`貼れませんでした` と出たときと、段0 からやり直しても `判断票を読めませんでした` と出るときは、そのことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください。**
 **ROUND と NOTE の中に、終わりの語（`ROUND`・`NOTE`・`COUNTS`）だけの行を作らないでください**（上の計画のコメントと同じ理由です）。
 
@@ -13238,18 +13238,22 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 **それ以外は、貼ったあとに自分で回し直してください。**判断票を前の判断票へ書き足したときも同じです。
 **下の `gh pr checks` で待つのは、どちらのときも毎周行います。**
 **7-3 で別のリポジトリへ出したときは、下の3つのコマンドの `--repo` を、出した先のリポジトリ（判断票の `PRREPO=` と同じ値）に置き換えてください。**
-**`--repo` だけでは足りません。**手元の worktree は issue のリポジトリなので、`git branch --show-current` も `.github/workflows/` も、出した先のものではありません。
+**`--repo` だけでは足りません。**手元の worktree は issue のリポジトリなので、`git branch --show-current` が出した先の pull request の branch 名とは限らず、手元の `.github/workflows/` も出した先の検査を走らせている定義ではありません。
 **`--branch` には、出した先の pull request の branch 名を書いてください。**次で読めます。
 
     gh pr view <PR番号> --repo <出した先> --json headRefName --jq .headRefName
 
-**回し直す workflow の名前は、手元の `.github/workflows/` ではなく、出した先のリポジトリの workflow で決めてください。**
-ファイルの一覧と中身は、次で読めます（`<branch 名>` は上で読んだ値です）。
+**回し直す workflow の名前は、手元の `.github/workflows/` ではなく、出した先の pull request の merge commit にある workflow で決めてください。**
+`pull_request` で走る workflow の定義は、出した先のリポジトリが作る merge commit（`refs/pull/<PR番号>/merge`）から読まれます。
+**`ref=` に branch 名を書かないでください。**6-3 のとおり push 先は `origin`（issue のリポジトリ）なので、その branch はふつう出した先にありません。
+ファイルの一覧と中身は、次で読めます。
 
-    gh api "repos/<出した先>/contents/.github/workflows?ref=<branch 名>" --jq '.[].path'
-    gh api "repos/<出した先>/contents/<そのパス>?ref=<branch 名>" -H 'Accept: application/vnd.github.raw+json'
+    gh api "repos/<出した先>/contents/.github/workflows?ref=refs/pull/<PR番号>/merge" --jq '.[].path'
+    gh api "repos/<出した先>/contents/<そのパス>?ref=refs/pull/<PR番号>/merge" -H 'Accept: application/vnd.github.raw+json'
 
 **下の「`.github/workflows/` の中を検索し」は、7-3 のときはこの2つで読んだ中身を検索することです。**
+**この2つの `gh api` が失敗したときは、「検索で1件も当たらない」と扱わないでください。**検査が無いのではなく、読めなかっただけです。
+**`gh run rerun` を叩かずに、読めなかったことと回し直しを飛ばしたことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください。**
 
     gh run list --repo {{.issue.owner}}/{{.issue.repo}} --branch "$(git branch --show-current)" \
       --limit 10 --json databaseId,workflowName,conclusion,createdAt
@@ -15314,7 +15318,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | **判断票を読み取れないとき** | 段0 と段5 のどちらでも、`ID=` が入っているのに `gh api` で前の判断票の本文を読み取れなかったら、貼らずに「判断票を読めませんでした」と出して止める。`gh` の出力を一時ファイルへ落としてから終了コードを見る（パイプの先へ流すと、失敗が消える）。段0 の「探せなかったことと、無いことを分ける」と揃える。止まったときの案内は、実装なら `PR=` と `PRREPO=` を確かめて叩き直す、計画なら書き換える値が無いのでそのまま叩き直す、と分ける。段5 で叩き直しても出るなら段0 からやり直す（段0 と段5 のあいだに前の判断票が消されると、段5 は何度叩いても読めない。`ID=` は段0 が出し直した値に従い、自分の判断では空にしない）。段0 からやり直しても出るなら 3-7 の報告に書いて `blocked` |
 | **判断票は書き足すと run の成果に数えられない** | continuo は、作成時刻が run の開始より後の issue のコメントだけを成果として数える（`hasRunComment`。設計 5-3k の理由で更新時刻は見ない）。計画の判断票は、新しく貼ったときだけ数えられ、書き足したときは数えられない。実装の判断票は pull request のコメントで continuo が読まないので、新しく貼っても数えられない。だから判断票だけで turn を終えさせない。連続10回で止まるとき・打ち切るとき・その他の止まる経路（印の立場が数えられないとき、判断票を探せない・読めない・貼れないとき）は、3-7 の報告を書いてから `blocked` を出す。数えられる側へ寄せる（書き足した判断票も数える）案は採らない。5-3k のとおり、前の run のコメントを書き足しで成果と誤認する |
 | **7-3 の検査を回し直す段** | 3-6 の「貼ったら、検査を回し直す」の `gh run list`・`gh run rerun`・`gh pr checks` も、7-3 で別のリポジトリへ出したときは `--repo` を出した先（判断票の `PRREPO=` と同じ値）にする。置き換えないと、issue のリポジトリの同じ番号の無関係な pull request の検査を待つ |
-| **7-3 の検査の branch と workflow** | 手元の worktree は issue のリポジトリなので、7-3 では `--repo` だけでは足りない。`gh run list --branch` には出した先の pull request の branch 名（`gh pr view --json headRefName`）を書き、回し直す workflow の名前は、手元の `.github/workflows/` ではなく出した先のリポジトリの workflow（`gh api repos/<出した先>/contents/.github/workflows?ref=<branch 名>`）を読んで決める |
+| **7-3 の検査の branch と workflow** | 手元の worktree は issue のリポジトリなので、7-3 では `--repo` だけでは足りない。`gh run list --branch` には出した先の pull request の branch 名（`gh pr view --json headRefName`）を書き、回し直す workflow の名前は、手元の `.github/workflows/` ではなく、出した先の pull request の merge commit にある workflow（`gh api repos/<出した先>/contents/.github/workflows?ref=refs/pull/<PR番号>/merge`）を読んで決める。`pull_request` で走る workflow の定義は merge commit から読まれ、6-3 のとおり push 先は `origin`（issue のリポジトリ）なので、head の branch 名を `ref=` に書くとふつう 404 になる。この `gh api` が失敗したら「検査が無い」と扱わず、回し直しを飛ばしたことを 3-7 の報告に書いて `blocked` で止まる（黙って飛ばすと、人間は検査が回り直していないことを知れない） |
 | **「応答に書く」を 3-7 の報告へそろえる** | 止まる経路と、人間に知らせたい事柄（取り込めなかった・回し直す相手が無い・7-2 で PR の本文を読めなかった）は、応答ではなく 3-7 の報告の `### 詳細` に書かせる。応答は issue に残らず、報告を書かずに `blocked` を出すと書かせ直しに回るためである。例外は 3-1 で issue を読めなかったときだけで、`gh` が落ちていると報告も書けないことがあるので、書けなかったときに限り応答の最後に書かせる |
 | **判断票の形** | 先頭に CRITICAL / HIGH / MEDIUM / LOW の件数の遷移表を必ず置き、周ごとの中身は `<details>` で畳む。削除した周は、遷移表の下に1行で残す |
 | **重さの名前** | CRITICAL / HIGH / MEDIUM / LOW。すべて大文字（`mid` をやめる） |

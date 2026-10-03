@@ -123,20 +123,20 @@ SPECIFIC ALTERNATIVE FLOW マージが衝突する:
 RFS BASIC FLOW 5
 1. エージェントはマージを取り込む前へ戻す。
 2. エージェントは、push していない commit が残っていれば、push する。
-3. エージェントは取り込めなかったことを応答に書く。
+3. エージェントは取り込めなかったことを報告のコメントの詳細に書く。
 4. エージェントは応答の最後に判断を仰ぐ表明を1行書く。
 5. システムはカンバンの issue の Status に blocked の遷移先を書く。
 6. ABORT
-POSTCONDITION: マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は応答で取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。
+POSTCONDITION: マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は報告のコメントで取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。
 
 SPECIFIC ALTERNATIVE FLOW 読めない:
 RFS BASIC FLOW 10
-1. エージェントは読めなかったことを応答の最後に書く。
+1. エージェントは読めなかったことを報告のコメントの詳細に書く。報告を書けなければ応答の最後に書く。
 2. エージェントは commit していない変更を commit して push する。
 3. エージェントは応答の最後に判断を仰ぐ表明を1行書く。
 4. システムはカンバンの issue の Status に blocked の遷移先を書く。
 5. ABORT
-POSTCONDITION: エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。
+POSTCONDITION: エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで何を読めなかったかを読む。報告を書けなかったときは応答で読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。
 
 SPECIFIC ALTERNATIVE FLOW 計画を書いて人間確認で止まる:
 RFS BASIC FLOW 12
@@ -213,7 +213,7 @@ BOUNDED ALTERNATIVE FLOW レビューが止まる:
 RFS BASIC FLOW 16,21
 1. システムは run を終える。
 2. ABORT
-POSTCONDITION: レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。
+POSTCONDITION: レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。
 
 SPECIFIC ALTERNATIVE FLOW pullrequestが出ていない:
 RFS BASIC FLOW 19
@@ -371,8 +371,8 @@ sequenceDiagram
 
 | 代替フロー | どの記述に在るか | `builtin.md` の節 | 利用者が読むもの |
 | --- | --- | --- | --- |
-| `マージが衝突する` | この記述 | 3-1 | 応答 |
-| `読めない` | この記述 | 3-1 | 応答 |
+| `マージが衝突する` | この記述 | 3-1 | 報告のコメント |
+| `読めない` | この記述 | 3-1 | 報告のコメント。書けなかったときだけ応答 |
 | `計画を書いて人間確認で止まる` | この記述 | 3-2 | 計画のコメントと、報告のコメント |
 | `対応しないと決める` | この記述 | 3-2 | 対応しない理由のコメント |
 | `了承も回答も無い` | この記述 | 1 | 報告のコメント |
@@ -462,11 +462,11 @@ flowchart TD
     A2S2["マージが始まる前に断られる 2 RESUME STEP 4"]
     A3S1["マージが衝突する 1 エージェントはマージを取り込む前へ戻す"]
     A3S2["マージが衝突する 2 エージェントは、push していない commit が残っていれば、push する"]
-    A3S3["マージが衝突する 3 エージェントは取り込めなかったことを応答に書く"]
+    A3S3["マージが衝突する 3 エージェントは取り込めなかったことを報告のコメントの詳細に書く"]
     A3S4["マージが衝突する 4 エージェントは応答の最後に判断を仰ぐ表明を1行書く"]
     A3S5["マージが衝突する 5 システムはカンバンの issue の Status に blocked の遷移先を書く"]
     A3S6(["マージが衝突する 6 ABORT"])
-    A4S1["読めない 1 エージェントは読めなかったことを応答の最後に書く"]
+    A4S1["読めない 1 エージェントは読めなかったことを報告のコメントの詳細に書く。報告を書けなければ応答の最後に書く"]
     A4S2["読めない 2 エージェントは commit していない変更を commit して push する"]
     A4S3["読めない 3 エージェントは応答の最後に判断を仰ぐ表明を1行書く"]
     A4S4["読めない 4 システムはカンバンの issue の Status に blocked の遷移先を書く"]

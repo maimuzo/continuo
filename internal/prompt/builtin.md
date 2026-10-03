@@ -535,7 +535,7 @@ fi
 **`ID=` と `NO=` は段0 が出した値のまま、もう一度叩いてください**（実装の判断票なら、`PR=` と `PRREPO=` も確かめます）。
 **`ID=` を空にして叩き直さないでください。**前の判断票の続きが別のコメントに分かれます。
 **叩き直しても `判断票を読めませんでした` と出るときは、段0 からやり直してください。**段0 と段5 のあいだに前の判断票が消されていると、段5 は何度叩いても読めません。
-段0 は前の判断票を探し直し、`ID=` と今回の周の番号を出し直します。**`ID=` は、段0 が出し直した値に従います**（消されていれば、段0 は1周目と出します）。自分の判断で空にするのではありません。
+段0 は前の判断票を探し直し、`ID=` と今回の周の番号を出し直します。**`ID=` は、段0 が出し直した値に従います**（消されていれば、段0 はそれより前の判断票の続きか、無ければ1周目と出します）。自分の判断で空にするのではありません。
 **`貼れませんでした` と出たときと、段0 からやり直しても `判断票を読めませんでした` と出るときは、そのことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください。**
 **ROUND と NOTE の中に、終わりの語（`ROUND`・`NOTE`・`COUNTS`）だけの行を作らないでください**（上の計画のコメントと同じ理由です）。
 
@@ -716,18 +716,22 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 **それ以外は、貼ったあとに自分で回し直してください。**判断票を前の判断票へ書き足したときも同じです。
 **下の `gh pr checks` で待つのは、どちらのときも毎周行います。**
 **7-3 で別のリポジトリへ出したときは、下の3つのコマンドの `--repo` を、出した先のリポジトリ（判断票の `PRREPO=` と同じ値）に置き換えてください。**
-**`--repo` だけでは足りません。**手元の worktree は issue のリポジトリなので、`git branch --show-current` も `.github/workflows/` も、出した先のものではありません。
+**`--repo` だけでは足りません。**手元の worktree は issue のリポジトリなので、`git branch --show-current` が出した先の pull request の branch 名とは限らず、手元の `.github/workflows/` も出した先の検査を走らせている定義ではありません。
 **`--branch` には、出した先の pull request の branch 名を書いてください。**次で読めます。
 
     gh pr view <PR番号> --repo <出した先> --json headRefName --jq .headRefName
 
-**回し直す workflow の名前は、手元の `.github/workflows/` ではなく、出した先のリポジトリの workflow で決めてください。**
-ファイルの一覧と中身は、次で読めます（`<branch 名>` は上で読んだ値です）。
+**回し直す workflow の名前は、手元の `.github/workflows/` ではなく、出した先の pull request の merge commit にある workflow で決めてください。**
+`pull_request` で走る workflow の定義は、出した先のリポジトリが作る merge commit（`refs/pull/<PR番号>/merge`）から読まれます。
+**`ref=` に branch 名を書かないでください。**6-3 のとおり push 先は `origin`（issue のリポジトリ）なので、その branch はふつう出した先にありません。
+ファイルの一覧と中身は、次で読めます。
 
-    gh api "repos/<出した先>/contents/.github/workflows?ref=<branch 名>" --jq '.[].path'
-    gh api "repos/<出した先>/contents/<そのパス>?ref=<branch 名>" -H 'Accept: application/vnd.github.raw+json'
+    gh api "repos/<出した先>/contents/.github/workflows?ref=refs/pull/<PR番号>/merge" --jq '.[].path'
+    gh api "repos/<出した先>/contents/<そのパス>?ref=refs/pull/<PR番号>/merge" -H 'Accept: application/vnd.github.raw+json'
 
 **下の「`.github/workflows/` の中を検索し」は、7-3 のときはこの2つで読んだ中身を検索することです。**
+**この2つの `gh api` が失敗したときは、「検索で1件も当たらない」と扱わないでください。**検査が無いのではなく、読めなかっただけです。
+**`gh run rerun` を叩かずに、読めなかったことと回し直しを飛ばしたことを 3-7 の報告の `### 詳細` に書き、`CONTINUO-STATUS: blocked` で止まってください。**
 
     gh run list --repo {{.issue.owner}}/{{.issue.repo}} --branch "$(git branch --show-current)" \
       --limit 10 --json databaseId,workflowName,conclusion,createdAt

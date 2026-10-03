@@ -3,7 +3,7 @@
   "usecase_name": "まとめて直したissueへ成果を書く",
   "source": {
     "file": "docs/spec/usecases/particular_case/まとめて直したissueへ成果を書く.rucm.md",
-    "rucm_block_sha256": "5954d34e77d93ee8ea23d01054b59af961e4ceb626dc93a60d44f6e3a6bcdef3"
+    "rucm_block_sha256": "200040208d3b9433ab1c19ebdfd057604ce1a461806b5c491229a3c2431d9b4d"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -116,7 +116,7 @@
       "type": "action",
       "flow": "本文を読めない",
       "step": 2,
-      "statement": "エージェントは本文を読めなかったことを応答に書く。"
+      "statement": "エージェントは本文を読めなかったことを報告のコメントの詳細に書く。"
     },
     {
       "id": "本文を読めない-3",
@@ -539,7 +539,7 @@
         "エージェントは VALIDATES THAT pull request の本文を読めている。",
         "CONDITION: NOT pull request の本文を読めている",
         "エージェントは pull request の本文を書き戻さない。",
-        "エージェントは本文を読めなかったことを応答に書く。",
+        "エージェントは本文を読めなかったことを報告のコメントの詳細に書く。",
         "RESUME STEP 5",
         "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
         "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
@@ -571,7 +571,7 @@
         "エージェントは VALIDATES THAT pull request の本文を読めている。",
         "CONDITION: NOT pull request の本文を読めている",
         "エージェントは pull request の本文を書き戻さない。",
-        "エージェントは本文を読めなかったことを応答に書く。",
+        "エージェントは本文を読めなかったことを報告のコメントの詳細に書く。",
         "RESUME STEP 5",
         "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
         "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",
@@ -609,7 +609,7 @@
         "エージェントは VALIDATES THAT pull request の本文を読めている。",
         "CONDITION: NOT pull request の本文を読めている",
         "エージェントは pull request の本文を書き戻さない。",
-        "エージェントは本文を読めなかったことを応答に書く。",
+        "エージェントは本文を読めなかったことを報告のコメントの詳細に書く。",
         "RESUME STEP 5",
         "エージェントは GitHub に、まとめて直した issue に在る、グループの印が付いた自分のコメントを要求する。",
         "エージェントは VALIDATES THAT まとめて直した issue に自分の成果報告のコメントがまだ無い。",

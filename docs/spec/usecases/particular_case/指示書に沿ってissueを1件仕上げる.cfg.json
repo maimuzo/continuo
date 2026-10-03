@@ -3,7 +3,7 @@
   "usecase_name": "指示書に沿ってissueを1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿ってissueを1件仕上げる.rucm.md",
-    "rucm_block_sha256": "a5826de2290199c0db738ae921c2d3ea2c3ffee58abc454e38d4c049888a99c2"
+    "rucm_block_sha256": "775c36c55191c94849ac15c56cf1c4dad2890e5781a0c0121845e8ee41728669"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -35,7 +35,7 @@
           5
         ]
       },
-      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は応答で取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は報告のコメントで取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
     },
     "読めない": {
       "rfs": {
@@ -44,7 +44,7 @@
           10
         ]
       },
-      "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+      "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで何を読めなかったかを読む。報告を書けなかったときは応答で読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
     },
     "計画を書いて人間確認で止まる": {
       "rfs": {
@@ -126,7 +126,7 @@
           21
         ]
       },
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。"
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。"
     },
     "pullrequestが出ていない": {
       "rfs": {
@@ -462,7 +462,7 @@
       "type": "action",
       "flow": "マージが衝突する",
       "step": 3,
-      "statement": "エージェントは取り込めなかったことを応答に書く。"
+      "statement": "エージェントは取り込めなかったことを報告のコメントの詳細に書く。"
     },
     {
       "id": "マージが衝突する-4",
@@ -490,7 +490,7 @@
       "type": "action",
       "flow": "読めない",
       "step": 1,
-      "statement": "エージェントは読めなかったことを応答の最後に書く。"
+      "statement": "エージェントは読めなかったことを報告のコメントの詳細に書く。報告を書けなければ応答の最後に書く。"
     },
     {
       "id": "読めない-2",
@@ -1852,7 +1852,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2068,7 +2068,7 @@
       "id": "P008",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2325,7 +2325,7 @@
       "id": "P012",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2749,7 +2749,7 @@
       "id": "P019",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3049,7 +3049,7 @@
       "id": "P024",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
-      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
+      "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントで、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3351,7 +3351,7 @@
       "id": "P030",
       "terminal": "abort",
       "terminal_flow": "読めない",
-      "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで何を読めなかったかを読む。報告を書けなかったときは応答で読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3381,7 +3381,7 @@
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
         "CONDITION: NOT 読む対象を全部読めている",
-        "エージェントは読めなかったことを応答の最後に書く。",
+        "エージェントは読めなかったことを報告のコメントの詳細に書く。報告を書けなければ応答の最後に書く。",
         "エージェントは commit していない変更を commit して push する。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
@@ -3518,7 +3518,7 @@
       "id": "P035",
       "terminal": "abort",
       "terminal_flow": "マージが衝突する",
-      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は応答で取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は報告のコメントで取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3541,7 +3541,7 @@
         "CONDITION: NOT 取り込むものが在る場合に、取ってきた分岐元をマージできる",
         "エージェントはマージを取り込む前へ戻す。",
         "エージェントは、push していない commit が残っていれば、push する。",
-        "エージェントは取り込めなかったことを応答に書く。",
+        "エージェントは取り込めなかったことを報告のコメントの詳細に書く。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
         "ABORT"

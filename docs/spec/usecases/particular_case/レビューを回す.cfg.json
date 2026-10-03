@@ -3,7 +3,7 @@
   "usecase_name": "レビューを回す",
   "source": {
     "file": "docs/spec/usecases/particular_case/レビューを回す.rucm.md",
-    "rucm_block_sha256": "128430390c7322a0604400c71fa82aa39173dcd4778466077dbc57686a84d8f6"
+    "rucm_block_sha256": "e4f792de6e5a3308c5f05fd0cf4e3c00f1150c7cf9bf9bd2f364aa3aa9f3bec4"
   },
   "root": "BASIC FLOW-2",
   "flows": {
@@ -53,7 +53,7 @@
           ]
         }
       ],
-      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は応答で立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。"
+      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。"
     }
   },
   "nodes": [
@@ -280,7 +280,7 @@
       "type": "action",
       "flow": "判断票が数えられない立場",
       "step": 1,
-      "statement": "エージェントは判断票が検査に数えられないことを応答に書く。"
+      "statement": "エージェントは判断票が検査に数えられないことを報告のコメントの詳細に書く。"
     },
     {
       "id": "判断票が数えられない立場-2",
@@ -619,7 +619,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "判断票が数えられない立場",
-      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は応答で立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。",
+      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。",
       "node_ids": [
         "BASIC FLOW-2",
         "BASIC FLOW-3",
@@ -643,7 +643,7 @@
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
         "CONDITION: 判断票を書いたアカウントの立場が OWNER でも MEMBER でも COLLABORATOR でもない場合",
-        "エージェントは判断票が検査に数えられないことを応答に書く。",
+        "エージェントは判断票が検査に数えられないことを報告のコメントの詳細に書く。",
         "エージェントは commit していない変更を commit して push する。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
@@ -912,7 +912,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "判断票が数えられない立場",
-      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は応答で立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。",
+      "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は報告のコメントで立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。",
       "node_ids": [
         "BASIC FLOW-2",
         "BASIC FLOW-3",
@@ -947,7 +947,7 @@
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
         "CONDITION: 判断票を書いたアカウントの立場が OWNER でも MEMBER でも COLLABORATOR でもない場合",
-        "エージェントは判断票が検査に数えられないことを応答に書く。",
+        "エージェントは判断票が検査に数えられないことを報告のコメントの詳細に書く。",
         "エージェントは commit していない変更を commit して push する。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
