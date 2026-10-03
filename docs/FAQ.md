@@ -1713,7 +1713,7 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 | 順 | 何をするか | コマンド |
 | --- | --- | --- |
 | 1 | **`WORKFLOW.md` の控えを取る** | `cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak` |
-| 2 | **動いている continuo を止める。**走っている run があるなら、終わってからのほうが安全です（下の「走っている run があるまま上げると？」） | 端末で `Ctrl+C`。残っていないかは `pgrep -fl continuo` |
+| 2 | **動いている continuo を止める。**走っている run があるなら、終わってからのほうが安全です（下の「走っている run があるまま上げると？」） | 端末で `Ctrl+C`。残っていないかは `pgrep -lx continuo` |
 | 3 | **実行ファイルを入れ替える** | `curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh \| sh` |
 | 4 | **版を確かめる** | `continuo version` |
 | 5 | **herdr を 0.9.1 へ上げる**（上げたら、6 で `herdr.protocol` を `22` へ直す） | herdr の入れ方に従う |
@@ -1969,7 +1969,7 @@ CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 **直し方。**動いている continuo を止めます。
 
 ```bash
-pgrep -fl continuo
+pgrep -lx continuo
 ```
 
 **わざと2本動かしたいときは、`--id <名前>` を付けます。**

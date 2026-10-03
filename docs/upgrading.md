@@ -1603,7 +1603,7 @@ cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
 > **`abandon` は「continuo は動いていません」と判定し、走っている worktree を消しにいきます。**
 >
 > ```bash
-> pgrep -fl continuo     # 動いているものを確かめる
+> pgrep -lx continuo     # 動いているものを確かめる
 > ```
 >
 > **最後の砦は残っています。**その worktree に herdr の pane が生きていれば `abandon` は止まります。
