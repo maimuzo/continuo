@@ -665,6 +665,27 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 確認のダイアログを出すので、**無人で走る continuo が当たる前に、人間が「常に許可」で答えておく。**
 出るのは読めた項目の名前だけで、トークンの値は画面にもログにも出ない。
 
+### 接続先の GitHub を選ぶ（GitHub Enterprise）
+
+**言いたいこと。**接続先のホスト名を `tracker.provider.host` に1つ書く（既定 `github.com`）。
+**continuo 自身の GraphQL・continuo が起こす `gh` と `ghq`・エージェントが叩く `gh` の宛先を、全部この1つから決める**（詳細版 3-86）。
+
+```yaml
+tracker:
+  provider:
+    host: ghe.example.com      # https:// やパスやポート番号は付けない。変えたら再起動する
+```
+
+| 経路 | どう渡るか（`host: ghe.example.com` のとき） |
+| --- | --- |
+| continuo 自身の GraphQL | `https://ghe.example.com/api/graphql`（`<名前>.ghe.com` なら `https://api.<名前>.ghe.com/graphql`） |
+| continuo が起こす `gh` | `gh auth status --hostname ghe.example.com` など。`gh project …` へは環境変数 `GH_HOST` |
+| continuo が起こす `ghq` | `ghq list -p -e ghe.example.com/octocat/hello-world` |
+| エージェントが叩く `gh` | issue ごとの設定ファイルの `env` に `"GH_HOST": "ghe.example.com"` |
+
+**GitHub Enterprise Server は 3.20 以上が要る。**接続先が `github.com` でないとき、`continuo doctor` が `カンバン` の検査の最初にスキーマを照会し、
+要る要素が無ければ `✗` にする。**GitHub Enterprise の実機では、動くことを確かめていない**（詳細版 3-86d）。
+
 ---
 
 ## 13. symphony の仕様と異なるところ
