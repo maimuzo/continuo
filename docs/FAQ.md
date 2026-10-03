@@ -1754,6 +1754,9 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 **直し方。**実行ファイルを戻す前に、`WORKFLOW.md` から v0.2.0 で足したキー（`rate_limit.refresh_interval_ms` / `tracker.direct_chat_state` など）を消してください。`rate_limit.source: statusline` にしていたなら `oauth_usage_api` か `none` へ戻します。
 **1 で取った控えがあれば、それへ戻すのがいちばん確かです。**
 
+**herdr を 0.9.1 へ上げていたら、herdr も 0.8.2 へ戻してください。**控えの `WORKFLOW.md` が v0.1.15 の雛形どおり `herdr.protocol: 20` なら、herdr 0.9.1（protocol 22）のままでは起動の照合で止まります。
+v0.1.15 が herdr 0.9.1 の上で動くかは確かめていません（`herdr.protocol` を `22` にすれば起動の照合は通りますが、それより先は測っていません）。
+
 ```bash
 cp ~/continuo-work/WORKFLOW.md.bak ~/continuo-work/WORKFLOW.md
 curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.1.15
