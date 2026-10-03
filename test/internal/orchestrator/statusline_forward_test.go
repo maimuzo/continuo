@@ -222,3 +222,41 @@ func TestSettings_statusLineを書かない着手では転送先も書かない(
 		t.Errorf("statusLine を書かないのに %s を書いた: %q", forwardEnvName, got)
 	}
 }
+
+// 目的: issue ごとの設定ファイルの env に、接続先ホストを GH_HOST として書くことを、
+// statusLine を書く着手と書かない着手の両方で確かめる（設計 3-86）。
+//
+// **エージェントの `gh` の宛先は、この値で決まる。**組み込みの指示書は
+// `gh issue view --repo <owner>/<repo>` のようにホストを書かずに叩かせるので、書かないと、
+// GitHub Enterprise の issue を担当するエージェントが github.com へ問い合わせる。
+// **claude.env の map そのものは書き換えない**（着手は並行に走る）。
+//
+// 与える情報: `tracker.provider.host` が `ghe.example.com` の設定と、claude.env に架空のプロキシ。
+// `rate_limit.source` は `statusline`（statusLine を書く）と `none`（書かない）の2通り。
+// 成功条件: どちらでも env の GH_HOST が `ghe.example.com` で、プロキシも残り、
+// 設定に渡した claude.env の map に GH_HOST が増えていないこと。
+func TestSettings_接続先ホストをGH_HOSTとしてenvへ書く(t *testing.T) {
+	for _, source := range []string{ratelimit.SourceStatusline, ratelimit.SourceNone} {
+		t.Run(source, func(t *testing.T) {
+			var claudeEnv map[string]string
+			fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+				cfg.RateLimit.Source = source
+				cfg.Tracker.Provider.Host = "ghe.example.com"
+				cfg.Claude.Env = map[string]string{"HTTPS_PROXY": "http://proxy.example.com:8080"}
+				claudeEnv = cfg.Claude.Env
+			}})
+
+			env := envOf(t, startAndReadIssueSettings(t, fx))
+
+			if got := env["GH_HOST"]; got != "ghe.example.com" {
+				t.Errorf("env の GH_HOST = %q, want ghe.example.com", got)
+			}
+			if env["HTTPS_PROXY"] != "http://proxy.example.com:8080" {
+				t.Errorf("claude.env の値が消えた: %v", env)
+			}
+			if _, ok := claudeEnv["GH_HOST"]; ok || len(claudeEnv) != 1 {
+				t.Errorf("claude.env の map を書き換えた: %v", claudeEnv)
+			}
+		})
+	}
+}

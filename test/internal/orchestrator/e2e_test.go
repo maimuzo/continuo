@@ -211,6 +211,7 @@ func TestTick_着手の13段が設計の順番どおりに進む(t *testing.T) {
 //   - `PreToolUse` / `PostToolUse` の matcher が `*` である
 //   - hook のコマンド行に socket と逃がし先の絶対パスが入っている
 //   - `env` に `CLAUDE_CODE_RETRY_WATCHDOG` が入っている
+//   - `env` に `GH_HOST`（接続先ホスト。設計 3-86）が入っている
 //   - `agent.start` の params に env が**入っていない**
 func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
@@ -279,6 +280,11 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 	}
 	if parsed.Env["CLAUDE_CODE_RETRY_WATCHDOG"] != "1" {
 		t.Fatalf("環境変数が設定ファイルの env に入っていない: %v", parsed.Env)
+	}
+	// **エージェントの `gh` の宛先を、接続先ホストにする**（設計 3-86）。
+	// github.com のときも書く。書かないと、宛先が機械ごとの gh の既定で決まる。
+	if parsed.Env["GH_HOST"] != "github.com" {
+		t.Fatalf("接続先ホストが設定ファイルの env に入っていない: %v", parsed.Env)
 	}
 	if len(parsed.Permissions.Allow) == 0 {
 		t.Fatalf("permissions.allow が空である: %s", raw)

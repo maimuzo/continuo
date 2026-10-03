@@ -1580,7 +1580,7 @@ sequenceDiagram
 | --- | --- |
 | **Status の選択肢名が設定と一致するか** | **合わないと GraphQL がエラーを出さずに 0 件を返し、キューが永久に止まる** |
 | `gh` が使えるか | **エージェントが `gh issue comment` でコメントを書く**（5-3）。Status を動かすのは continuo が GraphQL で行うので、`gh project` のサブコマンドは要らない |
-| `gh auth status` の scope に project が含まれるか | カンバンを読めない |
+| `gh auth status` の scope に project が含まれるか | カンバンを読めない。**検査する相手は接続先ホストである**（`gh auth status --hostname <tracker.provider.host>`。3-86） |
 | ~~対象リポジトリが Claude Code に信頼登録されているか~~ | **ここには置かない。**対象リポジトリの集合はカンバンを読むまで確定しないので、起動時には検査できない。**dispatch の直前に issue ごとに検査する**（下の表） |
 | herdr の socket に到達でき、protocol が想定内か | 通信できない |
 | **設定ファイルの未知キーと不正値** | 書いたつもりの設定が効いていないことに気づけない。**これは仕様から意図的に外している**（8-1） |
@@ -1608,7 +1608,7 @@ sequenceDiagram
 **信頼を引く鍵の作り方。**
 
 ```text
-1. ghq list -p -e <owner>/<repo> で clone のパスを引く（出力が空なら「clone が無い」として飛ばす）
+1. ghq list -p -e <接続先ホスト>/<owner>/<repo> で clone のパスを引く（出力が空なら「clone が無い」として飛ばす。3-86b）
 2. git -C <そのパス> rev-parse --path-format=absolute --show-toplevel でシンボリックリンクを解決する
 3. その出力を鍵にして ~/.claude.json の projects[<鍵>].hasTrustDialogAccepted を読む
 ```
@@ -3179,14 +3179,17 @@ continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 **そのリポジトリのローカルの clone は `ghq` で引く。**
 
 ```text
-ghq list -p -e <owner>/<repo>
+ghq list -p -e <接続先ホスト>/<owner>/<repo>
 ```
+
+**ホストを必ず付ける**（3-86b）。`<owner>/<repo>` だけだと、同じ名前の clone が github.com と GitHub Enterprise の両方に在るときに2行返る。
+接続先ホストは `tracker.provider.host`（既定 `github.com`）である。
 
 **引けなければ、その issue を飛ばして人間に知らせる。巡回のループは clone しない。**
 **カンバンに載っただけのリポジトリを無断で clone することになるからである。**
 issue を足せる人は、カンバンに載るリポジトリの集合を変えられる（3-33）。
 
-> **`continuo trust` の本番実行だけは clone を取ってくる**（`workspace.RunGhqGet`）。
+> **`continuo trust` の本番実行だけは clone を取ってくる**（`workspace.GhqGetForHost`。`ghq get --vcs git https://<接続先ホスト>/<owner>/<repo>`。3-86b）。
 > **対象は人間が `trust.repositories` に書いたものだけ**なので、無断にはならない。
 > **`--dry-run` では取らない。**読むだけのつもりで叩いた人のディスクを使わないため。
 > 制限時間は10分にしてある（他の外部コマンドの既定では大きなリポジトリが必ず切れる）。
@@ -3421,7 +3424,7 @@ Linux は107バイトまで。**両対応のため103バイトを上限にし、
 | 環境変数 | 何を決めるか | 空・未定義のとき |
 | --- | --- | --- |
 | `CONTINUO_RUNTIME_DIR` | 実行時ディレクトリ（上の探索順の1番目） | 探索順の2番目以降へ落ちる |
-| `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` | GitHub の GraphQL API の URL | 本番の `https://api.github.com/graphql` を使う |
+| `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` | GitHub の GraphQL API の URL | **接続先ホスト（`tracker.provider.host`）から導いた宛先を使う**（3-86。既定の `github.com` なら `https://api.github.com/graphql`） |
 
 **`CONTINUO_GITHUB_GRAPHQL_ENDPOINT` は運用者の逃げ道であり、テストの接続先でもある。**
 **これが無いと、ビルドしたバイナリを本番のカンバンへ繋がずに動かす手段が1つも無い**
@@ -5177,7 +5180,7 @@ continuo statusline    # Claude Code のステータスラインから呼ばれ�
 | herdr が動いているか | **socket の `ping` を呼び、応答の `protocol` が設定の `herdr.protocol` と一致するか**（2-1）。**`herdr status` の CLI は使わない**（socket API で完結する） | — |
 | `gh` の認証と scope | **`gh auth status` の `Token scopes:` の行に `'project'` が単独の scope として並んでいるか**（下記） | **`--show-scopes` というフラグは存在しない**（gh 2.97.0 で確認）。既定の出力に scope が入っている |
 | リポジトリの信頼登録 | `~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted` が `true` か | **非公開の内部ファイルである。**将来キー名が変わりうる前提で扱う |
-| ローカルの clone | `ghq list -p -e <owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
+| ローカルの clone | `ghq list -p -e <接続先ホスト>/<owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
 | **`ghq` と `git` が PATH にあるか** | **clone を調べる前に `exec.LookPath` で見る。**無ければ `✗` にして、その先を調べない | **「確かめられなかった」で通してはならない。**巡回は worktree を作るときにこの2つを起動するので、無ければ**必ず落ちる。**`!` にすると終了コードが 0 になり「足りないものはありません」と出てしまう |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか | **読めない理由で直し方を変える**（6-12）。理由を問わず `continuo init` を勧めると、ファイルシステムが壊れた利用者に設定を作り直させることになる |
 | **`claude` が PATH にあるか** | `claude.kind`（既定 `claude`）を `exec.LookPath` で探す | **設定が読めなくても既定値で探す**（6-11）。無くても herdr は pane を作れるので、着手は最後まで進んでから失敗する |
@@ -5248,11 +5251,11 @@ continuo statusline    # Claude Code のステータスラインから呼ばれ�
 
 | 何を | どうするか |
 | --- | --- |
-| **対象のホスト** | **`github.com` に固定する。**設定から引かない（トラッカーは GitHub Projects v2 だけである） |
+| **対象のホスト** | **接続先ホスト（`tracker.provider.host`。既定 `github.com`）。**かつては `github.com` に固定していたが、GitHub Enterprise へ移った利用者が起動できないので取り下げた（3-86） |
 | **どのブロックを読むか** | **`Active account: true` の行を持つブロックだけ。**`gh` は同じホストに複数のアカウントを持てる |
 | **何を見るか** | そのブロックの **`Token scopes:` の行**。カンマで区切り、各要素の前後の空白と引用符を落とす |
 | **合格の条件** | **落とした結果に `project` が1つの要素として在ること。**`read:project` は不可（読めるだけでは Status を書けない） |
-| **該当ブロックが1つも無いとき**（未ログイン） | **`✗`。**「`gh auth login -s project` を実行してください」と出す |
+| **該当ブロックが1つも無いとき**（未ログイン） | **`✗`。**「`gh auth login --hostname <接続先ホスト> -s project` を実行してください」と出す |
 
 **資格情報の記号を、設定が読めたかどうかで分ける。**
 
@@ -5298,7 +5301,7 @@ $ continuo doctor
 ✓ herdr           protocol 22（設定と一致）
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
-                  → ghq get octocat/hello-world を実行してください
+                  → ghq get --vcs git https://github.com/octocat/hello-world を実行してください（`continuo trust` でも同じものを取ります）
 ! 未記入の項目     WORKFLOW.md に書かれていない設定項目があります（2件／雛形は 108件）。書いていないあいだは continuo が持つ既定値が使われます
                   → 足す差分を読むには: continuo doctor --missing-keys-patch WORKFLOW.md
 
@@ -5334,7 +5337,8 @@ $ continuo doctor
 | `--owner` / `--project` が渡された | **その値を使う。**gh を叩かない |
 | カンバンの候補が**複数** | **選ばせない。**候補を番号・名前・URL で並べ、`--project <番号>` で再実行しろと出す |
 | カンバンの候補が**0件** | プレースホルダのまま残し、カンバンの作り方を出す（3-34） |
-| **gh が無い・認証が無い・scope が足りない** | プレースホルダのまま残し、`gh auth login -s project` を案内する |
+| **gh が無い・認証が無い・scope が足りない** | プレースホルダのまま残し、`gh auth login --hostname <接続先ホスト> -s project` を案内する。接続先が違うなら `--host` で指定できることも添える（3-86b） |
+| `--host` が渡された | **その値を接続先ホストにして、gh へ環境変数 `GH_HOST` で渡し、`WORKFLOW.md` の `host:` に書く。**省くと、環境変数 `GH_HOST` が在ればその値、無ければ `github.com`。ホスト名として受け付けられない値は、終了コード 2 で断る（3-86b） |
 
 **対話で選ばせない。**標準入力を握ると、`continuo init` を自動で叩く経路（設定の作り直しなど）が止まる。
 
@@ -5758,7 +5762,7 @@ MCP サーバーが使えるようになる（`permissions.md`）。**信頼の�
 | `<clone>/.mcp.json` | `mcpServers` の名前と、起動する `command` / `url` |
 | `~/.claude.json` | `projects["<鍵>"].hasTrustDialogAccepted`（いまの状態） |
 
-**`<clone>` は `ghq list -p -e <owner>/<repo>` が返したパスである。**鍵は
+**`<clone>` は `ghq list -p -e <接続先ホスト>/<owner>/<repo>` が返したパスである。**鍵は
 `git -C <clone> rev-parse --path-format=absolute --show-toplevel` の出力である（3-6）。
 **設定ファイルが symlink なら中身を読まずに知らせる。**リポジトリの外にあるものを
 「このリポジトリの要求内容」として見せてはならない。
@@ -6725,7 +6729,7 @@ worktree を消しました（<worktree>）。branch continuo/<owner>/<repo>/400
 | --- | --- |
 | 利用者が打った issue の URL | 人間が名指しした相手そのものである |
 | 設定の `herdr.worktree.branch_template` | continuo が着手のときに使ったのと同じ規則である |
-| `ghq list -p -e <owner>/<repo>` が答えた clone | 消す宛先を worktree の外側で決められる |
+| `ghq list -p -e <接続先ホスト>/<owner>/<repo>` が答えた clone | 消す宛先を worktree の外側で決められる |
 
 **身元ファイルは1バイトも読まない。**読む worktree がもう無いうえ、身元ファイルは
 worktree の直下にあってエージェントが書き換えられる（3-16 の段9）。
@@ -8222,7 +8226,7 @@ issue をまたいで使い回さない。**開き印と閉じ印の両方に同
 
 | 何を | 内容 |
 | --- | --- |
-| **取り方** | `gh api user --jq .login` を実行し、`octocat` のような1行を得る（[internal/tracker/ghuser.go](../../internal/tracker/ghuser.go) の `RunGHAPIUserLogin`） |
+| **取り方** | `gh api --hostname <接続先ホスト> user --jq .login` を実行し、`octocat` のような1行を得る（[internal/tracker/ghuser.go](../../internal/tracker/ghuser.go) の `GHAPIUserLoginForHost`。ホストを渡すのは 3-86b） |
 | **どこに持つか** | `Orchestrator.selfLogin string`（メモリ上だけ。**ファイルにも設定にも書かない**） |
 | **誰がいつ取るか** | 巡回（`Tick`）の先頭と、コメントを確かめる直前（`hasRunComment`） |
 
@@ -11494,9 +11498,12 @@ sequenceDiagram
 ```json
 "env": {
   "CLAUDE_CODE_RETRY_WATCHDOG": "1",
-  "CONTINUO_STATUSLINE_COMMAND": "~/.claude/my-statusline.sh"
+  "CONTINUO_STATUSLINE_COMMAND": "~/.claude/my-statusline.sh",
+  "GH_HOST": "github.com"
 }
 ```
+
+**`GH_HOST` は接続先ホスト（`tracker.provider.host`）である**（3-86b）。statusLine を書かない着手でも、これだけは書く。
 
 **env は `claude.env` を写した新しい map に書く。**`claude.env` の map をそのまま書き換えない（着手は並行に走るので、ある issue の転送先が別の issue の設定ファイルへ漏れる）。
 **見つからなくても空文字で書く。**書かないと、pane が受け継いだ同じ名前の変数を拾いうる。`claude.env` に同じ名前があっても continuo の値で上書きする。
@@ -11890,6 +11897,143 @@ issue を1件作ってよい。
 
 **変えたら continuo を再起動する。**
 
+### 3-86. 接続先の GitHub は `tracker.provider.host` の1つから決める（GitHub Enterprise）
+
+**言いたいこと。**接続先のホスト名を `WORKFLOW.md` の `tracker.provider.host` に1つ書く（既定 `github.com`）。
+**continuo 自身の GraphQL・continuo が起こす `gh`・continuo が起こす `ghq`・エージェントが叩く `gh` の宛先を、全部この1つから決める**（issue #86）。
+
+**何が問題だったか。**4つの経路の宛先の決め方がばらばらだった。
+
+| 経路 | 変える前 | 何が起きていたか |
+| --- | --- | --- |
+| continuo 自身の GraphQL | `https://api.github.com/graphql` に固定。環境変数でだけ差し替えられた | GitHub Enterprise へ向ける正規の手段が無かった |
+| `gh auth status` | `--hostname github.com` に固定（「設定から引かない」と決めていた） | GitHub Enterprise へ移った利用者は、ボードを1回も読まずに起動が終わった |
+| `gh auth token`・`gh api user`・`gh project …` | ホストを渡さず、機械ごとの `gh` の既定に任せていた | github.com と GitHub Enterprise の両方にログインしていると、**接続先の宛先へ別のホストのトークンを送った** |
+| `ghq list -p -e <owner>/<repo>` | ホストを渡さなかった | 同じ名前の clone が両方のホストに在ると2行返り、1行目を採って**別のホストの clone から worktree を切った** |
+
+**`ghAuthHost` の「`github.com` に固定する。設定から引かない」は取り下げた。**理由にしていた「トラッカーは GitHub Projects v2 だけである」は、
+ホストを固定する理由にならない（GitHub Enterprise も GitHub Projects v2 を持つ）。
+
+**決めたこと。**
+
+| 何 | どうするか | 理由 |
+| --- | --- | --- |
+| 受け付ける値 | ホスト名だけ。英字・数字・`.`・`-`。大文字は小文字に直す。空・先頭か末尾が `-` か `.`・`https://`・パス・ポート番号は、設定の誤りにする | 人間の指示が「ドメイン名を文字列で」である。値は `gh` と `ghq` の引数へそのまま入るので、`-` で始まる値を通さない。置き場所のホスト（issue の URL から取る。3-22）はポート番号を落とすので、ポート番号を通すと食い違う |
+| 読み直し | **走っている最中には読み直さない。**変えたら再起動する | 走っている run の設定ファイルと `ghq` の引き方が、途中で別のホストへ変わらないようにする |
+| GraphQL の宛先 | **`NewAdapter` の1箇所で導く**（`GraphQLEndpointForHost`）。`github.com` → `https://api.github.com/graphql`、`.ghe.com` で終わる → `https://api.<ホスト名>/graphql`、それ以外 → `https://<ホスト名>/api/graphql` | `gh` 本体と同じ規則である（3-86d の実測）。常駐・`continuo doctor`・`continuo abandon`・`continuo prompt` の4つは、どれも環境変数の値（無ければ空）を `NewAdapter` へ渡すだけなので、4つが別の宛先へ向くことが無い |
+| `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` | 残す。設定より優先する（3-23） | テスト用GraphQL mockの宛先である |
+| 「差し替えられています」の警告 | 宛先が、接続先ホストから導いた宛先と違うときだけ出す | github.com の宛先と比べると、GitHub Enterprise を正規の接続先にした利用者が起動のたびに読む |
+| 対象 | `https` で繋がる接続先だけ | トークンを Authorization ヘッダに載せる |
+
+**採らなかった案。**
+
+| 案 | なぜ採らないか |
+| --- | --- |
+| GraphQL の URL をそのまま設定に書かせる | GitHub Enterprise Server と `<名前>.ghe.com` で組み立ての規則が違うことを、利用者に書かせることになる。`gh` と `ghq` へ渡すホスト名も別に要る |
+| 環境変数（`GH_HOST`）だけで切り替える | 「その機械でどう動かすか」ではなく「どのカンバンを見張るか」を決める値である。`WORKFLOW.md` に無いと、同じ設定が機械ごとに別のカンバンを読む |
+| 既にある worktree を新しいホストへ移す | 人間が却下した（2026-08-28）。github.com 側で push して捨て、移った先で作り直す |
+
+### 3-86b. `gh` と `ghq` へ、接続先ホストを必ず渡す
+
+**言いたいこと。**continuo が起こす `gh` と `ghq` は、**どれも接続先ホストを明示して呼ぶ。**機械ごとの既定に任せる呼び出しを1つも残さない。
+
+| 呼び出し | どう渡すか |
+| --- | --- |
+| `gh auth status`・`gh auth token`・`gh api user` | `--hostname <接続先ホスト>` |
+| `continuo init` と `continuo setup` の `gh api …`・`gh project …` | 子プロセスの環境に `GH_HOST=<接続先ホスト>`。**`gh project` には `--hostname` が無い** |
+| `ghq list` | `ghq list -p -e <接続先ホスト>/<owner>/<repo>` |
+| `ghq get` | `ghq get --vcs git https://<接続先ホスト>/<owner>/<repo>` |
+| エージェントの `gh` | issue ごとの設定ファイルの `env` に `GH_HOST=<接続先ホスト>`（3-12 の「環境変数は設定ファイルの env に書く」） |
+
+**`ghq` の関数の形 `(ctx, owner, repo)` は変えない。**`continuo trust`・statusline取得の clone 選び・片付けの検算は issue の URL を持たないので、ホストを引数で渡せない。
+**接続先ホストを閉じ込めた関数を作って渡す**（`GhqListForHost` / `GhqGetForHost`）。1つのプロセスが見る接続先は1つで、走っている最中には変わらないので、
+clone のパスのキャッシュの鍵（`<owner>/<repo>`）にホストを入れなくても混ざらない。
+
+**`github.com` のときに `<owner>/<repo>` の2要素で引き直すことはしない。**github.com の clone が無く、別のホストの同名の clone だけが在る機械で、それを返してしまう。
+**その結果、`ghq` の置き場所の1階層目が `github.com` でない clone（SSH の別名のホストで取ったものなど）は当たらなくなる。**破壊的変更として `docs/upgrading.md` に書いた（`continuo trust` で取り直すか、同じ場所へ手で clone を置く。**別名のホストを使っている利用者が `continuo trust` だけで取り直せるかは、確かめていない**）。
+
+**`ghq get` は URL の形で渡し、`--vcs git` を付ける。**`<ホスト>/<owner>/<repo>` の形だと、ghq は1要素目が「ドットのあとに英字だけが続く」形のときだけホストと読む
+（ghq の公開ソースを読んだ結果。実行しては確かめていない）。`--vcs git` を付けないと、ghq は github.com 以外のホストで `?go-get=1` を取りに行って VCS の判定から入る（ghq 1.10.1 で実測）。
+
+**エージェントの `GH_HOST` は、接続先が `github.com` のときも書く。**書かないと、宛先が機械ごとの `gh` の既定で決まる。
+**`claude.env` に、接続先ホストと違う値の `GH_HOST` が書いてあれば、設定の誤りにする。**黙ってどちらかを勝たせると、利用者が書いた値が効いていないことに気づけない。
+**statusline取得用の設定ファイル（3-84）には書かない。**そこで起こす Claude Code は `gh` を叩かない。
+**利用者が書いた hook（`workspace_hooks`）の環境にも足さない。**hook は利用者のシェルで、そこで `GH_HOST` を置ける。
+
+**`continuo init` は `--host` を持つ。**省くと、環境変数 `GH_HOST` が在ればその値、無ければ `github.com`。かつて `init` は `gh` の環境を組まなかったので、
+シェルに `GH_HOST` を置いた機械で、いまと同じホストを引くためである。**決まった値を `WORKFLOW.md` の `host:` に書く**ので、どのホストを引いたかが目に見える。
+**`continuo setup` はフラグを持たない。**`WORKFLOW.md` の原文から `tracker.provider.host` を拾う（設定として読み込まないので、プレースホルダが残っていても読める）。
+**front matter の中だけを、キーの入れ子で辿って探す。**字下げの幅は問わず、本文は見ない。値の無い `host:` は、常駐の読み込みと同じく `github.com` にする。
+値が在るのに形が合わなければ止める。黙って `github.com` のカンバンを読みに行かない。
+
+**`continuo abandon <URL>` と `continuo prompt --show --url <URL>` は、URL のホストが接続先ホストと違えば断る。**どちらも issue を `<owner>/<repo>#<番号>` で
+接続先のカンバンから引くので、断らないと、接続先のカンバンに在る同じ番号の別の issue を扱う。
+**worktree を探すときに置き場所のホストを比べない、という 3-37 の決定は変えていない。**比べるのは、渡された URL と設定の接続先だけである。
+
+### 3-86c. 接続先が対応しているかは、`continuo doctor` がスキーマを照会して確かめる
+
+**言いたいこと。**接続先が `github.com` でないとき、`continuo doctor` は `カンバン` の検査の最初に、**GraphQL でスキーマを照会する。**
+continuo の問い合わせに要る4要素が1つでも無ければ、`カンバン` を `✗` にして、足りない要素の名前を出す（人間の決定。2026-10-03）。
+
+**何が問題だったか。**GitHub Enterprise Server 3.19 以下では、最初の問い合わせが「Unknown argument "query"」のような GraphQL の誤りで落ちる。
+**その文面からは、版が古いことが原因だとは読めない。**
+
+| 何 | どうするか | 理由 |
+| --- | --- | --- |
+| 新しい見出し語 | **立てない。**`カンバン` の検査の最初の段にする | 人間の指示は「GHE を使っている場合は」である。見出しを立てると、github.com の利用者にも1行増え、見出しの数（18）を書いている文書が全部変わる |
+| いつ照会するか | 接続先が `github.com` でないときだけ | github.com の利用者のリクエストを1本も増やさない |
+| 足りないとき | `カンバン` を `✗`。`Bootstrap` は叩かない。`.ghe.com` で終わる接続先では版に触れず、それ以外では「3.20 以上が要る」を添える | `<名前>.ghe.com` は GitHub が運営していて、利用者は版を上げられない |
+| 照会そのものの失敗 | いまの `カンバン` の検査と同じ振り分け（`boardFailure`）。レートリミットと期限切れだけ `!` | ここだけ `!` にすると、繋がっていないのに doctor が終了コード 0 で終わる |
+| 期限 | **変えない。**照会は、`カンバン` の検査の期限（2本ぶん）の中で走る | 3本ぶんにすると、`カンバン` だけで全体の上限（30秒）を使い切れてしまい、clone・信頼登録・資格情報が巻き添えで `!` になる（3-32 が自動化のぶんを足さないと決めたのと同じ理由）。応答の遅い接続先では `カンバン` が `!` になるが、叩き直せば通る |
+| 起動時 | **照会しない。**`Bootstrap` が落ち、接続先が `github.com` でないときは、誤りに「`continuo doctor` で確かめる」案内を添える（`.ghe.com` で終わる接続先では、版に触れない文面にする） | 人間の指示が「continuo doctor で」である。案内が無いと、利用者は「Status の選択肢名が一致しません」を読んで Status の名前を直しに行く |
+
+**照会するのは次の4要素である。**
+
+| 要素 | continuo のどこが使うか |
+| --- | --- |
+| `ProjectV2.items` の `query` 引数 | 候補の取得と `Bootstrap`（Status で絞る） |
+| 型 `ProjectV2ItemStatusChangedEvent` と、enum `IssueTimelineItemsItemType` の `PROJECT_V2_ITEM_STATUS_CHANGED_EVENT` | 誰が Status を書いたかの判定（3-54） |
+| `Issue.blockedBy` | item の共通の断片 |
+
+**この一覧の限界。**4要素は「GitHub Enterprise Server 3.19 以下の公開スキーマに無いと分かっているもの」である（3-86d の検証）。
+**今後の問い合わせが新しい要素を使うと、この一覧から漏れる。**漏れると、doctor は「対応している」と言うのに、巡回が GraphQL の誤りで落ちる。
+**問い合わせを変えたら、3-86d の検証をやり直すこと**（`internal/tracker/query.go` の冒頭にも書いた）。
+**`query` 引数が将来非推奨になった接続先では、「無い」と読む。**`fields` と `enumValues` には `includeDeprecated: true` を付けたが、`args` には付けていない
+（`args(includeDeprecated:)` を GitHub Enterprise Server が受け付けるかを確かめられない。付けて照会が落ちると、動く接続先を「対応していない」と読む）。
+
+**doctor で分かるのは「要る要素の名前がスキーマに在るか」までである。**その接続先で動くことまでは言えない。文書にも「動く」とは書かない。
+
+### 3-86d. 確かめたことと、確かめていないこと
+
+**言いたいこと。**GitHub Enterprise の実機は無い。**宛先が切り替わることと、照会の答えを読めることまでを手元で測った。実機で動くことは確かめていない。**
+
+**測ったこと（2026-10-03）。**
+
+| 何を | 結果 |
+| --- | --- |
+| gh 2.100.0 で `GH_HOST=ghe.example.invalid` を付けたときの宛先（`GH_DEBUG=api`） | `gh issue view 1 --repo octocat/hello-world`・`gh api repos/…`・`gh api user` は `https://ghe.example.invalid/api/v3/…`、`gh project list`・`gh project field-list`・`gh auth status --hostname …` は `https://ghe.example.invalid/api/graphql`。**`--repo <owner>/<repo>` も `GH_HOST` に従う** |
+| 同じく `<名前>.ghe.com` の形のホスト | `https://api.<名前>.ghe.com/user` と `https://api.<名前>.ghe.com/graphql` |
+| ghq 1.10.1 で、同じ `<owner>/<repo>` の clone を2つのホストの下に置いたとき | `ghq list -p -e <owner>/<repo>` は2行、`ghq list -p -e <ホスト>/<owner>/<repo>` は1行 |
+| ghq 1.10.1 で、1階層目を別名にした clone | 2要素では1行、`github.com/<owner>/<repo>` では0行 |
+| 照会の問い合わせを github.com へ | 4要素とも在る。**存在しない型は、誤りではなく `null` で返る** |
+| continuo が送る問い合わせ13本（`query.go` の12本と `by_identifier.go` の1本）を、GitHub Enterprise Server の公開スキーマ（`https://docs.github.com/public/ghes-<版>/schema.docs-enterprise.graphql`）に対して GraphQL の検証器（graphql-js 16）で検証 | 3.17・3.18 は誤り9件（4要素の全部）。3.19 は5件（`Issue.blockedBy` を除く3要素）。**3.20・3.21・3.22 は0件。**3.16 以前は公開スキーマが配られていない（404） |
+| ビルドした実行ファイルで、`host` に架空のホストを書いて `continuo doctor` と `continuo trust` | `gh` は `auth status --hostname <ホスト>` と `auth token --hostname <ホスト>`、`ghq` は `list -p -e <ホスト>/<owner>/<repo>` と `get --vcs git https://<ホスト>/<owner>/<repo>` で呼ばれた |
+| 同じ実行ファイルで、宛先を環境変数で github.com へ向け、`host` に架空のホストを書いて `continuo doctor`（読むだけ） | 照会が github.com の応答を読み、`カンバン` の検査が先へ進んで `✓` になった |
+
+**確かめていないこと。**
+
+| 何を | なぜ確かめられないか |
+| --- | --- |
+| GitHub Enterprise Server と `<名前>.ghe.com` の実機で動くこと | 実機が無い |
+| 実機が、スキーマの照会に公開スキーマと同じ答えを返すこと | 同上 |
+| `items(query:)` の検索の書き方が github.com と同じこと | 存在しないキーを渡しても誤りにならず0件が返るので、スキーマからは分からない |
+| 組織のポリシーで Projects が止められていないこと | 照会は、止められていても通る |
+| `ghq get --vcs git` が実機から clone できること | 実機が無い |
+| `continuo init` が書く CI の検査ファイルが、GitHub Enterprise Server の Actions で動くこと | 実機が無い。公式文書は、GitHub が提供する runner が使えないと書いている（self-hosted runner が要る） |
+| github.com のときの worktree と身元ファイルを残したまま接続先を切り替えたときの、起動時の復元の動き | 実機が別の接続先の ID にどう答えるかで決まる。**だから手順は「接続先が github.com のうちに片付ける」にした** |
+
+**乗り換えの手順は `docs/FAQ.md` の「GitHub Enterprise で使いたいとき・github.com から乗り換えるとき」に置いた。**
+
 
 ## 4. 人間が決めたこと
 
@@ -12264,6 +12408,8 @@ continuo /path/to/WORKFLOW.md   ← 位置引数で明示する
 tracker:
   kind: github_projects_v2                  # 見張る先の種類。いまは GitHub Projects v2 だけ
   provider:                                 # ここから下は GitHub Projects v2 に固有の設定
+    host: github.com                        # 接続先の GitHub のホスト名。GitHub Enterprise を使うなら、そのホスト名に書き換える
+                                            # （例: ghe.example.com）。https:// やパスは付けない。変えたら continuo を再起動する
     owner: octocat                          # 例: https://github.com/octocat なら octocat
     project_number: 3                       # 例: https://github.com/users/octocat/projects/3 なら 3
     status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前
@@ -14514,6 +14660,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 | **`--url` の形が issue の URL でない** | **終了コード 2。**GitHub を叩く前に断る。**`WORKFLOW.md` を読む前でもある**（引数の形の誤りが、設定の壊れに隠されてはならない） |
 | **`--builtin` と `--url` を同時に指定** | **終了コード 2。**下の「同時に指定できない理由」 |
 | **`--attempt` を `--url` 無しで指定** | **終了コード 2。**変数を展開しないので何にも効かない。**黙って捨てると、利用者は「効いた」と思ったまま違う文面を読む** |
+| **`--url` のホストが、設定の接続先ホスト（`tracker.provider.host`）と違う** | **何も出さずに終了コード 1。**URL から作る識別子はホストを持たないので、断らないと、接続先のカンバンに在る同じ番号の別の issue の文面を出す（3-86b）。**設定を読んだあとでないと比べられないので、2 ではなく 1 である** |
 | **カンバンを読めない・issue を組み立てられない** | **何も出さずに終了コード 1。**下の「展開できなかったら断る」 |
 | **変数展開に失敗した** | **何も出さずに終了コード 1。**本文の `{{if}}` の閉じ忘れがここで落ちる。**このコマンドが最初の網ではない**（常駐は起動時に、`continuo doctor` は `prompt vars` で落とす） |
 

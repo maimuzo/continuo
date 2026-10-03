@@ -55,7 +55,10 @@ type FetchOptions struct {
 	ProjectNumber int
 	// FieldName は読む single-select フィールドの名前である。空なら DefaultStatusFieldName。
 	FieldName string
-	// RunGH は gh を実行する関数である。nil なら scaffold.RunGH（本物のコマンド実行）を使う。
+	// Host は接続先ホストである（WORKFLOW.md の `tracker.provider.host`。設計 3-86）。
+	// 空文字なら github.com として扱う。RunGH が nil のとき、gh へ `GH_HOST` として渡す。
+	Host string
+	// RunGH は gh を実行する関数である。nil なら scaffold.RunGHForHost(Host)（本物のコマンド実行）を使う。
 	RunGH scaffold.GHRunner
 	// Timeout は gh の呼び出しの制限時間である。0 以下なら scaffold.DefaultDetectTimeout。
 	Timeout time.Duration
@@ -85,7 +88,7 @@ func FetchStatusField(ctx context.Context, opts FetchOptions) (StatusField, erro
 
 	run := opts.RunGH
 	if run == nil {
-		run = scaffold.RunGH
+		run = scaffold.RunGHForHost(opts.Host)
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {

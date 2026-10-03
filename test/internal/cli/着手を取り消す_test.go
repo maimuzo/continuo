@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f14a8015d787e822ff52d0078d06c8780fdbe7bb4deb92dc9ba5a322716e67e7", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "43566f3b603f55073410b6583b08c94b06550123df19e7fcbed2d97885a6270a", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **ユースケース記述「着手を取り消す」の経路に対応づけたテストである。**
 // 関数名の `P008` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

@@ -75,6 +75,10 @@ type Options struct {
 	//
 	// **テストが実物の `~/.claude.json` を触らないよう、必ず引数で受け取る。**
 	HomeDir string
+	// Host は接続先ホストである（`tracker.provider.host`。設計 3-86）。空文字なら github.com。
+	//
+	// **ResolveClone が nil のとき、このホストで ghq を引く。**人間へ出す案内にも入れる。
+	Host string
 	// ResolveClone は clone の絶対パスを引く関数である。nil なら ghq を使う。
 	ResolveClone CloneResolver
 	// ResolveKey は信頼を引く鍵を求める関数である。nil なら git を使う。
@@ -200,7 +204,7 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 	}
 	for _, name := range opts.Repositories {
 		report.Entries = append(report.Entries,
-			inspect(ctx, name, opts.HomeDir, resolveClone, resolveKey, timeout, opts.FetchClone, opts.OnFetch, opts.OnFetched))
+			inspect(ctx, name, opts.Host, opts.HomeDir, resolveClone, resolveKey, timeout, opts.FetchClone, opts.OnFetch, opts.OnFetched))
 	}
 	return report, nil
 }
@@ -209,6 +213,7 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // name: "owner/repo"。
+// host: 接続先ホスト（人間へ出す `ghq list` の案内に入れる。設計 3-86）。
 // homeDir: `~/.claude.json` を探すホームディレクトリ。
 // resolveClone: clone のパスを引く関数。
 // resolveKey: 信頼を引く鍵を求める関数。
@@ -217,7 +222,7 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 // onFetch: 取りに行く直前に呼ぶ関数。nil なら何もしない。
 // onFetched: 取り終えた直後に呼ぶ関数。nil なら何もしない。
 // 戻り値: 調べた結果。
-func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration, fetchClone CloneFetcher, onFetch func(string), onFetched func(string)) Entry {
+func inspect(ctx context.Context, name, host, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration, fetchClone CloneFetcher, onFetch func(string), onFetched func(string)) Entry {
 	e := Entry{Repository: name}
 
 	owner, repo, ok := strings.Cut(name, "/")
@@ -236,7 +241,8 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 	if clonePath == "" {
 		if fetchClone == nil {
 			e.Problem = fmt.Sprintf(
-				"clone がありません（`ghq list -p -e %s` の出力が空。--dry-run では取りに行きません）", name)
+				"clone がありません（`ghq list -p -e %s` の出力が空。--dry-run では取りに行きません）",
+				workspace.GhqListTarget(host, owner, repo))
 			return e
 		}
 		// **ここが唯一、continuo がディスクへ書きに行く場所である。**
@@ -256,7 +262,8 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 		cancelRe()
 		if err != nil || clonePath == "" {
 			e.Problem = fmt.Sprintf(
-				"clone を取ったのにパスを引けませんでした（`ghq list -p -e %s` の出力が空）", name)
+				"clone を取ったのにパスを引けませんでした（`ghq list -p -e %s` の出力が空）",
+				workspace.GhqListTarget(host, owner, repo))
 			return e
 		}
 		if onFetched != nil {
@@ -652,7 +659,7 @@ func claudeConfigPath(homeDir string) string {
 func (o Options) resolvers() (CloneResolver, KeyResolver, time.Duration) {
 	resolveClone := o.ResolveClone
 	if resolveClone == nil {
-		resolveClone = workspace.RunGhqList
+		resolveClone = CloneResolver(workspace.GhqListForHost(o.Host))
 	}
 	resolveKey := o.ResolveKey
 	if resolveKey == nil {

@@ -98,10 +98,11 @@ type ProjectWorkflow struct {
 // NewAdapter は Adapter を作る。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション（設計 5-2）。
-// endpoint: GraphQL API の URL。空文字なら本番の GitHub GraphQL API を使う。
+// endpoint: GraphQL API の URL。**空文字なら、`cfg.Provider.Host`（接続先ホスト）から導く**
+// （GraphQLEndpointForHost。設計 3-86）。空でない値は、環境変数で差し替えたときだけ渡す。
 // テストでは httptest.Server の URL を渡して本番のカンバンへ接続しないようにすること。
 // **https 以外は受け付けない**（loopback の http だけは例外。トークンを平文で第三者へ
-// 送らないため。newGraphQLClient を参照）。既定と違う接続先のときは警告を1行残す。
+// 送らないため。newGraphQLClient を参照）。接続先ホストから導いた宛先と違うときは警告を1行残す。
 // token: 認証トークン（ResolveToken で取得した値）。
 // httpClient: リクエストを送るクライアント。nil なら接続10秒・全体30秒のクライアントを
 // 組み立てて使う。
@@ -146,15 +147,24 @@ func NewAdapter(
 		logger = slog.Default()
 	}
 
+	// **宛先は接続先ホストから導く**（設計 3-86）。endpoint が空でないのは、環境変数で
+	// 差し替えられたとき（テスト用GraphQL mockなど）だけである。
+	derived := GraphQLEndpointForHost(cfg.Provider.Host)
+	if endpoint == "" {
+		endpoint = derived
+	}
 	gql, err := newGraphQLClient(endpoint, token, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	if gql.endpoint != defaultGraphQLEndpoint {
-		// **無人運用で「本物の GitHub ではない相手にトークンを送っている」ことに
+	if gql.endpoint != derived {
+		// **無人運用で「設定の接続先ではない相手にトークンを送っている」ことに
 		// 気づけるようにする。**差し替えは環境変数1行でできてしまうため、必ず1行残す。
-		logger.Warn("GraphQL の接続先が既定と違います（本番の GitHub ではありません）",
-			"endpoint", gql.endpoint, "既定", defaultGraphQLEndpoint,
+		// **比べる相手は接続先ホストから導いた宛先である。**github.com の宛先と比べると、
+		// GitHub Enterprise を正規の接続先にした利用者が、起動のたびにこの警告を読む。
+		logger.Warn("GraphQL の接続先が、設定の接続先ホストから導いた宛先と違います（差し替えられています）",
+			"endpoint", gql.endpoint, "接続先ホストから導いた宛先", derived,
+			"host", NormalizedHost(cfg.Provider.Host),
 		)
 	}
 

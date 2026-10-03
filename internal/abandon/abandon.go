@@ -114,7 +114,8 @@ type Options struct {
 	// **同じ名前で2度 Resolve しない。**
 	Instance *instance.Layout
 	// GraphQLEndpoint は GitHub の GraphQL API の接続先である。
-	// **空なら本番の GitHub を使う。**テストは httptest.Server の URL を渡すこと。
+	// **空なら、設定の接続先ホスト（`tracker.provider.host`）から導いた宛先を使う**（設計 3-86）。
+	// テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
 	// Out は人間に見せる出力先である。nil なら os.Stdout。
 	Out io.Writer
@@ -209,6 +210,14 @@ func Run(ctx context.Context, opts Options) int {
 	loaded, err := config.Load(opts.ConfigPath)
 	if err != nil {
 		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrConfigLoad, err))
+		return ExitStopped
+	}
+
+	// **URL のホストが接続先ホストと違えば、何もせずに止まる**（設計 3-86）。
+	// **worktree を探すより前に見る。**探してから断ると、「見つかったのに消さない」理由が
+	// 2つ（ホストが違う・検算が食い違う）に割れる。
+	if err := issue.CheckHost(loaded.Config.Tracker.Provider.Host); err != nil {
+		fmt.Fprintln(errOut, err)
 		return ExitStopped
 	}
 

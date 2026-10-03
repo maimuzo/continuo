@@ -28,6 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/scaffold"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // ===== テスト用herdr mock socket サーバ =====
@@ -190,6 +191,58 @@ type fakeGitHub struct {
 	delay time.Duration
 	// queries は受け取ったクエリの種別を受け取った順に記録したものである。
 	queries []string
+	// schemaMissing は、スキーマの照会（設計 3-86）で「無い」と答える要素である。
+	// 鍵は `tracker.SchemaElement…` の定数の値。**空なら4要素とも在ると答える。**
+	schemaMissing map[string]bool
+}
+
+// SetSchemaMissing は、スキーマの照会で「無い」と答える要素を差し替える（設計 3-86）。
+//
+// **GitHub Enterprise Server 3.19 以下のスキーマを再現するために使う。**
+//
+// elements: 無いと答える要素（`tracker.SchemaElement…` の定数）。
+func (fg *fakeGitHub) SetSchemaMissing(elements ...string) {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	fg.schemaMissing = map[string]bool{}
+	for _, e := range elements {
+		fg.schemaMissing[e] = true
+	}
+}
+
+// schemaPayload はスキーマの照会への応答を組み立てる（設計 3-86）。
+//
+// **存在しない型は null で返す。**本物の GitHub がそう答える（2026-10-03 に実測）。
+//
+// 戻り値: 応答の data。
+func (fg *fakeGitHub) schemaPayload() map[string]any {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	itemsArgs := []any{map[string]any{"name": "first"}, map[string]any{"name": "after"}}
+	if !fg.schemaMissing[tracker.SchemaElementItemsQuery] {
+		itemsArgs = append(itemsArgs, map[string]any{"name": "query"})
+	}
+	var event any
+	if !fg.schemaMissing[tracker.SchemaElementStatusChangedEvent] {
+		event = map[string]any{"name": "ProjectV2ItemStatusChangedEvent"}
+	}
+	enumValues := []any{map[string]any{"name": "ISSUE_COMMENT"}}
+	if !fg.schemaMissing[tracker.SchemaElementStatusChangedEnum] {
+		enumValues = append(enumValues, map[string]any{"name": "PROJECT_V2_ITEM_STATUS_CHANGED_EVENT"})
+	}
+	issueFields := []any{map[string]any{"name": "number"}}
+	if !fg.schemaMissing[tracker.SchemaElementBlockedBy] {
+		issueFields = append(issueFields, map[string]any{"name": "blockedBy"})
+	}
+	return map[string]any{
+		"projectV2": map[string]any{"fields": []any{
+			map[string]any{"name": "id", "args": []any{}},
+			map[string]any{"name": "items", "args": itemsArgs},
+		}},
+		"event":     event,
+		"itemTypes": map[string]any{"enumValues": enumValues},
+		"issue":     map[string]any{"fields": issueFields},
+	}
 }
 
 // fakeWorkflow は偽カンバンが返す自動化1件である。
@@ -298,6 +351,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 	delay := fg.delay
 	kind := "unknown"
 	switch {
+	case strings.Contains(req.Query, `__type(name: "ProjectV2")`):
+		kind = "schema"
 	case strings.Contains(req.Query, "field(name: $statusField)"):
 		kind = "bootstrap"
 	case strings.Contains(req.Query, "items(first: 100"):
@@ -334,6 +389,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 
 	var data map[string]any
 	switch kind {
+	case "schema":
+		data = fg.schemaPayload()
 	case "bootstrap":
 		data = fg.bootstrapPayload(failure)
 	case "items":
@@ -563,7 +620,7 @@ type fixture struct {
 	// Env は doctor が引く環境変数である（Options.LookupEnv がこれを引く）。
 	Env map[string]string
 	// GhqPaths は注入する `ghq list` の結果である（鍵は `<owner>/<repo>`）。
-	// **nil なら本物の RunGhqList を使う**（PATH のテスト用ghq mock が答える）。
+	// **nil なら本物の GhqListForHost を使う**（PATH のテスト用ghq mock が答える）。
 	GhqPaths map[string]string
 	// CheckTimeout は外部に触る検査1つあたりの上限である。
 	// **0 なら doctor の既定（10秒）を使う。**返ってこない外部コマンドを待たずに
@@ -728,6 +785,24 @@ func (fx *fixture) WriteWorkflow(t *testing.T, rateLimit string) {
 		content = setFrontMatterValue(t, content, o.path, o.value)
 	}
 
+	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+}
+
+// SetHost は WORKFLOW.md の `tracker.provider.host` を書き換える（設計 3-86）。
+//
+// **書き換えるのは値だけである。**ほかの行は WriteWorkflow が書いたまま残る。
+//
+// t: 呼び出し元のテスト。
+// host: 接続先ホスト。
+func (fx *fixture) SetHost(t *testing.T, host string) {
+	t.Helper()
+	raw, err := os.ReadFile(fx.WorkflowPath)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	content := setFrontMatterValue(t, string(raw), []string{"tracker", "provider", "host"}, host)
 	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}

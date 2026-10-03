@@ -569,9 +569,10 @@ func writeFakeGhq(t *testing.T, binDir, fullName, repoDir string) {
 		t.Fatalf("テスト用ghq mock を置く場所を作れません: %v", err)
 	}
 	script := "#!/bin/sh\n" +
-		"# テスト用ghq mock。`ghq list -p -e <owner>/<repo>` にだけ答える。\n" +
+		"# テスト用ghq mock。`ghq list -p -e github.com/<owner>/<repo>` にだけ答える。\n" +
+		"# **ホスト付きの名前にだけ答える。**continuo は接続先ホストを付けて引く（設計 3-86）。\n" +
 		"for a in \"$@\"; do\n" +
-		"  if [ \"$a\" = \"" + fullName + "\" ]; then\n" +
+		"  if [ \"$a\" = \"github.com/" + fullName + "\" ]; then\n" +
 		"    echo \"" + repoDir + "\"\n" +
 		"    exit 0\n" +
 		"  fi\n" +

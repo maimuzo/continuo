@@ -125,7 +125,7 @@ type Comment struct {
 // ただの文字列であり、issue にコメントできる人なら誰でも同じものを書ける。
 // **投稿者を併せて見て初めて、外部の第三者のコメントと区別できる。**
 //
-// login: continuo が使う gh の持ち主のログイン名（RunGHAPIUserLogin の戻り値）。
+// login: continuo が使う gh の持ち主のログイン名（GHAPIUserLoginForHost が返す関数の戻り値）。
 // **空文字なら照合を行わず true を返す。**持ち主を取れなかったときは印だけで
 // 判定する形に落ちる（設計 3-65。取れないことで判定を止めない）。
 // 戻り値: 投稿者が login と一致すれば true。

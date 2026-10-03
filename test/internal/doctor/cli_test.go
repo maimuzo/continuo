@@ -143,7 +143,7 @@ func TestDoctorCLI_足りないものがあれば直し方を出して終了コ�
 	if !strings.Contains(out, "✗ clone") {
 		t.Fatalf("clone が ✗ になっていない:\n%s", out)
 	}
-	if !strings.Contains(out, "→ ghq get octocat/hello-world を実行してください") {
+	if !strings.Contains(out, "→ ghq get --vcs git https://github.com/octocat/hello-world を実行してください") {
 		t.Fatalf("直し方が出ていない:\n%s", out)
 	}
 	if !strings.Contains(out, "! 信頼登録") {

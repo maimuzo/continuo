@@ -35,7 +35,7 @@
 //
 // **検査の実体は既にあるものを呼ぶ。**gh は internal/tracker の CheckGHAvailable /
 // CheckGHProjectScope、herdr は internal/herdr の CheckProtocol、カンバンは
-// internal/tracker の Bootstrap、clone は internal/workspace の RunGhqList、信頼は
+// internal/tracker の Bootstrap、clone は internal/workspace の GhqListForHost、信頼は
 // internal/workspace の CheckTrustForClonePath である。**判定をこのパッケージで書き直さない。**
 // internal/daemon の起動時検査（3-6）も同じ関数を呼んでいる。違うのは落ち方だけで、
 // 起動時検査は最初の失敗で起動を止め、doctor は全部調べて記号で並べる。
@@ -82,7 +82,8 @@ type Options struct {
 	// ConfigPath は読み込む WORKFLOW.md の絶対パスである。必須。
 	ConfigPath string
 	// GraphQLEndpoint は GitHub の GraphQL API の URL である。
-	// **空なら本番の GitHub GraphQL API を使う。**テストは httptest.Server の URL を渡すこと。
+	// **空なら、設定の接続先ホスト（`tracker.provider.host`）から導いた宛先を使う**（設計 3-86）。
+	// テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
 	// HomeDir は `~/.claude.json` と `~/.claude/.credentials.json` を探すホームディレクトリである。
 	// **`~/.claude/session-env` に書けるかの検査もここを基準にする。**
@@ -146,9 +147,9 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	                                        └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
-// **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い
-// （対象のホストは github.com に固定）が、**依存の図と「上流が `✗` か `!` なら下流は `!`」の
-// 規則を実装で曲げない。**設定ファイルが `✗` か `!` なら、`gh の認証` も `!` になる。
+// **この線は設計 3-32 の依存の図そのままである。**`gh の認証` は、検査する相手のホストを
+// 設定から読む（接続先ホスト。設計 3-86）。**依存の図と「上流が `✗` か `!` なら下流は `!`」の
+// 規則のとおり、**設定ファイルが `✗` か `!` なら、`gh の認証` も `!` になる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // opts: 設定ファイルのパスと、外部に触る口の差し替え。
@@ -159,9 +160,6 @@ func Run(ctx context.Context, opts Options) Report {
 	}
 	if opts.LookupEnv == nil {
 		opts.LookupEnv = os.LookupEnv
-	}
-	if opts.GhqList == nil {
-		opts.GhqList = workspace.RunGhqList
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = DefaultTimeout
@@ -196,6 +194,12 @@ func Run(ctx context.Context, opts Options) Report {
 	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
 	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
+	// **clone を引く相手は接続先ホストである**（設計 3-86）。設定を読んでからでないと決まらない。
+	// 設定を読めなかったときは github.com で引くが、そのときは clone の検査まで進まない。
+	if opts.GhqList == nil {
+		opts.GhqList = workspace.GhqListForHost(cfg.Config.Tracker.Provider.Host)
+	}
+
 	// 段1d: プロンプトの変数。**ここもカンバンを1バイトも読まない。**
 	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
 	report.add(checkPromptVariables(cfg, configResult.Symbol))
@@ -227,7 +231,7 @@ func Run(ctx context.Context, opts Options) Report {
 
 	// 段4: gh の認証。設定ファイルの下流である（設計 3-32 の依存の図）。
 	ghResult := withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
-		return checkGHAuth(ctx, opts, configResult.Symbol)
+		return checkGHAuth(ctx, cfg, opts, configResult.Symbol)
 	})
 	report.add(ghResult)
 
@@ -243,6 +247,9 @@ func Run(ctx context.Context, opts Options) Report {
 	var repos []Repo
 	var boardStates []string
 	var workflows []tracker.ProjectWorkflow
+	// **接続先が github.com でないときは、Bootstrap の前にスキーマの照会が1本入る**（設計 3-86c）。
+	// **そのぶんの期限は足さない。**足して3倍にすると、すぐ上に書いた害がそのまま起きる。
+	// 応答の遅い接続先では、照会が残り時間を食って `カンバン` が `!` になる（叩き直せば通る）。
 	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
 		res, repos, boardStates, workflows = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
@@ -276,7 +283,7 @@ func Run(ctx context.Context, opts Options) Report {
 	var clonePaths map[string]string
 	cloneResult = withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, clonePaths = checkClone(ctx, opts, repos, boardResult.Symbol)
+		res, clonePaths = checkClone(ctx, opts, cfg.Config.Tracker.Provider.Host, repos, boardResult.Symbol)
 		return res
 	})
 	report.add(cloneResult)

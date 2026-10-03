@@ -15,12 +15,6 @@ import (
 // ghBinary は実行する gh の名前である。PATH から解決する。
 const ghBinary = "gh"
 
-// ghAuthHost は認証を検査する対象のホストである（設計 3-6）。
-//
-// **`github.com` に固定する。設定から引かない。**このアダプタが対応するトラッカーは
-// GitHub Projects v2 だけである。
-const ghAuthHost = "github.com"
-
 // requiredGHScope は起動時の検査で必須にする scope である（設計 3-6）。
 //
 // **`read:project` は不可である。**読めるだけでは Status を書けない。
@@ -37,7 +31,7 @@ const ghOutputMax = 800
 
 // GHAuthStatusFunc は `gh auth status` 相当の処理を行う関数の型である。
 //
-// 本番は RunGHAuthStatus を使う。テストではコマンドを実際に実行せずに済むよう、
+// 本番は GHAuthStatusForHost が返す関数を使う。テストではコマンドを実際に実行せずに済むよう、
 // 別の関数を差し替えて渡す（GHAuthTokenFunc と同じ考え方）。
 //
 // ctx: 実行に適用するコンテキスト。
@@ -46,31 +40,40 @@ const ghOutputMax = 800
 // その場合も出力を返してエラーにはしない**（出力の中身で判定するため）。
 type GHAuthStatusFunc func(ctx context.Context) (string, error)
 
-// RunGHAuthStatus は実際に `gh auth status --hostname github.com` を実行する。
+// GHAuthStatusForHost は、接続先ホストに対して `gh auth status --hostname <ホスト>` を
+// 実行する関数を返す（設計 3-6 / 3-86）。
+//
+// **検査する相手は接続先ホスト（`tracker.provider.host`）である。**かつては `github.com` に
+// 固定していたが、それだと GitHub Enterprise へ移った利用者は、ボードを1回も読まずに
+// 起動が終わる（issue #86）。
 //
 // **`--show-scopes` というフラグは存在しない**（gh 2.97.0 で確認）。既定の出力に scope が入る。
 // **gh は情報を標準エラーへ出す版がある**ので、標準出力と標準エラーの両方を読む。
 //
-// ctx: 実行に適用するコンテキスト。
-// 戻り値: 出力（標準出力 + 標準エラー）と、gh を起動できなかった場合のエラー。
+// host: 接続先ホスト。空なら github.com として扱う。
+// 戻り値: `gh auth status` を実行する関数。その関数は、出力（標準出力 + 標準エラー）と、
+// gh を起動できなかった場合のエラーを返す。
 // 終了コードが非 0 なだけならエラーにしない（未ログインの判定は出力で行う）。
-func RunGHAuthStatus(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, ghBinary, "auth", "status", "--hostname", ghAuthHost)
-	cmd.WaitDelay = ghWaitDelay
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	out := stdout.String() + stderr.String()
-	if err != nil {
-		// **終了コードが非 0 なだけならエラーにしない。**未ログインでも gh は非 0 で終わるが、
-		// その判定は出力の中身（Active account の有無）で行う。
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			return out, i18n.Errorf(i18n.KeyTrackerGHAuthStatusStartFailed, ghAuthHost, err)
+func GHAuthStatusForHost(host string) GHAuthStatusFunc {
+	h := NormalizedHost(host)
+	return func(ctx context.Context) (string, error) {
+		cmd := exec.CommandContext(ctx, ghBinary, "auth", "status", "--hostname", h)
+		cmd.WaitDelay = ghWaitDelay
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		out := stdout.String() + stderr.String()
+		if err != nil {
+			// **終了コードが非 0 なだけならエラーにしない。**未ログインでも gh は非 0 で終わるが、
+			// その判定は出力の中身（Active account の有無）で行う。
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				return out, i18n.Errorf(i18n.KeyTrackerGHAuthStatusStartFailed, h, err)
+			}
 		}
+		return out, nil
 	}
-	return out, nil
 }
 
 // CheckGHAvailable は `gh` が使えるかを検査する（設計 3-6）。
@@ -91,7 +94,7 @@ func CheckGHAvailable() error {
 //
 // 読み方は次のとおりに1つへ決めてある。
 //
-//	対象のホスト     … github.com に固定する（設定から引かない）
+//	対象のホスト     … 接続先ホスト（`tracker.provider.host`。既定は github.com）
 //	どのブロックを読むか … `Active account: true` の行を持つブロックだけ
 //	                    （gh は同じホストに複数のアカウントを持てる）
 //	何を見るか       … そのブロックの `Token scopes:` の行。カンマで区切り、
@@ -107,12 +110,14 @@ func CheckGHAvailable() error {
 // そもそもネットワークが戻れば何もしなくてよい。
 //
 // ctx: 実行に適用するコンテキスト。
-// run: `gh auth status` を実行する関数。**nil なら RunGHAuthStatus を使う。**
+// host: 接続先ホスト。空なら github.com として扱う。**エラー文の直し方にも、この値を入れる。**
+// run: `gh auth status` を実行する関数。**nil なら GHAuthStatusForHost(host) を使う。**
 // 戻り値: gh を起動できない場合、gh がトークンを検証できていない場合、
 // 有効なアカウントが1つも無い場合、scope に `project` が無い場合のエラー。
-func CheckGHProjectScope(ctx context.Context, run GHAuthStatusFunc) error {
+func CheckGHProjectScope(ctx context.Context, host string, run GHAuthStatusFunc) error {
+	ghAuthHost := NormalizedHost(host)
 	if run == nil {
-		run = RunGHAuthStatus
+		run = GHAuthStatusForHost(ghAuthHost)
 	}
 	out, err := run(ctx)
 	if err != nil {
@@ -126,7 +131,7 @@ func CheckGHProjectScope(ctx context.Context, run GHAuthStatusFunc) error {
 	}
 	if !account.found {
 		return i18n.Errorf(i18n.KeyTrackerGHScopeNoActiveAccount,
-			ghAuthHost, requiredGHScope, ghOutputForError(out))
+			ghAuthHost, ghAuthHost, requiredGHScope, ghOutputForError(out))
 	}
 	for _, s := range account.scopes {
 		if s == requiredGHScope {

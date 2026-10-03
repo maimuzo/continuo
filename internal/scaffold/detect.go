@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -111,26 +113,51 @@ func (d Detection) AllFilled() bool {
 
 // DetectOptions は Detect の入力である。
 type DetectOptions struct {
+	// Host は接続先ホストである（`continuo init --host`。設計 3-86）。
+	//
+	// **空文字なら github.com として扱う。**RunGH が nil のとき、この値を `GH_HOST` として
+	// gh へ渡す。雛形の `tracker.provider.host` にも、この値を書く。
+	Host string
 	// Owner は `--owner` で明示された user / organization 名である。
 	// 空でなければ gh を叩かずにこの値を使う。
 	Owner string
 	// ProjectNumber は `--project` で明示されたカンバンの番号である。
 	// 0 より大きければ gh を叩かずにこの値を使う。
 	ProjectNumber int
-	// RunGH は gh を実行する関数である。nil なら RunGH（本物のコマンド実行）を使う。
+	// RunGH は gh を実行する関数である。nil なら RunGHForHost(Host)（本物のコマンド実行）を使う。
 	RunGH GHRunner
 	// Timeout は gh の呼び出し1回あたりの制限時間である。0 以下なら DefaultDetectTimeout を使う。
 	Timeout time.Duration
 }
 
-// RunGH は実際に gh コマンドを実行し、標準出力をそのまま返す。
+// RunGHForHost は、接続先ホストへ向けて gh コマンドを実行する関数を返す（設計 3-86）。
+//
+// **子プロセスの環境に `GH_HOST=<接続先ホスト>` を足す。**`gh project …` には `--hostname` が
+// 無いので、宛先を決められるのは環境変数だけである（gh 2.100.0 で、`GH_HOST` を付けると
+// `gh project list` も `gh api` も `--repo <owner>/<repo>` もそのホストへ向くことを実測。2026-10-03）。
+// **足さないと、宛先は機械ごとの gh の既定で決まる。**同じ WORKFLOW.md でも、
+// 機械によって別のホストのカンバンを読むことになる。
+//
+// host: 接続先ホスト。空文字なら github.com として扱う。
+// 戻り値: gh を実行する関数。その関数は標準出力を返す。gh が見つからない場合は
+// ErrGHNotFound を包んだエラー、それ以外の失敗では標準エラー出力を添えたエラーを返す。
+func RunGHForHost(host string) GHRunner {
+	h := hostForAdvice(host)
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		return runGH(ctx, h, args...)
+	}
+}
+
+// runGH は RunGHForHost の実体である。
 //
 // ctx: 実行に適用するコンテキスト。
+// host: `GH_HOST` として渡す接続先ホスト。
 // args: gh に渡す引数。
-// 戻り値: 標準出力。gh が見つからない場合は ErrGHNotFound を包んだエラー、
-// それ以外の失敗では標準エラー出力を添えたエラーを返す。
-func RunGH(ctx context.Context, args ...string) ([]byte, error) {
+func runGH(ctx context.Context, host string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "gh", args...)
+	// **親の環境に1つ足す。**同じ名前が親の環境に在っても、後ろに置いたほうが勝つ
+	// （os/exec は重複した名前のうち最後の値を使う）。
+	cmd.Env = append(os.Environ(), config.EnvGHHost+"="+host)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -158,7 +185,7 @@ func RunGH(ctx context.Context, args ...string) ([]byte, error) {
 func Detect(ctx context.Context, opts DetectOptions) Detection {
 	run := opts.RunGH
 	if run == nil {
-		run = RunGH
+		run = RunGHForHost(opts.Host)
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -179,9 +206,12 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 		owner.Advice = nil
 	}
 
-	repos, repoList := detectRepositories(ctx, run, timeout, owner.Value, number)
+	repos, repoList := detectRepositories(ctx, run, timeout, hostForAdvice(opts.Host), owner.Value, number)
 
 	d := Detection{Fields: []Field{owner, project, repos}}
+	// **接続先ホストは gh から引かない。**呼び出し側（`continuo init --host`）が決めた値を、
+	// そのまま雛形へ書く（設計 3-86）。
+	d.Values.Host = opts.Host
 	if owner.Filled {
 		d.Values.Owner = owner.Value
 	}
@@ -209,7 +239,7 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 // number: 決まったカンバンの番号。0 以下なら引かない。
 // 戻り値の1つ目: trust.repositories についての Field。
 // 戻り値の2つ目: 拾った owner/repo（辞書順・重複なし）。拾えなかった場合は nil。
-func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration, owner string, number int) (Field, []string) {
+func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration, host, owner string, number int) (Field, []string) {
 	f := Field{Key: RepositoriesKey}
 
 	if owner == "" || number <= 0 {
@@ -232,7 +262,7 @@ func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration
 			f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesItemListFailed, err)
 		}
 		f.Advice = []string{
-			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope),
+			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope, host),
 			i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional),
 		}
 		return f, nil
@@ -340,7 +370,7 @@ func detectOwner(ctx context.Context, opts DetectOptions, run GHRunner, timeout 
 	out, err := run(callCtx, "api", "user", "--jq", ".login")
 	if err != nil {
 		f.Reason = ownerFailureReason(err)
-		f.Advice = ownerAdvice()
+		f.Advice = ownerAdvice(hostForAdvice(opts.Host))
 		return f
 	}
 
@@ -348,10 +378,10 @@ func detectOwner(ctx context.Context, opts DetectOptions, run GHRunner, timeout 
 	switch {
 	case login == "":
 		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPIEmpty)
-		f.Advice = ownerAdvice()
+		f.Advice = ownerAdvice(hostForAdvice(opts.Host))
 	case !ValidOwner(login):
 		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPIInvalid, login)
-		f.Advice = ownerAdvice()
+		f.Advice = ownerAdvice(hostForAdvice(opts.Host))
 	default:
 		f.Value, f.Filled = login, true
 		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPILogin)
@@ -370,12 +400,30 @@ func ownerFailureReason(err error) string {
 	return i18n.T(i18n.KeyScaffoldDetectOwnerGHFailed, err)
 }
 
+// hostForAdvice は案内の文面へ入れる接続先ホストを返す（設計 3-86）。
+//
+// host: DetectOptions.Host。空文字なら github.com。
+// 戻り値: 小文字にしたホスト名。
+func hostForAdvice(host string) string {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if h == "" {
+		return config.DefaultHost
+	}
+	return h
+}
+
 // ownerAdvice は owner を埋められなかったときに出す案内を返す。
 //
+// **ログインを勧める相手のホストを必ず入れる**（設計 3-86）。入れないと、GitHub Enterprise の
+// 利用者が案内どおりに叩いて github.com へログインする。**接続先が違うなら `--host` で
+// 指定できることも添える。**
+//
+// host: 接続先ホスト。
 // 戻り値: 1行に1つずつの案内。
-func ownerAdvice() []string {
+func ownerAdvice(host string) []string {
 	return []string{
-		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceLogin),
+		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceLogin, host),
+		i18n.T(i18n.KeyScaffoldDetectAdviceHostFlag, host),
 		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceFlag),
 		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceWhere),
 	}
@@ -416,7 +464,7 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 			f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectListFailed, err)
 		}
 		f.Advice = []string{
-			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope),
+			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope, hostForAdvice(opts.Host)),
 			i18n.T(i18n.KeyScaffoldDetectProjectAdviceFlag),
 		}
 		return f, 0, ""

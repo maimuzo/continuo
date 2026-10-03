@@ -379,6 +379,14 @@ const (
 	KeyDoctorBoardWhatBootstrap Key = "doctor.board.what_bootstrap"
 	// KeyDoctorBoardWhatFetchIssues は何をしようとして落ちたかの語（候補の取得）に出る。
 	KeyDoctorBoardWhatFetchIssues Key = "doctor.board.what_fetch_issues"
+	// KeyDoctorBoardWhatSchema は何をしようとして落ちたかの語（接続先のスキーマの照会。設計 3-86）に出る。
+	KeyDoctorBoardWhatSchema Key = "doctor.board.what_schema"
+	// KeyDoctorBoardSchemaUnsupported は接続先が continuo の問い合わせに要る要素を持っていないときに出る（設計 3-86）。
+	KeyDoctorBoardSchemaUnsupported Key = "doctor.board.schema_unsupported"
+	// KeyDoctorBoardRemedySchemaGHES は接続先（GitHub Enterprise Server）に要る要素が無いときの直し方である。
+	KeyDoctorBoardRemedySchemaGHES Key = "doctor.board.remedy_schema_ghes"
+	// KeyDoctorBoardRemedySchemaTenancy は接続先（<名前>.ghe.com）に要る要素が無いときの直し方である。版には触れない。
+	KeyDoctorBoardRemedySchemaTenancy Key = "doctor.board.remedy_schema_tenancy"
 	// KeyDoctorBoardOK は読めたときの説明に出る。
 	KeyDoctorBoardOK Key = "doctor.board.ok"
 	// KeyDoctorBoardEndpointNote は接続先を差し替えているときに添える1行に出る。
@@ -546,8 +554,12 @@ const (
 	KeyCLIInitFlagOwner Key = "cli.init.flag_owner"
 	// KeyCLIInitFlagProject は--project の説明に出る。
 	KeyCLIInitFlagProject Key = "cli.init.flag_project"
+	// KeyCLIInitFlagHost は continuo init の --host の説明である（設計 3-86）。
+	KeyCLIInitFlagHost Key = "cli.init.flag_host"
 	// KeyCLIInitErrOwnerInvalid は--owner の値が形として不正なときに出る。
 	KeyCLIInitErrOwnerInvalid Key = "cli.init.err_owner_invalid"
+	// KeyCLIInitErrHostInvalid は continuo init に渡された接続先ホスト（--host か GH_HOST）が受け付けられない形のときに出る。
+	KeyCLIInitErrHostInvalid Key = "cli.init.err_host_invalid"
 	// KeyCLIInitErrProjectPositive は--project の値が0以下のときに出る。
 	KeyCLIInitErrProjectPositive Key = "cli.init.err_project_positive"
 	// KeyCLIInitErrTooManyPositional は位置引数が2つ以上あるときに出る。
@@ -715,6 +727,8 @@ const (
 	KeyCLISetupErrNotFoundRemedy Key = "cli.setup.err_not_found_remedy"
 	// KeyCLISetupErrKeysNotFound は書き換える対象のキーが WORKFLOW.md に無いときに出る。
 	KeyCLISetupErrKeysNotFound Key = "cli.setup.err_keys_not_found"
+	// KeyCLISetupErrHostInvalid は continuo setup が WORKFLOW.md の host を読めなかったときに出る（設計 3-86）。
+	KeyCLISetupErrHostInvalid Key = "cli.setup.err_host_invalid"
 	// KeyCLISetupErrKeysNotRewritable はキーの値が下の行にぶら下がっていて書き換えられないときに出る。
 	KeyCLISetupErrKeysNotRewritable Key = "cli.setup.err_keys_not_rewritable"
 	// KeyCLISetupErrKeysNotRewritableRemedy は同じときの直し方に出る。
@@ -874,6 +888,8 @@ const (
 	KeyAbandonIssueURLBadShape Key = "abandon.issue_url.bad_shape"
 	// KeyAbandonIssueURLBadNumber はissue の番号が正の整数でないときに出る。
 	KeyAbandonIssueURLBadNumber Key = "abandon.issue_url.bad_number"
+	// KeyAbandonIssueURLHostMismatch は issue の URL のホストが接続先ホスト（tracker.provider.host）と違うときに出る（設計 3-86）。
+	KeyAbandonIssueURLHostMismatch Key = "abandon.issue_url.host_mismatch"
 
 	// KeyAbandonHerdrSocketUnresolved はherdr の socket の場所を決められないときに出る。
 	KeyAbandonHerdrSocketUnresolved Key = "abandon.herdr_socket_unresolved"
@@ -1395,6 +1411,14 @@ const (
 	KeyConfigValidateInvalidValue Key = "config.validate.invalid_value"
 	// KeyConfigValidateRequired は必須のキーが空・未設定であるときに出る。
 	KeyConfigValidateRequired Key = "config.validate.required"
+	// KeyConfigHostEmpty は接続先ホストが空のときに出る（設計 3-86）。
+	KeyConfigHostEmpty Key = "config.host.empty"
+	// KeyConfigHostInvalidChar は接続先ホストに、ホスト名に使えない文字が入っているときに出る。
+	KeyConfigHostInvalidChar Key = "config.host.invalid_char"
+	// KeyConfigHostInvalidEdge は接続先ホストの先頭か末尾が "-" か "." のときに出る。
+	KeyConfigHostInvalidEdge Key = "config.host.invalid_edge"
+	// KeyConfigHostEnvMismatch は claude.env の GH_HOST が tracker.provider.host と違うときに出る。
+	KeyConfigHostEnvMismatch Key = "config.host.env_mismatch"
 	// KeyConfigValidateBranchTemplateNeedsIssueNumber は
 	// herdr.worktree.branch_template に issue の番号が入っていないときに出る。
 	// **既に設定している利用者が居るので、なぜ要るのかを書く。**
@@ -1524,7 +1548,7 @@ const (
 	KeyHerdrAgentSendKeysEmpty Key = "herdr.agent.send_keys_empty"
 )
 
-// カンバンを読み書きするためのトークンの取得（internal/tracker の RunGHAuthToken）の文言。
+// カンバンを読み書きするためのトークンの取得（internal/tracker の GHAuthTokenForHost）の文言。
 const (
 	// KeyTrackerGHAuthTokenRunFailed は `gh auth token` の実行そのものが失敗したときに出る。
 	KeyTrackerGHAuthTokenRunFailed Key = "tracker.gh_auth_token.run_failed"
@@ -1532,7 +1556,7 @@ const (
 	KeyTrackerGHAuthTokenEmptyOutput Key = "tracker.gh_auth_token.empty_output"
 )
 
-// 「continuo が使う gh の持ち主」の取得（internal/tracker の RunGHAPIUserLogin）の文言。
+// 「continuo が使う gh の持ち主」の取得（internal/tracker の GHAPIUserLoginForHost）の文言。
 const (
 	// KeyTrackerGHAPIUserRunFailed は `gh api user --jq .login` の実行が失敗したときに出る。
 	KeyTrackerGHAPIUserRunFailed Key = "tracker.gh_api_user.run_failed"
@@ -1540,7 +1564,7 @@ const (
 	KeyTrackerGHAPIUserEmptyOutput Key = "tracker.gh_api_user.empty_output"
 )
 
-// gh の有無と scope の検査（internal/tracker の RunGHAuthStatus / CheckGHAvailable /
+// gh の有無と scope の検査（internal/tracker の GHAuthStatusForHost / CheckGHAvailable /
 // CheckGHProjectScope）の文言。
 const (
 	// KeyTrackerGHAuthStatusStartFailed は `gh auth status` を起動できなかったときに出る。
@@ -1924,6 +1948,8 @@ const (
 	KeyScaffoldErrStatusesIncomplete Key = "scaffold.err.statuses_incomplete"
 	// KeyScaffoldErrKeysNotRewritable はキーの値が下の行にぶら下がっているときに出る。
 	KeyScaffoldErrKeysNotRewritable Key = "scaffold.err.keys_not_rewritable"
+	// KeyScaffoldErrHostInvalid は WORKFLOW.md の tracker.provider.host の行が、ホスト名として受け付けられない形のときに出る（設計 3-86）。
+	KeyScaffoldErrHostInvalid Key = "scaffold.err.host_invalid"
 	// KeyScaffoldErrWouldBreakConfig は書き換えると front matter を読めなくなるときに出る。
 	KeyScaffoldErrWouldBreakConfig Key = "scaffold.err.would_break_config"
 )
@@ -1959,6 +1985,8 @@ const (
 	KeyScaffoldDetectOwnerAdviceLogin Key = "scaffold.detect.owner.advice_login"
 	// KeyScaffoldDetectOwnerAdviceFlag は`--owner` で直接指定する案内である。
 	KeyScaffoldDetectOwnerAdviceFlag Key = "scaffold.detect.owner.advice_flag"
+	// KeyScaffoldDetectAdviceHostFlag は、接続先が違うなら --host で指定できることを案内する（設計 3-86）。
+	KeyScaffoldDetectAdviceHostFlag Key = "scaffold.detect.advice_host_flag"
 	// KeyScaffoldDetectOwnerAdviceWhere はURL のどの位置が owner なのかを示す案内である。
 	KeyScaffoldDetectOwnerAdviceWhere Key = "scaffold.detect.owner.advice_where"
 
@@ -2514,6 +2542,10 @@ const (
 	KeyDaemonRunStartupChecksHerdrUnreachable Key = "daemon.run_startup_checks.herdr_unreachable"
 	// KeyDaemonRunStartupChecksStatusOptionMismatch は起動時の検査でカンバンの Status の選択肢名が設定と一致しなかったときに出る。
 	KeyDaemonRunStartupChecksStatusOptionMismatch Key = "daemon.run_startup_checks.status_option_mismatch"
+	// KeyDaemonRunStartupChecksBootstrapFailedOnHost は、接続先が github.com でないときに起動時の Bootstrap が落ちたら出る（設計 3-86）。
+	KeyDaemonRunStartupChecksBootstrapFailedOnHost Key = "daemon.run_startup_checks.bootstrap_failed_on_host"
+	// KeyDaemonRunStartupChecksBootstrapFailedOnTenancy は、接続先が <名前>.ghe.com のときに起動時の Bootstrap が落ちたら出る（設計 3-86c）。版には触れない。
+	KeyDaemonRunStartupChecksBootstrapFailedOnTenancy Key = "daemon.run_startup_checks.bootstrap_failed_on_tenancy"
 	// KeyDaemonRunStartupChecksNotWritable は起動時の検査で書けなければならない場所に書けなかったときに出る。
 	KeyDaemonRunStartupChecksNotWritable Key = "daemon.run_startup_checks.not_writable"
 	// KeyDaemonValidateGraphQLEndpointURLUnparsable はGraphQL の接続先を差し替える環境変数の値が URL として読めなかったときに出る。
@@ -2789,6 +2821,10 @@ var allKeys = []Key{
 	KeyDoctorBoardRemedyTracker,
 	KeyDoctorBoardWhatBootstrap,
 	KeyDoctorBoardWhatFetchIssues,
+	KeyDoctorBoardWhatSchema,
+	KeyDoctorBoardSchemaUnsupported,
+	KeyDoctorBoardRemedySchemaGHES,
+	KeyDoctorBoardRemedySchemaTenancy,
 	KeyDoctorBoardOK,
 	KeyDoctorBoardEndpointNote,
 	KeyDoctorBoardTimeout,
@@ -2858,7 +2894,9 @@ var allKeys = []Key{
 	KeyCLIInitFlagForce,
 	KeyCLIInitFlagOwner,
 	KeyCLIInitFlagProject,
+	KeyCLIInitFlagHost,
 	KeyCLIInitErrOwnerInvalid,
+	KeyCLIInitErrHostInvalid,
 	KeyCLIInitErrProjectPositive,
 	KeyCLIInitErrTooManyPositional,
 	KeyCLIInitOverwritten,
@@ -2924,6 +2962,7 @@ var allKeys = []Key{
 	KeyCLISetupErrNotFound,
 	KeyCLISetupErrNotFoundRemedy,
 	KeyCLISetupErrKeysNotFound,
+	KeyCLISetupErrHostInvalid,
 	KeyCLISetupErrKeysNotRewritable,
 	KeyCLISetupErrKeysNotRewritableRemedy,
 	KeyCLISetupErrWouldBreakConfig,
@@ -2992,6 +3031,7 @@ var allKeys = []Key{
 	KeyAbandonIssueURLNoHost,
 	KeyAbandonIssueURLBadShape,
 	KeyAbandonIssueURLBadNumber,
+	KeyAbandonIssueURLHostMismatch,
 	KeyAbandonHerdrSocketUnresolved,
 	KeyAbandonRuntimeDirFailed,
 	KeyAbandonWorkspaceFailed,
@@ -3185,6 +3225,10 @@ var allKeys = []Key{
 	KeyConfigPlaceholderItem,
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
+	KeyConfigHostEmpty,
+	KeyConfigHostInvalidChar,
+	KeyConfigHostInvalidEdge,
+	KeyConfigHostEnvMismatch,
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
 	KeyConfigValidateHandoffBidWindowRange,
 	KeyConfigValidateHandoffIdleTimeoutRange,
@@ -3332,6 +3376,7 @@ var allKeys = []Key{
 	KeyScaffoldErrKeysNotFound,
 	KeyScaffoldErrStatusesIncomplete,
 	KeyScaffoldErrKeysNotRewritable,
+	KeyScaffoldErrHostInvalid,
 	KeyScaffoldErrWouldBreakConfig,
 	KeyScaffoldDetectGHNotFound,
 	KeyScaffoldDetectAdviceProjectScope,
@@ -3343,6 +3388,7 @@ var allKeys = []Key{
 	KeyScaffoldDetectOwnerFollowedBoard,
 	KeyScaffoldDetectOwnerAdviceLogin,
 	KeyScaffoldDetectOwnerAdviceFlag,
+	KeyScaffoldDetectAdviceHostFlag,
 	KeyScaffoldDetectOwnerAdviceWhere,
 	KeyScaffoldDetectProjectFromFlag,
 	KeyScaffoldDetectProjectNoOwner,
@@ -3587,6 +3633,8 @@ var allKeys = []Key{
 	KeyDaemonRunRestoreFailed,
 	KeyDaemonRunStartupChecksHerdrUnreachable,
 	KeyDaemonRunStartupChecksStatusOptionMismatch,
+	KeyDaemonRunStartupChecksBootstrapFailedOnHost,
+	KeyDaemonRunStartupChecksBootstrapFailedOnTenancy,
 	KeyDaemonRunStartupChecksNotWritable,
 	KeyDaemonValidateGraphQLEndpointURLUnparsable,
 	KeyDaemonValidateGraphQLEndpointHostMissing,

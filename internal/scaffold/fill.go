@@ -32,6 +32,12 @@ const ownerFilledComment = "例: https://github.com/octocat なら octocat"
 // projectFilledComment は tracker.provider.project_number を埋めたあとに残すコメントである。
 const projectFilledComment = "例: https://github.com/users/octocat/projects/3 なら 3"
 
+// hostTemplateCode は雛形の host の行の、コメントより前の部分である（設計 3-86）。
+const hostTemplateCode = "    host: " + config.DefaultHost
+
+// hostFilledComment は tracker.provider.host を書き換えたあとに残すコメントである。
+const hostFilledComment = "接続先の GitHub のホスト名。GitHub Enterprise を使うなら、そのホスト名に書き換える"
+
 // ownerPlaceholderCode は雛形の owner の行の、コメントより前の部分である。
 // 行の先頭から一致させることで、branch_template の中の {{.issue.owner}} のような
 // 別の場所を取り違えないようにする。
@@ -84,6 +90,11 @@ var ownerPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0
 // ゼロ値は「決まらなかった」を表す。Owner が空文字、ProjectNumber が 0 の場合、
 // その行はプレースホルダのまま残る（continuo の起動時に config が名指しで落とす）。
 type Values struct {
+	// Host は tracker.provider.host に書く接続先ホストである（設計 3-86）。
+	//
+	// **空文字か github.com なら、雛形の `host: github.com` をそのまま残す。**
+	// 形が合わない値（config.NormalizeHost を通らない値）も書き込まない。
+	Host string
 	// Owner は tracker.provider.owner に書く GitHub の user / organization 名である。
 	Owner string
 	// ProjectNumber は tracker.provider.project_number に書くカンバンの番号である。
@@ -118,6 +129,9 @@ func ValidOwner(name string) bool {
 func TemplateWithValues(values Values) string {
 	out := applyRateLimitTokenSource(workflowTemplate)
 	out = applyWriteLanguage(out)
+	if host, err := config.NormalizeHost(values.Host); err == nil && host != config.DefaultHost {
+		out = replaceLine(out, hostTemplateCode, "    host: "+host, hostFilledComment)
+	}
 	if values.Owner != "" && ValidOwner(values.Owner) {
 		out = replaceLine(out, ownerPlaceholderCode, "    owner: "+values.Owner, ownerFilledComment)
 	}

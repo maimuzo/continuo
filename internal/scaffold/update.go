@@ -49,6 +49,9 @@ var (
 	// YAML として読めないファイルになり、**画面には「書き換えました」が出る。**
 	// 利用者は「setup は成功したのに continuo が起動しない」状態になるので、書かずに止める。
 	ErrKeysNotRewritable = i18n.Sentinel(i18n.KeyScaffoldErrKeysNotRewritable)
+	// ErrHostInvalid は、WORKFLOW.md の `tracker.provider.host` の行が、ホスト名として
+	// 受け付けられない形であることを表す（設計 3-86）。**黙って github.com に倒さない。**
+	ErrHostInvalid = i18n.Sentinel(i18n.KeyScaffoldErrHostInvalid)
 
 	// ErrWouldBreakConfig は、書き換えた結果が front matter として読めなくなることを表す。
 	//
@@ -95,7 +98,12 @@ func CheckUpdatable(dir string) (Result, error) {
 	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を
 	// 指定させるのは筋が通らない（2026-08-21 に実際に詰まった。設計 6-2）。
 	owner, number := readProviderValues(string(raw))
-	return Result{Path: path, Overwritten: true, Owner: owner, ProjectNumber: number}, nil
+	// **接続先ホストも同じ仕組みで拾う**（設計 3-86）。`continuo setup` は、この値を gh へ渡す。
+	host, err := readProviderHost(string(raw))
+	if err != nil {
+		return Result{Path: path}, fmt.Errorf("%w: %s: %w", ErrHostInvalid, path, err)
+	}
+	return Result{Path: path, Overwritten: true, Owner: owner, ProjectNumber: number, Host: host}, nil
 }
 
 // UpdateStatuses は、既にある WORKFLOW.md の Status に関する9つのキーの行だけを書き換える。
@@ -201,6 +209,51 @@ var (
 	providerOwnerRe   = regexp.MustCompile(`(?m)^[ \t]*owner:[ \t]*([^\s#]+)`)
 	providerProjectRe = regexp.MustCompile(`(?m)^[ \t]*project_number:[ \t]*([0-9]+)`)
 )
+
+// providerHostPath は接続先ホストのキーの、ルートからの並びである（設計 3-86）。
+var providerHostPath = []string{"tracker", "provider", "host"}
+
+// readProviderHost は WORKFLOW.md の原文から接続先ホスト（`tracker.provider.host`）を拾う（設計 3-86b）。
+//
+// **設定として読み込まない。**readProviderValues と同じ理由である（プレースホルダが残った
+// WORKFLOW.md でも読めなければならない）。
+//
+// **front matter の中だけを、キーの入れ子で辿って探す**（findKeyLine）。
+// 字下げの幅は問わない。**本文（プロンプト）は見ない。**本文に `host:` で始まる行を書く利用者はいる。
+// 行頭の空白の数を決め打ちした正規表現で全文から探すと、字下げの違う WORKFLOW.md で見つけられずに
+// **断りなく github.com のカンバンを読みに行き**、本文の行を接続先として拾う。
+//
+// **引用符は外して読む。**`host: "ghe.example.com"` は YAML として正しい書き方である。
+//
+// **値の無い `host:` は github.com にする。**常駐の読み込み（config.Load）が、
+// 値の無いキーを既定値のまま読むためである（2026-10-03 に実測）。ここだけ誤りにすると、
+// `continuo doctor` は通るのに `continuo setup` だけが止まる。
+// **引用符つきの空（`host: ""`）と、形の合わない値は誤りにする。**こちらは常駐の読み込みも誤りにする。
+// 黙って github.com に倒すと、`continuo setup` が断りなく github.com のカンバンを読みに行く。
+//
+// raw: WORKFLOW.md の全文。
+// 戻り値の1つ目: 接続先ホスト。`host:` の行が無いか、値が無ければ github.com。
+// 戻り値の2つ目: 値が在るのに形が合わないときのエラー。
+func readProviderHost(raw string) (string, error) {
+	lines := strings.Split(raw, "\n")
+	start, end, ok := frontMatterRange(lines)
+	if !ok {
+		return config.DefaultHost, nil
+	}
+	idx, found := findKeyLine(lines, start, end, providerHostPath)
+	if !found {
+		return config.DefaultHost, nil
+	}
+	_, _, rest := splitKeyValue(strings.TrimLeft(trimEOL(lines[idx]), " \t"))
+	value := strings.TrimSpace(stripComment(rest))
+	if value == "" {
+		return config.DefaultHost, nil
+	}
+	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
+		value = value[1 : len(value)-1]
+	}
+	return config.NormalizeHost(value)
+}
 
 // readProviderValues は front matter から owner とカンバンの番号を拾う。
 //

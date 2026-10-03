@@ -548,7 +548,7 @@ func TestE2E_status_fieldの綴りが違うとカンバンを読めない(t *tes
 	mustContain(t, "status_field の綴りが違うときの `continuo doctor`", res.Out,
 		"✗ カンバン",
 		"Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status",
-		"→ WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください")
+		"→ WORKFLOW.md の tracker.provider（host / owner / project_number / status_field）を確認してください")
 }
 
 // assertIdentityHasBase は worktree の身元ファイルに base が書かれていることを確かめる。

@@ -230,8 +230,29 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIInitFlagForce))
 	ownerFlag := fs.String("owner", "", i18n.T(i18n.KeyCLIInitFlagOwner))
 	projectFlag := fs.Int("project", 0, i18n.T(i18n.KeyCLIInitFlagProject))
+	hostFlag := fs.String("host", "", i18n.T(i18n.KeyCLIInitFlagHost))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+
+	// **接続先ホストを決める**（設計 3-86）。`--host` → 環境変数 GH_HOST → github.com の順である。
+	//
+	// **GH_HOST を見るのは、いまと同じホストを引くためである。**かつて `continuo init` は
+	// gh の環境を組まなかったので、シェルに GH_HOST を置いた機械では、gh がそのホストの
+	// カンバンを引いていた。**決まった値は gh へ渡し、WORKFLOW.md の `host:` にも書く**ので、
+	// どのホストを引いたかが目に見える。
+	// **どちらの値も同じ検査に通す。**通らない値を gh と雛形へ渡さない。
+	host, hostSource := *hostFlag, "--host"
+	if host == "" {
+		host, hostSource = os.Getenv(config.EnvGHHost), config.EnvGHHost
+	}
+	if host == "" {
+		host = config.DefaultHost
+	}
+	host, hostErr := config.NormalizeHost(host)
+	if hostErr != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrHostInvalid, hostSource, hostErr))
+		return 2
 	}
 
 	// gh から引いた値も同じ規則で弾く（internal/scaffold）。ここで弾くのは打ち間違いを
@@ -267,9 +288,12 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	// gh を叩くのは、--owner / --project で渡されなかったぶんだけである（設計 3-32）。
 	// 両方が渡されていれば Detect は1回も gh を起動しない。
 	detection := d.ScaffoldDetect(context.Background(), scaffold.DetectOptions{
+		Host:          host,
 		Owner:         *ownerFlag,
 		ProjectNumber: *projectFlag,
 	})
+	// **接続先ホストは、検出の実装が何であっても雛形へ書く**（設計 3-86）。
+	detection.Values.Host = host
 
 	// **書くのは2枚である**（設計 5-3o）。
 	// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
@@ -474,13 +498,14 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 同じ場所で断れる。**設定を先に読むと、URL を打ち間違えた人が終了コード 1
 	// （設定を読めない）を受け取り、文書の表（URL の形が違う → 2）と食い違う。**
 	identifier := ""
+	var issueRef abandon.IssueRef
 	if urlGiven {
-		id, idErr := promptIssueIdentifier(*urlFlag)
+		ref, id, idErr := promptIssueIdentifier(*urlFlag)
 		if idErr != nil {
 			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, idErr))
 			return 2
 		}
-		identifier = id
+		identifier, issueRef = id, ref
 	}
 
 	var dir string
@@ -512,6 +537,14 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, frag.Text())
 		printPromptBreakdown(stderr, frag)
 		return 0
+	}
+
+	// **URL のホストが接続先ホストと違えば断る**（設計 3-86）。識別子はホストを持たないので、
+	// 断らないと、接続先のカンバンに在る同じ番号の別の issue の文面を、何の断りも無く出す。
+	// **設定を読んだあとでないと比べられない**ので、終了コードは 1 である（引けなかった、と同じ扱い）。
+	if err := issueRef.CheckHost(loaded.Config.Tracker.Provider.Host); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
 	// **`--attempt 1` は「試行回数を渡さない」へ写す**（issue #183）。
@@ -791,7 +824,10 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	if projectNumber <= 0 {
 		projectNumber = check.ProjectNumber
 	}
+	// **接続先ホストは WORKFLOW.md の `tracker.provider.host` から取る**（設計 3-86）。
+	// `continuo setup` にフラグは無い。WORKFLOW.md が在ることが前提だからである。
 	detection := d.ScaffoldDetect(context.Background(), scaffold.DetectOptions{
+		Host:          check.Host,
 		Owner:         owner,
 		ProjectNumber: projectNumber,
 	})
@@ -803,6 +839,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupBoardUsing, detection.Values.Owner, detection.Values.ProjectNumber))
 
 	field, err := d.SetupFetchStatusField(context.Background(), setup.FetchOptions{
+		Host:          check.Host,
 		Owner:         detection.Values.Owner,
 		ProjectNumber: detection.Values.ProjectNumber,
 		FieldName:     *statusFieldFlag,
@@ -811,7 +848,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupBoardErr, err))
 		switch {
 		case errors.Is(err, setup.ErrScopeMissing):
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupBoardRemedyScope))
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupBoardRemedyScope, check.Host))
 		case errors.Is(err, setup.ErrStatusFieldNotFound):
 			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupBoardRemedyStatusField))
 		case errors.Is(err, setup.ErrRateLimited):
@@ -938,6 +975,9 @@ func printScaffoldError(w io.Writer, result scaffold.Result, err error) int {
 		// **雛形を作るのは `continuo init` の仕事である。**setup は作らずに案内して止まる。
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotFound, pathOf(result, err)))
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotFoundRemedy))
+	case errors.Is(err, scaffold.ErrHostInvalid):
+		// **黙って github.com のカンバンを読みに行かない**（設計 3-86）。
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrHostInvalid, err))
 	case errors.Is(err, scaffold.ErrKeysNotFound):
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrKeysNotFound, err))
 	case errors.Is(err, scaffold.ErrKeysNotRewritable):
@@ -1103,11 +1143,13 @@ func runTrust(d Deps, args []string, stdout, stderr io.Writer) int {
 		return trustInternalErrorExitCode
 	}
 
-	opts := trust.Options{Repositories: loaded.Config.Trust.Repositories, HomeDir: homeDir}
+	// **clone を引く相手も取ってくる相手も、接続先ホストである**（設計 3-86）。
+	host := loaded.Config.Tracker.Provider.Host
+	opts := trust.Options{Repositories: loaded.Config.Trust.Repositories, HomeDir: homeDir, Host: host}
 	// **`--dry-run` では clone を取りに行かない。**読むだけのつもりで叩いた人の
 	// ディスクを無断で使わないため（設計 3-22 / 3-33）。
 	if !*dryRunFlag {
-		opts.FetchClone = workspace.RunGhqGet
+		opts.FetchClone = workspace.GhqGetForHost(host)
 		opts.OnFetch = func(repository string) {
 			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLITrustFetchingClone, repository))
 		}
@@ -1305,7 +1347,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 
 	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
-	// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
+	// 空なら、設定の接続先ホストから導いた宛先を読む（読み取りだけである。設計 3-86）。
 	// **常駐プロセスと同じ検査を通す。**ここへ `gh auth token` のトークンが送られるので、
 	// 宛先を確かめずに使わない。
 	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)

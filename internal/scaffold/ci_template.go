@@ -85,13 +85,24 @@ jobs:
     steps:
       - name: 設計のレビュー結果が貼ってあるか
         # **checkout しません。**この job はリポジトリの中身を1つも読みません。
+        # **GH_TOKEN と GH_ENTERPRISE_TOKEN の両方を渡します。**
+        # gh は github.com と <名前>.ghe.com では GH_TOKEN を、GitHub Enterprise Server では
+        # GH_ENTERPRISE_TOKEN を読みます。片方だけだと、どちらかの環境で認証に落ちます。
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
         run: |
           set -eu
+
+          # **gh の宛先を、この検査が走っている GitHub にします。**
+          # GITHUB_SERVER_URL は runner が必ず置く環境変数で、github.com なら
+          # https://github.com、GitHub Enterprise ならそのホストの URL です。
+          # **置かないと、GitHub Enterprise でも gh は github.com へ問い合わせます。**
+          GH_HOST="${GITHUB_SERVER_URL#*://}"
+          export GH_HOST
 
           # **数える条件は2つです。**
           #   一、目印が本文の**先頭**か、continuo:agent の印の**直後**にある。
@@ -141,14 +152,18 @@ jobs:
 
           # **このリポジトリの issue だけを残します。**別のリポジトリの issue は、この job の
           # 権限では読めません（private なら 404、public でも投稿者の立場が変わります）。
-          jq -r --arg repo "${REPO}" '
+          #
+          # **URL の頭は GITHUB_SERVER_URL から取ります。**https://github.com/ と決め打ちすると、
+          # GitHub Enterprise では1件も当たらず、紐づく issue が0件になって必ず落ちます。
+          # **一重引用符の中ではシェルの変数が展開されないので、--arg で渡します。**
+          jq -r --arg repo "${REPO}" --arg server "${GITHUB_SERVER_URL}" '
             [ .closingIssuesReferences[]
-              | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
+              | select(.url | startswith($server + "/" + $repo + "/issues/"))
               | .number
             ] | unique | .[]' pr.json > issues.txt
-          jq -r --arg repo "${REPO}" '
+          jq -r --arg repo "${REPO}" --arg server "${GITHUB_SERVER_URL}" '
             .closingIssuesReferences[]
-            | select(.url | startswith("https://github.com/" + $repo + "/issues/") | not)
+            | select(.url | startswith($server + "/" + $repo + "/issues/") | not)
             | .url' pr.json > outside.txt
 
           # 段3. その issue のどれか1件に、設計のレビュー結果が貼られているか。
@@ -248,11 +263,16 @@ jobs:
       - name: 実装のレビュー結果が貼ってあるか
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
         run: |
           set -eu
+
+          # **gh の宛先を、この検査が走っている GitHub にします**（上の job と同じ）。
+          GH_HOST="${GITHUB_SERVER_URL#*://}"
+          export GH_HOST
 
           # **数える条件は上の job と同じ2つです。**
           # **数えるのを gh と同じパイプラインに置きません。**gh が落ちても wc の終了状態が

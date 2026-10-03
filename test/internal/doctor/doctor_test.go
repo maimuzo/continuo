@@ -262,7 +262,7 @@ func TestDoctor_cloneの検査はghq_list_p_eで行う(t *testing.T) {
 	if err != nil {
 		t.Fatalf("テスト用ghq mock が受け取った引数を読めません: %v", err)
 	}
-	if got := strings.TrimSpace(string(recorded)); got != "list -p -e octocat/hello-world" {
+	if got := strings.TrimSpace(string(recorded)); got != "list -p -e github.com/octocat/hello-world" {
 		t.Fatalf("ghq の呼び方が違う: %q", got)
 	}
 }
@@ -433,8 +433,8 @@ func TestDoctor_有効なアカウントが1つも無ければブロックが1�
 	report := fx.Run(t)
 
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolMissing)
-	if !strings.Contains(strings.Join(gh.Remedies, "\n"), "gh auth login -s project") {
-		t.Fatalf("直し方に `gh auth login -s project` が無い: %v", gh.Remedies)
+	if !strings.Contains(strings.Join(gh.Remedies, "\n"), "gh auth login --hostname github.com -s project") {
+		t.Fatalf("直し方に `gh auth login --hostname github.com -s project` が無い: %v", gh.Remedies)
 	}
 }
 
