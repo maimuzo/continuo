@@ -157,7 +157,8 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 			t.Errorf("取り込めなかったときの扱いに %q がありません（issue #214）", want)
 		}
 	}
-	if !strings.Contains(body, "取り込めなかったことを応答に書いて `CONTINUO-STATUS: blocked` を出してください") {
+	// 応答は issue に残らず、報告を書かずに blocked を出すと書かせ直しに回るので、3-7 の報告へ書かせる（設計 5-3u）。
+	if !strings.Contains(body, "取り込めなかったことを 3-7 の報告の `### 詳細` に書いてから、`CONTINUO-STATUS: blocked` を出してください") {
 		t.Error("マージで落ちたときの行き先が書かれていません（issue #214）")
 	}
 }

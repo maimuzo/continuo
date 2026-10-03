@@ -489,8 +489,9 @@ func TestTemplate_書き足した判断票は成果に数えられないので�
 	body := prompt.Builtin()
 	plan := sectionOf(t, body, planReviewHeading)
 	for _, want := range []struct{ needle, why string }{
-		{"判断票がその run の成果に数えられるのは、その run の中で新しく貼ったときだけです", "書き足した判断票が成果になると読めます"},
+		{"計画の判断票（issue のコメント）がその run の成果に数えられるのは、その run の中で新しく貼ったときだけです", "書き足した判断票が成果になると読めます"},
 		{"前の判断票へ書き足したときは、順序が正しくても数えられません", "書き足した判断票が成果になると読めます"},
+		{"実装の判断票（3-6。pull request のコメント）は、新しく貼っても数えられません", "実装の判断票なら新しく貼れば成果になると読めます"},
 		{"判断票だけを書いて turn を終えないでください", "判断票だけで終えると、書かせ直しから failure_state へ落ちます"},
 		{"そのことを 3-7 の報告の `### 詳細` に書いて人間へ渡してください", "印の立場が数えられないときに、判断票だけで止まります"},
 	} {
@@ -514,6 +515,100 @@ func TestTemplate_書き足した判断票は成果に数えられないので�
 	} {
 		if !strings.Contains(loop, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", reviewLoopHeading, want.needle, want.why)
+		}
+	}
+	// 止まる段の2か所とも、実装の判断票（pull request のコメント）も数えられないと書く。
+	// 「書き足した判断票は」だけだと、実装の判断票を新しく貼れば成果になると読める。
+	if n := strings.Count(loop, "判断票は、前の判断票へ書き足したときも、実装の判断票（pull request のコメント）のときも、その run の成果に数えられません"); n != 2 {
+		t.Errorf("%q の止まる段で、数えられない判断票の範囲を書き分けた文が %d か所です（2か所のはず）", reviewLoopHeading, n)
+	}
+	if strings.Contains(loop, "前の判断票へ書き足した判断票は、その run の成果に数えられません") {
+		t.Errorf("%q に、計画の判断票にしか当たらない旧い文が残っています", reviewLoopHeading)
+	}
+}
+
+// 目的: 人間に知らせることと止まる理由を、応答ではなく 3-7 の報告へ書かせることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**応答は issue に残らない。報告を書かずに `blocked` を出すと、continuo はセッションを
+// 復元して書かせ直し、2度目も書かれなければ failure_state へ落とす。
+// **例外は 3-1 で issue を読めなかったときだけである。**gh が落ちていると報告も書けないことがあるので、
+// 書けなかったときに限って応答へ書かせる。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 「応答に書」「応答の最後に書いて」を含む行が、3-1 の「書けなかったら」の1行だけである。
+// 3-1・3-6・7-2 の該当の段が 3-7 の報告へ書かせている。
+func TestTemplate_知らせることは応答ではなく報告へ書かせる(t *testing.T) {
+	body := prompt.Builtin()
+	re := regexp.MustCompile(`応答に書|応答の最後に書いて`)
+	var hits []string
+	for _, line := range strings.Split(body, "\n") {
+		if re.MatchString(line) {
+			hits = append(hits, line)
+		}
+	}
+	if len(hits) != 1 || !strings.Contains(hits[0], "書けなかったら") {
+		t.Errorf("応答へ書かせる行は、3-1 の「報告を書けなかったら」の1行だけのはずです。%d 行あります:\n%s",
+			len(hits), strings.Join(hits, "\n"))
+	}
+	for _, want := range []string{
+		"取り込めなかったことを 3-7 の報告の `### 詳細` に書いてから、`CONTINUO-STATUS: blocked` を出してください",
+		"読めなかったときは、その旨を 3-7 の報告の `### 詳細` に書いてから、`CONTINUO-STATUS: blocked` を出してください",
+		"`gh run rerun` を叩かずに、そのことを 3-7 の報告の `### 詳細` に書いてください",
+		"書き戻さず、そのことを 3-7 の報告の `### 詳細` に書いてください",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("組み込みに %q がありません。応答に書くと issue に残りません", want)
+		}
+	}
+	if n := strings.Count(body, "`gh run rerun` を叩かずに、そのことを 3-7 の報告の `### 詳細` に書いてください"); n != 2 {
+		t.Errorf("回し直す相手が無い2つの場面のうち、報告へ書かせているのが %d か所です", n)
+	}
+}
+
+// 目的: 7-3 で別のリポジトリへ出したとき、検査の段の `--branch` と workflow の名前も出した先から決めさせることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**手元の worktree は issue のリポジトリである。`--repo` だけ置き換えても、
+// `git branch --show-current` と `.github/workflows/` の検索は手元を見るので、出した先に無い branch や
+// workflow の名前で run を探し、回し直す相手を取り違えるか、見つけられない。
+//
+// 与える情報: prompt.Builtin() の 3-6 の節の「貼ったら、検査を回し直す」。
+// 成功条件: `--repo` だけでは足りないと書き、出した先の branch 名を `headRefName` で読ませ、
+// 出した先の workflow を contents API で読ませる。
+func TestTemplate_別のリポジトリへ出したときは検査のbranchとworkflowも出した先から決めさせる(t *testing.T) {
+	section := sectionOf(t, prompt.Builtin(), changeReviewHeading)
+	checks := section[strings.Index(section, "### 貼ったら、検査を回し直す"):]
+	for _, want := range []string{
+		"**`--repo` だけでは足りません。**",
+		"`--branch` には、出した先の pull request の branch 名を書いてください",
+		"gh pr view <PR番号> --repo <出した先> --json headRefName --jq .headRefName",
+		"手元の `.github/workflows/` ではなく、出した先のリポジトリの workflow で決めてください",
+		`gh api "repos/<出した先>/contents/.github/workflows?ref=<branch 名>" --jq '.[].path'`,
+		`gh api "repos/<出した先>/contents/<そのパス>?ref=<branch 名>"`,
+	} {
+		if !strings.Contains(checks, want) {
+			t.Errorf("「貼ったら、検査を回し直す」に %q がありません。7-3 のとき手元の branch と workflow を見ます", want)
+		}
+	}
+}
+
+// 目的: 段0 と段5 のあいだに前の判断票が消されたとき、段5 で止まり続けず段0 からやり直させることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**段5 は段0 が出した `ID=` を読み直す。消されていると、何度叩いても「判断票を読めませんでした」で止まる。
+// **「`ID=` を空にして叩き直さない」と矛盾させない。**`ID=` は段0 が出し直した値に従わせる。
+//
+// 与える情報: prompt.Builtin() の 3-2 の節。
+// 成功条件: 叩き直しても出るなら段0 からやり直す、`ID=` は段0 が出し直した値に従う、
+// 段0 からやり直しても出るなら 3-7 の報告に書いて止まる、の3つがある。`ID=` を空にさせない文も残っている。
+func TestTemplate_判断票を読めないままなら段0からやり直させる(t *testing.T) {
+	plan := sectionOf(t, prompt.Builtin(), planReviewHeading)
+	for _, want := range []string{
+		"叩き直しても `判断票を読めませんでした` と出るときは、段0 からやり直してください",
+		"`ID=` は、段0 が出し直した値に従います",
+		"段0 からやり直しても `判断票を読めませんでした` と出るときは、そのことを 3-7 の報告の `### 詳細` に書き",
+		"`ID=` を空にして叩き直さないでください",
+	} {
+		if !strings.Contains(plan, want) {
+			t.Errorf("%q の節に %q がありません", planReviewHeading, want)
 		}
 	}
 }
