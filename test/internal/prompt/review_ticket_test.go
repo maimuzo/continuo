@@ -25,6 +25,12 @@ const changeReviewHeading = "## 3-6. pull request のレビューを受ける"
 // transitionHeader は、判断票の先頭に置かせる件数の遷移表の見出しの行である。
 const transitionHeader = "| 周 | CRITICAL | HIGH | MEDIUM | LOW |"
 
+// findSampleMark は、段0（前の判断票を探し、今回の周の番号を出す）の見本を見分ける文字列である。
+const findSampleMark = "LAST=$(tr -d"
+
+// reviewLoopHeading は、レビューの回し方（何周回すか・止まり方）を書かせる節の見出しである。
+const reviewLoopHeading = "## 5-6. レビューの回し方"
+
 // 目的: 実装レビューが収まったら、誰が作った draft でも必ず外させることを固定する（設計 5-3u）。
 //
 // **なぜ要るか。**人間は「実装レビューが終わったら必ずdraft PRのdraftを外せ」と指示した。
@@ -157,11 +163,15 @@ func fencedBashBlock(t *testing.T, mark string) string {
 // fakeGh は、試しに使う偽の gh である。読み取りは $BODY を返し、書き込みは $OUT の下へ写す。
 // `issue view` と `pr view` は、探す段の jq を通した結果として $FIND_ID を返す。
 // $VIEW_FAIL が空でなければ、`issue view` と `pr view` を終了コード 1 で落とす。
+// $API_FAIL が空でなければ、PATCH でない `api`（前の判断票の読み取り）を、本文を2行だけ出して終了コード 1 で落とす。
 // 受け取った引数は、1回につき1行で $OUT/args へ足す。
 const fakeGh = `#!/bin/sh
 echo "$*" >> "$OUT/args"
 if [ -n "$VIEW_FAIL" ]; then
   case "$1 $2" in "issue view"|"pr view") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;; esac
+fi
+if [ -n "$API_FAIL" ] && [ "$1" = api ] && [ "$2" != --method ]; then
+  head -n 2 "$BODY"; echo "HTTP 502: Bad Gateway" >&2; exit 1
 fi
 case "$1 $2" in
   "api --method")
@@ -360,7 +370,7 @@ func TestTemplate_判断票の見本は遷移表に今回の周を1行足す(t *
 // 成功条件: 計画でも実装でも「判断票を探せませんでした」と出て、「今回は1周目です」と出ない。
 // `PR=` が空のときは gh を呼ばずに「PR= が空です」と出る。
 func TestTemplate_前の判断票を探せないときは1周目にしない(t *testing.T) {
-	find := fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api"))
+	find := fillTemplate.Replace(fencedBashBlock(t, findSampleMark))
 	for _, sh := range shellsForSample(t) {
 		t.Run(sh, func(t *testing.T) {
 			for _, tc := range []struct{ name, script, want string }{
@@ -395,7 +405,7 @@ func TestTemplate_前の判断票を探せないときは1周目にしない(t *
 // どれも issue のリポジトリ（octocat/hello-world）へは届かない。計画の段5 は issue のリポジトリを PATCH する。
 func TestTemplate_実装の判断票はPRREPOのリポジトリで扱う(t *testing.T) {
 	const other = "octocat/spoon-knife"
-	find := asChangeReview(fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api")), "7", other)
+	find := asChangeReview(fillTemplate.Replace(fencedBashBlock(t, findSampleMark)), "7", other)
 	ticket := "<!-- code-review-result -->\n<!-- continuo:agent -->\n" + changeTicketHeading + "\n\n" +
 		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n\n" +
 		"<details>\n<summary>1周目</summary>\n\nx\n\n</details>\n"
@@ -446,7 +456,7 @@ func TestTemplate_実装の判断票はPRREPOのリポジトリで扱う(t *test
 // 与える情報: 段0 の見本と、2周目まで入った前の判断票。
 // 成功条件: 「今回は 3 周目です」と出る。前の判断票が無いときは「今回は1周目です」と出る。
 func TestTemplate_前の判断票を探す見本は今回の周の番号を出す(t *testing.T) {
-	find := fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api"))
+	find := fillTemplate.Replace(fencedBashBlock(t, findSampleMark))
 	ticket := "<!-- continuo:agent -->\n<!-- design-review-result -->\n" + planTicketHeading + "\n\n" +
 		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n| 2周目 | 0 | 0 | 0 | 0 |\n\n" +
 		"<details>\n<summary>1周目</summary>\n\n| 9周目 | 中の表は数えない |\n\n</details>\n"
@@ -461,5 +471,126 @@ func TestTemplate_前の判断票を探す見本は今回の周の番号を出�
 				t.Errorf("前の判断票が無いのに、1周目と出していません: %q", out)
 			}
 		})
+	}
+}
+
+// 目的: 書き足した判断票は run の成果に数えられないと正しく書かせ、止まるときは 3-7 の報告を書かせることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**continuo は、作成時刻が run の開始より後のコメントだけを成果として数える
+// （internal/orchestrator/comment.go の hasRunComment）。**前の判断票へ書き足した判断票は数えられない。**
+// 指示書が「判断票だけで成果になる」前提のままだと、連続10回で止まった run が判断票と `blocked` だけで終え、
+// continuo はセッションを復元して書かせ直し、2度目も書かれなければ failure_state へ落とす。
+//
+// 与える情報: prompt.Builtin() の 3-2 と 5-6 の節。
+// 成功条件: 3-2 が「新しく貼ったときだけ」「書き足したときは数えられない」と書き、旧い前提の文が無い。
+// 5-6 の連続10回で止まる段と打ち切る段が、3-7 の報告を書いてから `blocked` を出させる。
+// 印の立場が数えられないときも、応答ではなく 3-7 の報告へ書かせる。
+func TestTemplate_書き足した判断票は成果に数えられないので報告を書いてから止めさせる(t *testing.T) {
+	body := prompt.Builtin()
+	plan := sectionOf(t, body, planReviewHeading)
+	for _, want := range []struct{ needle, why string }{
+		{"判断票がその run の成果に数えられるのは、その run の中で新しく貼ったときだけです", "書き足した判断票が成果になると読めます"},
+		{"前の判断票へ書き足したときは、順序が正しくても数えられません", "書き足した判断票が成果になると読めます"},
+		{"判断票だけを書いて turn を終えないでください", "判断票だけで終えると、書かせ直しから failure_state へ落ちます"},
+		{"そのことを 3-7 の報告の `### 詳細` に書いて人間へ渡してください", "印の立場が数えられないときに、判断票だけで止まります"},
+	} {
+		if !strings.Contains(plan, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", planReviewHeading, want.needle, want.why)
+		}
+	}
+	for _, old := range []string{
+		"入れ替えると、判断票だけを書いて turn を終えたときに",
+		"そのことを応答に書いて人間へ渡してください",
+	} {
+		if strings.Contains(body, old) {
+			t.Errorf("組み込みに %q が残っています。書き足した判断票は成果に数えられません", old)
+		}
+	}
+
+	loop := sectionOf(t, body, reviewLoopHeading)
+	for _, want := range []struct{ needle, why string }{
+		{"止まるときは、3-7 の報告を書いてから、応答の最後に `CONTINUO-STATUS: blocked` を書いてください", "連続10回で止まるときに、判断票と blocked だけで終えます"},
+		{"質問を判断票の中だけに書いて止まらないでください", "打ち切るときに、判断票の中の質問だけで止まります"},
+	} {
+		if !strings.Contains(loop, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", reviewLoopHeading, want.needle, want.why)
+		}
+	}
+}
+
+// 目的: 前の判断票の読み取り（gh api）が失敗したら、段0 も段5 も貼らずに止めることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**読み取りをパイプの先へ流すと、gh の失敗が消える。
+// 段5 は空の本文を「旧い形」と取り違えて新しく1件貼り、前の判断票の続きが別のコメントに分かれる。
+// 段0 は周の番号を出せずに「遷移表を読めません」と言い、段5 の新しく貼る経路へ進ませる。
+// **段0 の「探せなかったことと、無いことを分ける」と食い違わせない。**
+//
+// 与える情報: 段0 と段5 の見本。偽の gh は、前の判断票の読み取りを本文を2行だけ出して終了コード 1 で落とす。
+// 成功条件: 計画でも実装でも、段0 は「判断票を読めませんでした」と出し、周の番号を出さない。
+// 段5 は「判断票を読めませんでした」と出し、PATCH も新しい投稿もしない。
+// 段0 の止まったときの案内は、計画と実装で分かれている。
+func TestTemplate_前の判断票を読み取れないときは貼らずに止める(t *testing.T) {
+	ticket := "<!-- continuo:agent -->\n<!-- design-review-result -->\n" + planTicketHeading + "\n\n" +
+		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n\n" +
+		"<details>\n<summary>1周目</summary>\n\nx\n\n</details>\n"
+	find := fillTemplate.Replace(fencedBashBlock(t, findSampleMark))
+	for _, sh := range shellsForSample(t) {
+		t.Run(sh, func(t *testing.T) {
+			for _, tc := range []struct{ name, find, post string }{
+				{"計画", find, postSample(t, "123", "2", "")},
+				{"実装", asChangeReview(find, "7", "octocat/hello-world"), asChangeReview(postSample(t, "123", "2", ""), "7", "octocat/hello-world")},
+			} {
+				env := []string{"API_FAIL=1"}
+				out, _, _ := runSample(t, sampleRun{shell: sh, script: tc.find, body: ticket, findID: "123", env: env})
+				if !strings.Contains(out, "判断票を読めませんでした（gh api が失敗しました）") || strings.Contains(out, "周目です") ||
+					strings.Contains(out, "遷移表を読めません") {
+					t.Errorf("%s の段0: 読み取りが失敗したのに止まっていないか、周の番号を出しています: %q", tc.name, out)
+				}
+
+				out, patched, posted := runSample(t, sampleRun{shell: sh, script: tc.post, body: ticket, env: env})
+				if patched != "" || posted != "" {
+					t.Errorf("%s の段5: 読み取りが失敗したのに貼っています\n%s\npatched=%q\nposted=%q", tc.name, out, patched, posted)
+				}
+				if !strings.Contains(out, "判断票を読めませんでした（gh api が失敗しました）。貼らずに止めました") {
+					t.Errorf("%s の段5: 読み取りが失敗したことを出していません: %q", tc.name, out)
+				}
+			}
+		})
+	}
+
+	plan := sectionOf(t, prompt.Builtin(), planReviewHeading)
+	for _, want := range []string{
+		"`判断票を探せませんでした` か `判断票を読めませんでした` と出たら、段5 へ進まないでください",
+		"実装の判断票（`KIND=実装`）なら、`PR=` と `PRREPO=` を確かめてから",
+		"計画の判断票（`KIND=計画`）なら、書き換える値はありません",
+		"`判断票を読めませんでした` と出たら、何も貼られていません",
+	} {
+		if !strings.Contains(plan, want) {
+			t.Errorf("%q の節に %q がありません。止まったときの案内が計画と実装で分かれていません", planReviewHeading, want)
+		}
+	}
+}
+
+// 目的: 7-3 で別のリポジトリへ出したとき、検査を回し直す3つのコマンドも出した先のリポジトリへ向けさせることを固定する（設計 5-3u）。
+//
+// **なぜ要るか。**`gh run list`・`gh run rerun`・`gh pr checks` は `--repo {{.issue.owner}}/{{.issue.repo}}` を直に書いている。
+// 置き換えさせないと、issue のリポジトリの同じ番号の、無関係な pull request の検査を待つ。
+//
+// 与える情報: prompt.Builtin() の 3-6 の節。
+// 成功条件: draft を外す段の置き換えの文が3つのコマンドも名指しし、検査の段にも置き換えの文がある。
+// どちらも `PRREPO=` と同じ値と書く。
+func TestTemplate_別のリポジトリへ出したときは検査の段もそのリポジトリへ向けさせる(t *testing.T) {
+	section := sectionOf(t, prompt.Builtin(), changeReviewHeading)
+	for _, want := range []string{
+		"下の「貼ったら、検査を回し直す」の3つのコマンド（`gh run list`・`gh run rerun`・`gh pr checks`）の `--repo` を、出した先のリポジトリ（判断票の `PRREPO=` と同じ値）に置き換えてください",
+		"7-3 で別のリポジトリへ出したときは、下の3つのコマンドの `--repo` を、出した先のリポジトリ（判断票の `PRREPO=` と同じ値）に置き換えてください",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("%q の節に %q がありません。7-3 のとき、無関係な pull request の検査を待ちます", changeReviewHeading, want)
+		}
+	}
+	checks := section[strings.Index(section, "### 貼ったら、検査を回し直す"):]
+	if !strings.Contains(checks, "下の3つのコマンドの `--repo` を、出した先のリポジトリ") {
+		t.Error("「貼ったら、検査を回し直す」の段の中に、7-3 の置き換えの文がありません")
 	}
 }
