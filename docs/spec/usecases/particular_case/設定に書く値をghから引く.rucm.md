@@ -14,6 +14,7 @@
 - `docs/plans/continuo_design.md` の「3-33. 信頼の登録は、人間が列挙したものだけを対象にする」（`trust.repositories` はカンバンから拾うだけ）
 - `internal/scaffold/detect.go` の `Detect` / `detectOwner` / `detectProject` / `detectRepositories` / `listProjects` / `listOrgs` / `parseProjectList` / `parseItemRepositories` / `validOwnerRepo`
 - `internal/scaffold/fill.go` の `ValidOwner`
+- `docs/plans/continuo_design.md` の「3-86b. `gh` と `ghq` へ、接続先ホストを必ず渡す」（**このユースケースが叩く gh は、どれも環境変数 `GH_HOST` に接続先ホストを入れて起こす。**`internal/scaffold/detect.go` の `RunGHForHost`。ログインを勧める案内にも、そのホストが入る。接続先ホストそのものは gh から引かず、呼び出し元が決める）
 - `internal/cli/cli.go` の `runInit` / `runSetup` / `checkDetectionForSetup`（呼び出し元）
 
 ## RUCM

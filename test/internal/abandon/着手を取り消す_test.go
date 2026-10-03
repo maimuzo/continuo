@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f14a8015d787e822ff52d0078d06c8780fdbe7bb4deb92dc9ba5a322716e67e7", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "43566f3b603f55073410b6583b08c94b06550123df19e7fcbed2d97885a6270a", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **ユースケース記述「着手を取り消す」の経路に対応づけたテストである。**
 // 関数名の `P008` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -2225,19 +2225,20 @@ func Test_着手を取り消す_P031_ロックの置き場所が無い機械で�
 	}
 }
 
+// {"RUCM-PATH": "P036"}
+//
 // 目的: issue の URL のホストが接続先ホスト（tracker.provider.host）と違うとき、
 // 何も消さず、カンバンも読まずに止まることを確認する（設計 3-86。issue #86）。
 //
 // **`continuo abandon` は Status を `<owner>/<repo>#<番号>` だけで接続先のカンバンから引く。**
 // 接続先を切り替えたあとに古いホストの URL を渡すと、接続先のカンバンに在る、
-// 同じ番号の別の issue の Status を動かす。**経路の番号は持たない**（ユースケース記述の経路に
-// 対応づけたテストではなく、入口の検査を1つ確かめるテストである）。
+// 同じ番号の別の issue の Status を動かす。**基本フローの段6 で止まり、代替フロー「前提を読めない」が受ける。**
 //
 // 与える情報: 接続先が github.com の設定と、issue 188 の worktree と、
 // `https://ghe.example.com/octocat/hello-world/issues/188`。
 // 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を送っていない、
 // カンバンのアダプタを1度も作っていない、止まった理由に両方のホストと次の手が出ていること。
-func TestAbandon_接続先ホストと違うURLでは何も消さずに止まる(t *testing.T) {
+func Test_着手を取り消す_P036_接続先ホストと違うURLでは何も消さずに止まる(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 
