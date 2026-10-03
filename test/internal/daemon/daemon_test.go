@@ -540,3 +540,42 @@ func TestDaemon_hookの受け口はherdrのread_timeout_msで接続を切らな�
 		t.Fatalf("SIGTERM で正常に終わらなかった（finished=%v, code=%d）\n%s", finished, code, logs.String())
 	}
 }
+
+// 目的: 接続先が github.com でないときに起動時のカンバンの読み取りが落ちたら、
+// `continuo doctor` へ案内することを確認する（設計 3-86。issue #86）。
+//
+// **スキーマの照会は `continuo doctor` にしか置いていない**（人間の決定）。
+// GitHub Enterprise Server 3.19 以下では、起動時の最初の問い合わせが GraphQL の誤りで落ちる。
+// 「Status の選択肢名が設定と一致しません」だけを出すと、利用者は Status の名前を直しに行く。
+//
+// 与える情報: `tracker.provider.host` が `ghe.example.com` で、カンバンに無い Status 名を
+// `failure_state` に書いた設定（起動時のカンバンの読み取りが落ちる）。
+// 成功条件: 終了コード 1 で起動を止め、出力に接続先ホストと `continuo doctor` と「3.20」が出ること。
+func TestDaemon_接続先がGHEで起動時にカンバンを読めなければdoctorへ案内する(t *testing.T) {
+	env := newDaemonEnv(t)
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
+	raw, err := os.ReadFile(env.WorkflowPath)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	content := strings.Replace(string(raw), "    status_field: Status\n",
+		"    status_field: Status\n    host: ghe.example.com\n", 1)
+	content = strings.Replace(content, "polling:\n", "  failure_state: カンバンに無い名前\npolling:\n", 1)
+	if err := os.WriteFile(env.WorkflowPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+
+	cmd, logs := env.start(t)
+	code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+	if !finished {
+		t.Fatalf("起動時の検査に落ちたのに終了しなかった\n%s", logs.String())
+	}
+	if code != 1 {
+		t.Fatalf("終了コードが 1 ではない: got %d\n%s", code, logs.String())
+	}
+	for _, want := range []string{"ghe.example.com", "continuo doctor", "3.20"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("出力に %q が無い:\n%s", want, logs.String())
+		}
+	}
+}

@@ -225,3 +225,65 @@ func TestRunGhqGet_ghqが無ければ起動できないと言う(t *testing.T) {
 		t.Errorf("起動できなかったことが分かる文面になっていない: %v", err)
 	}
 }
+
+// 目的: 接続先ホストが GitHub Enterprise のとき、ghq へホスト付きの名前を渡すことを確認する（設計 3-86）。
+//
+// **`ghq list -e` は末尾側の部分パスとの完全一致で引く。**`<owner>/<repo>` の2要素だと、
+// github.com と GitHub Enterprise の両方に同じ名前の clone が在るときに2行返り、
+// 1行目を採ると別のホストの clone から worktree を切る。
+// **`ghq get` は URL の形で渡す。**`<ホスト>/<owner>/<repo>` の形だと、ghq はホスト名の形によって
+// github.com の下のパスと読む。
+//
+// 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、接続先ホスト `GHE.example.com`（大文字混じり）。
+// 成功条件: `list -p -e ghe.example.com/octocat/hello-world` と
+// `get --vcs git https://ghe.example.com/octocat/hello-world` で呼ばれること。
+func TestGhq_接続先ホストを付けて呼ぶ(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "args.txt")
+	fakeGhq(t, "echo \"$@\" >> "+out+"\nexit 0")
+
+	if _, err := workspace.GhqListForHost("GHE.example.com")(context.Background(), "octocat", "hello-world"); err != nil {
+		t.Fatalf("list に失敗した: %v", err)
+	}
+	if err := workspace.GhqGetForHost("GHE.example.com")(context.Background(), "octocat", "hello-world"); err != nil {
+		t.Fatalf("get に失敗した: %v", err)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
+	}
+	want := "list -p -e ghe.example.com/octocat/hello-world\n" +
+		"get --vcs git https://ghe.example.com/octocat/hello-world\n"
+	if string(raw) != want {
+		t.Fatalf("ghq へ渡した引数が違う:\ngot  %q\nwant %q", raw, want)
+	}
+}
+
+// 目的: 接続先ホストを省いたら github.com として引くことと、ghq へ渡せない形のホストは
+// 起動せずに断ることを確認する（設計 3-86）。
+// 与える情報: 空文字のホストと、`-` で始まるホスト・パス付きのホスト。呼ばれたら印を残すテスト用ghq mock。
+// 成功条件: 空文字では `github.com/…` で呼ばれ、渡せない形ではエラーになって ghq が1回も起動しないこと。
+func TestGhq_ホストを省けばgithub_comで渡せない形は起動せずに断る(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "args.txt")
+	fakeGhq(t, "echo \"$@\" >> "+out+"\nexit 0")
+
+	if _, err := workspace.GhqListForHost("")(context.Background(), "octocat", "hello-world"); err != nil {
+		t.Fatalf("list に失敗した: %v", err)
+	}
+	for _, bad := range []string{"-x", "ghe.example.com/evil", "ghe.example.com:8443"} {
+		if _, err := workspace.GhqListForHost(bad)(context.Background(), "octocat", "hello-world"); err == nil {
+			t.Errorf("ホスト %q を受け付けてしまった", bad)
+		}
+		if err := workspace.GhqGetForHost(bad)(context.Background(), "octocat", "hello-world"); err == nil {
+			t.Errorf("ホスト %q を受け付けてしまった（get）", bad)
+		}
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
+	}
+	if string(raw) != "list -p -e github.com/octocat/hello-world\n" {
+		t.Fatalf("ghq の呼ばれ方が違う（渡せない形で起動していないか）: %q", raw)
+	}
+}

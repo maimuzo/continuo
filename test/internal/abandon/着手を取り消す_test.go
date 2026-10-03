@@ -2224,3 +2224,34 @@ func Test_着手を取り消す_P031_ロックの置き場所が無い機械で�
 		t.Fatalf("ロックの置き場所の権限が開いている: got %04o, want 0700", got)
 	}
 }
+
+// 目的: issue の URL のホストが接続先ホスト（tracker.provider.host）と違うとき、
+// 何も消さず、カンバンも読まずに止まることを確認する（設計 3-86。issue #86）。
+//
+// **`continuo abandon` は Status を `<owner>/<repo>#<番号>` だけで接続先のカンバンから引く。**
+// 接続先を切り替えたあとに古いホストの URL を渡すと、接続先のカンバンに在る、
+// 同じ番号の別の issue の Status を動かす。**経路の番号は持たない**（ユースケース記述の経路に
+// 対応づけたテストではなく、入口の検査を1つ確かめるテストである）。
+//
+// 与える情報: 接続先が github.com の設定と、issue 188 の worktree と、
+// `https://ghe.example.com/octocat/hello-world/issues/188`。
+// 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を送っていない、
+// カンバンのアダプタを1度も作っていない、止まった理由に両方のホストと次の手が出ていること。
+func TestAbandon_接続先ホストと違うURLでは何も消さずに止まる(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) {
+		opts.IssueURL = "https://ghe.example.com/octocat/hello-world/issues/188"
+	})
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if fx.TrackerBuilds() != 0 {
+		t.Fatalf("断るべき URL なのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
+	}
+	for _, want := range []string{"ghe.example.com", "github.com", "tracker.provider.host", "git worktree remove"} {
+		assertContains(t, fx, want)
+	}
+}

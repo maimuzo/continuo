@@ -1,6 +1,7 @@
 package abandon_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/abandon"
@@ -85,6 +86,38 @@ func TestSameIssue_揺れは吸収し別のissueには一致しない(t *testing
 	for _, other := range different {
 		if ref.SameIssue(other) {
 			t.Fatalf("別の issue のはずの %q が一致した", other)
+		}
+	}
+}
+
+// 目的: issue の URL のホストが接続先ホストと違えば断り、同じなら通すことを確認する（設計 3-86）。
+//
+// **`continuo abandon` は Status を `<owner>/<repo>#<番号>` だけで接続先のカンバンから引く。**
+// 接続先を切り替えたあとに古いホストの URL を渡すと、接続先のカンバンに在る、
+// 同じ番号の別の issue の Status を動かす。**断る文面に、次の手を書く。**
+//
+// 与える情報: github.com の URL と、接続先ホストが github.com・空文字（既定）・大文字混じり・
+// GitHub Enterprise のホスト名の4通り。
+// 成功条件: 前の3つは通り、最後はエラーになって、その文面に両方のホストと
+// `tracker.provider.host` と `git worktree remove` が入ること。
+func TestIssueRef_CheckHost_接続先ホストと違うURLを断る(t *testing.T) {
+	ref, err := abandon.ParseIssueURL("https://github.com/octocat/hello-world/issues/42")
+	if err != nil {
+		t.Fatalf("URL を読めなかった: %v", err)
+	}
+	for _, same := range []string{"github.com", "", "GitHub.com"} {
+		if err := ref.CheckHost(same); err != nil {
+			t.Errorf("接続先ホスト %q と同じなのに断った: %v", same, err)
+		}
+	}
+
+	err = ref.CheckHost("ghe.example.com")
+	if err == nil {
+		t.Fatal("接続先ホストと違う URL を通してしまった")
+	}
+	for _, want := range []string{"github.com", "ghe.example.com", "tracker.provider.host", "git worktree remove"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("断る文面に %q が無い: %v", want, err)
 		}
 	}
 }

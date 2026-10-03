@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+// **このファイルと by_identifier.go の問い合わせを変えたら、GitHub Enterprise Server の
+// 公開スキーマでの検証をやり直すこと**（設計 3-86）。
+//
+// continuo が送る問い合わせ13本（このファイルの12本と by_identifier.go の1本）は、
+// 2026-10-03 に GitHub Enterprise Server 3.17〜3.22 の公開スキーマ
+// （`https://docs.github.com/public/ghes-<版>/schema.docs-enterprise.graphql`）に対して
+// GraphQL の検証器（graphql-js 16）で検証してある。3.20・3.21・3.22 は13本とも誤りが0件で、
+// 3.19 以下で足りない要素は4つだけだった。**`continuo doctor` が照会するのは、その4つである**
+// （schema.go の schemaSupportQuery）。新しい型・フィールド・引数・enum の値を使うと、
+// その一覧から漏れる。漏れると、doctor は「対応している」と言うのに、巡回が GraphQL の誤りで落ちる。
+
 // itemFieldsFragment は project item 1件を取得するときに共通して要る GraphQL フィールドの
 // 断片である。候補の取得（fetch_issues_by_states）と ID 指定の取り直し
 // （fetch_issues_by_ids）の両方で使い回す。
