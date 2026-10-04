@@ -3,18 +3,36 @@
   "usecase_name": "進捗報告を書く",
   "source": {
     "file": "docs/spec/usecases/particular_case/進捗報告を書く.rucm.md",
-    "rucm_block_sha256": "2cfc9f2f9bfdb6f1ae03d1817a5a67c94157434cda319991bcd3691b10b7e3ad"
+    "rucm_block_sha256": "f18f6a61d87b72957da790a248457a2dd6b278055f551490e2e3bd091c52564f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。"
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。"
+    },
+    "別の人が担当になっている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。"
+    },
+    "担当を確かめられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "エージェントは今回の push を見送っている。エージェントは作業を続けている。エージェントは次の push の前に担当を確かめ直す。"
     },
     "進捗報告を新しく投稿する": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          2
+          3
         ]
       },
       "postcondition": "進捗報告のコメントが増えている。新しいコメントの1行目はエージェントの印である。新しいコメントの2行目は進捗報告の印である。"
@@ -23,7 +41,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          4
+          5
         ]
       },
       "postcondition": "進捗報告のコメントが増えている。前の進捗報告の本文は壊れていない。"
@@ -32,52 +50,122 @@
   "nodes": [
     {
       "id": "BASIC FLOW-1",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 1,
-      "statement": "エージェントは GitHub に issue のいちばん下のコメントを要求する。"
+      "statement": "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。"
     },
     {
       "id": "BASIC FLOW-2",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。"
+      "statement": "エージェントは GitHub に issue のいちばん下のコメントを要求する。"
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "エージェントは GitHub に進捗報告の本文を要求する。"
+      "statement": "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。"
     },
     {
       "id": "BASIC FLOW-4",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。"
+      "statement": "エージェントは GitHub に進捗報告の本文を要求する。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "エージェントは読んだ本文の末尾に1行足して書き戻す。"
+      "statement": "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。"
     },
     {
       "id": "BASIC FLOW-6",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "エージェントは、push できる状態であれば、commit を push する。"
+      "statement": "エージェントは読んだ本文の末尾に、いま何をしていて、あと何が残っているかの1行を足して書き戻す。"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 7,
+      "statement": "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
       "statement": "エージェントはいまの時刻を控え直す。"
+    },
+    {
+      "id": "別の人が担当になっている-1",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 1,
+      "statement": "エージェントは進捗報告を書かない。"
+    },
+    {
+      "id": "別の人が担当になっている-2",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 2,
+      "statement": "エージェントは手元の変更を commit する。"
+    },
+    {
+      "id": "別の人が担当になっている-3",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 3,
+      "statement": "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "別の人が担当になっている-4",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 4,
+      "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
+    },
+    {
+      "id": "別の人が担当になっている-5",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 5,
+      "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
+    },
+    {
+      "id": "別の人が担当になっている-6",
+      "type": "abort",
+      "flow": "別の人が担当になっている",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "担当を確かめられない-1",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 1,
+      "statement": "エージェントは今回の push を見送ると決める。"
+    },
+    {
+      "id": "担当を確かめられない-2",
+      "type": "resume",
+      "flow": "担当を確かめられない",
+      "step": 2,
+      "statement": "RESUME STEP 2"
     },
     {
       "id": "進捗報告を新しく投稿する-1",
@@ -91,7 +179,7 @@
       "type": "resume",
       "flow": "進捗報告を新しく投稿する",
       "step": 2,
-      "statement": "RESUME STEP 6"
+      "statement": "RESUME STEP 7"
     },
     {
       "id": "進捗報告の本文を読めない-1",
@@ -112,53 +200,111 @@
       "type": "resume",
       "flow": "進捗報告の本文を読めない",
       "step": 3,
-      "statement": "RESUME STEP 6"
+      "statement": "RESUME STEP 7"
     }
   ],
   "edges": [
     {
       "from": "BASIC FLOW-1",
       "to": "BASIC FLOW-2",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "別の人が担当になっている-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "担当を確かめられない-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
     },
     {
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
       "kind": "true",
       "condition": "いちばん下のコメントが自分の進捗報告である"
     },
     {
-      "from": "BASIC FLOW-2",
+      "from": "BASIC FLOW-3",
       "to": "進捗報告を新しく投稿する-1",
       "kind": "false",
       "condition": "NOT いちばん下のコメントが自分の進捗報告である"
     },
     {
-      "from": "BASIC FLOW-3",
-      "to": "BASIC FLOW-4",
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-4",
-      "to": "BASIC FLOW-5",
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
       "kind": "true",
       "condition": "読んだ本文に進捗報告の印が入っている"
     },
     {
-      "from": "BASIC FLOW-4",
+      "from": "BASIC FLOW-5",
       "to": "進捗報告の本文を読めない-1",
       "kind": "false",
       "condition": "NOT 読んだ本文に進捗報告の印が入っている"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-6",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-6",
       "to": "BASIC FLOW-7",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-1",
+      "to": "別の人が担当になっている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-2",
+      "to": "別の人が担当になっている-3",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-3",
+      "to": "別の人が担当になっている-4",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-4",
+      "to": "別の人が担当になっている-5",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-5",
+      "to": "別の人が担当になっている-6",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-1",
+      "to": "担当を確かめられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-2",
+      "to": "BASIC FLOW-2",
+      "kind": "resume"
     },
     {
       "from": "進捗報告を新しく投稿する-1",
@@ -167,7 +313,7 @@
     },
     {
       "from": "進捗報告を新しく投稿する-2",
-      "to": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "resume"
     },
     {
@@ -182,7 +328,7 @@
     },
     {
       "from": "進捗報告の本文を読めない-3",
-      "to": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "resume"
     }
   ],
@@ -191,7 +337,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -199,15 +345,19 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
-        "BASIC FLOW-7"
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
       ],
       "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
         "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
         "エージェントは GitHub に進捗報告の本文を要求する。",
         "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
-        "エージェントは読んだ本文の末尾に1行足して書き戻す。",
-        "エージェントは、push できる状態であれば、commit を push する。",
+        "エージェントは読んだ本文の末尾に、いま何をしていて、あと何が残っているかの1行を足して書き戻す。",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
         "エージェントはいまの時刻を控え直す。"
       ]
     },
@@ -215,19 +365,22 @@
       "id": "P002",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
+        "BASIC FLOW-5",
         "進捗報告の本文を読めない-1",
         "進捗報告の本文を読めない-2",
         "進捗報告の本文を読めない-3",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7"
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
       ],
       "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
         "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
         "エージェントは GitHub に進捗報告の本文を要求する。",
@@ -235,8 +388,9 @@
         "CONDITION: NOT 読んだ本文に進捗報告の印が入っている",
         "エージェントは進捗報告を書き戻さない。",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
-        "RESUME STEP 6",
-        "エージェントは、push できる状態であれば、commit を push する。",
+        "RESUME STEP 7",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
         "エージェントはいまの時刻を控え直す。"
       ]
     },
@@ -244,30 +398,162 @@
       "id": "P003",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
+        "BASIC FLOW-3",
         "進捗報告を新しく投稿する-1",
         "進捗報告を新しく投稿する-2",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7"
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
       ],
       "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
         "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
         "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
-        "RESUME STEP 6",
-        "エージェントは、push できる状態であれば、commit を push する。",
+        "RESUME STEP 7",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
+        "エージェントはいまの時刻を控え直す。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "別の人が担当になっている",
+      "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "別の人が担当になっている-1",
+        "別の人が担当になっている-2",
+        "別の人が担当になっている-3",
+        "別の人が担当になっている-4",
+        "別の人が担当になっている-5",
+        "別の人が担当になっている-6"
+      ],
+      "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは進捗報告を書かない。",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
+        "システムはカンバンの issue の Status に blocked の遷移先を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "担当を確かめられない-1",
+        "担当を確かめられない-2",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは今回の push を見送ると決める。",
+        "RESUME STEP 2",
+        "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
+        "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
+        "エージェントは GitHub に進捗報告の本文を要求する。",
+        "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
+        "エージェントは読んだ本文の末尾に、いま何をしていて、あと何が残っているかの1行を足して書き戻す。",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
+        "エージェントはいまの時刻を控え直す。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "担当を確かめられない-1",
+        "担当を確かめられない-2",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "進捗報告の本文を読めない-1",
+        "進捗報告の本文を読めない-2",
+        "進捗報告の本文を読めない-3",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは今回の push を見送ると決める。",
+        "RESUME STEP 2",
+        "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
+        "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
+        "エージェントは GitHub に進捗報告の本文を要求する。",
+        "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
+        "CONDITION: NOT 読んだ本文に進捗報告の印が入っている",
+        "エージェントは進捗報告を書き戻さない。",
+        "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
+        "RESUME STEP 7",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
+        "エージェントはいまの時刻を控え直す。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "この回では進捗報告のコメントは増えていない。進捗報告のコメントの最終更新日時が新しくなっている。push できる commit は remote に載っている。push が通っていれば、いま居る branch の pull request がある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "担当を確かめられない-1",
+        "担当を確かめられない-2",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "進捗報告を新しく投稿する-1",
+        "進捗報告を新しく投稿する-2",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは今回の push を見送ると決める。",
+        "RESUME STEP 2",
+        "エージェントは GitHub に issue のいちばん下のコメントを要求する。",
+        "エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。",
+        "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
+        "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
+        "RESUME STEP 7",
+        "エージェントは、push できる状態であり、今回の push を見送っていなければ、commit を push する。",
+        "エージェントは、push が通っていて、いま居る branch の pull request がまだ無ければ、pull request を draft で作る。",
         "エージェントはいまの時刻を控え直す。"
       ]
     }
   ],
   "coverage": {
-    "nodes_total": 12,
-    "nodes_covered": 12,
-    "edges_total": 13,
-    "edges_covered": 13
+    "nodes_total": 22,
+    "nodes_covered": 22,
+    "edges_total": 24,
+    "edges_covered": 24
   }
 }
