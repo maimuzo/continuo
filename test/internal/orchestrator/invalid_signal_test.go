@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -41,7 +42,9 @@ func writeFileAt(t *testing.T, path string, data []byte) {
 // **逃がし先（`pending/`）の中には書かないこと**（本体が hook の1件として読んでしまう）。
 // 与える情報: `Ready` の issue が1件。
 // 成功条件: `<実行時ディレクトリ>/issues/<スラグ>/status-signal.json` に、識別子・印・
-// 既定の3つの値が入っている。
+// 既定の3つの値が入っている。**`settings.json` の hook のコマンド行に書いた `--pending-dir` から
+// hook が引く場所と、本体が書いた場所が同じである**（逃がし先の場所を変えたときに、
+// hook がファイルを見つけられなくなるのを、ここで止める）。
 func TestDispatch_着手のとき取り得る値のファイルを書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
@@ -69,6 +72,18 @@ func TestDispatch_着手のとき取り得る値のファイルを書く(t *test
 	}
 	if !got.Usable() {
 		t.Errorf("hook が使えない中身を書いている: %+v", got)
+	}
+
+	settings, err := os.ReadFile(filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "settings.json"))
+	if err != nil {
+		t.Fatalf("設定ファイルを読めない: %v", err)
+	}
+	m := regexp.MustCompile(`--pending-dir '([^']+)'`).FindSubmatch(settings)
+	if m == nil {
+		t.Fatalf("設定ファイルの hook のコマンド行に --pending-dir が無い:\n%s", settings)
+	}
+	if fromHook := statussignal.PathFromPendingDir(string(m[1])); fromHook != statusSignalPathOf(fx) {
+		t.Errorf("hook が引く場所と本体が書いた場所が違う: hook=%q 本体=%q", fromHook, statusSignalPathOf(fx))
 	}
 }
 

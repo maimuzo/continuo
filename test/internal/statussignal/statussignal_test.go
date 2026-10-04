@@ -303,6 +303,8 @@ func TestFile_材料が欠けていれば使えない(t *testing.T) {
 // **逃がし先の中には置かない。**本体は逃がし先の `.json` を、届かなかった hook として読む。
 //
 // 目的: `--pending-dir` の親（issue ごとのディレクトリ）の直下を指すこと。
+// **本体が実際に `settings.json` へ書く `--pending-dir` と結ぶ検査は、ここではなく
+// `test/internal/orchestrator` の `TestDispatch_着手のとき取り得る値のファイルを書く` に在る。**
 // 与える情報: `<実行時ディレクトリ>/issues/<スラグ>/pending` と、末尾に `/` を付けた同じパス。
 // 成功条件: どちらも `<実行時ディレクトリ>/issues/<スラグ>/status-signal.json`。
 func TestPathFromPendingDir_逃がし先の親に置く(t *testing.T) {
@@ -319,5 +321,103 @@ func TestPathFromPendingDir_逃がし先の親に置く(t *testing.T) {
 	}
 	if got := statussignal.PathInIssueDir(issueDir); got != want {
 		t.Errorf("本体が書く場所と hook が読む場所が違う: got %q, want %q", got, want)
+	}
+}
+
+// TestBlockReason_Statusを動かさない値が無い対応表では表明を書かずに続ける道を示す は、
+// `working` を書いていない対応表での文面を確かめる。
+//
+// **利用者が `status_signal_map` を自分で書くと、既定の対応表は丸ごと置き換わる。**
+// `working` を書かなかった利用者の対応表で、指示書どおりに `working` と書いたエージェントは、
+// いままで「続けてください」を受け取っていた。**「作業は進めず、Status を動かす値から選んで」と
+// 返すと、作業の途中の run が人間へ渡る。**
+//
+// 目的: Status を動かさない値が1つも無い対応表では、作業を止める言い方をせず、
+// 表明を書かずに作業を続ける道を示すこと。
+// 与える情報: `review` と `blocked` だけの対応表と、自分の issue の `working`。
+// 成功条件: 「作業は進めず」が無く、「表明は書かずに、そのまま作業を続けてください」が在る。
+func TestBlockReason_Statusを動かさない値が無い対応表では表明を書かずに続ける道を示す(t *testing.T) {
+	values := map[string]*string{"review": strPtr("In Review"), "blocked": strPtr("Blocked")}
+
+	got := statussignal.BlockReason(prefix, current,
+		[]statussignal.Invalid{{Target: current, Value: "working"}}, values)
+
+	if strings.Contains(got, "作業は進めず") {
+		t.Errorf("続きを表す値が無い対応表なのに、作業を止めさせている:\n%s", got)
+	}
+	for _, want := range []string{
+		"「working」 は、決められた値ではありません",
+		"この一覧には、まだ作業が続くことを表す値がありません。",
+		"まだ作業が続くなら、表明は書かずに、そのまま作業を続けてください。",
+		"作業を終えたつもりなら、続きの作業はせず、Status を動かす値から選んでください。",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("本文に %q が無い:\n%s", want, got)
+		}
+	}
+}
+
+// TestBlockReason_別のissueの表明だけが決まり以外なら作業を止めさせない は、
+// 自分の作業が途中かもしれない場面の文面を確かめる。
+//
+// 目的: 決まり以外だったのが別の issue を指す行だけのとき、「作業は進めず」と
+// 「作業を終えたつもりなら」を出さないこと。
+// 与える情報: #45 の `done` だけ（自分の issue の表明は決まりどおり）。
+// 成功条件: 2つの文が無く、書き直しを求める文と、対象を付けた形が在る。
+func TestBlockReason_別のissueの表明だけが決まり以外なら作業を止めさせない(t *testing.T) {
+	got := statussignal.BlockReason(prefix, current,
+		[]statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, defaultValues())
+
+	for _, bad := range []string{"作業は進めず", "作業を終えたつもりなら"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("自分の issue の表明は正しいのに、%q と言っている:\n%s", bad, got)
+		}
+	}
+	for _, want := range []string{
+		"この中から選んで、応答の最後に、行頭から1行で書き直してください。",
+		"`CONTINUO-STATUS: #45 <値>` の形で書き直してください",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("本文に %q が無い:\n%s", want, got)
+		}
+	}
+}
+
+// TestFindInvalid_対応表が空なら1件も返さない は、返せる一覧が無いときに書き直しを求めないことを確かめる。
+//
+// **`status_signal_map: {}` は設定の検査を通る。**その対応表では全部の表明が決まり以外になるが、
+// 「この中から選んで」と言える値が1つも無い。
+//
+// 目的: 対応表が空のとき、決まり以外の値を1件も返さず、一覧も書かないこと。
+// 与える情報: 空の対応表と、`done` の表明。
+// 成功条件: `FindInvalid` が0件。`WriteValueList` が1文字も書かない。
+func TestFindInvalid_対応表が空なら1件も返さない(t *testing.T) {
+	signals := statussignal.Parse([]string{"CONTINUO-STATUS: done"}, prefix, current)
+	for name, values := range map[string]map[string]*string{"nil": nil, "空": {}} {
+		if got := statussignal.FindInvalid(signals, values); len(got) != 0 {
+			t.Errorf("対応表が%sなのに、決まり以外の値を返している: %+v", name, got)
+		}
+		var b strings.Builder
+		statussignal.WriteValueList(&b, prefix, values)
+		if b.Len() != 0 {
+			t.Errorf("対応表が%sなのに、一覧を書いている: %q", name, b.String())
+		}
+	}
+}
+
+// TestParse_全角空白で字下げした表明も拾う は、行頭の空白の扱いを確かめる。
+//
+// **全角空白は、見た目で半角の空白と区別が付かない。**落とす文字の一覧から消えても、
+// 見ただけでは気づけない。
+//
+// 目的: 半角の空白・タブ・全角空白のどれで字下げした表明も拾うこと。
+// 与える情報: それぞれで字下げした `CONTINUO-STATUS: review`。
+// 成功条件: 3つとも `review` を拾う。
+func TestParse_全角空白で字下げした表明も拾う(t *testing.T) {
+	for name, indent := range map[string]string{"半角の空白": "  ", "タブ": "\t", "全角空白": "\u3000"} {
+		got := statussignal.Parse([]string{indent + "CONTINUO-STATUS: review"}, prefix, current)
+		if got[current] != "review" {
+			t.Errorf("%sで字下げした表明を拾えていない: %+v", name, got)
+		}
 	}
 }

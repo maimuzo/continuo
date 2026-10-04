@@ -56,12 +56,13 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 // 打ち切るか」は continuo が持っている状態からしか作れず、利用者に書き換えさせると
 // その状態を渡すための変数を追加で公開することになる。
 //
-// turnCount: この turn が continuo にとって何回目か（1始まり）。
-// maxDispatchTurns: 打ち切りまでの上限（`agent.max_dispatch_turns`）。
-// **前回の turn の表明の値が取り得る値に無かったときは、1行目の「続けてください」を
-// 差し替える**（issue #274 の経路2。設計 3-25）。エージェントは終えたつもりで
+// **前回の turn の、いま作業している issue の表明の値が取り得る値に無かったときは、
+// 1行目の「続けてください」を差し替える**（issue #274 の経路2。設計 3-25）。エージェントは終えたつもりで
 // 決まり以外の値を書いているので、「続けてください」を送ると、続ける作業が無いまま
 // 手を動かす。代わりに、その値と取り得る値の一覧を返し、書き直させる。
+//
+// **決まり以外だったのが、別の issue を指す行だけなら、「続けてください」は残して一覧を足す。**
+// 自分の作業は途中かもしれない。
 //
 // **表明が1行も無かったときの促しにも、同じ一覧を載せる。**箇条書きや強調の中に書いた行と、
 // 印を打ち間違えた行は、continuo からは「行が無い」と見える。その形に一覧が届くのは
@@ -94,12 +95,21 @@ func BuildContinuationPrompt(
 	}
 
 	var b strings.Builder
-	if len(invalid) > 0 {
+	switch {
+	case len(invalid) == 0:
+		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+	case statussignal.HasTarget(invalid, currentIdentifier):
+		// **いま作業している issue の表明が決まり以外だった。**終えたつもりのエージェントに
+		// 「続けてください」を送らない。
 		statussignal.WriteInvalidGuidance(&b, "前回の応答", "作業を進める前に",
 			signalPrefix, currentIdentifier, invalid, signalMap)
 		fmt.Fprintf(&b, "この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
-	} else {
-		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+	default:
+		// **決まり以外だったのは、別の issue を指す行だけである。**自分の作業は途中かも
+		// しれないので、「続けてください」は残し、そのあとに一覧を足す。
+		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n\n", turnCount, remaining)
+		statussignal.WriteInvalidGuidance(&b, "前回の応答", "作業を進める前に",
+			signalPrefix, currentIdentifier, invalid, signalMap)
 	}
 	if missingSignal {
 		// **「行頭から」を言う。**箇条書きや強調の中に正しい値を書き直しても、

@@ -207,3 +207,52 @@ func TestDispatch_agent名が重複したら末尾に連番を付ける(t *testi
 		t.Fatalf("重複した agent 名に連番を付けていない: got %v, want %q", got, want)
 	}
 }
+
+// TestBuildContinuationPrompt_別のissueの表明だけが決まり以外なら続けてくださいを残す は、
+// 自分の作業が途中かもしれない場面の文面を確かめる。
+//
+// 目的: 決まり以外だったのが別の issue を指す行だけのとき、「続けてください」を残し、
+// そのあとに一覧を足すこと。**「作業を進める前に」と「作業を終えたつもりなら」は出さない。**
+// 与える情報: #45 の `done` だけ。
+// 成功条件: 1行目が「続けてください。」で始まり、一覧と対象を付けた形が載り、止める言い方が無い。
+func TestBuildContinuationPrompt_別のissueの表明だけが決まり以外なら続けてくださいを残す(t *testing.T) {
+	const current = "octocat/hello-world#188"
+	got := orchestrator.BuildContinuationPrompt(2, 20, false, "In Progress", signalPrefix,
+		[]statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, defaultSignalMap(), current)
+
+	if !strings.HasPrefix(got, "続けてください。この確認は 2 回目です。あと 18 回で打ち切ります。\n") {
+		t.Fatalf("自分の issue の表明は正しいのに、「続けてください」を外している:\n%s", got)
+	}
+	for _, bad := range []string{"作業を進める前に", "作業を終えたつもりなら"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("作業が途中かもしれないのに、%q と言っている:\n%s", bad, got)
+		}
+	}
+	for _, want := range []string{
+		"前回の応答の表明の値 octocat/hello-world#45 の値 「done」 は、決められた値ではありません",
+		"`CONTINUO-STATUS: #45 <値>` の形で書き直してください",
+		"- `CONTINUO-STATUS: review` … Status を In Review へ動かします",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("文面に %q が無い:\n%s", want, got)
+		}
+	}
+}
+
+// TestBuildContinuationPrompt_対応表が空なら一覧を載せない は、中身の無い一覧を送らないことを確かめる。
+//
+// 目的: `status_signal_map` が空の設定で、表明が無かったときの促しに「取り得る値は次のとおりです」を
+// 載せないこと（そのあとに何も続かない文面になる）。
+// 与える情報: 空の対応表と、前回の turn に表明が無かった状態。
+// 成功条件: 促しの1文は入り、「取り得る値は次のとおりです」は入らない。
+func TestBuildContinuationPrompt_対応表が空なら一覧を載せない(t *testing.T) {
+	got := orchestrator.BuildContinuationPrompt(2, 20, true, "In Progress", signalPrefix,
+		nil, map[string]*string{}, "octocat/hello-world#188")
+
+	if !strings.Contains(got, "行頭から1行で書いてください") {
+		t.Errorf("表明を促す1文が入っていない:\n%s", got)
+	}
+	if strings.Contains(got, "取り得る値は次のとおりです") {
+		t.Errorf("対応表が空なのに、一覧の頭だけを載せている:\n%s", got)
+	}
+}

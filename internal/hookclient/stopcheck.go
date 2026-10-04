@@ -14,8 +14,10 @@ const stopEventName = "Stop"
 
 // stopInput は `Stop` hook の入力のうち、表明を調べるのに要る項目である。
 //
-// **3つとも「欄が在るか」を区別して読む。**欄が無い入力を偽や空文字と同じに読むと、
-// Claude Code の版が変わって欄が消えたときに、調べる側へ倒れる。
+// **`stop_hook_active` と `last_assistant_message` は、「欄が在るか」を区別して読む**（ポインタで受ける）。
+// 欄が無い入力を偽や空文字と同じに読むと、Claude Code の版が変わって欄が消えたときに、
+// 調べる側へ倒れる。`hook_event_name` は区別しない（欄が無ければ空文字で、`Stop` と一致しない）。
+// **型が違う入力**（真偽値でない `stop_hook_active` など）**は、JSON の読み取りが失敗して調べない。**
 type stopInput struct {
 	HookEventName string `json:"hook_event_name"`
 	// StopHookActive は、差し戻されて書き直したあとの `Stop` で真になる。

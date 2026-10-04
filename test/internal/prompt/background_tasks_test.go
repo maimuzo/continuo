@@ -26,7 +26,7 @@ const backgroundDemandMarker = "を書く前に、バックグラウンドで動
 // 与える情報: prompt.Builtin() の全文。
 // 成功条件: その文が1つだけあり、`blocked` と `review` を名指しし、`working` を名指ししていない。
 // コマンドと subagent の両方を挙げ、表明のあとに新しく起動しないよう求めている。
-// **その文が、表明の3行の見本より後ろ・成果の報告の見本より前（3-7 の中）に在る。**
+// **その文が 3-7 の中に在り、表明の3行の見本より後ろに在る。**
 func TestTemplate_組み込みのプロンプトは表明の前にバックグラウンドの処理を終わらせる(t *testing.T) {
 	body := prompt.Builtin()
 
@@ -63,11 +63,14 @@ func TestTemplate_組み込みのプロンプトは表明の前にバックグ�
 		}
 	}
 
-	head := strings.Index(body, "## 3-7. 終わりを書く")
+	head := strings.Index(body, "CONTINUO-STATUS: working    まだ続きがある")
+	if section := strings.Index(body, "## 3-7. 終わりを書く"); section < 0 || head < section {
+		t.Fatalf("3-7 の表明の3行の見本を見つけられません（3-7=%d 見本=%d）", section, head)
+	}
 	demand := strings.Index(body, backgroundDemandMarker)
 	next := strings.Index(body, "# 4. 処理に必要なコンテキスト")
 	if head < 0 || next < 0 || demand < head || demand > next {
-		t.Errorf("その文が 3-7 の中にありません（3-7=%d 文=%d 4=%d）。"+
+		t.Errorf("その文が、3-7 の表明の3行の見本より後ろにありません（見本=%d 文=%d 4=%d）。"+
 			"表明の書き方を決めている節に置かないと、表明を書くときに読まれません", head, demand, next)
 	}
 }

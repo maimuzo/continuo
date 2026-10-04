@@ -89,7 +89,7 @@ func Parse(texts []string, prefix, currentIdentifier string) map[string]string {
 
 	for _, text := range texts {
 		for _, line := range strings.Split(text, "\n") {
-			trimmed := strings.TrimLeft(line, " \t　")
+			trimmed := strings.TrimLeft(line, " \t\u3000")
 			if !strings.HasPrefix(trimmed, prefix) {
 				continue
 			}
@@ -215,9 +215,15 @@ type Invalid struct {
 // 同じ応答から違う文面ができる。
 //
 // signals: `Parse` が返した、対象から値への対応。
-// values: `tracker.status_signal_map`。
+// values: `tracker.status_signal_map`。**空なら、何も返さない。**
 // 戻り値: 取り得る値に無かった表明の並び。1件も無ければ nil。
 func FindInvalid(signals map[string]string, values map[string]*string) []Invalid {
+	if len(values) == 0 {
+		// **対応表が空なら、返せる一覧が無い。**全部の表明が決まり以外になるが、
+		// 「この中から選んで」と言える値が1つも無い。hook の側も、値の無いファイルでは調べない
+		// （`File.Usable`）。
+		return nil
+	}
 	var out []Invalid
 	for target, value := range signals {
 		if _, known := Lookup(values, value); known {
@@ -302,10 +308,15 @@ func describeInvalid(invalid []Invalid, currentIdentifier string) string {
 // **行頭を `- ` と backtick にする。**エージェントが一覧を応答へ書き写しても、
 // その行は印から始まらないので、本体は表明として読まない（`Parse` は行頭の印だけを拾う）。
 //
+// **対応表が空なら、何も書かない。**「取り得る値は次のとおりです」のあとに何も無い文面を作らない。
+//
 // b: 書き込む先。
 // prefix: 表明の印。
 // values: `tracker.status_signal_map`。
 func WriteValueList(b *strings.Builder, prefix string, values map[string]*string) {
+	if len(values) == 0 {
+		return
+	}
 	keys := make([]string, 0, len(values))
 	for k := range values {
 		keys = append(keys, k)
@@ -352,6 +363,30 @@ func writeTargetNote(b *strings.Builder, prefix string, invalid []Invalid, curre
 	}
 }
 
+// HasTarget は、取り得る値に無かった表明の中に、その対象のものが在るかを返す。
+//
+// invalid: 取り得る値に無かった表明の並び。
+// identifier: 探す対象の識別子。
+// 戻り値: 1件でも在れば true。
+func HasTarget(invalid []Invalid, identifier string) bool {
+	for _, inv := range invalid {
+		if strings.EqualFold(inv.Target, identifier) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasStayingValue は、Status を動かさない値（行き先が null の値）が1つでも在るかを返す。
+func hasStayingValue(values map[string]*string) bool {
+	for _, dest := range values {
+		if dest == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // WriteInvalidGuidance は、表明の値が決まり以外だったときに返す文面を書く（issue #274）。
 //
 // **2つの経路が同じ文面を使う。**`continuo hook` が `Stop` を差し戻すときの `reason`
@@ -363,26 +398,50 @@ func writeTargetNote(b *strings.Builder, prefix string, invalid []Invalid, curre
 // 書かせ直しているセッションでは、本体は表明を読まない。**「この値では Status を動かせません」は
 // どの場面でも事実である。**
 //
+// **作業を止める言い方は、止めてよいときにだけ出す。**次の2つが両方そろったときである。
+//
+//	いま作業している issue の表明が決まり以外である
+//	    … 別の issue を指す行だけが決まり以外なら、自分の作業は途中かもしれない
+//	対応表に、Status を動かさない値が在る
+//	    … 無い対応表では、「まだ続きがある」を表す値を選べない。止めると、
+//	      作業の途中のエージェントが Status を動かす値を選び、run が途中で人間へ渡る
+//
+// **Status を動かさない値が無い対応表では、表明を書かずに続ける道を示す。**
+// 利用者が `status_signal_map` を自分で書くと、既定の対応表は丸ごと置き換わる。
+// `working` を書かなかった利用者の対応表で、指示書どおりに `working` と書いたエージェントが
+// ここへ来る。いままでは、その値は無視されて「続けてください」が届いていた。
+//
 // b: 書き込む先。
 // when: 1行目の頭に置く語（「この応答」「前回の応答」）。
 // stop: 書き直しを求める文の頭に置く語（「作業は進めず」「作業を進める前に」）。
 // prefix: 表明の印。
 // currentIdentifier: いま作業している issue の識別子。
 // invalid: 取り得る値に無かった表明の並び。**1件以上あること。**
-// values: `tracker.status_signal_map`。
+// values: `tracker.status_signal_map`。**1件以上あること**（空なら `FindInvalid` が何も返さない）。
 func WriteInvalidGuidance(
 	b *strings.Builder,
 	when, stop, prefix, currentIdentifier string,
 	invalid []Invalid,
 	values map[string]*string,
 ) {
+	own := HasTarget(invalid, currentIdentifier)
+	staying := hasStayingValue(values)
+
 	fmt.Fprintf(b, "%sの表明の値 %s は、決められた値ではありません。この値では Status を動かせません。\n",
 		when, describeInvalid(invalid, currentIdentifier))
 	WriteValueList(b, prefix, values)
 	b.WriteString("\n")
 	writeTargetNote(b, prefix, invalid, currentIdentifier)
-	fmt.Fprintf(b, "%s、この中から選んで、応答の最後に、行頭から1行で書き直してください。\n", stop)
-	if hasMovingValue(values) {
+	if own && staying {
+		fmt.Fprintf(b, "%s、この中から選んで、応答の最後に、行頭から1行で書き直してください。\n", stop)
+	} else {
+		b.WriteString("この中から選んで、応答の最後に、行頭から1行で書き直してください。\n")
+	}
+	if !staying {
+		b.WriteString("この一覧には、まだ作業が続くことを表す値がありません。" +
+			"まだ作業が続くなら、表明は書かずに、そのまま作業を続けてください。\n")
+	}
+	if own && hasMovingValue(values) {
 		b.WriteString("作業を終えたつもりなら、続きの作業はせず、Status を動かす値から選んでください。\n")
 	}
 }

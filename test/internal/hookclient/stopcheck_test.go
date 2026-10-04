@@ -117,6 +117,7 @@ func TestCheckStop_調べない条件ではどれも差し戻さない(t *testin
 		{name: "Stop 以外の hook である", fields: map[string]any{"hook_event_name": "SubagentStop"}},
 		{name: "stop_hook_active が真である", fields: map[string]any{"stop_hook_active": true}},
 		{name: "stop_hook_active の欄が無い", fields: map[string]any{"stop_hook_active": nil}},
+		{name: "stop_hook_active が真偽値でない", fields: map[string]any{"stop_hook_active": "false"}},
 		{name: "last_assistant_message の欄が無い", fields: map[string]any{"last_assistant_message": nil}},
 		{name: "last_assistant_message が文字列でない", fields: map[string]any{"last_assistant_message": 123}},
 		{name: "last_assistant_message が空である", fields: map[string]any{"last_assistant_message": ""}},

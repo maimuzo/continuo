@@ -113,12 +113,14 @@ flowchart LR
 **巡回と表明を読む経路は、`runState` という同じメモリを見ている。**
 **ファイルにも DB にも書いていない**（[internal/orchestrator/runstate.go:64](../../internal/orchestrator/runstate.go#L64)。「プロセスが落ちると消える。永続化層は作らない」）。
 
-**ただし、ファイルに書いているものが5つある。**`runState` の話と混ぜてはならない。
+**ただし、ファイルに書いているものが7つある。**`runState` の話と混ぜてはならない。
 **どれも `<実行時ディレクトリ>`（hook の socket を置くディレクトリ）の下か worktree の中にあり、復元に使うのは身元ファイルだけである。**
 
 | 何を | どこへ | 誰がいつ読むか |
 | --- | --- | --- |
 | **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:151](../../internal/config/default.go#L151)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
+| **issue ごとの設定ファイル**（hook のコマンド行・権限・`statusLine`。設計 3-12） | `<実行時ディレクトリ>/issues/<issue のスラグ>/settings.json` | **continuo は読まない。**その issue の Claude Code が `--settings` で読む。着手のたびに書き直す |
+| **取り得る値のファイル**（いま作業している issue の識別子・表明の印・`status_signal_map`。設計 3-25） | `<実行時ディレクトリ>/issues/<issue のスラグ>/status-signal.json` | **continuo は読まない。**`continuo hook` が、`Stop` のたびに読む。着手のときと、立て直して run を引き継ぐときに書き直す |
 | **hook が socket へ届かなかったときの逃がし先**（設計 3-19） | `pending/<時刻>-<イベント名>.json` | **continuo が次に起動したときに読む。**動いている continuo は読まない |
 | **使用率の保管値**（期間ごとの使用率と `resets_at`。設計 3-4b・3-27） | `<実行時ディレクトリ>/quota.json` | **continuo が次に起動したときに、`sl.sock` を開く前に読む。**動いている continuo は書くだけで読まない。上限の最中に立て直しても、回復待ちの判定を効かせるため |
 | **閉じ残しの statusline取得用の workspace の ID**（設計 3-4b） | `<実行時ディレクトリ>/statusline-fetch/workspaces.json` | **continuo が起動したとき（復元の前）と、statusline取得を始める前に読み、閉じる** |

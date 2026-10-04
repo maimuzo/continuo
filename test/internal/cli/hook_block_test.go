@@ -208,15 +208,17 @@ func TestRunHook_差し戻すとき以外は標準出力へ1バイトも書か�
 	}
 }
 
-// TestRunHook_reasonに改行やbacktickが入ってもJSONとして読める は、標準出力の形を確かめる。
+// TestRunHook_reasonに引用符やbacktickが入ってもJSONとして読める は、標準出力の形を確かめる。
 //
-// **エージェントが書いた値が `reason` に入る。**引用符や改行を含む値でも、
+// **エージェントが書いた値が `reason` に入る。**引用符やバックスラッシュを含む値でも、
 // 標準出力は1行の正しい JSON でなければならない（壊れた JSON は差し戻しとして読まれない）。
+// **`reason` の本文そのものは複数行である**（一覧を載せるため）。改行は JSON の中で `\n` に
+// 逃がされるので、標準出力は1行のままである。値そのものには改行は入らない（値は空白で区切った1語）。
 //
 // 目的: 値に引用符・backtick・バックスラッシュが入っていても、1行の JSON として読めること。
 // 与える情報: `CONTINUO-STATUS: "do`ne\` という表明。
 // 成功条件: 標準出力が1行で、JSON として読め、`reason` に値がそのまま載っている。
-func TestRunHook_reasonに改行やbacktickが入ってもJSONとして読める(t *testing.T) {
+func TestRunHook_reasonに引用符やbacktickが入ってもJSONとして読める(t *testing.T) {
 	fx := newHookFixture(t, true)
 	fx.writeSignalFile(t)
 
@@ -237,5 +239,8 @@ func TestRunHook_reasonに改行やbacktickが入ってもJSONとして読める
 	}
 	if out.Decision != "block" || !strings.Contains(out.Reason, "「\"do`ne\\」") {
 		t.Errorf("値がそのまま載っていない: %+v", out)
+	}
+	if !strings.Contains(out.Reason, "\n- `CONTINUO-STATUS: review`") {
+		t.Errorf("reason の本文が複数行のまま読み戻せていない: %q", out.Reason)
 	}
 }
