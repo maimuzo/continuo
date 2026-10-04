@@ -1304,7 +1304,7 @@ level=INFO msg=continuo を終了しました
 
 | 何を | どうするか |
 | --- | --- |
-| worktree と branch | **Status を `Done` にすれば continuo が片付ける。**着手そのものを取り消したいなら段8b の `continuo abandon` を使う。それでも残っていれば `~/worktrees` の下を見て `git worktree remove` と `git branch -D` |
+| worktree と branch | **Status を `Done` にすれば continuo が片付ける。**着手そのものを取り消したいなら段8b の `continuo abandon` を使う。それでも残っていれば `~/worktrees` の下を見る。**消す前に必ず `git -C <worktree> fetch origin -q` を打ち、`git -C <worktree> log --oneline HEAD --not --remotes` が何も出さないことを確かめる。**何か出たら push してから消す。そのあと `git worktree remove` と `git branch -D` |
 | push した branch | **GitHub には残る。**continuo が消すのは手元の branch だけである（`cleanup.require_pushed` で push を確かめてから消しているので、成果は GitHub 側に残る）。要らなければ GitHub の画面か `git push origin --delete <branch>` で消す |
 | カンバンの item | **カンバンは消さない。**試した issue だけを画面から外すか、`Done` に置いたままにする |
 | 信頼の登録 | `~/.claude.json.continuo-backup-<日時>` から戻すか、`projects` の該当キーを消す。**バックアップを消すのは人間である** |
