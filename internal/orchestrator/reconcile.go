@@ -86,8 +86,10 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		return
 	}
 
-	// **ここは「誰が Status を書いたか」も取る**（設計 3-61）。知らない Status になったとき、
-	// 書き戻すか止めるかをその記録で決める（`handleUnknownState`）。
+	// **ここは「誰が Status を書いたか」も取る**（設計 3-61）。読むのは2か所である。
+	// 終端と引き渡しの Status を、turn の終わりまで待つかどうか（`holdForAutomatedMove`）と、
+	// 止めるときの案内（`automatedStateHint` の、対応表に無い Status の側）。
+	// **対応表のキーの Status を書き戻すかどうかは、この記録では決めない**（設計 3-54。issue #299）。
 	issues, err := o.tracker.FetchIssuesByIDs(ctx, ids)
 	if err != nil {
 		o.logger.Warn("実行中の issue を取り直せません（この巡回では照合しません）", "error", err)

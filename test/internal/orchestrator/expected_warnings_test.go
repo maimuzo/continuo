@@ -100,32 +100,32 @@ var expectedWarnings = map[string][]string{
 	"Test_人間に判断を渡す_P010_知らないStatusで止めるときはissueに理由を書く":                     {"continuo が知らない Status になったので worker を止めます"},
 	"Test_人間に判断を渡す_P011_turnが動いている間は知らないStatusでもすぐには止めない":                 {"知らない Status のまま猶予を過ぎたので worker を止めます"},
 	// 設計 3-54: **止まることそのものを確かめるテストである。**
-	// 自動化が動かしても対応表に無い・人間が動かした・誰が動かしたか分からない、の3つは
-	// いままでどおり止まる。**止まったときの WARN は、そのテストが起こしている。**
-	"TestAutomatedState_対応表に無ければいままでどおり止まる":       {"continuo が知らない Status になったので worker を止めます"},
-	"TestAutomatedState_人間が動かしたときはいままでどおり止まる":     {"continuo が知らない Status になったので worker を止めます"},
-	"TestAutomatedState_誰が動かしたか分からなければいままでどおり止まる": {"continuo が知らない Status になったので worker を止めます"},
+	// 自動化が動かしても、対応表に無ければいままでどおり止まる。
+	// **止まったときの WARN は、そのテストが起こしている。**
+	// （対応表に在れば、人間が動かした回も、誰が動かしたか分からない回も止まらない。issue #299）
+	"TestAutomatedState_対応表に無ければいままでどおり止まる": {"continuo が知らない Status になったので worker を止めます"},
 	"TestAutomatedState_書き戻しを繰り返しても上限で止まる": {
-		"自動化が動かした Status を書き戻す回数が上限に達しました",
+		"対応表にある Status を書き戻す回数が上限に達しました",
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	// 設計 3-56: **戻す先の選択肢がカンバンから消えた状況を、このテストが作っている。**
 	// 書き込みが失敗し続けることも、そのあと人間へ渡すことも、どちらもテストが起こしている。
 	"TestAutomatedState_戻せない状態が続いたら人間へ渡す": {
-		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
+		"対応表にある Status を戻せない状態が続いたので、ここからは人間へ渡します",
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	// 設計 3-57b（issue #67）: **止まったときに出す案内を見るテストである。**
 	// 止まること自体は上のテスト群と同じで、**その WARN はテストが起こしている。**
 	"TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない": {
-		"自動化が動かした Status を書き戻す回数が上限に達しました",
+		"対応表にある Status を書き戻す回数が上限に達しました",
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	"TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない": {
-		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
+		"対応表にある Status を戻せない状態が続いたので、ここからは人間へ渡します",
 		"continuo が知らない Status になったので worker を止めます",
 	},
-	"TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない": {
+	"TestAutomatedState_人間が上限まで動かして止まっても書き手を断定しない": {
+		"対応表にある Status を書き戻す回数が上限に達しました",
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	// 設計 3-57b（issue #76）: **`cleanup.on_states` の Status で止めたときの案内を見る。**
@@ -134,6 +134,7 @@ var expectedWarnings = map[string][]string{
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	"TestUnknownState_対応表と片付けの両方に名前があっても貼ると起動しない案内を出さない": {
+		"対応表にある Status を書き戻す回数が上限に達しました",
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	"TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると書く": {

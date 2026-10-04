@@ -239,55 +239,142 @@ func TestAutomatedState_対応表に無ければいままでどおり止まる(t
 	}
 }
 
-// TestAutomatedState_人間が動かしたときはいままでどおり止まる は、設計 3-54 を確かめる。
+// TestAutomatedState_人間が動かしても対応表のキーなら戻す は、設計 3-54 を確かめる（issue #299）。
 //
-// 目的: **人間が「止めろ」の意味で Status を動かす操作を、書き戻しで打ち消してはならない。**
-// 対応表に載っている Status であっても、動かしたのが人間なら止まる。
+// 目的: **対応表のキーの Status へ動いたら、書いた主体を見ずに戻す。**
+// GitHub は Status の変更イベントを記録しないことがあり（設計 2-6）、「自動化と読めたときだけ戻す」
+// にしていたあいだは、対応表に書いてあっても、記録が無い回は worker を止めていた。
+// **人間が動かしたときも戻す**（人間の決定。2026-10-04）。
 //
 // 与える情報: 対応表に `In Progress` が載っている設定。**人間が** Status を
 // `In Progress` へ動かす（`actor.__typename` が `User`）。
-// 成功条件: worker を止め、Status を書き換えないこと。
-func TestAutomatedState_人間が動かしたときはいままでどおり止まる(t *testing.T) {
+// 成功条件:
+//   - worker を止めず、Status を `In Progress (AI)` へ戻すこと
+//   - 戻した記録に、**動かした人の名前を書かないこと**（読める書き手は当てにならない）
+//   - 戻した記録に、**止め方**（`tracker.failure_state` の Status へ動かす）を書くこと
+func TestAutomatedState_人間が動かしても対応表のキーなら戻す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	itemID := startRunForAutomation(t, fx)
 
-	// **SetState は人間が動かした扱いである**（SetStateByAutomation と対になる）。
+	// **SetState は人間が動かした扱いである**（書き手は `octocat`）。
 	fx.Tracker.SetState(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 
-	if body := selfCommentBody(fx, "I_node188"); body == "" {
-		t.Fatal("人間が動かしたのに止めず、理由も残していない")
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("対応表のキーへ動いただけなのに印を外している: 印は %d 件", got)
 	}
-	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
-		t.Errorf("人間が動かした Status を continuo が書き戻している: got %q, want %q", got, "In Progress")
+	if body := selfCommentBody(fx, "I_node188"); body != "" {
+		t.Fatalf("書き戻したのに、止めた理由を書いている:\n%s", body)
 	}
+	assertRewriteRecordNamesNoAuthor(t, fx, "octocat")
 }
 
-// TestAutomatedState_誰が動かしたか分からなければいままでどおり止まる は、
-// 設計 3-54 を確かめる。
+// TestAutomatedState_誰が動かしたか分からなくても対応表のキーなら戻す は、
+// 設計 3-54 を確かめる（issue #299 の症状そのもの）。
 //
-// 目的: **timeline のイベントを1件も引けないことがある**（消えた・権限が無い・
-// 直近50件から溢れた）。**分からないなら「自動化ではない」に倒す。**
-// 倒し方を逆にすると、人間が止めたつもりの操作が黙って巻き戻る。
+// 目的: **timeline のイベントを1件も引けないことがある**（GitHub が記録しなかった・
+// 権限が無い・直近50件から溢れた）。**そのときも、対応表のキーの Status なら戻す。**
+// 以前は「分からないなら自動化ではない」に倒して止めていたので、
+// **対応表に書いてあっても、記録が無い回は1度も戻らなかった。**
 //
-// 与える情報: 対応表に載っている Status へ動かすが、「誰が書いたか」は付けない。
-// 成功条件: worker を止め、Status を書き換えないこと。
-func TestAutomatedState_誰が動かしたか分からなければいままでどおり止まる(t *testing.T) {
+// 与える情報: 対応表に載っている Status へ動かすが、「誰が書いたか」は付けない。巡回の経路。
+// 成功条件: worker を止めず、Status を `In Progress (AI)` へ戻すこと。
+func TestAutomatedState_誰が動かしたか分からなくても対応表のキーなら戻す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	itemID := startRunForAutomation(t, fx)
 
 	// **SetStateByAutomation を使わない。**取り直した issue に「誰が書いたか」が入らない。
 	fx.Tracker.SetState(itemID, "In Progress")
 	fx.Tracker.ClearStatusAuthor(itemID)
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 
-	if body := selfCommentBody(fx, "I_node188"); body == "" {
-		t.Fatal("誰が書いたか分からないのに止めず、理由も残していない")
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("対応表のキーへ動いただけなのに印を外している: 印は %d 件", got)
 	}
-	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
-		t.Errorf("誰が書いたか分からないのに Status を書き戻している: got %q, want %q", got, "In Progress")
+	if body := selfCommentBody(fx, "I_node188"); body != "" {
+		t.Fatalf("書き戻したのに、止めた理由を書いている:\n%s", body)
+	}
+}
+
+// TestAutomatedState_turnの終わりでも誰が動かしたか分からなくても戻す は、
+// 設計 3-54 を確かめる（issue #299）。
+//
+// 目的: **書き戻しの入口は2つある**（巡回と、turn の終わり）。どちらも同じ門
+// （`claimAutomatedRewrite`）を通る。**巡回の側だけが直って turn の終わりの側が残ると、
+// どのテストも落ちないまま、症状が半分残る。**
+//
+// 与える情報: 1回目の turn の最中に、対応表のキーの Status へ動かす（書き手は付けない）。
+// **巡回は打たない。**turn を `working` の表明で終わらせる。
+// 成功条件: Status を `In Progress (AI)` へ戻し、run を続ける（2回目の turn を送る）こと。
+func TestAutomatedState_turnの終わりでも誰が動かしたか分からなくても戻す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	releasePrompt := blockFirstPrompt(t, fx)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// ★ 対応表のキーの Status へ動いた。**誰が書いたかは読めない。**
+	fx.Tracker.SetState("PVTI_item188", "In Progress")
+	fx.Tracker.ClearStatusAuthor("PVTI_item188")
+	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+
+	// turn が終わる（表明は `working`＝Status を動かさない。書き込みは書き戻しの1回だけになる）。
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
+	})
+	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	releasePrompt()
+
+	waitFor(t, 20*time.Second, "turn の終わりから Status が戻り、次の turn が送られる", func() bool {
+		return fx.Tracker.StateOf("PVTI_item188") == "In Progress (AI)" &&
+			fx.Herdr.CountMethod(herdr.MethodAgentPrompt) >= 2
+	})
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("対応表のキーへ動いただけなのに印を外している: 印は %d 件", got)
+	}
+}
+
+// assertRewriteRecordNamesNoAuthor は、書き戻したときの記録（設計 3-29）が、
+// 書いた主体を名指しせず、止め方を書いていることを確かめる（設計 3-54。issue #299）。
+//
+// **名指ししてはならない理由。**読める書き手は「同じ名前のいちばん新しいイベント」の主体で、
+// GitHub がイベントを記録しなかった回は、過去に同じ Status へ動かした別の主体を指す。
+// **公開の issue で、動かしていない人を名指しすることになる。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// author: 偽のトラッカーが「書いた主体」として持たせた名前。**記録に出てはならない。**
+func assertRewriteRecordNamesNoAuthor(t *testing.T, fx *fixture, author string) {
+	t.Helper()
+	moves := fx.Tracker.StatusMoveCommentsOf("I_node188")
+	if len(moves) == 0 {
+		t.Fatal("Status を戻したのに、何から何へ動かしたかを issue に残していない（設計 3-29）")
+	}
+	last := moves[len(moves)-1].Body
+	for _, want := range []string{
+		"In Progress", "In Progress (AI)",
+		// なぜ戻したか。
+		"tracker.automated_state_rewrite",
+		// 止め方。**止める先は `tracker.failure_state` の値で名指しする。**
+		"人が動かした場合も戻します",
+		"`" + fx.Config.Tracker.FailureState + "` へ動かしてください",
+	} {
+		if !strings.Contains(last, want) {
+			t.Errorf("戻した記録に %q が無い:\n%s", want, last)
+		}
+	}
+	// **書き手の名前は、バッククォートで囲んだ形で探す**（案内はログイン名をそう書いていた）。
+	// 裸で探すと、issue の識別子（`octocat/hello-world#188`）に当たる。
+	for _, forbidden := range []string{"`" + author + "`", "組み込みの自動化", "人間ではありません"} {
+		if strings.Contains(last, forbidden) {
+			t.Errorf("戻した記録が、書いた主体を名指しまたは断定している（%q）:\n%s", forbidden, last)
+		}
 	}
 }
 
@@ -409,7 +496,7 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	// **書き込みの失敗は、このテストが自分で起こしているものである。**
-	fx.AllowLog("自動化が動かした Status を戻せませんでした")
+	fx.AllowLog("対応表にある Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
 	// **カンバンから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
@@ -421,7 +508,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
-			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
+			return strings.Count(fx.Logs.String(), "対応表にある Status を戻せませんでした") >= want
 		})
 	}
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
@@ -782,7 +869,7 @@ func TestAutomatedState_押し合いで止めても貼ると起動しない案�
 func TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	// **書き込みの失敗は、このテストが自分で起こしているものである。**
-	fx.AllowLog("自動化が動かした Status を戻せませんでした")
+	fx.AllowLog("対応表にある Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
 	// **カンバンから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
@@ -790,17 +877,22 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
 	// **巡回は `tickRewriteOnce` が打つ。**書き戻しが始まったことを見てから次へ進める。
+	//
+	// **書き手を付けない**（issue #299）。GitHub がイベントを記録しなかった回でも、
+	// この道の案内が出ること（`automatedStateHint` が書き手を見ないこと）を確かめる。
 	for i := 1; i <= 3; i++ {
-		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+		fx.Tracker.SetState(itemID, "In Progress")
+		fx.Tracker.ClearStatusAuthor(itemID)
 		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
-			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
+			return strings.Count(fx.Logs.String(), "対応表にある Status を戻せませんでした") >= want
 		})
 	}
 
 	// 4回目。**ここからは書き戻さず、人間へ渡す。**
-	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	fx.Tracker.SetState(itemID, "In Progress")
+	fx.Tracker.ClearStatusAuthor(itemID)
 	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	body := selfCommentBody(fx, "I_node188")
@@ -808,31 +900,68 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 		t.Fatal("戻せないまま止めたのに、理由を issue へ1文字も残していない")
 	}
 	assertRewriteKeyHintIsPastable(t, body)
+	// **書き手が読めない回にも、何が起きたかの案内が出ること**（issue #299）。
+	if !strings.Contains(body, "書き込めませんでした") {
+		t.Errorf("書き手が読めない回に、戻せなかったことの案内が出ていない:\n%s", body)
+	}
+	if strings.Contains(body, "人間ではありません") {
+		t.Errorf("書き手を読めていないのに、書いたのは人間ではないと断定している:\n%s", body)
+	}
 }
 
-// TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない は、
-// 設計 3-57b を確かめる（issue #67 の1件目）。
+// TestAutomatedState_人間が上限まで動かして止まっても書き手を断定しない は、
+// 設計 3-54 / 3-57b を確かめる（issue #299。issue #67 の1件目）。
 //
-// 目的: **人間が動かした場合も同じ道へ入る。**この道では「自動化が書いた」の説明そのものが
-// 出ないので、抑止を `automatedStateHint` の中だけに置くと**必ず取りこぼす。**
-// 判定は「対応表に書いてある名前か」で行わなければならない。
+// 目的: **人間が対応表のキーへ動かした回も、書き戻す。**止まるのは、同じ run で
+// 上限（3回）を超えて動かされたときである。**そのとき出す案内は、書いたのが自動化だとも
+// 人間だとも断定してはならない**（continuo は書き手を見ていない）。
+// **貼ると起動しなくなる案内（`active_states` へ足せ）も出してはならない。**
 //
 // 与える情報: 対応表に `In Progress` が載っている設定で、**人間が** Status を
-// `In Progress` へ動かす（`actor.__typename` が `User`）。
-// 成功条件: 止めた理由のコメントに `active_states` へ足す案内が無く、
-// 代わりに「対応表のその行を消す」が書かれていること。
-func TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない(t *testing.T) {
+// `In Progress` へ4回動かす（`actor.__typename` が `User`）。
+// 成功条件:
+//   - 3回目までは戻し、4回目で worker を止めること
+//   - 止めた理由のコメントに `active_states` へ足す案内が無く、「対応表のその行を消す」があること
+//   - **「書いたのは人間ではありません」と書かず、動かした人の名前も書かないこと**
+//   - 止め方（`tracker.failure_state` の Status へ動かす）を書くこと
+func TestAutomatedState_人間が上限まで動かして止まっても書き手を断定しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	itemID := startRunForAutomation(t, fx)
 
-	// **SetState は人間が動かした扱いである**（SetStateByAutomation と対になる）。
-	fx.Tracker.SetState(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	// 上限は3回である（internal/orchestrator の maxAutomatedRewrites）。
+	// **SetState は人間が動かした扱いである**（書き手は `octocat`）。
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetState(itemID, "In Progress")
+		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
+	}
 
+	// 4回目。**ここからは戻さず、人間へ渡す。**
+	fx.Tracker.SetState(itemID, "In Progress")
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
+
+	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
+		t.Errorf("上限を超えたのに書き戻している: got %q, want %q", got, "In Progress")
+	}
 	body := selfCommentBody(fx, "I_node188")
 	if body == "" {
-		t.Fatal("人間が動かして止めたのに、理由を issue へ1文字も残していない")
+		t.Fatal("上限で止めたのに、理由を issue へ1文字も残していない")
 	}
 	assertRewriteKeyHintIsPastable(t, body)
+	for _, want := range []string{
+		// 何が起きたか。
+		"動かされ直し",
+		// 止め方。
+		"`" + fx.Config.Tracker.FailureState + "` へ動かしてください",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+	// **書き手の名前は、バッククォートで囲んだ形で探す。**issue の識別子
+	// （`octocat/hello-world#188`）にも同じ文字列が入っているので、裸で探すと必ず当たる。
+	for _, forbidden := range []string{"人間ではありません", "`octocat`"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("止めた理由のコメントが、書いた主体を名指しまたは断定している（%q）:\n%s", forbidden, body)
+		}
+	}
 }

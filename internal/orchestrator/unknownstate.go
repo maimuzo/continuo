@@ -31,6 +31,10 @@ func (o *Orchestrator) isKnownState(state string) bool {
 // continuo とカンバンが同じ issue を押し合い続け、**GitHub への書き込みが巡回のたびに増え続ける。**
 // **3回で足りる。**PR を1本作れば自動化は1回動く。CI の直しで PR を作り直しても数回である。
 // **上限に達したら、いままでどおり猶予を置いて worker を止める**（押し合いを人間へ渡す）。
+//
+// **数えるのは、書いた主体を問わない書き戻しの回数である**（設計 3-56。issue #299）。
+// 自動化が動かしたぶんも、人間が動かしたぶんも、同じ枠を使う。**枠は成功しても減らない。**
+// 自動化が3回動いたあとに人間が1回動かすと、その1回で上限に達する。
 const maxAutomatedRewrites = 3
 
 // maxAutomatedRewriteFailures は、書き戻しが「カンバンを1ミリも動かせないまま終わる」ことを
@@ -66,7 +70,7 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 // handleUnknownState は「continuo が知らない Status」になった run をどうするかを決める
 // （設計 3-50 / 3-54）。
 //
-//	書いたのがカンバンの自動化で、対応表に戻す先がある … **止めない。**本来の Status へ書き戻す
+//	対応表に戻す先がある（書いた主体は問わない）       … **止めない。**本来の Status へ書き戻す
 //	turn が動いていて猶予の内側                        … **止めない。**turn の終わりの表明を読んでから判断する
 //	turn が動いていない                                … その場で止める（待っても表明は出てこない）
 //	猶予を過ぎた                                      … その場で止める（人間が止めたがっている可能性がある）
@@ -79,7 +83,7 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 // issue: 取り直した issue。
 func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, issue tracker.Issue) {
 	if target, claim, ok := o.claimAutomatedRewrite(rs, issue); ok {
-		// **カンバンの自動化が動かしただけである**（設計 3-54）。人間の引き渡しではないので
+		// **対応表に戻す先が書いてある Status である**（設計 3-54）。書いた主体は見ない。
 		// worker を止めない。**書き戻しは巡回のループを止めないよう別の goroutine で回す。**
 		o.rewriteAutomatedStateAsync(ctx, rs, issue, target, claim)
 		return
@@ -277,12 +281,18 @@ func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
 	return true
 }
 
-// claimAutomatedRewrite は「知らない Status を書いたのはカンバンの自動化で、対応表に
-// 戻す先がある」ときに、その戻す先を返す（設計 3-54）。
+// claimAutomatedRewrite は「知らない Status が、対応表に戻す先のある Status である」ときに、
+// その戻す先を返す（設計 3-54）。
 //
-// **4つが揃ったときだけ確保できる。**
+// **書いた主体は見ない**（issue #299）。**GitHub は Status の変更イベントを記録しないことがあり**
+// （設計 2-6 の 2026-10-04 の実測）、記録が無い回は「誰が書いたか」を読めない。
+// 「自動化と読めたときだけ戻す」にしていたあいだは、**対応表に書いてあっても、記録が無い回は
+// 戻さずに worker を止めていた。**対応表のキーは、利用者が「この Status へ動いたら戻してほしい」
+// と自分で書いた名前である。**人間がそこへ動かしたときも戻す**（人間の決定。2026-10-04）。
+// 止めたい人間は `tracker.failure_state` の Status へ動かす（`automatedMoveReason` が案内する）。
 //
-//	書いたのが自動化である  … `actor.__typename` が `Bot`、または `wasAutomated` が真（設計 2-6）
+// **3つが揃ったときだけ確保できる。**
+//
 //	対応表に戻す先がある    … `tracker.automated_state_rewrite` のキーに一致する
 //	書き戻す回数が残っている … 1つの Status につき maxAutomatedRewrites 回まで
 //	戻せない失敗が続いていない … 1つの Status につき maxAutomatedRewriteFailures 回まで
@@ -307,9 +317,6 @@ func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
 func (o *Orchestrator) claimAutomatedRewrite(
 	rs *runState, issue tracker.Issue,
 ) (string, *rewriteClaim, bool) {
-	if !issue.StatusChangedByAutomation {
-		return "", nil, false
-	}
 	target, ok := lookupStateRewrite(o.reloadableConfig().AutomatedStateRewrite, issue.State)
 	if !ok {
 		// **対応表に無ければ書き戻さない。**いままでどおり猶予を置いて止める。
@@ -323,16 +330,16 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	if failed >= maxAutomatedRewriteFailures &&
 		rs.expireAutomatedRewriteFailures(issue.State, o.now(), automatedRewriteFailureRetryAfter) {
 		// **「続けて何回」を時間で切り直す**（設計 3-56）。通信が回復していれば、ここで通る。
-		o.logger.Info("自動化が動かした Status の書き戻しを、時間を置いてもう一度試します",
-			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
+		o.logger.Info("対応表にある Status の書き戻しを、時間を置いてもう一度試します",
+			"identifier", issue.Identifier, "動かされた先の Status", issue.State,
 			"戻す先", target, "置いた時間", formatDuration(automatedRewriteFailureRetryAfter))
 		failed = 0
 	}
 	if failed >= maxAutomatedRewriteFailures {
 		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByFailures) {
-			o.logger.Warn("自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します"+
+			o.logger.Warn("対応表にある Status を戻せない状態が続いたので、ここからは人間へ渡します"+
 				"（カンバンから戻す先の選択肢が消えている可能性があります）",
-				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
+				"identifier", issue.Identifier, "動かされた先の Status", issue.State,
 				"戻す先", target, "戻せなかった回数", failed, "上限", maxAutomatedRewriteFailures)
 		}
 		return "", nil, false
@@ -340,9 +347,9 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	claim, done := rs.claimAutomatedRewrite(issue.State, maxAutomatedRewrites)
 	if claim == nil {
 		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByPushback) {
-			o.logger.Warn("自動化が動かした Status を書き戻す回数が上限に達しました"+
-				"（continuo とカンバンの自動化が押し合っています。ここからは人間へ渡します）",
-				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
+			o.logger.Warn("対応表にある Status を書き戻す回数が上限に達しました"+
+				"（書き戻すたびに動かされ直しています。ここからは人間へ渡します）",
+				"identifier", issue.Identifier, "動かされた先の Status", issue.State,
 				"戻す先", target, "書き戻した回数", done, "上限", maxAutomatedRewrites)
 		}
 		return "", nil, false
@@ -389,8 +396,8 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 		if gate == rewriteBusy {
 			reason = "別の書き戻しが飛んでいます"
 		}
-		o.logger.Info("自動化が動かした Status を戻しませんでした（"+reason+"）",
-			"identifier", issue.Identifier, "自動化が書いた Status", issue.State, "戻す先", target)
+		o.logger.Info("対応表にある Status を戻しませんでした（"+reason+"）",
+			"identifier", issue.Identifier, "動かされた先の Status", issue.State, "戻す先", target)
 		return
 	}
 	o.wg.Add(1)
@@ -406,8 +413,13 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 	}()
 }
 
-// rewriteAutomatedState は、カンバンの自動化が動かした Status を本来の Status へ戻す
-// （設計 3-54）。
+// rewriteAutomatedState は、対応表のキーの Status へ動かされた issue を、本来の Status へ戻す
+// （設計 3-54）。**動かしたのが自動化か人間かは見ない**（issue #299）。
+//
+// **書いた主体の名前を、ログにも issue のコメントにも出さない。**`issue.StatusChangedBy` は
+// 「いまの Status と同じ名前の、いちばん新しいイベント」の書き手であり（`judgeStatusAuthor`）、
+// **GitHub がイベントを記録しなかった回は、過去に同じ Status へ動かした別の主体を指す**
+// （設計 2-6）。公開の issue で、動かしていない人を名指しすることになる。
 //
 // **書き戻すのは、カンバンを見た人間が読み違えないようにするためである。**止めないだけだと、
 // 人間の列（`In Progress`）に continuo が担当中の issue が居座り、列を分けた意味が消える。
@@ -437,10 +449,6 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 func (o *Orchestrator) rewriteAutomatedState(
 	ctx context.Context, rs *runState, issue tracker.Issue, target string, claim *rewriteClaim,
 ) (tracker.StatusWrite, error) {
-	by := issue.StatusChangedBy
-	if by == "" {
-		by = "(ログイン名を取れませんでした)"
-	}
 	// **`protectedStates()` を渡す。**その issue を人間が「終わった」にしていたら、
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
 	// **人間が `direct_chat_state` へ動かしていたときも書かない**（設計 3-83e の不変条件2）。
@@ -455,9 +463,9 @@ func (o *Orchestrator) rewriteAutomatedState(
 			add = maxAutomatedRewriteFailures
 		}
 		failed := rs.noteAutomatedRewriteFailure(issue.State, add, o.now())
-		o.logger.Warn("自動化が動かした Status を戻せませんでした（次の巡回で拾い直します）",
-			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
-			"戻す先", target, "書いたのは", by,
+		o.logger.Warn("対応表にある Status を戻せませんでした（次の巡回で拾い直します）",
+			"identifier", issue.Identifier, "動かされた先の Status", issue.State,
+			"戻す先", target,
 			"戻せなかった回数", failed, "上限", maxAutomatedRewriteFailures, "error", err)
 		return moved, err
 	}
@@ -465,8 +473,8 @@ func (o *Orchestrator) rewriteAutomatedState(
 		// 既にその値だった・item がもう見えない・終わったとみなす状態だった、のいずれか。
 		// **どれもカンバンは動いていないので、枠を返す。**
 		claim.release()
-		o.logger.Info("自動化が動かした Status は戻しませんでした（カンバンは動いていません）",
-			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
+		o.logger.Info("対応表にある Status は戻しませんでした（カンバンは動いていません）",
+			"identifier", issue.Identifier, "動かされた先の Status", issue.State,
 			"戻す先", target, "取り直した状態", moved.Previous)
 		if !moved.Reached {
 			if moved.Previous != "" {
@@ -493,27 +501,46 @@ func (o *Orchestrator) rewriteAutomatedState(
 		return moved, nil
 	}
 	rs.clearAutomatedRewriteFailures(issue.State)
-	o.logger.Info("カンバンの自動化が動かした Status を、continuo が意図した Status へ戻しました"+
-		"（人間が動かしたものは戻しません）",
-		"identifier", issue.Identifier, "何から", moved.Previous, "何へ", target, "書いたのは", by)
+	o.logger.Info("対応表にある Status を、continuo が意図した Status へ戻しました"+
+		"（動かしたのが自動化か人間かは見ていません）",
+		"identifier", issue.Identifier, "何から", moved.Previous, "何へ", target)
 	rs.setLastWrittenState(target)
 	// **知らない Status だった記録を消す**（設計 3-50）。戻したのだから猶予の起点も捨てる。
 	rs.clearExternalMove()
 	o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue), newStatusMove(moved, target),
-		automatedMoveReason(moved.Previous, by))
+		automatedMoveReason(moved.Previous, o.cfg.Tracker.FailureState))
 	return moved, nil
 }
 
 // automatedMoveReason は、書き戻したときの「なぜ」の文を作る（設計 3-29）。
 //
-// from: 自動化が書いていた Status 名。
-// by: 書いた主体のログイン名。
-// 戻り値: 「〜ためです」で終わる1文。
-func automatedMoveReason(from, by string) string {
-	return fmt.Sprintf(
-		"カンバンの組み込みの自動化（`%s`）が Status を `%s` へ動かし、"+
+// **書いた主体を書かない**（issue #299）。自動化が動かしたとも、人間が動かしたとも断定しない
+// （`rewriteAutomatedState` のコメントのとおり、読める書き手は当てにならない）。
+//
+// **止め方を括弧で添える。**人間が動かして戻されたとき、その人間が最初に目にするのが
+// このコメントである。**止め方が無いと、理由が分からないまま同じ操作を繰り返し、
+// そのあいだエージェントが走り続ける。**
+//
+// **止める先は `tracker.failure_state` の値で名指しする。**必須の設定で（`config.Validate`）、
+// `KnownStates` に入るので対応表のキーにはできず、`tracker.active_states` にも入れない。
+// **そこへ動かせば、戻されずに止まる。**「対応表のキー以外の Status」のような言い方は、
+// `tracker.direct_chat_state`（止まらずに人間が引き取る）や、設定に名前の無い Status
+// （猶予のあいだ止まらない）も指してしまう。
+//
+// from: 動かされた先の Status 名（対応表のキー）。
+// stopState: 止めたい人間へ案内する Status 名（`tracker.failure_state`）。
+// **空なら止め方を添えない**（設定の検査を通っていれば空にはならない）。
+// 戻り値: 「〜ためです」で終わる1文。**止め方の補足が、そのあとに括弧で付く。**
+func automatedMoveReason(from, stopState string) string {
+	reason := fmt.Sprintf(
+		"Status が `%s` へ動いており、"+
 			"WORKFLOW.md の `tracker.automated_state_rewrite` に戻す先が書かれているためです",
-		by, from)
+		from)
+	if strings.TrimSpace(stopState) == "" {
+		return reason
+	}
+	return reason + fmt.Sprintf(
+		"（人が動かした場合も戻します。止めたいときは `%s` へ動かしてください）", stopState)
 }
 
 // lookupStateRewrite は対応表から戻す先を引く（設計 3-54）。
@@ -566,7 +593,7 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 		defer cancel()
 		// **コメントを先に書く。**pane を閉じてから書くと、投稿に失敗したときに
 		// 「黙って止まった」状態がそのまま残る。
-		// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
+		// **Status を動かした記録は添えない。**動かしたのは continuo ではない（人間か、カンバンの自動化である）。
 		//
 		// **コメントの直前と `release` の直前に、direct chat への引き取りを見る**（設計 3-83f）。
 		// この道も印を外す6本のうちの1本である。見ないと、後始末の最中に人間が direct chat へ動かしたとき、
@@ -601,10 +628,12 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 		return
 	}
 	reason := o.unknownStateReason(rs, state)
-	// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
+	// **Status を動かした記録は添えない。**動かしたのは continuo ではない（人間か、カンバンの自動化である）。
 	o.postHandoffComment(ctx, rs, reason, statusMove{})
-	// **`failureState` は渡さない。**人間が自分で動かした Status を continuo が
-	// 上書きしてはならない（設計 3-4 の「人間の操作を巻き戻さない」）。
+	// **`failureState` は渡さない。**continuo の外で動かされた Status を、止めるときに
+	// continuo が上書きしてはならない（設計 3-4 の「人間の操作を巻き戻さない」）。
+	// **対応表のキーの Status だけは別である**（設計 3-54）。そちらは止める前に
+	// `claimAutomatedRewrite` が戻しており、ここへ来るのは戻せなかった回だけである。
 	o.finishRunClaimed(ctx, rs, "", reason)
 }
 
@@ -624,11 +653,13 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //
 // **判定は「対応表に既に書いてある名前か」で行う。**「書き戻しの案内を出したか」で
 // 判定すると、**対応表に書いてある Status で止まった道を1本も塞げない**（そこでは
-// 案内を出さないので偽になる）。塞ぎ損ねる道は3本ある。
+// 案内を出さないので偽になる）。塞ぎ損ねる道は2本ある。
 //
-//	書き戻す回数が上限に達した … `automatedStateHint` の押し合いの分岐
+//	書き戻す回数が上限に達した … `automatedStateHint` の、動かされ直した分岐
 //	戻せない失敗が続いた       … 同じく、戻す先がカンバンから消えたときの分岐
-//	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
+//
+// **「人間がそのキーの Status へ動かした」という3本目の道は、もう無い**（issue #299）。
+// 書き戻しは書いた主体を見ないので、人間が動かした回も上の2本のどちらかへ入る。
 //
 // **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57b。issue #76）。
 // あちらへ書いた名前を `tracker.active_states` へ足すと、`config.Validate` が
@@ -779,18 +810,24 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 // automatedStateHint は「その Status を書いたのはカンバンの自動化だった」ことと、
 // 次から止まらなくする1行を、issue のコメントへ足す文を作る（設計 3-54）。
 //
-// **人間が動かしたときは何も足さない。**その場合は止まったことが正しい振る舞いであり、
-// 設定を足す話ではない。
+// **案内は2つの側に分かれる。書いた主体を見るのは、対応表に無い側だけである**（issue #299）。
 //
-// **書いたのが自動化なのに対応表に無い、という場合が本題である。**
+// **既に対応表にある Status の側は、書いた主体を見ずに出す。**書き戻しそのものが
+// 書いた主体を見ないので（`claimAutomatedRewrite`）、ここへ来るのは自動化が動かした回とは限らない。
+// **「書いたのは人間ではありません」と断定してはならない。書き手の名前も出さない**
+// （読める書き手は「同じ名前のいちばん新しいイベント」の主体で、GitHub がイベントを
+// 記録しなかった回は別の主体を指す。設計 2-6）。**足せとも言わない。**同じ行をもう一度足させても直らない。
+// **この側に来る道は2本しか無い**（どちらも `claimAutomatedRewrite` で枠を取れなかった道である）。
+//
+//	書き戻す回数が上限に達した … 書き戻すたびに、自動化か人間が動かし直している
+//	戻せない失敗が続いた       … 戻す先の選択肢がカンバンから消えている可能性が高い
+//
+// **対応表に無い Status の側は、書いたのが自動化と読めたときだけ出す**（いままでどおり）。
+// 人間が動かしたときは、止まったことが正しい振る舞いであり、設定を足す話ではない。
 // PR を作った・PR がマージされた、といった操作でカンバンの組み込みの自動化が動くことは、
 // 設定の既定のまま起きる（設計 2-6）。**足す2行をそのまま書いて見せる。**
-//
-// **既に対応表にある Status なら、足せとは言わない。**同じ行をもう一度足させても直らない。
-// **この案内に来る道は2本しか無い**（どちらも `claimAutomatedRewrite` で枠を取れなかった道である）。
-//
-//	書き戻す回数が上限に達した … continuo とカンバンの自動化が押し合っている
-//	戻せない失敗が続いた       … 戻す先の選択肢がカンバンから消えている可能性が高い
+// **この側は GitHub の記録に頼ったままである。**記録が無い回は案内が出ず、
+// 同じ名前の古い自動化のイベントが残っていると、人間が動かした回にも出る（設計 3-54 の限界）。
 //
 // **書き込みが1〜2回失敗しただけでは、ここへ来ない。**その場合は run が続き、
 // 次の巡回が同じ判定でもう一度書きに行く。**`terminal_states` に入っていて断られた場合も
@@ -812,8 +849,40 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 // （呼び出し側は、そのとき `active_states` へ足す案内を出さない）。
 // **既に対応表にある Status のときは偽である。**その場合に `active_states` の案内を
 // 抑えるかどうかは、**呼び出し側が対応表を自分で引いて決める**（`unknownStateReason`）。
-// ここで決めさせると、人間が動かして早々に戻る道（この関数の1つ目の分岐）を塞げない。
 func (o *Orchestrator) automatedStateHint(rs *runState, state string, rewrite map[string]string) (string, bool) {
+	if target, ok := lookupStateRewrite(rewrite, state); ok {
+		// **書いた主体を見ない。**断定もしない（上のコメント）。
+		listed := fmt.Sprintf(
+			"\n【この Status は対応表に既に書かれています】"+
+				"**WORKFLOW.md の `tracker.automated_state_rewrite` に"+
+				"（`%s` → `%s` として）書かれています。**それでも止まったので、"+
+				"足りないのは設定の1行ではありません。", state, target)
+		// **戻せない失敗が続いたのなら、押し合いの話をしてはならない。**
+		// 押し合いは1度も起きていないので、`Workflows` を切っても直らない。
+		if rs.automatedRewriteFailureCount(state) >= maxAutomatedRewriteFailures {
+			return listed + fmt.Sprintf(
+				"\n【何が起きたか】continuo が `%s` へ戻そうとして、%d 回続けて書き込めませんでした。"+
+					"\n【いちばんありそうな原因】カンバンの Status の選択肢から `%s` が消えています"+
+					"（continuo の起動時には在りました）。"+
+					"\n【対処】カンバンに `%s` の選択肢を作り直すか、"+
+					"`tracker.automated_state_rewrite` の戻す先を実在する Status に直して、"+
+					"continuo を再起動してください。",
+				target, maxAutomatedRewriteFailures, target, target), false
+		}
+		// **誰が動かし直したのかは書かない。**自動化と人間のどちらの場合もあるので、
+		// 対処を2通り並べる。**人が止めたいときの先は `tracker.failure_state` で名指しする**
+		// （`automatedMoveReason` と同じ理由。そこは対応表のキーにも `active_states` にもできない）。
+		return listed + fmt.Sprintf(
+			"\n【何が起きたか】continuo が `%s` へ戻すたびに `%s` へ動かされ直し、"+
+				"書き戻す回数が上限（%d 回）に達しました"+
+				"（動かしたのがカンバンの自動化か人かは、continuo は見ていません）。"+
+				"\n【対処】カンバンの自動化が動かしているなら、カンバンの `Workflows` でその自動化を切ってください。"+
+				"人が動かしているなら、止めたいときは `%s` へ動かしてください"+
+				"（`%s` へ動かしても、continuo は戻します）。",
+			target, state, maxAutomatedRewrites, o.cfg.Tracker.FailureState, state), false
+	}
+
+	// **ここから下は、対応表に無い Status の側である。書いたのが自動化と読めたときだけ出す。**
 	issue := rs.issue()
 	if !issue.StatusChangedByAutomation {
 		return "", false
@@ -826,31 +895,6 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string, rewrite ma
 		"\n【この Status を書いたのは人間ではありません】`%s` が書いています"+
 			"（カンバンの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
 			"といった操作で動きます）。", by)
-
-	if target, ok := lookupStateRewrite(rewrite, state); ok {
-		written += fmt.Sprintf(
-			"**この Status は WORKFLOW.md の `tracker.automated_state_rewrite` に"+
-				"（`%s` → `%s` として）既に書かれています。**それでも止まったので、"+
-				"足りないのは設定の1行ではありません。", state, target)
-		// **戻せない失敗が続いたのなら、押し合いの話をしてはならない。**
-		// 押し合いは1度も起きていないので、`Workflows` を切っても直らない。
-		if rs.automatedRewriteFailureCount(state) >= maxAutomatedRewriteFailures {
-			return written + fmt.Sprintf(
-				"\n【何が起きたか】continuo が `%s` へ戻そうとして、%d 回続けて書き込めませんでした。"+
-					"\n【いちばんありそうな原因】カンバンの Status の選択肢から `%s` が消えています"+
-					"（continuo の起動時には在りました）。"+
-					"\n【対処】カンバンに `%s` の選択肢を作り直すか、"+
-					"`tracker.automated_state_rewrite` の戻す先を実在する Status に直して、"+
-					"continuo を再起動してください。",
-				target, maxAutomatedRewriteFailures, target, target), false
-		}
-		return written + fmt.Sprintf(
-			"\n【何が起きたか】continuo が `%s` へ戻すたびに自動化が `%s` を書き直していて、"+
-				"書き戻す回数が上限（%d 回）に達しました。"+
-				"\n【対処】カンバンの `Workflows` でこの自動化を切るか、"+
-				"`%s` を continuo が使わない Status に変えてください。",
-			target, state, maxAutomatedRewrites, state), false
-	}
 
 	back := o.rewriteTargetSuggestion(rs)
 	if back == "" {

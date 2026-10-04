@@ -502,8 +502,9 @@ type runState struct {
 	// 自動化に `Done` へ動かされることがある。起点を繰り越すと、そこから測る猶予が
 	// 残り1分しかない。**別の理由で止まりかけたのだから、猶予は最初から数え直す。**
 	externalMoveKind externalMoveKind
-	// automatedRewrites は、カンバンの自動化が動かした Status を書き戻した回数である
-	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	// automatedRewrites は、対応表（`tracker.automated_state_rewrite`）のキーの Status を
+	// 書き戻した回数である（設計 3-56）。**キーは動かされた先の Status（小文字にして前後の空白を落としたもの）。**
+	// **動かしたのが自動化か人間かは問わず、同じ枠で数える**（設計 3-54。issue #299）。
 	//
 	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
 	// continuo とカンバンが同じ issue の Status を押し合い続ける。
@@ -1912,7 +1913,8 @@ func (rs *runState) automatedRewriteFailureCount(state string) int {
 type automatedHandoffReason string
 
 const (
-	// handoffByPushback は「continuo とカンバンの自動化が押し合って上限に達した」である。
+	// handoffByPushback は「書き戻すたびに動かされ直して、上限に達した」である。
+	// **動かし直したのがカンバンの自動化か人間かは問わない**（設計 3-54。issue #299）。
 	handoffByPushback automatedHandoffReason = "押し合いの上限"
 	// handoffByFailures は「書き戻しがカンバンを1ミリも動かせないまま上限に達した」である。
 	handoffByFailures automatedHandoffReason = "戻せない失敗の上限"
