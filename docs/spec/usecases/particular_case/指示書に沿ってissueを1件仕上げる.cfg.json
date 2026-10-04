@@ -3,7 +3,7 @@
   "usecase_name": "指示書に沿ってissueを1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿ってissueを1件仕上げる.rucm.md",
-    "rucm_block_sha256": "055bf493f198ac31386264c234cd6c4bcd1a8c1f060780fb3b8342c2575e3d21"
+    "rucm_block_sha256": "3eeeb5471b9c2863e0c04d364ec4f43a6910e4873b40893dea12f85da9da7831"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -80,7 +80,7 @@
           1
         ]
       },
-      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。"
+      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。"
     },
     "了承も回答も無い": {
       "rfs": {
@@ -706,7 +706,7 @@
       "type": "action",
       "flow": "対応しないと決める",
       "step": 1,
-      "statement": "エージェントは対応しない理由を issue へコメントする。"
+      "statement": "エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする。"
     },
     {
       "id": "対応しないと決める-2",
@@ -3728,7 +3728,7 @@
       "id": "P031",
       "terminal": "abort",
       "terminal_flow": "対応しないと決める",
-      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。",
+      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3767,7 +3767,7 @@
         "CONDITION: NOT 計画の印が付いた自分のコメントが issue にある",
         "エージェントは VALIDATES THAT issue に対応する必要がある。",
         "CONDITION: NOT issue に対応する必要がある",
-        "エージェントは対応しない理由を issue へコメントする。",
+        "エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする。",
         "エージェントは commit していない変更を commit して push する。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",

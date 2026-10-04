@@ -177,12 +177,12 @@ POSTCONDITION: issue に計画のコメントがある。issue に、設計レ�
 
 SPECIFIC ALTERNATIVE FLOW 対応しないと決める:
 RFS 計画を書いて人間確認で止まる 1
-1. エージェントは対応しない理由を issue へコメントする。
+1. エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする。
 2. エージェントは commit していない変更を commit して push する。
 3. エージェントは応答の最後に判断を仰ぐ表明を1行書く。
 4. システムはカンバンの issue の Status に blocked の遷移先を書く。
 5. ABORT
-POSTCONDITION: issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。
+POSTCONDITION: issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。
 
 SPECIFIC ALTERNATIVE FLOW 了承も回答も無い:
 RFS BASIC FLOW 14
@@ -471,7 +471,7 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 | `判断に迷って止まる` | この記述 | 5-4 | 報告のコメント |
 
 `レビューを回す` の4つの出口は、この記述では代替フロー `レビューが止まる` の1本に受けている。
-`成果をpushしてpullrequestを出す` の4つの出口は、`pullrequestが出ていない` の1本に受けている。
+`成果をpushしてpullrequestを出す` の4つの出口は、`pullrequestが出ていない` の1本に受けている。同じ記述の `実装の途中で作れない` は、実装の途中の push でだけ通る。段19 は実装を終えたあとなので、ここでは通らない。
 `進捗報告を書く` の1つの出口は、`進捗報告を書く前に止まる` に受けている。
 
 ## 命令として扱わないもの
@@ -513,7 +513,7 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 
 | 時点 | 何をするか | どの記述に在るか |
 | --- | --- | --- |
-| 最初に commit を push した直後（実装の途中の push） | 途中の目印を本文の1行目に置いた pull request を、draft で作る | 進捗報告を書く |
+| 最初に commit を push した直後（実装の途中の push） | 途中の目印を本文の1行目に置いた pull request を、draft で作る | 進捗報告を書く（手順は `成果をpushしてpullrequestを出す` の段3〜5 と同じ） |
 | 実装が終わったあとの push（段19） | pull request がまだ無ければ draft で作る。途中の目印が残っていれば、題名と本文を書き直して目印を外す | 成果をpushしてpullrequestを出す |
 | 実装のレビューが収まって終わったあと（段23） | 実装のレビューを回した pull request が draft なら、外す。誰が draft で作ったかは問わない | この記述 |
 
@@ -605,7 +605,7 @@ flowchart TD
     A7S7["計画を書いて人間確認で止まる 7 エージェントは応答の最後に判断を仰ぐ表明を1行書く"]
     A7S8["計画を書いて人間確認で止まる 8 システムはカンバンの issue の Status に blocked の遷移先を書く"]
     A7S9(["計画を書いて人間確認で止まる 9 ABORT"])
-    A8S1["対応しないと決める 1 エージェントは対応しない理由を issue へコメントする"]
+    A8S1["対応しないと決める 1 エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする"]
     A8S2["対応しないと決める 2 エージェントは commit していない変更を commit して push する"]
     A8S3["対応しないと決める 3 エージェントは応答の最後に判断を仰ぐ表明を1行書く"]
     A8S4["対応しないと決める 4 システムはカンバンの issue の Status に blocked の遷移先を書く"]
