@@ -14217,6 +14217,7 @@ subagent はこの指示書を持っていないので、節の番号だけで�
 切れたときは、先に件数を数えさせ（`--jq '.comments | length'`）、式の `.comments[]` を `.comments[0]`、`.comments[1]` … に変えて、1件ずつ読み直させます（4-1 の1つ目と、4-2 の `gh pr view` が、この形です）。
 `--paginate` の付いた `gh api`（4-2 の timeline・行に紐づくレビューコメント・reviews）は、`--paginate` を外し、
 URL の末尾に `?per_page=20&page=1`、`?per_page=20&page=2` … を付けて、少しずつ読み直させます（`--paginate` を付けたままだと、式がページごとに当たります）。
+**URL は、全体を一重引用符で囲ませてください。**囲まないと、シェルが `?` と `&` を解釈して落ちます。
 それでも読めないと報告されたら、その分をあなたが読み、要る部分を原文のまま渡してください。読めないまま判定させないでください。
 
 **Bash を持たない subagent には、URL を渡しても読めません。**
@@ -15721,6 +15722,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 - **continuo が動いていて、担当が移ってから `recheck_interval_ms` 以内にエージェントが先に気づいて `blocked` を出すと、元の機械の continuo が、移ったあとの issue の Status を引き渡しへ動かす**（[internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `handleTurnEnd`。確かめ直しが期限前なら、表明をそのまま読む）。**新しい担当の機械は、それを見て worker を止める**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go)）。**`after_run` に `git push` を書いている機械では、そのとき本体が push する**（`finishRunClaimed` は担当を見ない。3-77h の手当ては、本体が自分で気づいた経路だけである）。**この窓は、この決定の前から在る**（同じ窓でエージェントが `review` や `blocked` を出せば、同じことが起きていた）。窓を閉じるには、turn の終わりで毎回担当を確かめ直すことになり、hook を受けた run の扱いに触るので、ここでは入れていない。**起きるのは、走っている run の担当を人間が手で付け替えたときである。**付け替える前に元の機械を止めれば起きない。
 - **`tracker.provider.token_source: env` で、`gh` とは別のアカウントのトークンを渡している構成では、毎回「別の人が担当」になる**（3-65。担当者に入るのはトークンの持ち主である）。
 - **push せずに止まった commit は、その機械の worktree にしか無い。**既定（`cleanup.require_pushed: true`）では片付けが見送られて残る。
+- **カンバンの自動化（`Pull request linked to issue`）が Status を書き換える時機も、実装の途中へ動く。**`tracker.automated_state_rewrite` が空のカンバンでは、continuo の知らない Status になってから `tracker.unknown_state_grace_ms`（既定10分）のあと、実装の途中で run が止まる。この決定の前は、実装が終わって pull request を作った直後に止まっていた。
 - **この決まりが届くのは、continuo が起動した Claude Code の会話だけである。**
 
 ### 5-3x. レビュワーと直す側の両方に、検討の経緯を読ませる

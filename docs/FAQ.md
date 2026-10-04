@@ -1782,7 +1782,13 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 #### v0.2.2 で、何もしないと動かなくなるものは？
 
-**ありません。**`WORKFLOW.md` に足すものも、消すものもありません。
+**1つだけあります。カンバンの自動化（`Pull request linked to issue`）を有効にしていて、`tracker.automated_state_rewrite` が空の人です。**
+pull request が実装の途中で作られるようになったので、自動化が Status を書き換える時機も実装の途中へ動きます。
+continuo の知らない Status へ書き換わると、最初の push の約10分後（`tracker.unknown_state_grace_ms`）に、実装の途中で止まります。
+**v0.2.1 までも同じカンバンでは止まっていましたが、止まるのは実装が終わったあとでした。**
+直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。`continuo doctor` が `! 自動化 … tracker.automated_state_rewrite が空です` と出すカンバンが、これに当たります。
+
+**それ以外の人は、`WORKFLOW.md` に足すものも、消すものもありません。**
 **変わるのは、エージェントの動きです。**次の6つです。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
 
 | 何が変わるか | 気をつけること |
@@ -1834,6 +1840,7 @@ continuo が担当者に入れるのはトークンの持ち主で、エージ�
 | **`WORKFLOW.md` に「draft で作らない」と書いている** | 作業中だけ draft になります。実装レビューが収まると、エージェントが draft を外します。10周で収まらなかったときと、人間に訊くことが出て止まったときは、draft のまま残ります |
 | **draft のまま受け取りたい** | `WORKFLOW.md` の本文に「draft のまま人間へ渡す」とはっきり書いてください（いままでと同じです） |
 | **途中の本文** | 1行目に `<!-- continuo:pull-request-in-progress -->` が入っています。実装が終わると、エージェントが題名と本文を書き直して、この行を外します。**この行を残したまま本文に書き足すと、書き直されます。**書き直されたくないときは、この行を消してください |
+| **カンバンの自動化** | `Pull request linked to issue` が、実装の途中で Status を書き換えます。`tracker.automated_state_rewrite` が空だと、約10分後に run が止まります。直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります |
 | **CI** | push のたびに回ります。continuo が配る `continuo-ci.yaml` の検査は、レビューの結果を貼るまで赤のままです（v0.2.1 までも、pull request を作ってからレビューを貼るまでは赤でした。赤い時間が、実装のあいだへ延びます） |
 | **draft を作れないリポジトリ** | エージェントは draft を外して作ります。そのリポジトリでは、途中の pull request がマージできる状態になります |
 | **人間が閉じた draft** | 次の push で、もう一度作られます |

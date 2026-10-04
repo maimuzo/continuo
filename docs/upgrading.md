@@ -110,7 +110,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 **要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.2.1 から v0.2.2 へ上げるとき」を先に読んでください。**
 
-**`WORKFLOW.md` に足すものも、消すものもありません。**変わるのは、組み込みの指示書（continuo が Claude Code へ送る指示）だけです。
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、最初の push のときに draft で作られます」を読んでください）。変わるのは、組み込みの指示書（continuo が Claude Code へ送る指示）だけです。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -167,6 +167,11 @@ Bash を持たない subagent（`WORKFLOW.md` の本文の「レビューを頼�
 | **「draft で作る」と書いている** | 同じです |
 | **「draft で作らない」と書いている** | **作業中は draft になります。**実装レビューが収まると外れるので、人間へ渡るときの状態は変わりません。**10周で収まらなかったときと、人間に訊くことが出て止まったときは、draft のまま残ります** |
 | **「draft のまま人間へ渡す」と書いている** | いままでと同じで、外れません |
+
+**カンバンの自動化（`Pull request linked to issue`）を有効にしている人へ。**pull request ができる時機が実装の途中へ動いたので、自動化が Status を書き換える時機も動きます。
+`tracker.automated_state_rewrite` に対応を書いていれば、continuo が書き戻して続けます。**空のままだと、continuo の知らない Status になった約10分後（`tracker.unknown_state_grace_ms`）に、実装の途中で run が止まります。**
+v0.2.1 までは、同じカンバンで、実装が終わって pull request を作った直後に止まっていました。
+直し方は [FAQ.md](FAQ.md) の「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。`continuo doctor` が、対応表が空であることを出します。
 
 **雛形の「pull request の決まり」のコメントも、この形に合わせて直しました。**あなたの `WORKFLOW.md` は書き換わりません。直さなくても動きます。
 CI への影響と、途中の本文の扱いは [FAQ.md](FAQ.md) の「pull request が、実装の途中なのに作られている」にあります。
