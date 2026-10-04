@@ -3,7 +3,8 @@
 // **エージェントが PR を作ると、カンバンの自動化が Status を動かす。**それを「人間が
 // 引き渡した」と読んで、continuo が自分のエージェントを turn の途中で殺していた。
 // **止めないこと**と、**本来の Status へ戻すこと**、そして
-// **人間が動かしたときの扱いを変えていないこと**を見る。
+// **対応表に書いてある Status なら、誰が動かしても（誰が動かしたか読めなくても）戻すこと**を見る
+// （issue #299）。対応表に無い Status は、いままでどおり止まる。
 package orchestrator_test
 
 import (
@@ -854,6 +855,14 @@ func TestAutomatedState_押し合いで止めても貼ると起動しない案�
 		t.Fatal("押し合いで止めたのに、理由を issue へ1文字も残していない")
 	}
 	assertRewriteKeyHintIsPastable(t, body)
+	// **書いたのが自動化と読めた回にも、書き手を名指しせず、断定しない**（設計 3-54。issue #299）。
+	// 読める書き手は「同じ名前のいちばん新しいイベント」の主体で、当てにならない。
+	// **出す回と出さない回を作らない。**
+	for _, forbidden := range []string{"人間ではありません", "github-project-automation"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("対応表にある Status で止めた案内が、書いた主体を名指しまたは断定している（%q）:\n%s", forbidden, body)
+		}
+	}
 }
 
 // TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない は、設計 3-57b を確かめる

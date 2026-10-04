@@ -427,7 +427,8 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 // **失敗しても run は止めない。**Status の書き込みは失敗しうるので、次の巡回で拾い直す。
 //
 // **カンバンが動かなかったら、確保した書き戻しの枠を返す**（設計 3-56）。
-// 枠は「continuo とカンバンの自動化が Status を押し合っている」ことを数えるためにある。
+// 枠は「continuo が戻すたびに、Status が動かされ直している」ことを数えるためにある
+// （動かし直しているのがカンバンの自動化か人間かは問わない。設計 3-56）。
 // **押し合いは、カンバンが実際に動いたときにだけ起きる。**通信の失敗や
 // 「既にその値だった」で枠を食い潰すと、**3回の失敗で上限に達し、押し合いが
 // 1度も起きていない run が人間へ渡されて worker が止まる。**
@@ -529,18 +530,15 @@ func (o *Orchestrator) rewriteAutomatedState(
 //
 // from: 動かされた先の Status 名（対応表のキー）。
 // stopState: 止めたい人間へ案内する Status 名（`tracker.failure_state`）。
-// **空なら止め方を添えない**（設定の検査を通っていれば空にはならない）。
+// **空を想定しない。**`tracker.failure_state` は設定の検査が必須にしている（`config.Validate`）。
+// 上限で止めたときの案内（`automatedStateHint`）も、同じ値を同じ前提で使う。
 // 戻り値: 「〜ためです」で終わる1文。**止め方の補足が、そのあとに括弧で付く。**
 func automatedMoveReason(from, stopState string) string {
-	reason := fmt.Sprintf(
+	return fmt.Sprintf(
 		"Status が `%s` へ動いており、"+
-			"WORKFLOW.md の `tracker.automated_state_rewrite` に戻す先が書かれているためです",
-		from)
-	if strings.TrimSpace(stopState) == "" {
-		return reason
-	}
-	return reason + fmt.Sprintf(
-		"（人が動かした場合も戻します。止めたいときは `%s` へ動かしてください）", stopState)
+			"WORKFLOW.md の `tracker.automated_state_rewrite` に戻す先が書かれているためです"+
+			"（人が動かした場合も戻します。止めたいときは `%s` へ動かしてください）",
+		from, stopState)
 }
 
 // lookupStateRewrite は対応表から戻す先を引く（設計 3-54）。
@@ -633,7 +631,8 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 	// **`failureState` は渡さない。**continuo の外で動かされた Status を、止めるときに
 	// continuo が上書きしてはならない（設計 3-4 の「人間の操作を巻き戻さない」）。
 	// **対応表のキーの Status だけは別である**（設計 3-54）。そちらは止める前に
-	// `claimAutomatedRewrite` が戻しており、ここへ来るのは戻せなかった回だけである。
+	// `claimAutomatedRewrite` が戻しており、ここへ来るのは書き戻さなかった回
+	// （書き戻す回数が上限に達した・戻せない失敗が続いた）だけである。
 	o.finishRunClaimed(ctx, rs, "", reason)
 }
 
@@ -807,8 +806,8 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 		hint)
 }
 
-// automatedStateHint は「その Status を書いたのはカンバンの自動化だった」ことと、
-// 次から止まらなくする1行を、issue のコメントへ足す文を作る（設計 3-54）。
+// automatedStateHint は、知らない Status で止めたときに、何が起きたかと、次から止まらなくする
+// 直し方を、issue のコメントへ足す文を作る（設計 3-54）。
 //
 // **案内は2つの側に分かれる。書いた主体を見るのは、対応表に無い側だけである**（issue #299）。
 //
@@ -878,7 +877,7 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string, rewrite ma
 				"（動かしたのがカンバンの自動化か人かは、continuo は見ていません）。"+
 				"\n【対処】カンバンの自動化が動かしているなら、カンバンの `Workflows` でその自動化を切ってください。"+
 				"人が動かしているなら、止めたいときは `%s` へ動かしてください"+
-				"（`%s` へ動かしても、continuo は戻します）。",
+				"（着手し直したあとは、`%s` へ動かしても continuo は戻します）。",
 			target, state, maxAutomatedRewrites, o.cfg.Tracker.FailureState, state), false
 	}
 

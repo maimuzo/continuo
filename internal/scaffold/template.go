@@ -109,7 +109,7 @@ tracker:
                                             # （組み込みの自動化は、PR を issue に紐づけた・PR をマージした等で Status を動かす）。
                                             # 誰が動かしたかは見ない。人間がその Status へ動かしたときも戻す
                                             # （止めたいときは、上の failure_state の Status へ動かす）。
-                                            # 戻すのは1件の着手につき3回まで。空なら戻さず、上の猶予を置いてから worker を止める。
+                                            # 戻すのは1件の着手につき、1つの Status あたり3回まで。空なら戻さず、上の猶予を置いてから worker を止める。
                                             # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
                                             # 戻す先は上の active_states に入っている Status にすること。
                                             # キーには、tracker の他のキー（上の active_states / terminal_states /

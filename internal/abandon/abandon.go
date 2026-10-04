@@ -691,7 +691,7 @@ func (r *runner) reportToSkipped() {
 
 // verifyTargets は、これから書きうる Status の値を消す前に確かめる（段2 の直後）。
 //
-// **確かめるのは2つである。**
+// **確かめるのは3つである。**
 //
 //	その値がカンバンの Status の選択肢にあるか（`--to` と park の先）
 //	park の先が `tracker.active_states` に入っていないか

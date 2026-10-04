@@ -1577,8 +1577,8 @@ func Test_着手を取り消す_P024_parkが作業中の状態なら書く前に
 // だが continuo は、対応表のキーの Status へ動いた issue を、書いた主体を見ずに作業中の Status へ戻す。
 // **手を離さないので、`--force` を付けると、continuo が持ったままの run の worktree を消す。**
 // 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
-// issue 188 の worktree、対応表に `Human Doing` を書いた設定、`--park "human doing"`
-// （**大文字小文字を変えて渡す。**continuo が対応表を引くときと同じ比べ方であること）。
+// issue 188 の worktree、対応表に `Human Doing` を書いた設定、`--park " human doing "`
+// （**大文字小文字を変え、前後に空白を付けて渡す。**continuo が対応表を引くときと同じ比べ方であること）。
 // 成功条件: 終了コードが 1、カンバンへの書き込みが0件、worktree が残っている、
 // herdr へ worktree.remove を送っていないこと。
 func Test_着手を取り消す_P024_parkが対応表のキーなら書く前に止まる(t *testing.T) {
@@ -1591,7 +1591,7 @@ func Test_着手を取り消す_P024_parkが対応表のキーなら書く前に
 
 	holdLock(t, fx)
 
-	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ParkState = "human doing" })
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ParkState = " human doing " })
 
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrParkRewriteKey, "human doing"))
