@@ -161,9 +161,12 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 **カンバンは continuo だけのものではありません。**人間も、GitHub Projects v2 の組み込みの
 自動化も、同じ Status を書き換えます。**書いたのが自動化かどうかは、issue の記録
 （`ProjectV2ItemStatusChangedEvent`）の `actor.__typename` が `Bot` かどうかで引けます。**
+**ただし、GitHub はその記録を残さないことがあります**（2026-10-04 に確かめました。
+[docs/plans/continuo_design.md](plans/continuo_design.md) の 2-6）。
 
-**引けるのはそこまでです。**「その issue を本来どの Status に戻すべきか」は記録に無いので、
-**`tracker.automated_state_rewrite` に人間が書いた対応表を引きます。**
+**だから、戻すかどうかは「誰が書いたか」では決めません。**
+**`tracker.automated_state_rewrite` に人間が書いた対応表を引き、そこに書いてある Status なら、
+誰が動かしても戻します。**「その issue を本来どの Status に戻すべきか」も、同じ対応表が持っています。
 **書いていなければ、いままでどおり「人間が引き渡した」と解釈して worker を止めます。**
 
 ### どこにあるか
@@ -171,9 +174,9 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 | ファイル | 何をしているか |
 | --- | --- |
 | `internal/orchestrator/reconcile.go` | `reconcileRunning` が毎巡回で Status を取り直して分類する |
-| `internal/orchestrator/unknownstate.go` | `claimAutomatedRewrite` が「書いたのは自動化か」を見て、戻すか止めるかを決める |
+| `internal/orchestrator/unknownstate.go` | `claimAutomatedRewrite` が「対応表に戻し先があるか」を見て、戻すか止めるかを決める（書いた主体は見ない） |
 | `internal/orchestrator/lifecycle.go` | `handleTurnEnd` が turn の終わりに同じ分類をする |
-| `internal/tracker/query.go` | `judgeStatusAuthor` が issue の記録から書いた主体を引く |
+| `internal/tracker/query.go` | `judgeStatusAuthor` が issue の記録から書いた主体を引く（使うのは、終端の Status の待ちと、対応表に無い Status で止めたときの案内だけ） |
 | `internal/tracker/adapter.go` | `UpdateStatus` が Status を書く。**書く前に読み直しますが、compare-and-swap ではありません** |
 
 **分類は4つです。**
@@ -182,11 +185,12 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 | --- | --- | --- |
 | `terminal_states` にある | 終わった | worktree と branch を片付ける |
 | `active_states` にあり、着手できる | まだ作業中 | 次の turn を送る |
-| **設定に名前が無く、書いたのは自動化で、対応表に戻し先がある** | **横取りされた** | **本来の Status へ戻す。止めない** |
+| **設定に名前が無く、対応表に戻し先がある**（書いた主体は問わない。1つの run で3回まで） | **横取りされた** | **本来の Status へ戻す。止めない** |
 | **それ以外のすべて** | **人間が引き渡した** | **worker を止める。worktree は残す** |
 
 **最後が「それ以外のすべて」であることが、この問題の形です。**
-**対応表に書いていない自動化の書き込みも、人間が手で動かした値も、まだここに落ちます。**
+**対応表に書いていない自動化の書き込みも、人間が対応表に無い Status へ手で動かした値も、まだここに落ちます。**
+**逆に、人間が対応表の Status へ手で動かした値は、3行目へ入って戻されます。**
 
 ### どう噛みつくか
 

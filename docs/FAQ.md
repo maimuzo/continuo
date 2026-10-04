@@ -643,15 +643,35 @@ cd ~/continuo-work && continuo doctor
 猶予を置いてから、**動いているエージェントを turn の途中で止めます。**
 利用者の環境では、**PR を作った3秒後に自動化が Status を書き、その29秒後の巡回で止まりました。**
 
-**どう解決するか。****Status を書いたのが誰かを見ます。**
+**どう解決するか。**`tracker.automated_state_rewrite` に対応表を書きます。
+**着手中の issue が、対応表の左に書いた Status へ動いたら、continuo は止めずに右の Status へ書き戻します。**
 
-| Status を動かしたのが | continuo はどうするか |
+**誰が動かしたかは見ません。人間がその Status へ動かしたときも戻します。**
+
+| 着手中の issue が動いた先 | continuo はどうするか |
 | --- | --- |
-| **カンバンの組み込みの自動化** | **止めません。**対応表にある Status へ書き戻して、作業を続けさせます |
-| **人間** | **いままでどおりです。**猶予を置いてからエージェントを止めます |
+| **対応表の左に書いた Status** | **止めません。**右の Status へ書き戻して、作業を続けさせます |
+| **それ以外の、設定に名前の無い Status** | **いままでどおりです。**猶予を置いてからエージェントを止めます |
 
-**人間が動かしたものは戻しません。**
-**「人間が Status を動かしてエージェントを止める」操作は、そのまま効きます。**
+**以前は「動かしたのがカンバンの自動化のときだけ戻す」でした。**いまは見ません。
+GitHub は「誰が Status を動かしたか」の記録を残さないことがあり、
+**記録が無い回は、対応表に書いてあっても戻さずに止めていた**ためです。
+
+**止めたいときは、`tracker.failure_state` の Status（雛形では `Blocked`）へ動かしてください。**
+対応表の左に書いた Status へ動かしても、戻されます。
+**戻したときに continuo が issue へ書くコメントにも、止め方が書いてあります。**
+
+**限りがあります。**
+
+| 何 | どうなるか |
+| --- | --- |
+| **戻す回数** | **1件の着手につき、1つの Status あたり3回までです。**自動化が動かした回も、人が動かした回も、合わせて数えます。4回目は戻さず、エージェントを止めて人間へ渡します（turn の途中なら、`tracker.unknown_state_grace_ms` まで turn の終わりを待ってから止めます）。**PR を何本も、間を空けてつなぐと当たります。**止まったら、Status を `tracker.active_states` の Status へ戻せば、次の巡回で着手し直します（回数は数え直します） |
+| **戻るまでの時間** | 次の巡回（`polling.interval_ms`。既定30秒）か、turn の終わりです |
+| **戻すのは、エージェントが走っている issue だけ** | 次のあいだは戻しません。turn が失敗してやり直しを待っているあいだ・direct chat の Status に居るあいだと、その用意中・continuo を再起動したあと。**Status を `tracker.active_states` の Status へ戻せば再開します** |
+| **direct chat を抜けた先が、対応表の左の Status** | 戻されますが、続きの指示が送られません。カードを direct chat の Status へ動かしてから、作業中の Status へ戻してください |
+| **同じ Status を `cleanup.on_states` にも書いている** | 戻されているあいだは片付きません。4回目で止まった回と、その Status に居るあいだに continuo を再起動したときは片付きます。**片付けさせたいなら、対応表からその行を消してください** |
+| **`continuo abandon --park` の先** | 対応表の左の Status は指定できません（そこへ動かしても continuo が戻すので、手を離しません）。`--park` を省くか、`tracker.failure_state` の Status を指定してください |
+| **自動化が動かした直後の `continuo abandon`** | 次の巡回までは Status が動かされた先のままなので、「continuo はもうこの issue を持っていません」と出ます。**そのまま `--force` を付けると、片付けたあとで continuo が Status を戻します。**30秒ほど待って叩き直してください |
 
 **書かなかったらどうなるか。**空（`{}`）のままでも壊れません。
 自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
@@ -659,6 +679,7 @@ cd ~/continuo-work && continuo doctor
 
 **何を書くか。**`tracker.automated_state_rewrite` の対応表を書きます。
 **左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+**左には、人間が止めるために動かす先の Status を書かないでください**（そこへ動かしても戻されます）。
 
 **雛形には `automated_state_rewrite: {}` の行が既にあります。**その `{}` を書き換えます。
 **塊ごと貼り替えないでください。**`tracker:` も `active_states:` も `automated_state_rewrite:` も
@@ -715,7 +736,8 @@ tracker:
 
 **書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
 そこから先はいままでどおり、猶予を置いてエージェントを止め、
-issue のコメントで `Workflows` を切る手を案内します。
+issue のコメントで `Workflows` を切る手を案内します
+（動かし直しているのが自動化か人かは、continuo は見ていません。コメントは両方の場合の対処を書きます）。
 **何回でやめるかは、[upgrading.md](upgrading.md) の
 「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
 
@@ -723,6 +745,12 @@ issue のコメントで `Workflows` を切る手を案内します。
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
 **「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
 **場所を見つける `grep` も一緒に書きます。**
+
+**ただし、この案内は出ないことがあります。**出すのは「動かしたのが自動化だ」と GitHub の記録から
+読めたときだけで、**GitHub はその記録を残さないことがあります。**
+**案内が出ずに止まったときは、止めた理由のコメントの「Status が `…` から `…` へ動いていました」の
+後ろのほうの Status 名を、左に書いてください。**
+右には、同じコメントの「【続けるには】」に並ぶ Status のうち、作業中の Status を書きます。
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
@@ -760,7 +788,12 @@ cleanup:
   on_states: ["Done", "Archived"]         # 既にある行。片付けを始める Status は、上の一覧の中から選ぶ
 ```
 
-**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
+**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、止まる回が限られます。**
+対応表のキーの Status へ動いた issue は、誰が動かしても戻されるので、片付けは始まりません。
+止まるのは、戻す回数が上限（3回）に達した回か、戻す書き込みが失敗し続けた回です。
+**その Status で片付けさせたいのなら、対応表からその行を消してください。**
+
+**設定を直すときは、消す先が2つあります。**
 **まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
 「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
 そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
@@ -3571,6 +3604,9 @@ agent の状態が `working` である限り、1つの指示に何時間かか�
 continuo は自分の知らない Status になった issue を、猶予（`tracker.unknown_state_grace_ms`、既定10分）のあと止めます。
 
 **見分け方。**issue のコメントに **【この Status を書いたのは人間ではありません】** の行があれば、これです。
+**この行は、出ないことがあります。**出すのは「動かしたのが自動化だ」と GitHub の記録から読めたときだけで、
+GitHub はその記録を残さないことがあります。**行が無くても、PR を作った直後・マージした直後に止まったのなら、
+自動化を疑ってください**（`continuo doctor` の `自動化` の行が、有効な自動化の名前を並べます）。
 
 ```bash
 gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
@@ -3593,6 +3629,12 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
 **「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
 **場所を見つける `grep` も一緒に書きます。**
+
+**ただし、この案内は出ないことがあります。**出すのは「動かしたのが自動化だ」と GitHub の記録から
+読めたときだけで、**GitHub はその記録を残さないことがあります。**
+**案内が出ずに止まったときは、止めた理由のコメントの「Status が `…` から `…` へ動いていました」の
+後ろのほうの Status 名を、左に書いてください。**
+右には、同じコメントの「【続けるには】」に並ぶ Status のうち、作業中の Status を書きます。
 
 **書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 **キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
@@ -4202,6 +4244,10 @@ continuo abandon --force   https://github.com/<owner>/<repo>/issues/42 ~/continu
 そこへ動かしても continuo は手を離さず、pane も閉じません。
 
 **直し方。**`tracker.active_states` に入っていない値を渡します（省略すると `tracker.failure_state`、既定 `Blocked`）。
+
+**`tracker.automated_state_rewrite` の左に書いた Status も指定できません。**
+「`--park` に指定した … は tracker.automated_state_rewrite のキーです」で止まります。
+そこへ動かしても、continuo が作業中の Status へ戻すためです。
 
 ```bash
 grep -n "active_states\|failure_state" ~/continuo-work/WORKFLOW.md

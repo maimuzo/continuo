@@ -105,9 +105,11 @@ tracker:
   automated_state_rewrite: {}               # カンバンの自動化に Status を動かされても、エージェントを止めずに続けさせるための設定。
                                             # カンバンの Settings → Workflows で Status を書く自動化を1つも有効にしていないなら、
                                             # 空のままでよい。有効にしているなら書く。
-                                            # 組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
-                                            # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
-                                            # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
+                                            # 着手中の issue がここに書いた Status へ動いたら、右に書いた Status へ戻す
+                                            # （組み込みの自動化は、PR を issue に紐づけた・PR をマージした等で Status を動かす）。
+                                            # 誰が動かしたかは見ない。人間がその Status へ動かしたときも戻す
+                                            # （止めたいときは、上の failure_state の Status へ動かす）。
+                                            # 戻すのは1件の着手につき3回まで。空なら戻さず、上の猶予を置いてから worker を止める。
                                             # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
                                             # 戻す先は上の active_states に入っている Status にすること。
                                             # キーには、tracker の他のキー（上の active_states / terminal_states /

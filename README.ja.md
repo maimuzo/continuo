@@ -195,7 +195,7 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **`--dry-run` はカンバンに1文字も書きません。**Status を書き換えず、continuo に手を離させることもしません。実行したらどの Status へ動かすかを、その場で1行お知らせするだけです。
 
-**書けない Status は、何かを消す前に弾きます。**`--to` と手を離させる先（`--park`）は、先にカンバンの Status の選択肢と突き合わせます。**`--park` に作業中の Status を渡すと、その場で止まります**（そこへ動かしても continuo は手を離さず、pane も閉じないためです）。**一致する worktree が無いときは `--to` を使いません。**黙って捨てず、動かしていないことをお知らせします（URL の打ち間違いだと、別の issue の Status を動かすことになるためです）。
+**書けない Status は、何かを消す前に弾きます。**`--to` と手を離させる先（`--park`）は、先にカンバンの Status の選択肢と突き合わせます。**`--park` に作業中の Status を渡すと、その場で止まります**（そこへ動かしても continuo は手を離さず、pane も閉じないためです）。**`tracker.automated_state_rewrite` の左に書いた Status を渡したときも、同じ理由で止まります**（continuo が作業中の Status へ戻すためです）。**一致する worktree が無いときは `--to` を使いません。**黙って捨てず、動かしていないことをお知らせします（URL の打ち間違いだと、別の issue の Status を動かすことになるためです）。
 
 **失うものがあると、何も消さずに止まります。**それでも消すなら `--force` を付けてください。
 

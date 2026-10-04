@@ -187,7 +187,7 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **`--dry-run` writes nothing at all.** It does not touch the kanban board and it does not make continuo let go of the issue — it only tells you which Status the real run would park it at.
 
-**A Status it cannot write is caught before anything is deleted.** `--to` and the park target are checked against the kanban board's own Status options first, and `--park` is refused outright if it names a working state — parking there would not make continuo let go, and the pane would never close. **If no worktree matches, `--to` is not applied**: the command says so instead of dropping it silently, because a URL with a typo would otherwise move some other issue's Status.
+**A Status it cannot write is caught before anything is deleted.** `--to` and the park target are checked against the kanban board's own Status options first, and `--park` is refused outright if it names a working state — parking there would not make continuo let go, and the pane would never close. A key of `tracker.automated_state_rewrite` is refused for the same reason: continuo would move the Status back to a working state. **If no worktree matches, `--to` is not applied**: the command says so instead of dropping it silently, because a URL with a typo would otherwise move some other issue's Status.
 
 **If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
 

@@ -554,7 +554,7 @@ func automatedMoveReason(from, stopState string) string {
 // （どちらに当たるかが map の反復順で決まってしまうため。設計 3-54）。
 //
 // table: `tracker.automated_state_rewrite`。
-// state: 自動化が書いた Status 名。
+// state: 動かされた先の Status 名（対応表のキー）。
 // 戻り値の1つ目: 戻す先の Status 名（設定に書かれた綴りのまま）。
 // 戻り値の2つ目: 対応表にあれば true。
 func lookupStateRewrite(table map[string]string, state string) (string, bool) {
