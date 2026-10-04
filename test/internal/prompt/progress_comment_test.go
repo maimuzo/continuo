@@ -47,7 +47,9 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 		why    string
 	}{
 		{"1時間", "間隔を書かないと、エージェントは「長く」がどれくらいかを決められません"},
-		{"date -u", "エージェントは時間の経過に自分では気づけません。" +
+		// **時刻は、その機械のタイムゾーンで書かせる**（設計 3-77a。issue #258）。
+		// continuo 自身のコメントと同じ `2006-01-02 15:04 (MST)` の形になる。
+		{"date '+%Y-%m-%d %H:%M (%Z)'", "エージェントは時間の経過に自分では気づけません。" +
 			"時刻を引くコマンドを渡さないと、決めた間隔を測る手立てがありません"},
 		{"gh issue comment", "コメントの投稿のしかたを書かないと、書けと言われても手段が分かりません"},
 		{"<!-- continuo:agent -->", "印が無いコメントは、continuo がエージェントの発言として見分けられません"},
@@ -58,6 +60,13 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", progressCommentHeading, want.needle, want.why)
 		}
+	}
+
+	// **UTC に固定する `date -u` へ戻してはならない**（issue #258）。
+	// continuo 自身のコメントは機械のタイムゾーンで出るので、戻すと1つの issue に2つの流儀が混ざる。
+	if strings.Contains(body, "date -u") {
+		t.Error("組み込みのプロンプトに `date -u` があります。" +
+			"エージェントの時刻だけが UTC になり、continuo 自身のコメントと混ざります（issue #258）")
 	}
 }
 

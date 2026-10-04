@@ -145,6 +145,17 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		"先に commit してから、もう一度取り込んでください。",
 		"**`git merge --abort` は打たないでください。**",
 		"**マージの途中で衝突したとき**",
+		// **衝突のうち、両方の変更を残せるものは解いて進ませる**（issue #289）。
+		// 中身を見ずに全部の衝突で止めると、両方の行を残すだけで解ける衝突でも人間の1往復を使う。
+		"**解いてよいのは、衝突した箇所の全部で、両方の branch の変更をそのまま残せるときだけです。**",
+		// **印の検査は、解いたファイルに絞る。終了コードは見ない。**
+		// `git diff --cached --check` は行末の空白でも 0 以外を返し、絞らないと分岐元が足した
+		// `=======` だけの行にも当たる（2026-10-05 に git 2.54.0 で実測）。
+		"git diff --cached --check -- <解いたファイル> | grep 'leftover conflict marker'",
+		"**`git diff --cached --check` の終了コードは見ないでください。**",
+		"git commit --no-edit",
+		"**1箇所でも次に当たるなら、解かずに、取り込む前へ戻してから止まります。**",
+		"**迷ったら、止まるほうを選んでください**（5-4）。",
 		"git merge --abort",
 		"**戻さずに `blocked` を出さないでください。**",
 		// **戻しても、その手前で作った commit は残る。**
@@ -157,7 +168,7 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 			t.Errorf("取り込めなかったときの扱いに %q がありません（issue #214）", want)
 		}
 	}
-	if !strings.Contains(body, "取り込めなかったことを応答に書いて `CONTINUO-STATUS: blocked` を出してください") {
+	if !strings.Contains(body, "どのファイルのどこを、なぜ決められなかったかを 3-7 の報告に書いて `CONTINUO-STATUS: blocked` を出してください") {
 		t.Error("マージで落ちたときの行き先が書かれていません（issue #214）")
 	}
 }
