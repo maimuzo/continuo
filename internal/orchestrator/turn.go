@@ -723,6 +723,9 @@ func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap run
 			rs.missingSignal(),
 			o.cfg.Tracker.RunningState,
 			o.cfg.Tracker.StatusSignalPrefix,
+			rs.invalidSignals(),
+			o.cfg.Tracker.StatusSignalMap,
+			snap.Identifier,
 		), false, nil
 	}
 	var attempt *int

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "19b0a93c99a5252131ded67068886d67eb0f111f61d2ad527f7508dc249d3ee7", "SOURCE": "docs/spec/usecases/particular_case/表明を読んでStatusを動かす.cfg.json"}
+// {"RUCM-CFG-SHA256": "90eb33836fe5ac6170f2661de8f3ffc973c0c7c63300f8f19fc5a6bcd0d09e21", "SOURCE": "docs/spec/usecases/particular_case/表明を読んでStatusを動かす.cfg.json"}
 //
 // **ユースケース記述「表明を読んでStatusを動かす」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -65,6 +65,85 @@ func Test_表明を読んでStatusを動かす_P006_知らない表明ではStat
 	}
 	if !strings.Contains(fx.Logs.String(), "status_signal_map にありません") {
 		t.Errorf("知らない表明を受けたことを人間へ残していない:\n%s", fx.Logs.String())
+	}
+}
+
+// {"RUCM-PATH": "P006"}
+//
+// Test_表明を読んでStatusを動かす_P006_知らない表明の次のturnで取り得る値の一覧を返す は、代替フロー「知らない表明」の
+// 「次の継続の指示で取り得る値の一覧を返す合図を立てる」を、turn ループを通して確かめる（issue #274 の経路2）。
+//
+// **いままでは「続けてください」だけが届いていた。**値が無視されたことも、正しい値も
+// 伝わらないので、終えたつもりのエージェントが続ける作業の無いまま手を動かしていた。
+//
+// 目的: 表明の値が `status_signal_map` に無かった turn の次に、その値と取り得る値の一覧を送り、
+// 「続けてください」を送らないこと。**決まりどおりの値で書き直されたら、Status が動くこと。**
+// 与える情報: 1回目の応答は `CONTINUO-STATUS: done`、2回目の応答は `CONTINUO-STATUS: review`。
+// 成功条件: 2回目に送った文面に「done」と3つの値が載り、「続けてください」が無い。
+// 2回目の turn のあと、Status が `In Review` になる。
+func Test_表明を読んでStatusを動かす_P006_知らない表明の次のturnで取り得る値の一覧を返す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	invalid := writeTranscript(t, transcriptDir, "invalid.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: done", false),
+	})
+	valid := writeTranscript(t, transcriptDir, "valid.jsonl", []any{
+		typedUserLine("p2", "書き直してください"),
+		assistantLine("req2", "CONTINUO-STATUS: review", false),
+	})
+
+	var mu sync.Mutex
+	var texts []string
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		text, _ := params["text"].(string)
+		texts = append(texts, text)
+		n := len(texts)
+		mu.Unlock()
+
+		path := invalid
+		if n >= 2 {
+			path = valid
+			fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+		}
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "run が終わる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(texts) < 2 {
+		t.Fatalf("2回目の turn が送られていない: %d 回", len(texts))
+	}
+	if strings.Contains(texts[1], "続けてください") {
+		t.Errorf("決まり以外の値を書いたエージェントに「続けてください」を送っている:\n%s", texts[1])
+	}
+	for _, want := range []string{
+		"前回の応答の表明の値 「done」 は、決められた値ではありません",
+		"- `CONTINUO-STATUS: blocked` … Status を Blocked へ動かします",
+		"- `CONTINUO-STATUS: review` … Status を In Review へ動かします",
+		"- `CONTINUO-STATUS: working` … Status を動かしません",
+	} {
+		if !strings.Contains(texts[1], want) {
+			t.Errorf("2回目の文面に %q が無い:\n%s", want, texts[1])
+		}
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Review" {
+		t.Errorf("書き直した表明で Status が動いていない: %s", got)
+	}
+	if !strings.Contains(fx.Logs.String(), "status_signal_map にありません") {
+		t.Errorf("決まり以外の値を受けたことをログに残していない:\n%s", fx.Logs.String())
 	}
 }
 

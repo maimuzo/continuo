@@ -9,6 +9,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/prompt"
+	"github.com/maimuzo/continuo/internal/statussignal"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -57,9 +58,25 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 //
 // turnCount: この turn が continuo にとって何回目か（1始まり）。
 // maxDispatchTurns: 打ち切りまでの上限（`agent.max_dispatch_turns`）。
+// **前回の turn の表明の値が取り得る値に無かったときは、1行目の「続けてください」を
+// 差し替える**（issue #274 の経路2。設計 3-25）。エージェントは終えたつもりで
+// 決まり以外の値を書いているので、「続けてください」を送ると、続ける作業が無いまま
+// 手を動かす。代わりに、その値と取り得る値の一覧を返し、書き直させる。
+//
+// **表明が1行も無かったときの促しにも、同じ一覧を載せる。**箇条書きや強調の中に書いた行と、
+// 印を打ち間違えた行は、continuo からは「行が無い」と見える。その形に一覧が届くのは
+// ここだけである。
+//
+// **どちらでもないとき（決まりどおりの値を書いた turn の次）の文面は、変えていない。**
+//
+// turnCount: この turn が continuo にとって何回目か（1始まり）。
+// maxDispatchTurns: 打ち切りまでの上限（`agent.max_dispatch_turns`）。
 // missingSignal: 前回の turn に表明が無かったかどうか（設計 3-25 の第3層）。
 // runningState: いま書き込まれている作業中の Status 名（`tracker.running_state`）。
 // signalPrefix: 表明の印（`tracker.status_signal_prefix`）。
+// invalid: 前回の turn の表明のうち、取り得る値に無かったもの。無ければ nil。
+// signalMap: 取り得る値と行き先（`tracker.status_signal_map`）。
+// currentIdentifier: いま作業している issue の識別子（別の issue を指す表明を見分ける）。
 // 戻り値: 送る本文。
 func BuildContinuationPrompt(
 	turnCount int,
@@ -67,6 +84,9 @@ func BuildContinuationPrompt(
 	missingSignal bool,
 	runningState string,
 	signalPrefix string,
+	invalid []statussignal.Invalid,
+	signalMap map[string]*string,
+	currentIdentifier string,
 ) string {
 	remaining := maxDispatchTurns - turnCount
 	if remaining < 0 {
@@ -74,12 +94,22 @@ func BuildContinuationPrompt(
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+	if len(invalid) > 0 {
+		statussignal.WriteInvalidGuidance(&b, "前回の応答", "作業を進める前に",
+			signalPrefix, currentIdentifier, invalid, signalMap)
+		fmt.Fprintf(&b, "この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+	} else {
+		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+	}
 	if missingSignal {
+		// **「行頭から」を言う。**箇条書きや強調の中に正しい値を書き直しても、
+		// continuo はまた「行が無い」と読む。一覧だけを足しても、その形は救えない。
 		fmt.Fprintf(&b,
 			"\n前回の応答に %s の行がありませんでした。Status がまだ %s のままです。"+
-				"作業の状態を、応答の中に1行で書いてください。\n",
+				"作業の状態を、応答の最後に、行頭から1行で書いてください。"+
+				"箇条書きや強調の中に書いた行は読みません。\n",
 			signalPrefix, runningState)
+		statussignal.WriteValueList(&b, signalPrefix, signalMap)
 	}
 	fmt.Fprintf(&b,
 		"\n権限で拒否された操作があれば、その内容を応答に書いて %s blocked を出してください。\n",

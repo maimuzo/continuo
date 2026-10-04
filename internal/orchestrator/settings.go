@@ -13,6 +13,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/statussignal"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -385,6 +386,9 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue, worktree string) (
 	if err := os.MkdirAll(pending, settingsDirPerm); err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFilePendingDirCreateFailed, pending, err)
 	}
+	// **取り得る値のファイルも、ここで書く**（issue #274。設計 3-25）。
+	// **書けなくても着手は止めない。**hook が表明を調べないだけで、本体が次の turn の指示で返す。
+	o.writeStatusSignalFile(identifier)
 
 	// **shell の引用を通す。**この文字列は Claude Code が shell で実行する。
 	// 引用せずに繋ぐと、パスに空白が1つ入るだけでコマンド行が別の引数へ割れ、
@@ -444,6 +448,62 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue, worktree string) (
 		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFileWriteFailed, path, err)
 	}
 	return path, nil
+}
+
+// writeStatusSignalFile は、取り得る値を `continuo hook` へ渡すファイルを書く
+// （issue #274 の経路1。設計 3-25）。
+//
+//	<実行時ディレクトリ>/issues/<issue のスラグ>/status-signal.json
+//
+//	{ "identifier": "octocat/hello-world#274", "prefix": "CONTINUO-STATUS:",
+//	  "values": { "blocked": "Blocked", "review": "In Review", "working": null } }
+//
+// **着手のときと、立て直して run を引き継ぐときの両方で書く。**`tracker.status_signal_prefix` と
+// `tracker.status_signal_map` が変わるのは立て直しのときだけなので、引き継ぐときに書き直せば、
+// hook と本体は同じ対応表を見る。**書き直さないと、対応表を書き換えて立て直した利用者の run で、
+// hook が古い一覧で差し戻し、本体が新しい一覧で返す。**
+//
+// **書けなかったら、前に残っているファイルを消す。**issue ごとのディレクトリは再着手でも
+// 立て直しでも同じ場所なので、前の着手が書いたファイルが残っている。古い対応表のファイルを
+// hook に読ませるより、無いほうがよい（無ければ hook は調べない）。
+//
+// **エラーを返さない。**このファイルが無くても run は進む。警告を出して戻る。
+//
+// **パスは `issueDir` から組み立てる。**身元ファイルの値（エージェントが書き換えられる）を
+// 通らないので、置き場所の内側かどうかの検査は要らない。
+//
+// identifier: issue の識別子。
+func (o *Orchestrator) writeStatusSignalFile(identifier string) {
+	dir := o.issueDir(identifier)
+	if !filepath.IsAbs(dir) {
+		// 実行時ディレクトリが決まっていない。相対パスへは書かない
+		// （hook は絶対パスの `--pending-dir` の親しか読まないので、書いても読まれない）。
+		return
+	}
+	path := statussignal.PathInIssueDir(dir)
+	data, err := statussignal.Encode(statussignal.File{
+		Identifier: identifier,
+		Prefix:     o.cfg.Tracker.StatusSignalPrefix,
+		Values:     o.cfg.Tracker.StatusSignalMap,
+	})
+	if err == nil {
+		err = os.MkdirAll(dir, settingsDirPerm)
+	}
+	if err == nil {
+		// **その場で空にしてから書かない**（CLAUDE.md の「絶対に守る制約」4 / 設計 3-59）。
+		// 書いている途中の中身を hook に読ませない。
+		err = atomicfile.Write(path, data, settingsFilePerm)
+	}
+	if err == nil {
+		return
+	}
+	removeErr := os.Remove(path)
+	if os.IsNotExist(removeErr) {
+		removeErr = nil
+	}
+	o.logger.Warn("取り得る値のファイルを書けませんでした（hook は表明の値を調べません。"+
+		"決まり以外の値には、次の turn の指示で一覧を返します）",
+		"identifier", identifier, "path", path, "error", err, "古いファイルを消せなかった理由", removeErr)
 }
 
 // claudeStartArgs は agent.start の args に載せる Claude Code の起動フラグを組み立てる

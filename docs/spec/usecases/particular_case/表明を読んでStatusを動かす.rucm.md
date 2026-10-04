@@ -14,9 +14,10 @@
 - `docs/plans/continuo_design.md#3-83`（人間が direct chat へ引き取ったカードの上へ書かない）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd`、`readSignals`、`applySignals`、`lookupSignalTarget`、`signalMoveReason`、`protectedStates`
-- `internal/orchestrator/signal.go` の `ParseSignals`
+- `internal/orchestrator/signal.go` の `ParseSignals`（中身は `internal/statussignal` の `Parse`）
+- `internal/statussignal` の `Lookup`、`FindInvalid`（取り得る値に在るかの判定。`continuo hook` も同じものを呼ぶ）
 - `internal/orchestrator/comment.go` の `postStatusMove`
-- `internal/orchestrator/prompt.go` の `BuildContinuationPrompt`（表明が1行も無かったときだけ、促す1文を足す）
+- `internal/orchestrator/prompt.go` の `BuildContinuationPrompt`（表明が1行も無かったときは促す1文と取り得る値の一覧を足し、表明の値が取り得る値に無かったときは「続けてください」をその値と一覧に差し替える）
 - `internal/tracker/adapter.go` の `UpdateStatus`（取り直す → 書いてはいけない Status なら書かない → 既に同じ値なら書き込みを省く → 書く）
 - `internal/config/default.go`（`status_signal_map` の既定。`working` は null）
 
@@ -57,8 +58,9 @@ SPECIFIC ALTERNATIVE FLOW 知らない表明:
 RFS BASIC FLOW 4
 1. システムは表明の値が status_signal_map にないことをログに出す。
 2. システムはボードの issue の Status を動かさない。
-3. ABORT
-POSTCONDITION: システムは issue の Status を書いていない。run に表明を促す合図は立っていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。
+3. システムは次の継続の指示で取り得る値の一覧を返す合図を run に立てる。
+4. ABORT
+POSTCONDITION: システムは issue の Status を書いていない。run に表明を促す合図は立っていない。run に取り得る値の一覧を返す合図が立っている。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。
 
 SPECIFIC ALTERNATIVE FLOW 動かさない表明:
 RFS BASIC FLOW 5
@@ -104,8 +106,8 @@ POSTCONDITION: システムは issue の Status を動かしていない。issue
 | 終わり方 | Status | 記録のコメント | 促す1文 |
 | --- | --- | --- | --- |
 | 基本フロー | 遷移先へ動いた | 1件書く | 足さない |
-| `表明なし` | 動かさない | 書かない | **足す**（次の継続の指示にだけ） |
-| `知らない表明` | 動かさない | 書かない | 足さない（表明の行は在ったので）。WARN を1行出す |
+| `表明なし` | 動かさない | 書かない | **足す**（次の継続の指示にだけ。取り得る値の一覧も載せる） |
+| `知らない表明` | 動かさない | 書かない | 足さない（表明の行は在ったので）。WARN を1行出す。**代わりに、次の継続の指示の「続けてください」を、書かれていた値と取り得る値の一覧に差し替える**（issue #274） |
 | `動かさない表明` | 動かさない | 書かない | 足さない。既定では `working` がこれに当たる |
 | `書いてはいけないStatus` | 動かさない（`terminal_states` か `tracker.direct_chat_state`） | 書かない | 足さない |
 | `既に同じStatus` | 既に遷移先である | **書かない**（書き込みが起きていないので） | 足さない |
@@ -123,6 +125,7 @@ POSTCONDITION: システムは issue の Status を動かしていない。issue
 | 段6 | item がもうボードから見えない | 誤りにはならない。書かず、記録も書かず、控えもしない（`Statusを書けない` と同じ状態で終わる。呼び出し元の取り直しが「見えない」を拾う） |
 | 段12 | 記録のコメントの投稿が失敗する | WARN を出して終わる。Status は動いたままである |
 | 段4 から段12 | 表明の行が2行以上ある（対象付きの行。設計 3-26） | 行ごとに同じ段を通す。別の issue を指す行の扱いは、この記述に書いていない |
+| 段1 より前 | `continuo hook` が、`Stop` の最後のテキストに在る表明の値を調べ、取り得る値に無ければ turn を差し戻す（設計 3-25。issue #274） | この記述の外である。差し戻された turn は終わっていないので、段1 に来ない。書き直したあとの応答が段1 から通る |
 
 ## フローチャート
 

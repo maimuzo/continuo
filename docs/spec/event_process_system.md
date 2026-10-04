@@ -11,7 +11,7 @@
 | 何 | プロセス | 何をするか |
 | --- | --- | --- |
 | **continuo 本体** | **ロックファイル1本につき1つ**（`flock(2)` で二重起動を止める。`--id <名前>` を付けるとロックが分かれ、1台で2本以上動く。設計 3-17b） | 巡回・表明の読み取り・後片付けを、**同じプロセスの中の goroutine で回す** |
-| **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送るだけ |
+| **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送る。`Stop` の表明の値が決まり以外のときだけ、そのあとに差し戻しの JSON を標準出力へ返す（設計 3-25。issue #274） |
 | **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送る。そのあと、利用者の `statusLine` のコマンドを**子のプロセス**として起動し、その出力を返す。転送先が無いか転送に失敗したら、固定の `continuo` を出す（設計 3-84） |
 
 **`continuo statusline` が起動する子のプロセスは、continuo のプロセスではない。**利用者の `statusLine` のコマンド（例: `~/.claude/my-statusline.sh`）で、
