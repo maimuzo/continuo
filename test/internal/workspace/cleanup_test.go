@@ -329,6 +329,58 @@ func TestCleanup_置き場所の外側のsettings_pathは消さない(t *testing
 	}
 }
 
+// 目的: 片付けで、設定ファイルと同じディレクトリに在る取り得る値のファイルも消すことを確認する
+// （issue #274。設計 3-25）。**残すと、issue ごとのディレクトリに hook が読むファイルだけが
+// 取り残される。**
+// 与える情報: 設定ファイルの隣に `status-signal.json` を置いた、片付けてよい worktree。
+// 成功条件: 設定ファイルも `status-signal.json` も消えていること。
+func TestCleanup_取り得る値のファイルも一緒に消す(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	signalPath := filepath.Join(filepath.Dir(cf.SettingsPath), "status-signal.json")
+	if err := os.WriteFile(signalPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("取り得る値のファイルを書けない: %v", err)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("片付けてよい worktree なのに消していない: %+v", *result)
+	}
+	if _, statErr := os.Stat(cf.SettingsPath); !os.IsNotExist(statErr) {
+		t.Errorf("設定ファイルが残っている: %v", statErr)
+	}
+	if _, statErr := os.Stat(signalPath); !os.IsNotExist(statErr) {
+		t.Errorf("取り得る値のファイルが残っている: %v", statErr)
+	}
+}
+
+// 目的: 身元ファイルの settings_path が置き場所の外側なら、その隣の `status-signal.json` も
+// 消さないことを確認する（issue #274）。**settings_path はエージェントが書き換えられる値で、
+// 隣のファイルを消す先も、そこから決まる。**
+// 与える情報: 置き場所の外側のディレクトリを指した settings_path と、その隣の `status-signal.json`。
+// 成功条件: 外側の `status-signal.json` が残っていること。
+func TestCleanup_置き場所の外側では取り得る値のファイルも消さない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "settings.json")
+	outsideSignal := filepath.Join(outsideDir, "status-signal.json")
+	for _, p := range []string{outside, outsideSignal} {
+		if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("外側のファイルを書けない: %v", err)
+		}
+	}
+	tamperIdentity(t, cf, func(identity *workspace.Identity) { identity.SettingsPath = outside })
+
+	if _, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf)); err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if _, statErr := os.Stat(outsideSignal); statErr != nil {
+		t.Fatalf("置き場所の外側の取り得る値のファイルが消されている: %v", statErr)
+	}
+}
+
 // 目的: settings_path が `..` で置き場所の外へ抜ける値でも消さないことを確認する
 // （設計 3-12。filepath.Clean で畳んでから判定する）。
 // 与える情報: `<置き場所>/../大事なもの.json` を指した settings_path。

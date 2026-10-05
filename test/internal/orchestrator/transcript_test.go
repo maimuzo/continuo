@@ -142,3 +142,36 @@ func TestReadTranscript_壊れた行があっても読める行だけを使う(t
 		t.Fatalf("読める行から表明を拾えていない: %v", got.Signals)
 	}
 }
+
+// TestReadTranscript_差し戻されて書き直した表明は同じturnの最後の行として読む は、
+// `continuo hook` が差し戻したあとの読み方を確かめる（issue #274 の経路1）。
+//
+// **差し戻しは transcript に user 行として残る**（本文は `Stop hook feedback:` で始まる）。
+// **その行に `promptSource` は付かない**（2026-10-05、Claude Code 2.1.289 で実測）。
+// `typed` ではないので turn の頭にならず、書き直す前の応答と書き直した応答は同じ範囲に入る。
+// **同じ対象は最後の行が勝つので、本体が読むのは書き直した値である。**
+//
+// 目的: 差し戻しの行を挟んでも turn が割れず、書き直した値を読むこと。
+// 与える情報: `done` の応答 → 差し戻しの user 行（`promptSource` なし）→ `review` の応答。
+// 成功条件: 表明が `review` の1件。
+func TestReadTranscript_差し戻されて書き直した表明は同じturnの最後の行として読む(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTranscript(t, dir, "session.jsonl", []any{
+		typedUserLine("p1", "この issue を実装してください"),
+		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: done", false),
+		map[string]any{
+			"type": "user", "promptId": "p1", "isSidechain": false,
+			"message": map[string]any{"content": "Stop hook feedback: この応答の表明の値 「done」 は、決められた値ではありません。"},
+		},
+		assistantLine("req2", "書き直します。\n\nCONTINUO-STATUS: review", false),
+	})
+
+	got, err := orchestrator.ReadTranscript(path, "p1", signalPrefix, currentIssue)
+	if err != nil {
+		t.Fatalf("transcript を読めない: %v", err)
+	}
+
+	if len(got.Signals) != 1 || got.Signals[currentIssue] != "review" {
+		t.Fatalf("書き直した値を読めていない: got %v", got.Signals)
+	}
+}

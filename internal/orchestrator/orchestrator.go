@@ -1502,6 +1502,11 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 		o.sessions[state.SessionUUID] = rs
 	}
 	o.mu.Unlock()
+	// **取り得る値のファイルを書き直す**（issue #274。設計 3-25）。
+	// 立て直しは `settings.json` を書き直さないが、このファイルは書き直す。
+	// `tracker.status_signal_map` が変わるのは立て直しのときだけなので、ここで書き直せば
+	// hook と本体は同じ対応表を見る。**`o.mu` を放してから書く**（ロックの中でファイルを書かない）。
+	o.writeStatusSignalFile(issue.Identifier)
 	return true
 }
 

@@ -96,6 +96,7 @@ var expectedWarnings = map[string][]string{
 	"Test_issueを1件処理する_P056_未信頼なら着手せず承認を促すコメントを1件書く":                      {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestPreflight_未信頼の通知は巡回のたびに繰り返さない":                                   {"リポジトリが Claude Code に信頼登録されていません"},
 	"Test_表明を読んでStatusを動かす_P006_知らない表明ではStatusを動かさない":                     {"表明の値が status_signal_map にありません"},
+	"Test_表明を読んでStatusを動かす_P006_知らない表明の次のturnで取り得る値の一覧を返す":                {"表明の値が status_signal_map にありません"},
 	"TestReconcile_active_statesに戻ったらdispatchの前にpaneを閉じる":                 {"印に入っていない worktree に生きた pane があったので閉じます"},
 	"Test_人間に判断を渡す_P010_知らないStatusで止めるときはissueに理由を書く":                     {"continuo が知らない Status になったので worker を止めます"},
 	"Test_人間に判断を渡す_P011_turnが動いている間は知らないStatusでもすぐには止めない":                 {"知らない Status のまま猶予を過ぎたので worker を止めます"},
