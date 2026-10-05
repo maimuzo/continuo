@@ -236,13 +236,13 @@ jobs:
             echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
             echo "- 投稿者が **OWNER / MEMBER / COLLABORATOR** であること"
             echo ""
+            echo "**結果や断りを貼っても、本文へ \`Closes #<番号>\` を書き足しても、この検査は回り直しません。**"
+            echo "\`gh run rerun\` を使うか、commit を1つ push してください。"
             if [ "${IS_DRAFT}" = "true" ]; then
+              echo ""
               echo "**この PR は draft です。**draft のうちは赤のままでかまいません。"
-              echo "結果を貼ってから \`gh pr ready ${PR_NUMBER}\` を打つと、この検査が回り直します。"
-            else
-              echo "**この PR は draft ではありません。**"
-              echo "**結果や断りを貼っても、本文へ \`Closes #<番号>\` を書き足しても、この検査は回り直しません。**"
-              echo "\`gh run rerun\` を使うか、commit を1つ push してください。"
+              echo "draft を外す \`gh pr ready ${PR_NUMBER}\` でも回り直しますが、"
+              echo "**外すのは、実装のレビュー結果を貼ってからにしてください。**"
             fi
           } | tee -a "${GITHUB_STEP_SUMMARY}"
 

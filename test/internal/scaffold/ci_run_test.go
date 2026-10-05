@@ -348,6 +348,7 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		res := r.run(script, false)
 		wantExit(t, res, 0)
 		wantSummary(t, res, "実装のレビュー結果=有り")
+		wantNoSummary(t, res, "push できる投稿者")
 		if n := res.permissionCalls(); n != 0 {
 			t.Errorf("権限の照会を %d 回叩いています（立場が当たれば叩かないはずです）\n%s", n, res.calls)
 		}
@@ -371,7 +372,8 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		r.canPush("hubot", true)
 		res := r.run(script, false)
 		wantExit(t, res, 0)
-		wantSummary(t, res, "実装のレビュー結果=有り")
+		// **緑になった理由を残す。**立場で数えたのか、照会で数えたのかを、あとから確かめられるようにする。
+		wantSummary(t, res, "実装のレビュー結果=有り", "立場は外れていますが、push できる投稿者 hubot のコメントを数えました")
 	})
 
 	t.Run("立場が外れ push もできない人のコメントは数えず、見えた立場を案内に出す", func(t *testing.T) {
@@ -402,6 +404,9 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		res := r.run(script, false)
 		wantExit(t, res, 1)
 		wantSummary(t, res, "権限の照会が 404 でした", "存在しないか、この検査のトークンからは見えません", "- gone")
+		// **確かめられなかったのに「貼られていません」と言い切らない。**
+		wantSummary(t, res, "数えてよいか確かめられませんでした")
+		wantNoSummary(t, res, "貼られていません", "1件もありません")
 	})
 
 	t.Run("照会が404以外で失敗したら、確かめられなかったと案内する", func(t *testing.T) {
@@ -410,7 +415,10 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		r.permissionFails("hubot", "gh: Server Error (HTTP 500)")
 		res := r.run(script, false)
 		wantExit(t, res, 1)
-		wantSummary(t, res, "「権限が無い」ではなく「確かめられなかった」", "HTTP 500", "回し直しても同じなら")
+		wantSummary(t, res, "「権限が無い」ではなく「確かめられなかった」", "- hubot: gh: Server Error (HTTP 500)", "回し直しても同じなら")
+		// **貼ってあるのに、一時的な失敗で数えられなかっただけかもしれない。**「貼られていません」と言い切らない。
+		wantSummary(t, res, "数えてよいか確かめられませんでした")
+		wantNoSummary(t, res, "貼られていません", "1件もありません")
 	})
 
 	t.Run("照会の値が true でも false でもなければ、黙って数え落とさずに案内する", func(t *testing.T) {
@@ -419,7 +427,9 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		r.permissionRaw("hubot", `{"permission":"write"}`) // .user.permissions.push が無い応答
 		res := r.run(script, false)
 		wantExit(t, res, 1)
-		wantSummary(t, res, "権限を表す値が true / false ではありませんでした")
+		wantSummary(t, res, "push できるかを読み取れませんでした", "- hubot（応答の値: ）")
+		// **回し直しても直らない。**「回し直すと直ります」の案内の下に出してはならない。
+		wantNoSummary(t, res, "回し直すと直ります")
 	})
 
 	t.Run("push できる人が見つかったら、残りの人は叩かない", func(t *testing.T) {
@@ -455,6 +465,8 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		r.comments(prComments, ghComment{Body: codeMarker, Assoc: "NONE", NoUser: true})
 		res := r.run(script, false)
 		wantExit(t, res, 1)
+		// **目印で始まるコメントは在るのに、数えなかった理由がどこにも出ない、という状態にしない。**
+		wantSummary(t, res, "投稿者のアカウントが消えているコメントは数えません")
 		if n := res.permissionCalls(); n != 0 {
 			t.Errorf("権限の照会を %d 回叩いています\n%s", n, res.calls)
 		}
@@ -468,7 +480,7 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 			ghComment{Body: "<!-- continuo:agent -->\n" + codeMarker, Login: "octocat", Assoc: "OWNER"})
 		res := r.run(script, false)
 		wantExit(t, res, 1)
-		wantSummary(t, res, "次の目印で始まるものが1件もありません")
+		wantSummary(t, res, "下の目印で始まるものが1件もありません")
 		if n := res.permissionCalls(); n != 0 {
 			t.Errorf("権限の照会を %d 回叩いています\n%s", n, res.calls)
 		}
@@ -481,6 +493,14 @@ func TestCITemplate_実装のレビュー結果を立場かpushできるかで�
 		wantExit(t, res, 1)
 		wantSummary(t, res, "コメントを読めませんでした")
 		wantNoSummary(t, res, "実装のレビュー結果=有り")
+	})
+
+	t.Run("draft なら、結果を貼ってから gh pr ready を打つよう案内する", func(t *testing.T) {
+		r := newCIRun(t)
+		r.comments(prComments)
+		res := r.run(script, true)
+		wantExit(t, res, 1)
+		wantSummary(t, res, "この pull request は draft です", "gh pr ready "+fakeCIPR)
 	})
 }
 
@@ -586,6 +606,34 @@ func TestCITemplate_設計のレビュー結果と断りを立場かpushでき�
 			"- stranger（この検査からは FIRST_TIME_CONTRIBUTOR と見えています）",
 			"continuo が起動したエージェントは、この断りを自分で貼りません",
 			"gh run rerun")
+		// **混ざっていないこと。**判断票の投稿者の見出しより後ろに、断りの投稿者が出てはならない。
+		const designHead = "設計のレビュー結果（design-review-result）の目印で始まるコメントは在りますが"
+		if i := strings.Index(res.summary, designHead); i < 0 || strings.Contains(res.summary[i:], "skipper") {
+			t.Errorf("断りの投稿者が、設計のレビュー結果の投稿者に混ざっています\n--- 案内 ---\n%s", res.summary)
+		}
+	})
+
+	t.Run("紐づく issue に目印が1件も無ければ、貼られていないと案内する", func(t *testing.T) {
+		r := newCIRun(t)
+		r.comments(prComments)
+		r.issues("7")
+		r.comments(issueComments("7"), ghComment{Body: "ただの相談です", Login: "octocat", Assoc: "OWNER"})
+		res := r.run(script, false)
+		wantExit(t, res, 1)
+		wantSummary(t, res, "設計のレビュー結果が貼られていません", "下の目印で始まるコメントが1件もありません")
+		wantNoSummary(t, res, "数える条件に当たる投稿者のものが1件もありません", "確かめられませんでした")
+	})
+
+	t.Run("判断票の投稿者の照会に失敗したら、貼られていないと言い切らない", func(t *testing.T) {
+		r := newCIRun(t)
+		r.comments(prComments)
+		r.issues("7")
+		r.comments(issueComments("7"), ghComment{Body: designMarker, Login: "hubot", Assoc: "CONTRIBUTOR"})
+		r.permissionFails("hubot", "gh: Server Error (HTTP 500)")
+		res := r.run(script, false)
+		wantExit(t, res, 1)
+		wantSummary(t, res, "設計のレビュー結果を、数えてよいか確かめられませんでした", "- hubot: gh: Server Error (HTTP 500)")
+		wantNoSummary(t, res, "設計のレビュー結果が貼られていません")
 	})
 
 	t.Run("1件目の issue を読めなくても、2件目の判断票を数える", func(t *testing.T) {
@@ -615,7 +663,11 @@ func TestCITemplate_設計のレビュー結果と断りを立場かpushでき�
 		r.comments(prComments)
 		res := r.run(script, true)
 		wantExit(t, res, 1)
-		wantSummary(t, res, "紐づく issue が1件もありません", "gh pr ready "+fakeCIPR)
+		wantSummary(t, res, "紐づく issue が1件もありません", "gh pr ready "+fakeCIPR,
+			// **設計の検査を回し直すためだけに draft を外させない。**
+			"外すのは、実装のレビュー結果を貼ってからにしてください", "gh run rerun",
+			// **draft では、Closes を書いても issue が紐づかないリポジトリがある**（実測）。手がかりを出す。
+			"draft のせいかもしれません", "gh pr view "+fakeCIPR+" --json closingIssuesReferences")
 	})
 }
 
@@ -641,11 +693,11 @@ func shellFunc(script, name string) string {
 // 名乗っているだけでは揃わない。
 //
 // 与える情報: 雛形の2つの job の run。
-// 成功条件: has_pusher・poster_counts・poster_notes の定義が、2つの job で1文字も違わないこと。
+// 成功条件: has_pusher・poster_counts・poster_notes・pusher_note の定義が、2つの job で1文字も違わないこと。
 func TestCITemplate_2つのjobの関数が同じ中身である(t *testing.T) {
 	design := templateRun(t, "design-review-result")
 	code := templateRun(t, "code-review-result")
-	for _, name := range []string{"has_pusher", "poster_counts", "poster_notes"} {
+	for _, name := range []string{"has_pusher", "poster_counts", "poster_notes", "pusher_note"} {
 		d, c := shellFunc(design, name), shellFunc(code, name)
 		if d == "" || c == "" {
 			t.Errorf("関数 %s の定義を取り出せません（design=%d バイト、code=%d バイト）", name, len(d), len(c))
@@ -708,6 +760,29 @@ func TestReviewGate_取得に失敗しても通る側へ倒れない(t *testing.
 		wantNoSummary(t, res, "断りが貼られています")
 	})
 
+	t.Run("設計: 立場が外れた人の断りしか無ければ、断りとして数えない（ここは立場だけで数える）", func(t *testing.T) {
+		r := newCIRun(t)
+		r.comments(prComments, ghComment{Body: skipMarker, Login: "hubot", Assoc: "CONTRIBUTOR"})
+		r.canPush("hubot", true)
+		res := r.run(design, false)
+		wantExit(t, res, 1)
+		wantNoSummary(t, res, "断りが貼られています")
+		if n := res.permissionCalls(); n != 0 {
+			t.Errorf("権限の照会を %d 回叩いています（このリポジトリの検査は照会しません）\n%s", n, res.calls)
+		}
+	})
+
+	t.Run("設計: 紐づく issue に立場が外れた人の判断票しか無ければ赤（ここは立場だけで数える）", func(t *testing.T) {
+		r := newCIRun(t)
+		r.comments(prComments)
+		r.issues("7")
+		r.comments(issueComments("7"), ghComment{Body: designMarker, Login: "hubot", Assoc: "CONTRIBUTOR"})
+		r.canPush("hubot", true)
+		res := r.run(design, false)
+		wantExit(t, res, 1)
+		wantNoSummary(t, res, "設計のレビュー結果=有り")
+	})
+
 	t.Run("設計: 立場が当たる人の断りがあれば緑", func(t *testing.T) {
 		r := newCIRun(t)
 		r.comments(prComments, ghComment{Body: skipMarker, Login: "octocat", Assoc: "OWNER"})
@@ -735,4 +810,61 @@ func TestReviewGate_取得に失敗しても通る側へ倒れない(t *testing.
 		wantExit(t, res, 1)
 		wantSummary(t, res, "gh run rerun")
 	})
+}
+
+// 目的: 落ちたときの案内の中の目印が、GitHub の画面で消えない形で書かれていることを確かめる（issue #261）。
+//
+// **案内は GITHUB_STEP_SUMMARY で markdown として描かれる。**
+// **地の文や字下げだけで置いた HTML コメントは、描かれずに消える**（GitHub の markdown の描画で確かめた）。
+// 「2行目に <!-- continuo:agent --> を置く」が「2行目に を置く」と読めてしまい、
+// **赤い job の案内を読んで直そうとする人が、何を置けばよいのかを読み取れない。**
+//
+// **雛形には backtick を置けないので、チルダ3つの囲みに入れる。**
+//
+// 与える情報: 雛形の2つの job の run。
+// 成功条件: echo が出す行のうち `<!--` を含むものが、どれも目印だけの行で、チルダ3つの囲みの中に在ること。
+func TestCITemplate_案内の中の目印がチルダの囲みの中に在る(t *testing.T) {
+	for _, job := range []string{"design-review-result", "code-review-result"} {
+		inFence := false
+		for i, raw := range strings.Split(templateRun(t, job), "\n") {
+			line := strings.TrimSpace(raw)
+			if line == `echo "~~~"` {
+				inFence = !inFence
+				continue
+			}
+			if !strings.HasPrefix(line, "echo ") || !strings.Contains(line, "<!--") {
+				continue
+			}
+			if !inFence {
+				t.Errorf("%s の run の %d 行目が、チルダの囲みの外で目印を出しています（画面で消えます）: %s", job, i+1, line)
+			}
+		}
+		if inFence {
+			t.Errorf("%s の run で、チルダの囲みが閉じていません", job)
+		}
+	}
+}
+
+// faqPath は、利用者向けの FAQ の場所である（test/internal/scaffold からの相対パス）。
+const faqPath = "../../../docs/FAQ.md"
+
+// 目的: FAQ が「新しい雛形かどうか」の見分けに使わせている文字列が、雛形に在ることを確かめる（issue #261）。
+//
+// **FAQ は、検査ファイルを grep させて古い雛形かどうかを見分けさせている。**
+// **雛形の側の名前を変えると、新しい雛形を置いた人へ「古い雛形です」と案内することになる。**
+//
+// 与える情報: docs/FAQ.md と、雛形の全文。
+// 成功条件: FAQ に見分けのコマンドが在り、そのコマンドが探す文字列が雛形に在ること。
+func TestCITemplate_FAQの見分け方が探す文字列が雛形に在る(t *testing.T) {
+	raw, err := os.ReadFile(faqPath)
+	if err != nil {
+		t.Fatalf("FAQ を読めません（%s）: %v", faqPath, err)
+	}
+	m := regexp.MustCompile("grep -c '([^']+)' \\.github/workflows/continuo-ci\\.yaml").FindStringSubmatch(string(raw))
+	if m == nil {
+		t.Fatal("FAQ に、検査ファイルが新しい雛形かを見分けるコマンド（grep -c '…' .github/workflows/continuo-ci.yaml）がありません")
+	}
+	if !strings.Contains(scaffold.CITemplate(), m[1]) {
+		t.Errorf("FAQ が探させている文字列 %q が、雛形にありません（新しい雛形を「古い雛形です」と案内します）", m[1])
+	}
 }

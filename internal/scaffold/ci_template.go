@@ -135,9 +135,13 @@ jobs:
           #   perm_denied.txt   push できなかった投稿者（名前と、この検査から見えた立場）
           #   perm_missing.txt  照会が 404 だった投稿者
           #   perm_errors.txt   照会がそれ以外で失敗した投稿者（確かめられなかった）
+          #   perm_odd.txt      照会の応答の値が true でも false でもなかった投稿者
+          # **counted_by.txt には、push できるかで数えた投稿者の名前を控えます**（通ったときに出します）。
           : > perm_denied.txt
           : > perm_missing.txt
           : > perm_errors.txt
+          : > perm_odd.txt
+          : > counted_by.txt
 
           # has_pusher は、push できる投稿者が1人でも居れば 0 を、居なければ 1 を返します。
           #
@@ -154,7 +158,8 @@ jobs:
           # **404 の原因は言い切りません。**存在しない名前を叩くと 404 になることは
           # 確かめてありますが、この検査のトークンから見えないときにも 404 が返りえます。
           #
-          # **true / false 以外の値は、黙って数え落とさずに控えます。**
+          # **true / false 以外の値は、黙って数え落とさずに、失敗とは別に控えます。**
+          # 回し直しても直らないので、「回し直すと直ります」の案内と混ぜません。
           # 応答に .user.permissions.push が無い環境（GitHub Enterprise Server では
           # 確かめていません）では、ここへ来ます。
           #
@@ -176,10 +181,12 @@ jobs:
                 continue
               fi
               case "${can_push}" in
-                true) return 0 ;;
+                true)
+                  printf '%s\n' "${login}" > counted_by.txt
+                  return 0
+                  ;;
                 false) printf '%s\t%s\n' "${login}" "${assoc}" >> perm_denied.txt ;;
-                *) printf '%s\t権限を表す値が true / false ではありませんでした: %s\n' \
-                     "${login}" "${can_push}" >> perm_errors.txt ;;
+                *) printf '%s\t%s\n' "${login}" "${can_push}" >> perm_odd.txt ;;
               esac
             done < "$1"
             return 1
@@ -192,7 +199,8 @@ jobs:
           #   login<タブ>名前<タブ>立場  立場が外れた。push できるかを照会する
           #
           # **ok が1行でもあれば、照会は叩きません。**
-          # **同じ投稿者を2回叩きません**（sort -u）。
+          # **1回の照合の中では、同じ投稿者を2回叩きません**（sort -u）。
+          # 照合をまたいでは覚えません。断りと判断票の両方に居る人は、2回叩きます。
           # **本文はこのファイルに入りません。**入るのは GitHub が付けた名前と立場だけなので、
           # コメントの本文に何を書いても、ok の行は作れません。
           poster_counts() {
@@ -227,10 +235,28 @@ jobs:
               echo "**${1}の投稿者のうち、次の人は push できるかを確かめられませんでした。**"
               echo "**「権限が無い」ではなく「確かめられなかった」です。**"
               echo "一時的な失敗なら、回し直すと直ります。"
-              echo "**回し直しても同じなら、この検査のトークンでは権限を照会できません**"
-              echo "（fork から来た pull request など）。そのときは、立場が"
-              echo "OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
-              sort -u perm_errors.txt | sed 's/^/- /'
+              echo "**回し直しても同じなら、この検査のトークンでは権限を照会できていません。**"
+              echo "そのときは、立場が OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
+              echo "（fork から来た pull request では、照会できるかを確かめていません）"
+              sort -u perm_errors.txt | awk -F'\t' '{ print "- " $1 ": " $2 }'
+            fi
+            if [ -s perm_odd.txt ]; then
+              echo ""
+              echo "**${1}の投稿者のうち、次の人は、権限の照会の応答から push できるかを読み取れませんでした。**"
+              echo "応答の値が true でも false でもありません。**回し直しても変わりません。**"
+              echo "立場が OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
+              sort -u perm_odd.txt | awk -F'\t' '{ print "- " $1 "（応答の値: " $2 "）" }'
+            fi
+          }
+
+          # pusher_note は、立場ではなく push できるかで数えたときに、誰のコメントを数えたかを出します。
+          #
+          # **緑になった理由を残します。**立場で数えたのか、照会で数えたのかが出ないと、
+          # あとから「なぜ通ったのか」を確かめられません。
+          pusher_note() {
+            if [ -s counted_by.txt ]; then
+              echo "（立場は外れていますが、push できる投稿者 $(cat counted_by.txt) のコメントを数えました）" \
+                | tee -a "${GITHUB_STEP_SUMMARY}"
             fi
           }
 
@@ -260,6 +286,7 @@ jobs:
           fi
           if poster_counts skipped.txt; then
             echo "設計のレビューを飛ばす断りが貼られています" | tee -a "${GITHUB_STEP_SUMMARY}"
+            pusher_note
             exit 0
           fi
 
@@ -269,6 +296,7 @@ jobs:
           : > perm_denied.txt
           : > perm_missing.txt
           : > perm_errors.txt
+          : > perm_odd.txt
 
           # 段2. 紐づく issue を引く。
           #
@@ -335,6 +363,7 @@ jobs:
             if poster_counts matched.txt; then
               echo "設計のレビュー結果=有り（issue #${n}）"
               echo "設計のレビュー結果=有り（issue #${n}）" >> "${GITHUB_STEP_SUMMARY}"
+              pusher_note
               found=1
               break
             fi
@@ -344,8 +373,23 @@ jobs:
           fi
 
           # **落ちたときは、どうすれば通るかを全部書きます。**
+          #
+          # **目印は、チルダ3つの囲みの中に書きます。**この案内は GITHUB_STEP_SUMMARY で
+          # markdown として描かれます。**地の文や字下げだけで置いた HTML コメントは、描かれずに消えます**
+          # （GitHub の描画で確かめました）。「2行目に を置く」と読めてしまいます。
+          #
+          # **投稿者が push できるかを確かめられなかったときは、「貼られていません」と言い切りません。**
+          # 貼ってあるのに、照会の一時的な失敗で数えられなかっただけかもしれないためです。
+          unsure=0
+          if [ -s perm_errors.txt ] || [ -s perm_missing.txt ] || [ -s perm_odd.txt ]; then
+            unsure=1
+          fi
           {
-            echo "## 設計のレビュー結果が貼られていません"
+            if [ "${marked}" -gt 0 ] && [ "${unsure}" -eq 1 ]; then
+              echo "## 設計のレビュー結果を、数えてよいか確かめられませんでした"
+            else
+              echo "## 設計のレビュー結果が貼られていません"
+            fi
             echo ""
             if [ "$(wc -l < issues.txt | tr -d ' ')" -eq 0 ]; then
               echo "**この pull request に紐づく issue が1件もありません。**"
@@ -356,16 +400,29 @@ jobs:
                 echo ""
               fi
               echo "本文へ Closes #<番号> を書いてください。"
-              echo "設計のレビューが要らない変更のときは、下の断りの段を読んでください。"
-            else
-              if [ "${marked}" -gt 0 ]; then
-                echo "紐づく issue に、次の目印で始まるコメントは在りますが、"
-                echo "**数える条件に当たる投稿者のものが1件もありません**（下の「数える条件」）。"
-              else
-                echo "紐づく issue に、次の目印で始まるコメントが1件もありません。"
+              if [ "${IS_DRAFT}" = "true" ]; then
+                echo ""
+                echo "**書いてあるのに紐づいていないなら、draft のせいかもしれません。**"
+                echo "draft の pull request では、本文に Closes #<番号> を書いても issue が紐づかないリポジトリがあります"
+                echo "（個人が持つ private のリポジトリで確かめました。draft を外すと紐づき、この検査も回り直しました）。"
+                echo "紐づいているかは gh pr view ${PR_NUMBER} --json closingIssuesReferences で見られます。"
               fi
               echo ""
-              echo "    <!-- design-review-result -->"
+              echo "設計のレビューが要らない変更のときは、下の断りの段を読んでください。"
+            else
+              if [ "${marked}" -gt 0 ] && [ "${unsure}" -eq 1 ]; then
+                echo "紐づく issue に、下の目印で始まるコメントは在ります。"
+                echo "**ただし、その投稿者が push できるかを確かめられませんでした**（下に、投稿者ごとの結果があります）。"
+              elif [ "${marked}" -gt 0 ]; then
+                echo "紐づく issue に、下の目印で始まるコメントは在りますが、"
+                echo "**数える条件に当たる投稿者のものが1件もありません**（下の「数える条件」）。"
+              else
+                echo "紐づく issue に、下の目印で始まるコメントが1件もありません。"
+              fi
+              echo ""
+              echo "~~~"
+              echo "<!-- design-review-result -->"
+              echo "~~~"
               echo ""
               sed 's/^/- issue #/' issues.txt
               if [ "${unreadable}" -gt 0 ]; then
@@ -379,19 +436,30 @@ jobs:
             echo ""
             echo "1. 設計をサブエージェントにレビューさせる"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
-            echo "3. それを **issue のコメント**として貼る。**1行目をこの目印にする**"
+            echo "3. それを **issue のコメント**として貼る（pull request のコメントではありません）。"
+            echo "   **1行目を、下の目印にする**"
             echo ""
-            echo "    <!-- design-review-result -->"
+            echo "~~~"
+            echo "<!-- design-review-result -->"
+            echo "~~~"
             echo ""
-            echo "   **continuo が起動したエージェントだけは、1行目を <!-- continuo:agent -->、2行目をこの目印にする。**"
-            echo "   それ以外（人間や、人間が自分で起動した Claude Code）は <!-- continuo:agent --> を付けない。"
-            echo "   付けると、continuo がそのコメントを、走っている run の成果として数えます"
+            echo "**continuo が起動したエージェントだけは、1行目を continuo:agent の印、2行目をこの目印にします。**"
+            echo ""
+            echo "~~~"
+            echo "<!-- continuo:agent -->"
+            echo "<!-- design-review-result -->"
+            echo "~~~"
+            echo ""
+            echo "それ以外（人間や、人間が自分で起動した Claude Code）は、continuo:agent の印を付けません。"
+            echo "付けると、continuo がそのコメントを、走っている run の成果として数えます。"
             echo ""
             echo "**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、"
             echo "人間が、この pull request のコメントに断りを貼ります。**"
             echo ""
-            echo "    <!-- design-review-skipped -->"
-            echo "    文書だけの変更のため"
+            echo "~~~"
+            echo "<!-- design-review-skipped -->"
+            echo "文書だけの変更のため"
+            echo "~~~"
             echo ""
             echo "**2行目の理由を落とさないでください。**目印だけでは通りません。"
             echo ""
@@ -402,21 +470,22 @@ jobs:
             echo "**数える条件。**"
             echo ""
             echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
-            echo "  （設計のレビュー結果の目印だけは、<!-- continuo:agent --> の直後でも数えます）"
+            echo "  （設計のレビュー結果の目印だけは、continuo:agent の印の直後でも数えます）"
             echo "- 投稿者の立場が **OWNER / MEMBER / COLLABORATOR** であること。"
             echo "  **どれでもないときは、その投稿者がこのリポジトリへ push できること**"
-            echo "- **立場は、この検査のトークンから見えた値で決まります。**同じコメントを"
-            echo "  自分のトークンで読むと、別の立場に見えることがあります"
+            echo "- **立場は、この検査のトークンから見えた値で決まります。**"
+            echo "  同じコメントを自分のトークンで読むと、別の立場に見えることがあります"
+            echo "- 投稿者のアカウントが消えているコメントは数えません"
             cat skipped_notes.txt
             poster_notes "設計のレビュー結果（design-review-result）"
             echo ""
+            echo "**結果や断りを貼っても、本文へ Closes #<番号> を書き足しても、この検査は回り直しません。**"
+            echo "gh run rerun を使うか、commit を1つ push してください。"
             if [ "${IS_DRAFT}" = "true" ]; then
+              echo ""
               echo "**この pull request は draft です。**draft のうちは赤のままでかまいません。"
-              echo "結果を貼ってから gh pr ready ${PR_NUMBER} を打つと、この検査が回り直します。"
-            else
-              echo "**この pull request は draft ではありません。**"
-              echo "**結果や断りを貼っても、本文へ Closes #<番号> を書き足しても、この検査は回り直しません。**"
-              echo "gh run rerun を使うか、commit を1つ push してください。"
+              echo "draft を外す gh pr ready ${PR_NUMBER} でも回り直しますが、"
+              echo "**外すのは、実装のレビュー結果を貼ってからにしてください。**"
             fi
           } | tee -a "${GITHUB_STEP_SUMMARY}"
 
@@ -446,13 +515,15 @@ jobs:
           #       **どれでもないときは、その投稿者がこのリポジトリへ push できる。**
           # 二の後ろ半分を足した理由は、上の job のコメントに書いてあります。
 
-          # **上の job と同じ3つの関数です。**YAML の job をまたいで共有できないので、
+          # **上の job と同じ4つの関数です。**YAML の job をまたいで共有できないので、
           # 同じものを置いてあります。**中身を変えるときは、両方を直してください。**
           # 理由は上の job のコメントに書いてあります。
           TAB="$(printf '\t')"
           : > perm_denied.txt
           : > perm_missing.txt
           : > perm_errors.txt
+          : > perm_odd.txt
+          : > counted_by.txt
 
           has_pusher() {
             local login assoc can_push rc
@@ -470,10 +541,12 @@ jobs:
                 continue
               fi
               case "${can_push}" in
-                true) return 0 ;;
+                true)
+                  printf '%s\n' "${login}" > counted_by.txt
+                  return 0
+                  ;;
                 false) printf '%s\t%s\n' "${login}" "${assoc}" >> perm_denied.txt ;;
-                *) printf '%s\t権限を表す値が true / false ではありませんでした: %s\n' \
-                     "${login}" "${can_push}" >> perm_errors.txt ;;
+                *) printf '%s\t%s\n' "${login}" "${can_push}" >> perm_odd.txt ;;
               esac
             done < "$1"
             return 1
@@ -505,10 +578,28 @@ jobs:
               echo "**${1}の投稿者のうち、次の人は push できるかを確かめられませんでした。**"
               echo "**「権限が無い」ではなく「確かめられなかった」です。**"
               echo "一時的な失敗なら、回し直すと直ります。"
-              echo "**回し直しても同じなら、この検査のトークンでは権限を照会できません**"
-              echo "（fork から来た pull request など）。そのときは、立場が"
-              echo "OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
-              sort -u perm_errors.txt | sed 's/^/- /'
+              echo "**回し直しても同じなら、この検査のトークンでは権限を照会できていません。**"
+              echo "そのときは、立場が OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
+              echo "（fork から来た pull request では、照会できるかを確かめていません）"
+              sort -u perm_errors.txt | awk -F'\t' '{ print "- " $1 ": " $2 }'
+            fi
+            if [ -s perm_odd.txt ]; then
+              echo ""
+              echo "**${1}の投稿者のうち、次の人は、権限の照会の応答から push できるかを読み取れませんでした。**"
+              echo "応答の値が true でも false でもありません。**回し直しても変わりません。**"
+              echo "立場が OWNER / MEMBER / COLLABORATOR と見える人に貼ってもらってください。"
+              sort -u perm_odd.txt | awk -F'\t' '{ print "- " $1 "（応答の値: " $2 "）" }'
+            fi
+          }
+
+          # pusher_note は、立場ではなく push できるかで数えたときに、誰のコメントを数えたかを出します。
+          #
+          # **緑になった理由を残します。**立場で数えたのか、照会で数えたのかが出ないと、
+          # あとから「なぜ通ったのか」を確かめられません。
+          pusher_note() {
+            if [ -s counted_by.txt ]; then
+              echo "（立場は外れていますが、push できる投稿者 $(cat counted_by.txt) のコメントを数えました）" \
+                | tee -a "${GITHUB_STEP_SUMMARY}"
             fi
           }
 
@@ -531,32 +622,52 @@ jobs:
           if poster_counts matched.txt; then
             echo "実装のレビュー結果=有り"
             echo "実装のレビュー結果=有り" >> "${GITHUB_STEP_SUMMARY}"
+            pusher_note
             exit 0
           fi
 
+          # **目印は、チルダ3つの囲みの中に書きます**（理由は上の job の案内に書いてあります）。
+          # **投稿者が push できるかを確かめられなかったときは、「貼られていません」と言い切りません。**
+          unsure=0
+          if [ -s perm_errors.txt ] || [ -s perm_missing.txt ] || [ -s perm_odd.txt ]; then
+            unsure=1
+          fi
           {
-            echo "## 実装のレビュー結果が貼られていません"
-            echo ""
-            if [ -s matched.txt ]; then
-              echo "この pull request のコメントに、次の目印で始まるものは在りますが、"
+            if [ -s matched.txt ] && [ "${unsure}" -eq 1 ]; then
+              echo "## 実装のレビュー結果を、数えてよいか確かめられませんでした"
+              echo ""
+              echo "この pull request のコメントに、下の目印で始まるものは在ります。"
+              echo "**ただし、その投稿者が push できるかを確かめられませんでした**（下に、投稿者ごとの結果があります）。"
+            elif [ -s matched.txt ]; then
+              echo "## 実装のレビュー結果が貼られていません"
+              echo ""
+              echo "この pull request のコメントに、下の目印で始まるものは在りますが、"
               echo "**数える条件に当たる投稿者のものが1件もありません**（下の「数える条件」）。"
             else
-              echo "この pull request のコメントに、次の目印で始まるものが1件もありません。"
+              echo "## 実装のレビュー結果が貼られていません"
+              echo ""
+              echo "この pull request のコメントに、下の目印で始まるものが1件もありません。"
             fi
             echo ""
-            echo "    <!-- code-review-result -->"
+            echo "~~~"
+            echo "<!-- code-review-result -->"
+            echo "~~~"
             echo ""
             echo "**通し方。**"
             echo ""
             echo "1. コードのレビューを回す"
             echo "2. その結果を、この pull request のコメントとして貼る"
-            echo "3. **1行目をこの目印にする**"
+            echo "3. **1行目を、上の目印にする**"
             echo ""
-            echo "    <!-- code-review-result -->"
+            echo "**continuo が起動したエージェントは、2行目に continuo:agent の印を置きます。**"
             echo ""
-            echo "   **continuo が起動したエージェントは、2行目に <!-- continuo:agent --> を置く。**"
-            echo "   **設計のレビュー結果（issue に貼るもの）とは、順番が逆です。**"
-            echo "   こちらは <!-- continuo:agent --> を1行目に置くと数えません"
+            echo "~~~"
+            echo "<!-- code-review-result -->"
+            echo "<!-- continuo:agent -->"
+            echo "~~~"
+            echo ""
+            echo "**設計のレビュー結果（issue に貼るもの）とは、順番が逆です。**"
+            echo "こちらは、continuo:agent の印を1行目に置くと数えません。"
             echo ""
             echo "**issue のコメントではありません。**この検査は、この pull request のコメントだけを読みます。"
             echo ""
@@ -565,8 +676,9 @@ jobs:
             echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
             echo "- 投稿者の立場が **OWNER / MEMBER / COLLABORATOR** であること。"
             echo "  **どれでもないときは、その投稿者がこのリポジトリへ push できること**"
-            echo "- **立場は、この検査のトークンから見えた値で決まります。**同じコメントを"
-            echo "  自分のトークンで読むと、別の立場に見えることがあります"
+            echo "- **立場は、この検査のトークンから見えた値で決まります。**"
+            echo "  同じコメントを自分のトークンで読むと、別の立場に見えることがあります"
+            echo "- 投稿者のアカウントが消えているコメントは数えません"
             poster_notes "実装のレビュー結果（code-review-result）"
             if [ "${IS_DRAFT}" = "true" ]; then
               echo ""

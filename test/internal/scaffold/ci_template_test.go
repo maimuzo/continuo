@@ -161,7 +161,7 @@ const reviewGatePath = "../../../.github/workflows/review-gate.yml"
 // design-review-result はあちらの検査の対象に入っていない。**ここで両方を見る。**
 //
 // 与える情報: scaffold.CITemplate() と .github/workflows/review-gate.yml の全文。
-// 成功条件: 3つの判定の式が、どちらのファイルにもそのまま在ること。
+// 成功条件: 3つの目印の正規表現と、2つの job の名前が、どちらのファイルにもそのまま在ること。
 func TestCITemplate_このリポジトリのCIと同じ目印とjob名を持つ(t *testing.T) {
 	raw, err := os.ReadFile(reviewGatePath)
 	if err != nil {
