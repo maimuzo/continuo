@@ -1340,7 +1340,7 @@ worktree は残します。カンバンへは書きません）
 **まず `after_run が成功したか` を見てください。**
 **`true` なら、あなたが `workspace_hooks.after_run` に書いた `git push` が走り切っています。**
 **`false` なら走り切っていません。**手元の commit が残っている可能性があるので、
-worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてください。
+worktree を開いて、必ず先に `git fetch origin -q` を打ってから `git log --oneline HEAD --not --remotes` を叩いてください。
 
 **`false` のときは、隣の `after_run を走らせなかった理由` にどれかが入ります。**
 **成功したときは空です。**
@@ -2770,11 +2770,15 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -
 **1. 未コミットの変更と、push していない commit があるかを、先に確かめてください。**
 
 ```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 fetch origin -q
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 log --oneline @{u}..HEAD
 ```
 
-**2つ目のコマンドが `no upstream configured` で落ちたら、その branch は1度も push されていません。**
+**必ず先に fetch してください。**fetch しないと、push 済みの commit が push していない側に出ることがあります。
+**fetch がエラーを出したら、そこで止めてください。**
+
+**`log` のコマンドが `no upstream configured` で落ちたら、その branch は1度も push されていません。**
 **commit は全部この機械の中にしかありません。**
 
 **いまの branch の作業が要るなら、期待の branch へ戻したあとでマージしてください。**
@@ -3940,7 +3944,7 @@ continuo prompt --show --builtin | grep -c '^## 5-3\. '
 | --- | --- |
 | **待つ時間を延ばす** | `WORKFLOW.md` の `tracker.provider.handoff.idle_timeout_ms` を大きくする（単位はミリ秒）。**延ばすほど、本当に落ちた機械が抱えた issue が拾われるまで長くかかります** |
 | **持ち回りをやめる** | 「持ち回りを使わずに、1台だけで動かしたい」（「目的別使用例」の「何台かの PC で分担したいとき」） |
-| **取り残された作業を拾う** | 前の機械の worktree で `git status --short` と `git log --oneline HEAD --not --remotes` を叩き、残っているものを push する |
+| **取り残された作業を拾う** | 前の機械の worktree で、必ず先に `git fetch origin -q` を打ってから `git status --short` と `git log --oneline HEAD --not --remotes` を叩き、残っているものを push する |
 
 **push していない変更は、担当が移った時点で他の機械から見えなくなります。**
 
@@ -4364,12 +4368,15 @@ git -C ~/ghq/github.com/<owner>/<repo> worktree list
 **直し方。**消す前に、失うものが無いことを確かめます。
 
 ```bash
+git -C <消したい worktree> fetch origin -q
 git -C <消したい worktree> status --short
 git -C <消したい worktree> log --oneline HEAD --not --remotes
 git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
 ```
 
-**1つ目が出たら commit してから、2つ目が出たら push してから消してください。**
+**必ず先に fetch してください。**fetch しないと、push 済みの commit が push していない側に出ることがあります。
+**fetch がエラーを出したら、そこで止めてください。**
+**`status` が何か出したら commit してから、`log` が何か出したら push してから消してください。**
 **`--force` は付けないでください。**コミットしていない変更が、確認も警告も無く消えます。
 **`git worktree remove` が断ったのは、消してはいけないものが残っているからです。**
 **lock されているときも断ります**（`cannot remove a locked working tree`）。

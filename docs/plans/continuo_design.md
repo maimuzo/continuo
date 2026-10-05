@@ -12559,7 +12559,7 @@ tracker:
     handoff:                                # 同じカンバンを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
       bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
                                             # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
-                                            # 上の polling.interval_ms より十分長く取ること
+                                            # 下の polling.interval_ms より十分長く取ること
       idle_timeout_ms: 64800000             # 担当者の最後の進捗報告からこれだけ経つと担当を外して入札をやり直す。
                                             # 64800000 なら18時間。終業時に機械を落とした人が翌朝に再開できる長さ。
                                             # 数えるのは <!-- continuo:progress --> が付いたコメントだけである。
@@ -12644,7 +12644,7 @@ workspace_hooks:                            # worktree の節目に走らせる�
 agent:
   max_concurrent_agents: 2                  # 同時に動かすエージェントの数の上限
   max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る。
-                                            # 引かれるのは running_state（下の "In Progress"）だけで、
+                                            # 引かれるのは running_state（上の "In Progress"）だけで、
                                             # 他の Status 名を書いても参照されない。0 以下は書けない
   max_dispatch_turns: 20                    # 1つの issue に continuo が指示を送る回数の上限。尽きたら failure_state へ落とす。
                                             # エージェントが自分で続けた turn は数えない
