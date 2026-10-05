@@ -194,10 +194,19 @@ type Issue struct {
 	//
 	// **イベントを1件も引けなかった場合は false である。**分からないなら
 	// 「自動化ではない」に倒す（人間が動かしたときの扱いを既定にする）。
+	//
+	// **この値は当てにならないことがある**（設計 2-6 の 2026-10-04 の実測）。
+	// GitHub は Status の変更イベントを記録しないことがあり、**記録が無い回は、
+	// いまの State と同じ名前の古いイベントを採るか、1件も引けずに false になる。**
+	// **だから、対応表（`tracker.automated_state_rewrite`）のキーの Status を書き戻すかどうかは、
+	// この値では決めない**（設計 3-54。issue #299）。読むのは、終端と引き渡しの Status を
+	// turn の終わりまで待つかどうか（設計 3-74）と、対応表に無い Status で止めたときの案内だけである。
 	StatusChangedByAutomation bool
 	// StatusChangedBy は、いまの State を書いた主体のログイン名である
 	// （組み込みの自動化なら `github-project-automation`）。
 	// **ログと issue のコメントに出すためだけに持つ。**判定には使わない。取れなければ空文字。
+	// **上と同じ理由で、いまの State を書いた主体とは限らない。**対応表のキーの Status を
+	// 書き戻したときのコメントと、その道で止めたときの案内には出さない（設計 3-54）。
 	StatusChangedBy string
 	// BranchName はトラッカーが返す branch のメタデータである（SPEC.md 4.1.1 の branch_name）。
 	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch の名前で、

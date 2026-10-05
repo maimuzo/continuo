@@ -248,10 +248,16 @@ func TestUnknownState_対応表と片付けの両方に名前があっても貼�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// ★ **人間が**動かした（`SetState` は人間の操作である）。書き戻しは起きない。
+	// ★ **対応表のキーの Status へ動いたら、書いた主体を見ずに戻す**（設計 3-54。issue #299）。
+	// 止まるのは、同じ run で上限（3回。internal/orchestrator の maxAutomatedRewrites）を
+	// 超えて動かされたときである。**その道で出す案内を見る。**
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetState(issue.ID, "Archived")
+		waitRewriteSettled(t, fx, issue.ID, "I_node188", "Ready")
+	}
+	// 4回目。**ここからは戻さず、人間へ渡す。**
 	fx.Tracker.SetState(issue.ID, "Archived")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	body := selfCommentBody(fx, "I_node188")
 	if body == "" {

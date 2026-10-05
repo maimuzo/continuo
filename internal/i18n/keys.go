@@ -964,6 +964,9 @@ const (
 	// KeyAbandonErrParkDirectChat は `--park` にdirect chat の状態（tracker.direct_chat_state の値）が
 	// 指定されたときに出る。**そこへ動かすと継続監視は pane を1回も閉じない。**
 	KeyAbandonErrParkDirectChat Key = "abandon.err_park_direct_chat"
+	// KeyAbandonErrParkRewriteKey は `--park` に書き戻しの対応表（tracker.automated_state_rewrite）の
+	// キーが指定されたときに出る（設計 3-54）。**そこへ動かしても、継続監視が作業中の Status へ戻す。**
+	KeyAbandonErrParkRewriteKey Key = "abandon.err_park_rewrite_key"
 	// KeyAbandonErrToDirectChat は `--to` に direct chat の状態（tracker.direct_chat_state の値）が
 	// 指定されたときに出る（設計 3-83k）。**次に continuo が起動したとき、消した worktree と pane を作り直す。**
 	KeyAbandonErrToDirectChat Key = "abandon.err_to_direct_chat"
@@ -3061,6 +3064,7 @@ var allKeys = []Key{
 	KeyAbandonParkMoved,
 	KeyAbandonErrParkActive,
 	KeyAbandonErrParkDirectChat,
+	KeyAbandonErrParkRewriteKey,
 	KeyAbandonErrToDirectChat,
 	KeyAbandonErrCurrentDirectChat,
 	KeyAbandonErrParkFailed,

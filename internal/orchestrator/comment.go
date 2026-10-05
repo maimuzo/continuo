@@ -606,7 +606,7 @@ func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState
 // identifier: issue の識別子（ログに出す）。
 // nodeID: 投稿先の issue のノード ID。空なら何もしない。
 // move: 動かした記録。
-// why: 「なぜ」に入れる文。「〜ためです」で終わる形で渡す。
+// why: 「なぜ」に入れる文。「〜ためです」で終わる形で渡す（補足を、そのあとに括弧で足してよい）。
 func (o *Orchestrator) postStatusMove(
 	ctx context.Context, identifier, nodeID string, move statusMove, why string,
 ) {

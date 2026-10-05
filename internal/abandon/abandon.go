@@ -691,10 +691,11 @@ func (r *runner) reportToSkipped() {
 
 // verifyTargets は、これから書きうる Status の値を消す前に確かめる（段2 の直後）。
 //
-// **確かめるのは2つである。**
+// **確かめるのは3つである。**
 //
 //	その値がカンバンの Status の選択肢にあるか（`--to` と park の先）
 //	park の先が `tracker.active_states` に入っていないか
+//	park の先が `tracker.direct_chat_state` でも、`tracker.automated_state_rewrite` のキーでもないか
 //
 // **選択肢の照合を段5 まで遅らせてはならない。**`UpdateStatus` は選択肢に無い名前を
 // 断るが、それを呼ぶのは worktree と branch を消したあとである。`--to Dnoe` のような
@@ -754,6 +755,23 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 		// 何も消さずに止まる。**待つ前に、はっきりした理由で断る。
 		if config.IsDirectChatState(r.cfg.Tracker, park) {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkDirectChat, park))
+			return ExitStopped
+		}
+		// **park の先を、書き戻しの対応表（`tracker.automated_state_rewrite`）のキーにしてはならない**
+		// （設計 3-54。issue #299）。**そこも「作業中の状態」ではないので上の検査を素通りするが、
+		// continuo は対応表のキーの Status へ動いた issue を、書いた主体を見ずに作業中の Status へ戻す。**
+		// 手を離さないので、段1 の後半が待ち切れずに何も消さずに止まる。
+		// **`--force` を付けると、continuo が持ったままの run の pane と worktree を消す。**
+		// 作業中の状態について上の検査が防いでいるのと、同じ結果である。
+		//
+		// **比べ方は、continuo が対応表を引くときと同じにする**（大文字小文字と前後の空白を無視。
+		// `orchestrator` の `lookupStateRewrite`）。完全一致で比べると、`--park "in progress"` が
+		// ここを抜けて、動かした先で戻される。
+		//
+		// **既定の park（`tracker.failure_state`）は、ここに当たらない。**対応表のキーは
+		// 「`tracker` の他のキーに名前が出てこない Status」に限られる（`config.Validate`）。
+		if isRewriteKey(r.cfg.Tracker.AutomatedStateRewrite, park) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkRewriteKey, park))
 			return ExitStopped
 		}
 		targets = append(targets, park)
@@ -1406,6 +1424,22 @@ func containsFold(list []string, value string) bool {
 	target := strings.TrimSpace(value)
 	for _, item := range list {
 		if strings.EqualFold(strings.TrimSpace(item), target) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRewriteKey は state が書き戻しの対応表（`tracker.automated_state_rewrite`）のキーかを返す
+// （設計 3-54）。**大文字小文字と前後の空白を無視して比べる**（continuo が対応表を引くときと同じ）。
+//
+// table: `tracker.automated_state_rewrite`。
+// state: 調べる Status 名。
+// 戻り値: キーに一致すれば true。
+func isRewriteKey(table map[string]string, state string) bool {
+	target := strings.TrimSpace(state)
+	for from := range table {
+		if strings.EqualFold(strings.TrimSpace(from), target) {
 			return true
 		}
 	}

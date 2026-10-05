@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "43566f3b603f55073410b6583b08c94b06550123df19e7fcbed2d97885a6270a", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "aeb187911c8a3d694d3a12dbc0666e8808af399204b5f26e1d1f4cbff6c184fc", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **ユースケース記述「着手を取り消す」の経路に対応づけたテストである。**
 // 関数名の `P008` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -1562,6 +1562,39 @@ func Test_着手を取り消す_P024_parkが作業中の状態なら書く前に
 
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrParkActive, active))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("止まったのにカンバンへ書いている: %v", fx.Tracker.Updates())
+	}
+}
+
+// {"RUCM-PATH": "P024"}
+//
+// 目的: `--park` に書き戻しの対応表（tracker.automated_state_rewrite）のキーを渡したとき、
+// **カンバンへ1文字も書かずに**止まることを確認する（設計 3-54。issue #299）。
+// **対応表のキーは `tracker.active_states` に入っていないので、1つ上の検査を素通りする。**
+// だが continuo は、対応表のキーの Status へ動いた issue を、書いた主体を見ずに作業中の Status へ戻す。
+// **手を離さないので、`--force` を付けると、continuo が持ったままの run の worktree を消す。**
+// 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
+// issue 188 の worktree、対応表に `Human Doing` を書いた設定、`--park " human doing "`
+// （**大文字小文字を変え、前後に空白を付けて渡す。**continuo が対応表を引くときと同じ比べ方であること）。
+// 成功条件: 終了コードが 1、カンバンへの書き込みが0件、worktree が残っている、
+// herdr へ worktree.remove を送っていないこと。
+func Test_着手を取り消す_P024_parkが対応表のキーなら書く前に止まる(t *testing.T) {
+	fx := newFixture(t)
+	active := fx.Config.Tracker.ActiveStates[len(fx.Config.Tracker.ActiveStates)-1]
+	// **`newFixtureWithConfig` の extra は最上位のキーしか足せない**ので、
+	// `tracker:` の中へは書けない。WORKFLOW.md を直接1行足す。
+	addTrackerKey(t, fx.WorkflowPath, `  automated_state_rewrite: {"Human Doing": "`+active+`"}`)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ParkState = " human doing " })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrParkRewriteKey, "human doing"))
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if len(fx.Tracker.Updates()) != 0 {

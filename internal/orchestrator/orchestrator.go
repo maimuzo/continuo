@@ -95,8 +95,8 @@ type Tracker interface {
 	// `Issue.StatusChangedByAutomation` を読むかどうかだけで決まる。**
 	// **6つの呼び出し元の内訳は次のとおりである。呼び出し元を足すときは、この表も足すこと。**
 	//
-	//	読む     reconcileRunning       知らない Status を書き戻すか止めるかを決める（reconcile.go）
-	//	読む     handleTurnEnd          同上を turn の終わりに決める（refreshIssue に真を渡す。lifecycle.go）
+	//	読む     reconcileRunning       終端と引き渡しの Status を待つかと、止めるときの案内を決める（reconcile.go）
+	//	読む     handleTurnEnd          止めるときの案内を turn の終わりに決める（refreshIssue に真を渡す。lifecycle.go）
 	//	読まない finishRunClaimed       片付けてよいかを Status だけで決める（refreshIssue に偽を渡す。lifecycle.go）
 	//	読まない reconcileWorktrees     取り残された worktree を片付けてよいかを Status だけで決める（reconcile.go）
 	//	読まない dispatchStatusAllowed  着手してよいかを Status だけで決める（dispatch.go）

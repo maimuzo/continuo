@@ -307,9 +307,9 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 // 「continuo は WORKFLOW.md に書かれた Status だけを扱います」と言うので、
 // **書いてある名前を挙げると嘘になる。**
 //
-// **「キーの Status では worker が止まらないから」ではない。**書き戻して worker を続けるのは
-// **カンバンの自動化がその Status を書いたときだけ**であり（設計 3-54）、
-// **人間がキーの Status へ動かしたときは、いままでどおり worker を止める**（設計 3-50）。
+// **「キーの Status では worker が止まらないから」でもない。**キーの Status へ動いた issue は、
+// 書いた主体を問わず作業中の Status へ書き戻すが（設計 3-54。issue #299）、
+// **書き戻す回数が上限に達したときと、戻せない失敗が続いたときは、worker を止める**（設計 3-56）。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: 設定に名前が出てこない選択肢名（カンバンの綴りのまま。名前順）。

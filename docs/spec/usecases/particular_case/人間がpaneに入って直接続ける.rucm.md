@@ -101,7 +101,7 @@ Status を書けても、理由のコメントの投稿が誤りを返したと�
 | 巡回が実行中の issue を取り直せない | この巡回では direct chat の出入りを決めない。次の巡回で同じ段を行う。`issueを1件処理する.rucm.md` の巡回の照合の扱いである |
 | 完了の Status を書いたのがカンバンの自動化である | `完了のStatusへ動かされた` は、利用者が動かした場合を書いている。自動化が書いた場合の待ち方は `issueを1件処理する.rucm.md` に在る |
 | 手を離すときに、別の終わらせる処理が既に走っている | `letGoOfDirectChatAsync` は何もせずに返る。走っている側が片付ける |
-| `作業中でも完了でもないStatusへ動かされた` のあとで、動かされた先の Status の扱いが Status を書く | direct chat を抜ける処理（`updateDirectChatMode`）は Status を書かない。同じ巡回の照合は、動かされた先が continuo の知らない Status で、書いたのがカンバンの自動化なら、本来の Status へ書き戻すことがある（`handleUnknownState`）。その扱いは `issueを1件処理する.rucm.md` に在る |
+| `作業中でも完了でもないStatusへ動かされた` のあとで、動かされた先の Status の扱いが Status を書く | direct chat を抜ける処理（`updateDirectChatMode`）は Status を書かない。同じ巡回の照合は、動かされた先が continuo の知らない Status で、書き戻しの対応表（`tracker.automated_state_rewrite`）に戻す先が在れば、本来の Status へ書き戻すことがある（`handleUnknownState`。書いた主体は問わない。設計 3-54）。**そのとき、続きの指示は送られない**（続きを送る印は、direct chat を抜けて作業中の Status へ入ったときにだけ立つ）。その扱いは `issueを1件処理する.rucm.md` に在る |
 
 ## テストの当て方
 
