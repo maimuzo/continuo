@@ -1,7 +1,11 @@
 // Package hookclient は `continuo hook` の実体である（docs/plans/continuo_design.md 3-2 / 3-19）。
 //
-// やることは1つだけである。標準入力の JSON を1行にして hook 受け口の socket へ書き、
-// 接続を閉じて終わる。応答は待たない（差し戻しを採らないので待つ必要が無い。設計 3-25）。
+// 転送でやることは1つだけである。標準入力の JSON を1行にして hook 受け口の socket へ書き、
+// 接続を閉じて終わる。**本体の応答は待たない**（本体の判定を待って差し戻す形は採らない。設計 3-25）。
+//
+// **差し戻すのは1つの場合だけである**（issue #274）。`Stop` の入力の `last_assistant_message` に、
+// 取り得る値に無い表明が在るときである。**本体へ訊かずに、hook がその場で決める**（`CheckStop`）。
+// 転送はそれより先に済ませるので、差し戻すかどうかは転送の手順に関わらない。
 //
 // 例外の扱いも設計で決まっている。
 //
@@ -173,6 +177,13 @@ type Result struct {
 	// Truncated は標準入力が上限を超えたため、共通の項目だけを拾って組み立て直したことを表す。
 	// **転送そのものは行っている**（捨てない）。呼び出し側は標準エラーへ1行出すこと。
 	Truncated bool
+	// Line は socket へ転送できた1行である（issue #274）。
+	// **入るのは、転送できて、かつ上限を超えていないときだけである。**呼び出し側が
+	// `Stop` の表明を調べるのに使う（`CheckStop`）。転送できなかったときに空にするのは、
+	// 本体が動いていないあいだは、取り得る値のファイルが次に起動する本体の設定と
+	// 食い違っているかもしれないためである。上限を超えた入力は `last_assistant_message` を
+	// 拾い直していないので、調べる材料が無い。
+	Line []byte
 	// Err は起きた不具合である。Outcome が OutcomeSent でも、
 	// 「逃がし先へ書けなかった」以外の軽微な失敗が入ることがある。
 	Err error
@@ -211,7 +222,11 @@ func Forward(cfg Config) Result {
 
 	sendErr := sendToSocket(cfg, line)
 	if sendErr == nil {
-		return Result{Outcome: OutcomeSent, EventName: eventName, Truncated: truncated}
+		sent := Result{Outcome: OutcomeSent, EventName: eventName, Truncated: truncated}
+		if !truncated {
+			sent.Line = line
+		}
+		return sent
 	}
 
 	if cfg.PendingDir == "" {

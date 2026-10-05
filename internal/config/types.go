@@ -274,7 +274,10 @@ type TrackerConfig struct {
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、
 	// この印で始まる行を探して、続く値を StatusSignalMap で引いて Status を動かす。
-	// last_assistant_message は使わない（印のあとに道具を呼ぶと落ちるため）。
+	// 本体は last_assistant_message を使わない（印のあとに道具を呼ぶと落ちるため）。
+	// `continuo hook` だけが、決まり以外の値をその場で差し戻すために読む（issue #274）。
+	// **この2つは設定の読み直しでは変わらない。**issue ごとのディレクトリの
+	// status-signal.json へ、着手のときと run を引き継ぐときに書く。
 	StatusSignalPrefix string `yaml:"status_signal_prefix"`
 	// StatusSignalMap は表明の値と Status の対応である（3-25）。
 	// キーは表明の値（"review" / "blocked" / "working" など）、値は動かす先の Status 名である。

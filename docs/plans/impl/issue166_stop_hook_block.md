@@ -45,6 +45,8 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 **hook は並行して走り、互いの答えを見られない。**continuo が張る `Stop` hook
 （[docs/plans/continuo_design.md の 1-3 の「張る hook と、それぞれの役目」](../continuo_design.md#hooks-and-roles)）は、
 **他の hook が差し戻したかどうかを知る手立てを持たない。**
+**issue #274 からは、continuo 自身の hook も差し戻す**（表明の値が決まり以外のとき。設計 3-25）。
+**それでも、差し戻したことは本体へ伝えない。**本体の動きは、他人の hook が差し戻したときと同じである。
 
 **差し戻しは transcript には残る。**手元の記録で確認した1行の形（`message.content` は文字列）。
 

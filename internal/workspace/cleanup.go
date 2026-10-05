@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/statussignal"
 )
 
 // CleanupResult は片付けを試みた結果である（3-9）。
@@ -736,6 +738,14 @@ func (m *Manager) removeSettingsFile(settingsPath string) {
 	if err := os.Remove(settingsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		m.logger.Warn("issue ごとの設定ファイルを消せませんでした",
 			"settings_path", settingsPath, "error", err)
+	}
+	// **取り得る値のファイルも一緒に消す**（issue #274。設計 3-25）。設定ファイルと同じ
+	// ディレクトリに在る。**消すのは、設定ファイルのパスが置き場所の内側だと確かめたあとだけである**
+	// （上の `checkUnder`）。`settingsPath` は身元ファイルの値で、エージェントが書き換えられる。
+	signalPath := statussignal.PathInIssueDir(filepath.Dir(settingsPath))
+	if err := os.Remove(signalPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.logger.Warn("取り得る値のファイルを消せませんでした",
+			"path", signalPath, "error", err)
 	}
 }
 
