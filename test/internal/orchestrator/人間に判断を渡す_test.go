@@ -222,10 +222,16 @@ func Test_人間に判断を渡す_P008_自動化が動かした知らないStat
 		t.Fatal("Status を戻したのに、何から何へ動かしたかを issue に残していない（設計 3-29）")
 	}
 	last := moves[len(moves)-1].Body
-	for _, want := range []string{"In Progress", "In Progress (AI)", "github-project-automation"} {
+	for _, want := range []string{"In Progress", "In Progress (AI)", "tracker.automated_state_rewrite"} {
 		if !strings.Contains(last, want) {
 			t.Errorf("戻した記録に %q が無い:\n%s", want, last)
 		}
+	}
+	// **書いた主体の名前は書かない**（設計 3-54。issue #299）。読める書き手は
+	// 「同じ名前のいちばん新しいイベント」の主体で、GitHub がイベントを記録しなかった回は
+	// 別の主体を指す。**自動化と読めた回でも出さない**（出す回と出さない回を作らない）。
+	if strings.Contains(last, "github-project-automation") {
+		t.Errorf("戻した記録が、書いた主体を名指ししている:\n%s", last)
 	}
 	if logs := fx.Logs.String(); !strings.Contains(logs, "continuo が意図した Status へ戻しました") {
 		t.Errorf("戻したことをログに残していない")
@@ -248,7 +254,7 @@ func Test_人間に判断を渡す_P008_自動化が動かした知らないStat
 func Test_人間に判断を渡す_P009_書き込みが失敗しても書き戻しの回数を食い潰さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	// **書き込みの失敗は、このテストが自分で起こしているものである。**
-	fx.AllowLog("自動化が動かした Status を戻せませんでした")
+	fx.AllowLog("対応表にある Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
 	// **「戻せない」の上限（3回）には届かせない**（internal/orchestrator の
@@ -259,7 +265,7 @@ func Test_人間に判断を渡す_P009_書き込みが失敗しても書き戻�
 		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
-			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
+			return strings.Count(fx.Logs.String(), "対応表にある Status を戻せませんでした") >= want
 		})
 	}
 

@@ -21,7 +21,7 @@ import (
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
 //     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
-//     知らない Status（自動化が書いた）… 本来の Status へ戻し、**書き込みの結果で判定し直す**（設計 3-54 / 3-56）
+//     知らない Status（対応表のキー）… 本来の Status へ戻し、**書き込みの結果で判定し直す**（設計 3-54 / 3-56）
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -57,7 +57,8 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	o.applySignals(ctx, rs, signals)
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
-	// 控え、`decideAfterTurn` が「カンバンの自動化が書いたのか」を判定する。
+	// 控え、止めるときの案内（`automatedStateHint` の、対応表に無い Status の側）が読む。
+	// **書き戻すかどうかは、この記録では決めない**（設計 3-54。issue #299）。
 	current, ok, _ := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
@@ -80,7 +81,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // current: 取り直した issue。
-// mayRewrite: カンバンの自動化が書いた Status を書き戻してよいか。
+// mayRewrite: 対応表のキーの Status を書き戻してよいか（書いた主体は問わない）。
 // **書き戻したあとの判定し直しでは偽で呼ぶ**（同じ turn で二度書きに行かないため）。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) decideAfterTurn(
@@ -131,7 +132,7 @@ func (o *Orchestrator) decideAfterTurn(
 	}
 }
 
-// rewriteAndDecide は、カンバンの自動化が動かした Status を書き戻し、
+// rewriteAndDecide は、対応表のキーの Status へ動かされた issue を書き戻し、
 // **書き込みの結果が示す Status で「終わりかどうか」を判定し直す**（設計 3-56）。
 //
 // **戻す先が `terminal_states` になることはない。**`tracker.automated_state_rewrite` の
@@ -178,15 +179,15 @@ func (o *Orchestrator) rewriteAndDecide(
 		// 既に終わらせる処理が走っている（または run が終わっている）。
 		// **確保した枠を返し、turn ループを止める。**
 		claim.release()
-		o.logger.Info("自動化が動かした Status を戻しませんでした（この run は既に終わりに向かっています）",
-			"identifier", current.Identifier, "自動化が書いた Status", current.State, "戻す先", target)
+		o.logger.Info("対応表にある Status を戻しませんでした（この run は既に終わりに向かっています）",
+			"identifier", current.Identifier, "動かされた先の Status", current.State, "戻す先", target)
 		return true
 	case rewriteBusy:
 		// **巡回からの書き戻しが既に飛んでいる。**この run は終わっていないので、
 		// **turn ループを止めてはならない。**着地する書き込みが Status を直す。
 		claim.release()
-		o.logger.Info("自動化が動かした Status は、飛んでいる書き戻しに任せます（turn は続けます）",
-			"identifier", current.Identifier, "自動化が書いた Status", current.State, "戻す先", target)
+		o.logger.Info("対応表にある Status は、飛んでいる書き戻しに任せます（turn は続けます）",
+			"identifier", current.Identifier, "動かされた先の Status", current.State, "戻す先", target)
 		return false
 	}
 	// **turn ループの goroutine なので、ここは同期で書きに行ってよい。**

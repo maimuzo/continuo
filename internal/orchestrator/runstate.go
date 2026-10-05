@@ -511,8 +511,9 @@ type runState struct {
 	// 自動化に `Done` へ動かされることがある。起点を繰り越すと、そこから測る猶予が
 	// 残り1分しかない。**別の理由で止まりかけたのだから、猶予は最初から数え直す。**
 	externalMoveKind externalMoveKind
-	// automatedRewrites は、カンバンの自動化が動かした Status を書き戻した回数である
-	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	// automatedRewrites は、対応表（`tracker.automated_state_rewrite`）のキーの Status を
+	// 書き戻した回数である（設計 3-56）。**キーは動かされた先の Status（小文字にして前後の空白を落としたもの）。**
+	// **動かしたのが自動化か人間かは問わず、同じ枠で数える**（設計 3-54。issue #299）。
 	//
 	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
 	// continuo とカンバンが同じ issue の Status を押し合い続ける。
@@ -1795,10 +1796,11 @@ type rewriteClaim struct {
 // 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
 //
 // **返さないと、押し合いが1度も起きていない run が止まる。**枠は
-// 「continuo とカンバンの自動化が同じ issue を押し合っている」ことを数えるためにあり、
+// 「continuo が戻すたびに、同じ issue の Status が動かされ直している」ことを数えるためにあり
+// （動かし直しているのがカンバンの自動化か人間かは問わない。設計 3-56）、
 // **押し合いはカンバンが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
-// 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
-// 動いた時点で worker ごと止まる。**
+// 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に対応表のキーの
+// Status へ動かされた時点で worker ごと止まる。**
 func (c *rewriteClaim) release() {
 	if c == nil {
 		return
@@ -1938,7 +1940,8 @@ func (rs *runState) automatedRewriteFailureCount(state string) int {
 type automatedHandoffReason string
 
 const (
-	// handoffByPushback は「continuo とカンバンの自動化が押し合って上限に達した」である。
+	// handoffByPushback は「書き戻すたびに動かされ直して、上限に達した」である。
+	// **動かし直したのがカンバンの自動化か人間かは問わない**（設計 3-54。issue #299）。
 	handoffByPushback automatedHandoffReason = "押し合いの上限"
 	// handoffByFailures は「書き戻しがカンバンを1ミリも動かせないまま上限に達した」である。
 	handoffByFailures automatedHandoffReason = "戻せない失敗の上限"

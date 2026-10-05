@@ -1261,7 +1261,7 @@ cd ~/continuo-try
 
 | 何が起きるか | 補足 |
 | --- | --- |
-| **continuo が動いていれば、先に手を離させる** | **まだ作業中の Status なら**、`tracker.failure_state`（既定 `Blocked`）へ一時的に動かし、**その worktree の pane が閉じるのを待つ。**`--park <Status 名>` で動かす先を変えられる |
+| **continuo が動いていれば、先に手を離させる** | **まだ作業中の Status なら**、`tracker.failure_state`（既定 `Blocked`）へ一時的に動かし、**その worktree の pane が閉じるのを待つ。**`--park <Status 名>` で動かす先を変えられる（作業中の Status と、`tracker.automated_state_rewrite` の左に書いた Status は断る） |
 | **pane が閉じなければ、何も消さずに止まる** | 上限は `herdr.read_timeout_ms` の10倍（既定50秒）。**終了コードは 1** |
 | **失うものがあれば、何も消さずに止まる** | コミットされていない変更・push されていない commit のこと。**それでも消すなら `--force`。**終了コードは 1 |
 | **片付けたあとの Status は動かさない** | 「Status は動かしていません。カンバンで決めてください。」と出る。**動かす先が決まっているなら `--to "<Status 名>"`** |
