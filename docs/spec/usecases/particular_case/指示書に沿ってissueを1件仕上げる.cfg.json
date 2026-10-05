@@ -3,12 +3,12 @@
   "usecase_name": "指示書に沿ってissueを1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿ってissueを1件仕上げる.rucm.md",
-    "rucm_block_sha256": "a5826de2290199c0db738ae921c2d3ea2c3ffee58abc454e38d4c049888a99c2"
+    "rucm_block_sha256": "3eeeb5471b9c2863e0c04d364ec4f43a6910e4873b40893dea12f85da9da7831"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。"
+      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。"
     },
     "文面が届かない": {
       "rfs": {
@@ -19,29 +19,47 @@
       },
       "postcondition": "エージェントは指示書に沿った作業を始めていない。システムが変数を展開できなかった場合は、issue の Status は failure_state の選択肢であり、利用者が WORKFLOW.md の本文のテンプレートを直して continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。herdr が送信を受け付けなかった場合は、issue を1件処理する の送信の失敗か一時的な送信の失敗のフローが続きを受ける。"
     },
+    "別の人が担当になっている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。"
+    },
+    "担当を確かめられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、担当を確かめられなかったことと commit の在りかの報告のコメントがある。報告のコメントは「担当が移った」と書いていない。issue の Status は blocked の遷移先である。"
+    },
     "マージが始まる前に断られる": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          6
         ]
       },
       "postcondition": "前の試行が残した変更が commit されている。エージェントは分岐元をもう一度取り込みに行く。"
     },
-    "マージが衝突する": {
+    "衝突を解かずに止まる": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          6
         ]
       },
-      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は応答で取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
+      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue に、決められなかった箇所と理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、決められなかった箇所と理由を読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
     },
     "読めない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          10
+          11
         ]
       },
       "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。"
@@ -50,7 +68,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          12
+          13
         ]
       },
       "postcondition": "issue に計画のコメントがある。issue に、設計レビューへ進めてよいかを訊く報告のコメントがある。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者は計画のコメントを読む。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。"
@@ -62,13 +80,13 @@
           1
         ]
       },
-      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。"
+      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。"
     },
     "了承も回答も無い": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          14
         ]
       },
       "postcondition": "エージェントは設計レビューへ進んでいない。issue に了承も回答も無いことを知らせる報告のコメントがある。issue の Status は blocked の遷移先である。利用者が了承か回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。"
@@ -77,7 +95,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          14
         ]
       },
       "postcondition": "issue に新しい計画のコメントがある。いちばん新しい計画のコメントが正である。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。"
@@ -86,7 +104,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          14
         ]
       },
       "postcondition": "issue に新しい計画のコメントがある。エージェントは実装を進めていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから回し直す。"
@@ -95,7 +113,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          14
+          15
         ]
       },
       "postcondition": "エージェントは計画を書き直していない。エージェントは計画のレビューを回し直していない。エージェントは実装の続きから作業している。"
@@ -104,7 +122,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          14
+          15
         ]
       },
       "postcondition": "エージェントは実装をやり直していない。エージェントは pull request を出すところから作業している。"
@@ -113,7 +131,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          14
+          15
         ]
       },
       "postcondition": "pull request は1本のままである。エージェントは実装のレビューの続きから作業している。"
@@ -122,8 +140,8 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          16,
-          21
+          17,
+          22
         ]
       },
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。"
@@ -132,16 +150,16 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          19
+          20
         ]
       },
-      "postcondition": "pull request は出ていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。"
+      "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。"
     },
     "まとめて直した": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          23
+          24
         ]
       },
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。"
@@ -152,11 +170,20 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            17
+            18
           ]
         }
       ],
       "postcondition": "issue に進捗報告のコメントがある。エージェントは作業を続けている。"
+    },
+    "進捗報告を書く前に止まる": {
+      "rfs": {
+        "flow": "進捗報告の間隔を超える",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。"
     },
     "判断に迷って止まる": {
       "when": "エージェントが扱いに迷った場合",
@@ -164,7 +191,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            17
+            18
           ]
         }
       ],
@@ -176,7 +203,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            6
+            7
           ]
         }
       ],
@@ -188,7 +215,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            7
+            8
           ]
         }
       ],
@@ -200,7 +227,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            8
+            9
           ]
         }
       ],
@@ -225,194 +252,208 @@
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。"
+      "statement": "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "エージェントは分岐元を remote から取ってくる。"
+      "statement": "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。"
+      "statement": "エージェントは分岐元を remote から取ってくる。"
     },
     {
       "id": "BASIC FLOW-6",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "エージェントは issue の本文とコメントを JSON で読む。"
+      "statement": "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。"
     },
     {
       "id": "BASIC FLOW-7",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。"
+      "statement": "エージェントは issue の本文とコメントを、1件残らず JSON で読む。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。"
+      "statement": "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。"
     },
     {
       "id": "BASIC FLOW-9",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "エージェントは WORKFLOW.md の本文が挙げる文書を読む。"
+      "statement": "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。"
     },
     {
       "id": "BASIC FLOW-10",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "エージェントは VALIDATES THAT 読む対象を全部読めている。"
+      "statement": "エージェントは WORKFLOW.md の本文が挙げる文書を読む。"
     },
     {
       "id": "BASIC FLOW-11",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。"
+      "statement": "エージェントは VALIDATES THAT 読む対象を全部読めている。"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。"
+      "statement": "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。"
+      "statement": "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "エージェントは VALIDATES THAT 次に行う段が設計レビューである。"
+      "statement": "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。"
     },
     {
       "id": "BASIC FLOW-15",
-      "type": "include",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 15,
+      "statement": "エージェントは VALIDATES THAT 次に行う段が設計レビューである。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 16,
       "statement": "INCLUDE USE CASE レビューを回す",
       "include": "レビューを回す"
     },
     {
-      "id": "BASIC FLOW-16",
+      "id": "BASIC FLOW-17",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 16,
+      "step": 17,
       "statement": "エージェントは VALIDATES THAT 計画のレビューが収まって終わっている。"
     },
     {
-      "id": "BASIC FLOW-17",
+      "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 17,
+      "step": 18,
       "statement": "エージェントは実装する。"
     },
     {
-      "id": "BASIC FLOW-18",
+      "id": "BASIC FLOW-19",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 18,
+      "step": 19,
       "statement": "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
       "include": "成果をpushしてpullrequestを出す"
     },
     {
-      "id": "BASIC FLOW-19",
+      "id": "BASIC FLOW-20",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 19,
+      "step": 20,
       "statement": "エージェントは VALIDATES THAT 行き先の pull request がある。"
     },
     {
-      "id": "BASIC FLOW-20",
+      "id": "BASIC FLOW-21",
       "type": "include",
       "flow": "BASIC FLOW",
-      "step": 20,
+      "step": 21,
       "statement": "INCLUDE USE CASE レビューを回す",
       "include": "レビューを回す"
     },
     {
-      "id": "BASIC FLOW-21",
+      "id": "BASIC FLOW-22",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 21,
+      "step": 22,
       "statement": "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。"
     },
     {
-      "id": "BASIC FLOW-22",
+      "id": "BASIC FLOW-23",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 22,
-      "statement": "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。"
-    },
-    {
-      "id": "BASIC FLOW-23",
-      "type": "condition",
-      "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。"
+      "statement": "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。"
     },
     {
       "id": "BASIC FLOW-24",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "エージェントは何をしたかを issue へ新しいコメントとして書く。"
+      "statement": "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。"
     },
     {
       "id": "BASIC FLOW-25",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "エージェントは応答の最後に完了の表明を1行書く。"
+      "statement": "エージェントは issue と pull request を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。"
     },
     {
       "id": "BASIC FLOW-26",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
+      "statement": "エージェントは何をしたかと、実行した指示以外の指示を、issue へ新しいコメントとして書く。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムはエージェントの会話の記録から表明を読む。"
+      "statement": "エージェントは応答の最後に完了の表明を1行書く。"
     },
     {
       "id": "BASIC FLOW-28",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 28,
-      "statement": "システムはカンバンの issue の Status に表明の値の遷移先を書く。"
+      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
     },
     {
       "id": "BASIC FLOW-29",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 29,
+      "statement": "システムはエージェントの会話の記録から表明を読む。"
+    },
+    {
+      "id": "BASIC FLOW-30",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 30,
+      "statement": "システムはカンバンの issue の Status に表明の値の遷移先を書く。"
+    },
+    {
+      "id": "BASIC FLOW-31",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 31,
       "statement": "システムは run を終える。"
     },
     {
@@ -430,6 +471,76 @@
       "statement": "ABORT"
     },
     {
+      "id": "別の人が担当になっている-1",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 1,
+      "statement": "エージェントは手元の変更を commit する。"
+    },
+    {
+      "id": "別の人が担当になっている-2",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 2,
+      "statement": "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "別の人が担当になっている-3",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 3,
+      "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
+    },
+    {
+      "id": "別の人が担当になっている-4",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 4,
+      "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
+    },
+    {
+      "id": "別の人が担当になっている-5",
+      "type": "abort",
+      "flow": "別の人が担当になっている",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "担当を確かめられない-1",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 1,
+      "statement": "エージェントは手元の変更を commit する。"
+    },
+    {
+      "id": "担当を確かめられない-2",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 2,
+      "statement": "エージェントは、担当を確かめられなかったことと、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "担当を確かめられない-3",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 3,
+      "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
+    },
+    {
+      "id": "担当を確かめられない-4",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 4,
+      "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
+    },
+    {
+      "id": "担当を確かめられない-5",
+      "type": "abort",
+      "flow": "担当を確かめられない",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
       "id": "マージが始まる前に断られる-1",
       "type": "action",
       "flow": "マージが始まる前に断られる",
@@ -441,48 +552,55 @@
       "type": "resume",
       "flow": "マージが始まる前に断られる",
       "step": 2,
-      "statement": "RESUME STEP 4"
+      "statement": "RESUME STEP 5"
     },
     {
-      "id": "マージが衝突する-1",
+      "id": "衝突を解かずに止まる-1",
       "type": "action",
-      "flow": "マージが衝突する",
+      "flow": "衝突を解かずに止まる",
       "step": 1,
+      "statement": "エージェントは衝突した箇所を全部読む。"
+    },
+    {
+      "id": "衝突を解かずに止まる-2",
+      "type": "action",
+      "flow": "衝突を解かずに止まる",
+      "step": 2,
       "statement": "エージェントはマージを取り込む前へ戻す。"
     },
     {
-      "id": "マージが衝突する-2",
+      "id": "衝突を解かずに止まる-3",
       "type": "action",
-      "flow": "マージが衝突する",
-      "step": 2,
+      "flow": "衝突を解かずに止まる",
+      "step": 3,
       "statement": "エージェントは、push していない commit が残っていれば、push する。"
     },
     {
-      "id": "マージが衝突する-3",
+      "id": "衝突を解かずに止まる-4",
       "type": "action",
-      "flow": "マージが衝突する",
-      "step": 3,
-      "statement": "エージェントは取り込めなかったことを応答に書く。"
+      "flow": "衝突を解かずに止まる",
+      "step": 4,
+      "statement": "エージェントは、どのファイルのどこを、なぜ決められなかったかを、報告のコメントとして issue へ書く。"
     },
     {
-      "id": "マージが衝突する-4",
+      "id": "衝突を解かずに止まる-5",
       "type": "action",
-      "flow": "マージが衝突する",
-      "step": 4,
+      "flow": "衝突を解かずに止まる",
+      "step": 5,
       "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
     },
     {
-      "id": "マージが衝突する-5",
+      "id": "衝突を解かずに止まる-6",
       "type": "action",
-      "flow": "マージが衝突する",
-      "step": 5,
+      "flow": "衝突を解かずに止まる",
+      "step": 6,
       "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
     },
     {
-      "id": "マージが衝突する-6",
+      "id": "衝突を解かずに止まる-7",
       "type": "abort",
-      "flow": "マージが衝突する",
-      "step": 6,
+      "flow": "衝突を解かずに止まる",
+      "step": 7,
       "statement": "ABORT"
     },
     {
@@ -588,7 +706,7 @@
       "type": "action",
       "flow": "対応しないと決める",
       "step": 1,
-      "statement": "エージェントは対応しない理由を issue へコメントする。"
+      "statement": "エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする。"
     },
     {
       "id": "対応しないと決める-2",
@@ -763,7 +881,7 @@
       "type": "resume",
       "flow": "実装の続きから始める",
       "step": 2,
-      "statement": "RESUME STEP 17"
+      "statement": "RESUME STEP 18"
     },
     {
       "id": "pullrequestを出すところから始める-1",
@@ -777,7 +895,7 @@
       "type": "resume",
       "flow": "pullrequestを出すところから始める",
       "step": 2,
-      "statement": "RESUME STEP 18"
+      "statement": "RESUME STEP 19"
     },
     {
       "id": "実装レビューの続きから始める-1",
@@ -791,7 +909,7 @@
       "type": "resume",
       "flow": "実装レビューの続きから始める",
       "step": 2,
-      "statement": "RESUME STEP 20"
+      "statement": "RESUME STEP 21"
     },
     {
       "id": "レビューが止まる-1",
@@ -841,48 +959,55 @@
       "type": "action",
       "flow": "まとめて直した",
       "step": 4,
-      "statement": "エージェントは、まとめて直した issue へ書いたコメントの URL を並べた成果のコメントを、担当の issue へ新しく書く。"
+      "statement": "エージェントは issue と pull request とまとめて直した issue を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。"
     },
     {
       "id": "まとめて直した-5",
       "type": "action",
       "flow": "まとめて直した",
       "step": 5,
-      "statement": "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。"
+      "statement": "エージェントは、まとめて直した issue へ書いたコメントの URL と、実行した指示以外の指示を並べた成果のコメントを、担当の issue へ新しく書く。"
     },
     {
       "id": "まとめて直した-6",
       "type": "action",
       "flow": "まとめて直した",
       "step": 6,
-      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
+      "statement": "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。"
     },
     {
       "id": "まとめて直した-7",
       "type": "action",
       "flow": "まとめて直した",
       "step": 7,
-      "statement": "システムはエージェントの会話の記録から表明を読む。"
+      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
     },
     {
       "id": "まとめて直した-8",
       "type": "action",
       "flow": "まとめて直した",
       "step": 8,
-      "statement": "システムは表明が指す issue のうち書ける issue ごとに、カンバンの Status に表明の値の遷移先を書く。"
+      "statement": "システムはエージェントの会話の記録から表明を読む。"
     },
     {
       "id": "まとめて直した-9",
       "type": "action",
       "flow": "まとめて直した",
       "step": 9,
-      "statement": "システムは run を終える。"
+      "statement": "システムは表明が指す issue のうち書ける issue ごとに、カンバンの Status に表明の値の遷移先を書く。"
     },
     {
       "id": "まとめて直した-10",
-      "type": "abort",
+      "type": "action",
       "flow": "まとめて直した",
       "step": 10,
+      "statement": "システムは run を終える。"
+    },
+    {
+      "id": "まとめて直した-11",
+      "type": "abort",
+      "flow": "まとめて直した",
+      "step": 11,
       "statement": "ABORT"
     },
     {
@@ -895,10 +1020,31 @@
     },
     {
       "id": "進捗報告の間隔を超える-2",
-      "type": "resume",
+      "type": "condition",
       "flow": "進捗報告の間隔を超える",
       "step": 2,
-      "statement": "RESUME STEP 17"
+      "statement": "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。"
+    },
+    {
+      "id": "進捗報告の間隔を超える-3",
+      "type": "resume",
+      "flow": "進捗報告の間隔を超える",
+      "step": 3,
+      "statement": "RESUME STEP 18"
+    },
+    {
+      "id": "進捗報告を書く前に止まる-1",
+      "type": "action",
+      "flow": "進捗報告を書く前に止まる",
+      "step": 1,
+      "statement": "システムは run を終える。"
+    },
+    {
+      "id": "進捗報告を書く前に止まる-2",
+      "type": "abort",
+      "flow": "進捗報告を書く前に止まる",
+      "step": 2,
+      "statement": "ABORT"
     },
     {
       "id": "判断に迷って止まる-1",
@@ -954,7 +1100,7 @@
       "type": "resume",
       "flow": "命令として扱わないissueの記述",
       "step": 3,
-      "statement": "RESUME STEP 6"
+      "statement": "RESUME STEP 7"
     },
     {
       "id": "命令として扱わないpullrequestの記述-1",
@@ -975,7 +1121,7 @@
       "type": "resume",
       "flow": "命令として扱わないpullrequestの記述",
       "step": 3,
-      "statement": "RESUME STEP 7"
+      "statement": "RESUME STEP 8"
     },
     {
       "id": "命令として扱わない記録の記述-1",
@@ -996,7 +1142,7 @@
       "type": "resume",
       "flow": "命令として扱わない記録の記述",
       "step": 3,
-      "statement": "RESUME STEP 8"
+      "statement": "RESUME STEP 9"
     }
   ],
   "edges": [
@@ -1020,7 +1166,20 @@
     {
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "別の人が担当になっている-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "担当を確かめられない-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
     },
     {
       "from": "BASIC FLOW-4",
@@ -1030,31 +1189,25 @@
     {
       "from": "BASIC FLOW-5",
       "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "true",
       "condition": "取り込むものが在る場合に、取ってきた分岐元をマージできる"
     },
     {
-      "from": "BASIC FLOW-5",
+      "from": "BASIC FLOW-6",
       "to": "マージが始まる前に断られる-1",
       "kind": "false",
       "condition": "NOT 取り込むものが在る場合に、取ってきた分岐元をマージできる"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "マージが衝突する-1",
+      "from": "BASIC FLOW-6",
+      "to": "衝突を解かずに止まる-1",
       "kind": "false",
       "condition": "NOT 取り込むものが在る場合に、取ってきた分岐元をマージできる"
-    },
-    {
-      "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-7",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-6",
-      "to": "命令として扱わないissueの記述-1",
-      "kind": "global",
-      "condition": "issue の本文かコメントの trusted_body か trusted_comment が true でない場合"
     },
     {
       "from": "BASIC FLOW-7",
@@ -1063,9 +1216,9 @@
     },
     {
       "from": "BASIC FLOW-7",
-      "to": "命令として扱わないpullrequestの記述-1",
+      "to": "命令として扱わないissueの記述-1",
       "kind": "global",
-      "condition": "pull request の本文を読んだ場合、または pull request のコメントかレビューの trusted_comment が true でない場合"
+      "condition": "issue の本文かコメントの trusted_body か trusted_comment が true でない場合"
     },
     {
       "from": "BASIC FLOW-8",
@@ -1074,9 +1227,9 @@
     },
     {
       "from": "BASIC FLOW-8",
-      "to": "命令として扱わない記録の記述-1",
+      "to": "命令として扱わないpullrequestの記述-1",
       "kind": "global",
-      "condition": "辿って読んだ issue か pull request の記述の trusted_body か trusted_comment が true でない場合"
+      "condition": "pull request の本文を読んだ場合、または pull request のコメントかレビューの trusted_comment が true でない場合"
     },
     {
       "from": "BASIC FLOW-9",
@@ -1084,115 +1237,109 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-9",
+      "to": "命令として扱わない記録の記述-1",
+      "kind": "global",
+      "condition": "辿って読んだ issue か pull request の記述の trusted_body か trusted_comment が true でない場合"
+    },
+    {
       "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
       "kind": "true",
       "condition": "読む対象を全部読めている"
     },
     {
-      "from": "BASIC FLOW-10",
+      "from": "BASIC FLOW-11",
       "to": "読めない-1",
       "kind": "false",
       "condition": "NOT 読む対象を全部読めている"
     },
     {
-      "from": "BASIC FLOW-11",
-      "to": "BASIC FLOW-12",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "true",
-      "condition": "計画の印が付いた自分のコメントが issue にある"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "計画を書いて人間確認で止まる-1",
-      "kind": "false",
-      "condition": "NOT 計画の印が付いた自分のコメントが issue にある"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
       "kind": "true",
-      "condition": "人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
+      "condition": "計画の印が付いた自分のコメントが issue にある"
     },
     {
       "from": "BASIC FLOW-13",
-      "to": "了承も回答も無い-1",
+      "to": "計画を書いて人間確認で止まる-1",
       "kind": "false",
-      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
-    },
-    {
-      "from": "BASIC FLOW-13",
-      "to": "計画の直しを求められる-1",
-      "kind": "false",
-      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
-    },
-    {
-      "from": "BASIC FLOW-13",
-      "to": "回答が次を明示していない-1",
-      "kind": "false",
-      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
+      "condition": "NOT 計画の印が付いた自分のコメントが issue にある"
     },
     {
       "from": "BASIC FLOW-14",
       "to": "BASIC FLOW-15",
       "kind": "true",
-      "condition": "次に行う段が設計レビューである"
+      "condition": "人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
     },
     {
       "from": "BASIC FLOW-14",
+      "to": "了承も回答も無い-1",
+      "kind": "false",
+      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "計画の直しを求められる-1",
+      "kind": "false",
+      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "回答が次を明示していない-1",
+      "kind": "false",
+      "condition": "NOT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "true",
+      "condition": "次に行う段が設計レビューである"
+    },
+    {
+      "from": "BASIC FLOW-15",
       "to": "実装の続きから始める-1",
       "kind": "false",
       "condition": "NOT 次に行う段が設計レビューである"
     },
     {
-      "from": "BASIC FLOW-14",
+      "from": "BASIC FLOW-15",
       "to": "pullrequestを出すところから始める-1",
       "kind": "false",
       "condition": "NOT 次に行う段が設計レビューである"
     },
     {
-      "from": "BASIC FLOW-14",
+      "from": "BASIC FLOW-15",
       "to": "実装レビューの続きから始める-1",
       "kind": "false",
       "condition": "NOT 次に行う段が設計レビューである"
     },
     {
-      "from": "BASIC FLOW-15",
-      "to": "BASIC FLOW-16",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
-      "kind": "true",
-      "condition": "計画のレビューが収まって終わっている"
-    },
-    {
-      "from": "BASIC FLOW-16",
-      "to": "レビューが止まる-1",
-      "kind": "false",
-      "condition": "NOT 計画のレビューが収まって終わっている"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "計画のレビューが収まって終わっている"
     },
     {
       "from": "BASIC FLOW-17",
-      "to": "進捗報告の間隔を超える-1",
-      "kind": "global",
-      "condition": "エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合"
-    },
-    {
-      "from": "BASIC FLOW-17",
-      "to": "判断に迷って止まる-1",
-      "kind": "global",
-      "condition": "エージェントが扱いに迷った場合"
+      "to": "レビューが止まる-1",
+      "kind": "false",
+      "condition": "NOT 計画のレビューが収まって終わっている"
     },
     {
       "from": "BASIC FLOW-18",
@@ -1200,55 +1347,67 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-18",
+      "to": "進捗報告の間隔を超える-1",
+      "kind": "global",
+      "condition": "エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "判断に迷って止まる-1",
+      "kind": "global",
+      "condition": "エージェントが扱いに迷った場合"
+    },
+    {
       "from": "BASIC FLOW-19",
       "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
       "kind": "true",
       "condition": "行き先の pull request がある"
     },
     {
-      "from": "BASIC FLOW-19",
+      "from": "BASIC FLOW-20",
       "to": "pullrequestが出ていない-1",
       "kind": "false",
       "condition": "NOT 行き先の pull request がある"
     },
     {
-      "from": "BASIC FLOW-20",
-      "to": "BASIC FLOW-21",
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-22",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-21",
-      "to": "BASIC FLOW-22",
+      "from": "BASIC FLOW-22",
+      "to": "BASIC FLOW-23",
       "kind": "true",
       "condition": "実装のレビューが収まって終わっている"
     },
     {
-      "from": "BASIC FLOW-21",
+      "from": "BASIC FLOW-22",
       "to": "レビューが止まる-1",
       "kind": "false",
       "condition": "NOT 実装のレビューが収まって終わっている"
     },
     {
-      "from": "BASIC FLOW-22",
-      "to": "BASIC FLOW-23",
-      "kind": "seq"
-    },
-    {
       "from": "BASIC FLOW-23",
       "to": "BASIC FLOW-24",
-      "kind": "true",
-      "condition": "この run が直した issue が担当の issue 1件だけである"
-    },
-    {
-      "from": "BASIC FLOW-23",
-      "to": "まとめて直した-2",
-      "kind": "false",
-      "condition": "NOT この run が直した issue が担当の issue 1件だけである"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-24",
       "to": "BASIC FLOW-25",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "この run が直した issue が担当の issue 1件だけである"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "まとめて直した-2",
+      "kind": "false",
+      "condition": "NOT この run が直した issue が担当の issue 1件だけである"
     },
     {
       "from": "BASIC FLOW-25",
@@ -1271,8 +1430,58 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
+      "kind": "seq"
+    },
+    {
       "from": "文面が届かない-1",
       "to": "文面が届かない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-1",
+      "to": "別の人が担当になっている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-2",
+      "to": "別の人が担当になっている-3",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-3",
+      "to": "別の人が担当になっている-4",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-4",
+      "to": "別の人が担当になっている-5",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-1",
+      "to": "担当を確かめられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-2",
+      "to": "担当を確かめられない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-3",
+      "to": "担当を確かめられない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-4",
+      "to": "担当を確かめられない-5",
       "kind": "seq"
     },
     {
@@ -1282,32 +1491,37 @@
     },
     {
       "from": "マージが始まる前に断られる-2",
-      "to": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
       "kind": "resume"
     },
     {
-      "from": "マージが衝突する-1",
-      "to": "マージが衝突する-2",
+      "from": "衝突を解かずに止まる-1",
+      "to": "衝突を解かずに止まる-2",
       "kind": "seq"
     },
     {
-      "from": "マージが衝突する-2",
-      "to": "マージが衝突する-3",
+      "from": "衝突を解かずに止まる-2",
+      "to": "衝突を解かずに止まる-3",
       "kind": "seq"
     },
     {
-      "from": "マージが衝突する-3",
-      "to": "マージが衝突する-4",
+      "from": "衝突を解かずに止まる-3",
+      "to": "衝突を解かずに止まる-4",
       "kind": "seq"
     },
     {
-      "from": "マージが衝突する-4",
-      "to": "マージが衝突する-5",
+      "from": "衝突を解かずに止まる-4",
+      "to": "衝突を解かずに止まる-5",
       "kind": "seq"
     },
     {
-      "from": "マージが衝突する-5",
-      "to": "マージが衝突する-6",
+      "from": "衝突を解かずに止まる-5",
+      "to": "衝突を解かずに止まる-6",
+      "kind": "seq"
+    },
+    {
+      "from": "衝突を解かずに止まる-6",
+      "to": "衝突を解かずに止まる-7",
       "kind": "seq"
     },
     {
@@ -1484,7 +1698,7 @@
     },
     {
       "from": "実装の続きから始める-2",
-      "to": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
       "kind": "resume"
     },
     {
@@ -1494,7 +1708,7 @@
     },
     {
       "from": "pullrequestを出すところから始める-2",
-      "to": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
       "kind": "resume"
     },
     {
@@ -1504,7 +1718,7 @@
     },
     {
       "from": "実装レビューの続きから始める-2",
-      "to": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
       "kind": "resume"
     },
     {
@@ -1565,14 +1779,36 @@
       "kind": "seq"
     },
     {
+      "from": "まとめて直した-10",
+      "to": "まとめて直した-11",
+      "kind": "seq"
+    },
+    {
       "from": "進捗報告の間隔を超える-1",
       "to": "進捗報告の間隔を超える-2",
       "kind": "seq"
     },
     {
       "from": "進捗報告の間隔を超える-2",
-      "to": "BASIC FLOW-17",
+      "to": "進捗報告の間隔を超える-3",
+      "kind": "true",
+      "condition": "進捗報告を書いたあとも作業を続けている"
+    },
+    {
+      "from": "進捗報告の間隔を超える-2",
+      "to": "進捗報告を書く前に止まる-1",
+      "kind": "false",
+      "condition": "NOT 進捗報告を書いたあとも作業を続けている"
+    },
+    {
+      "from": "進捗報告の間隔を超える-3",
+      "to": "BASIC FLOW-18",
       "kind": "resume"
+    },
+    {
+      "from": "進捗報告を書く前に止まる-1",
+      "to": "進捗報告を書く前に止まる-2",
+      "kind": "seq"
     },
     {
       "from": "判断に迷って止まる-1",
@@ -1606,7 +1842,7 @@
     },
     {
       "from": "命令として扱わないissueの記述-3",
-      "to": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "resume"
     },
     {
@@ -1621,7 +1857,7 @@
     },
     {
       "from": "命令として扱わないpullrequestの記述-3",
-      "to": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
       "kind": "resume"
     },
     {
@@ -1636,7 +1872,7 @@
     },
     {
       "from": "命令として扱わない記録の記述-3",
-      "to": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
       "kind": "resume"
     }
   ],
@@ -1645,7 +1881,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
+      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1675,16 +1911,19 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -1699,9 +1938,10 @@
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
-        "エージェントは何をしたかを issue へ新しいコメントとして書く。",
+        "エージェントは issue と pull request を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは何をしたかと、実行した指示以外の指示を、issue へ新しいコメントとして書く。",
         "エージェントは応答の最後に完了の表明を1行書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -1738,6 +1978,7 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-4",
@@ -1746,16 +1987,18 @@
         "まとめて直した-7",
         "まとめて直した-8",
         "まとめて直した-9",
-        "まとめて直した-10"
+        "まとめて直した-10",
+        "まとめて直した-11"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -1770,12 +2013,13 @@
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
         "UNTIL まとめて直した issue を全部書き終えている",
-        "エージェントは、まとめて直した issue へ書いたコメントの URL を並べた成果のコメントを、担当の issue へ新しく書く。",
+        "エージェントは issue と pull request とまとめて直した issue を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは、まとめて直した issue へ書いたコメントの URL と、実行した指示以外の指示を並べた成果のコメントを、担当の issue へ新しく書く。",
         "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -1813,6 +2057,7 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-2"
@@ -1820,11 +2065,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -1839,7 +2085,7 @@
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
@@ -1875,17 +2121,19 @@
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "レビューが止まる-1",
         "レビューが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -1909,7 +2157,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "pullrequestが出ていない",
-      "postcondition": "pull request は出ていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。",
+      "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1930,17 +2178,19 @@
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
+        "BASIC FLOW-20",
         "pullrequestが出ていない-1",
         "pullrequestが出ていない-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -1981,18 +2231,21 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "進捗報告の間隔を超える-1",
         "進捗報告の間隔を超える-2",
-        "BASIC FLOW-17"
+        "進捗報告の間隔を超える-3",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2005,12 +2258,69 @@
         "エージェントは実装する。",
         "CONDITION: エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合",
         "INCLUDE USE CASE 進捗報告を書く",
-        "RESUME STEP 17",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "RESUME STEP 18",
         "エージェントは実装する。"
       ]
     },
     {
       "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "進捗報告を書く前に止まる",
+      "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "進捗報告の間隔を超える-1",
+        "進捗報告の間隔を超える-2",
+        "進捗報告を書く前に止まる-1",
+        "進捗報告を書く前に止まる-2"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
+        "エージェントは分岐元を remote から取ってくる。",
+        "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
+        "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
+        "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
+        "エージェントは VALIDATES THAT 読む対象を全部読めている。",
+        "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。",
+        "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。",
+        "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。",
+        "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
+        "INCLUDE USE CASE レビューを回す",
+        "エージェントは VALIDATES THAT 計画のレビューが収まって終わっている。",
+        "エージェントは実装する。",
+        "CONDITION: エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合",
+        "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "CONDITION: NOT 進捗報告を書いたあとも作業を続けている",
+        "システムは run を終える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "判断に迷って止まる",
       "postcondition": "issue に迷った内容の報告のコメントがある。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2032,6 +2342,7 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -2041,11 +2352,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2065,7 +2377,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2086,17 +2398,19 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "レビューが止まる-1",
         "レビューが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2112,10 +2426,10 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
+      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2131,9 +2445,9 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
@@ -2145,16 +2459,19 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2164,15 +2481,16 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
-        "エージェントは何をしたかを issue へ新しいコメントとして書く。",
+        "エージェントは issue と pull request を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは何をしたかと、実行した指示以外の指示を、issue へ新しいコメントとして書く。",
         "エージェントは応答の最後に完了の表明を1行書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2181,7 +2499,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2200,15 +2518,16 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-4",
@@ -2217,16 +2536,18 @@
         "まとめて直した-7",
         "まとめて直した-8",
         "まとめて直した-9",
-        "まとめて直した-10"
+        "まとめて直した-10",
+        "まとめて直した-11"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2236,18 +2557,19 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
         "UNTIL まとめて直した issue を全部書き終えている",
-        "エージェントは、まとめて直した issue へ書いたコメントの URL を並べた成果のコメントを、担当の issue へ新しく書く。",
+        "エージェントは issue と pull request とまとめて直した issue を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは、まとめて直した issue へ書いたコメントの URL と、実行した指示以外の指示を並べた成果のコメントを、担当の issue へ新しく書く。",
         "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2257,7 +2579,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2276,15 +2598,16 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-2"
@@ -2292,11 +2615,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2306,13 +2630,13 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
@@ -2322,7 +2646,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2341,24 +2665,26 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "レビューが止まる-1",
         "レビューが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2368,7 +2694,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
@@ -2380,10 +2706,10 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "pullrequestが出ていない",
-      "postcondition": "pull request は出ていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。",
+      "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2399,22 +2725,24 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
+        "BASIC FLOW-20",
         "pullrequestが出ていない-1",
         "pullrequestが出ていない-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2424,7 +2752,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
@@ -2434,7 +2762,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "cycle",
       "terminal_flow": "進捗報告の間隔を超える",
       "postcondition": "issue に進捗報告のコメントがある。エージェントは作業を続けている。",
@@ -2453,21 +2781,24 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "進捗報告の間隔を超える-1",
         "進捗報告の間隔を超える-2",
-        "BASIC FLOW-17"
+        "進捗報告の間隔を超える-3",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2477,16 +2808,74 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "CONDITION: エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合",
         "INCLUDE USE CASE 進捗報告を書く",
-        "RESUME STEP 17",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "RESUME STEP 18",
         "エージェントは実装する。"
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
+      "terminal": "abort",
+      "terminal_flow": "進捗報告を書く前に止まる",
+      "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "実装の続きから始める-1",
+        "実装の続きから始める-2",
+        "BASIC FLOW-18",
+        "進捗報告の間隔を超える-1",
+        "進捗報告の間隔を超える-2",
+        "進捗報告を書く前に止まる-1",
+        "進捗報告を書く前に止まる-2"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
+        "エージェントは分岐元を remote から取ってくる。",
+        "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
+        "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
+        "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
+        "エージェントは VALIDATES THAT 読む対象を全部読めている。",
+        "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。",
+        "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。",
+        "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。",
+        "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
+        "CONDITION: NOT 次に行う段が設計レビューである",
+        "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
+        "RESUME STEP 18",
+        "エージェントは実装する。",
+        "CONDITION: エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合",
+        "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "CONDITION: NOT 進捗報告を書いたあとも作業を続けている",
+        "システムは run を終える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "判断に迷って止まる",
       "postcondition": "issue に迷った内容の報告のコメントがある。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2505,9 +2894,10 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装の続きから始める-1",
         "実装の続きから始める-2",
-        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -2517,11 +2907,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2531,7 +2922,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
-        "RESUME STEP 17",
+        "RESUME STEP 18",
         "エージェントは実装する。",
         "CONDITION: エージェントが扱いに迷った場合",
         "エージェントは迷った内容を報告のコメントとして issue へ書く。",
@@ -2542,10 +2933,10 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P018",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
+      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2561,9 +2952,9 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "pullrequestを出すところから始める-1",
         "pullrequestを出すところから始める-2",
-        "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
@@ -2574,16 +2965,19 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2593,14 +2987,15 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit が remote に載っていることを確かめる。",
-        "RESUME STEP 18",
+        "RESUME STEP 19",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
-        "エージェントは何をしたかを issue へ新しいコメントとして書く。",
+        "エージェントは issue と pull request を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは何をしたかと、実行した指示以外の指示を、issue へ新しいコメントとして書く。",
         "エージェントは応答の最後に完了の表明を1行書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2609,7 +3004,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2628,14 +3023,15 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "pullrequestを出すところから始める-1",
         "pullrequestを出すところから始める-2",
-        "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-4",
@@ -2644,16 +3040,18 @@
         "まとめて直した-7",
         "まとめて直した-8",
         "まとめて直した-9",
-        "まとめて直した-10"
+        "まとめて直した-10",
+        "まとめて直した-11"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2663,17 +3061,18 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit が remote に載っていることを確かめる。",
-        "RESUME STEP 18",
+        "RESUME STEP 19",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
         "UNTIL まとめて直した issue を全部書き終えている",
-        "エージェントは、まとめて直した issue へ書いたコメントの URL を並べた成果のコメントを、担当の issue へ新しく書く。",
+        "エージェントは issue と pull request とまとめて直した issue を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは、まとめて直した issue へ書いたコメントの URL と、実行した指示以外の指示を並べた成果のコメントを、担当の issue へ新しく書く。",
         "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2683,7 +3082,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P020",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2702,14 +3101,15 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "pullrequestを出すところから始める-1",
         "pullrequestを出すところから始める-2",
-        "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-2"
@@ -2717,11 +3117,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2731,12 +3132,12 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit が remote に載っていることを確かめる。",
-        "RESUME STEP 18",
+        "RESUME STEP 19",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
@@ -2746,7 +3147,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2765,23 +3166,25 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "pullrequestを出すところから始める-1",
         "pullrequestを出すところから始める-2",
-        "BASIC FLOW-18",
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "レビューが止まる-1",
         "レビューが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2791,7 +3194,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit が remote に載っていることを確かめる。",
-        "RESUME STEP 18",
+        "RESUME STEP 19",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "INCLUDE USE CASE レビューを回す",
@@ -2802,10 +3205,10 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "pullrequestが出ていない",
-      "postcondition": "pull request は出ていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。",
+      "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2821,21 +3224,23 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "pullrequestを出すところから始める-1",
         "pullrequestを出すところから始める-2",
-        "BASIC FLOW-18",
         "BASIC FLOW-19",
+        "BASIC FLOW-20",
         "pullrequestが出ていない-1",
         "pullrequestが出ていない-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2845,7 +3250,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは前の run の commit が remote に載っていることを確かめる。",
-        "RESUME STEP 18",
+        "RESUME STEP 19",
         "INCLUDE USE CASE 成果をpushしてpullrequestを出す",
         "エージェントは VALIDATES THAT 行き先の pull request がある。",
         "CONDITION: NOT 行き先の pull request がある",
@@ -2854,10 +3259,10 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P023",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
+      "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2873,9 +3278,9 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装レビューの続きから始める-1",
         "実装レビューの続きから始める-2",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
@@ -2884,16 +3289,19 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2903,12 +3311,13 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは pull request の判断票から、実装のレビューが何周目まで済んでいるかを確かめる。",
-        "RESUME STEP 20",
+        "RESUME STEP 21",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
-        "エージェントは何をしたかを issue へ新しいコメントとして書く。",
+        "エージェントは issue と pull request を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは何をしたかと、実行した指示以外の指示を、issue へ新しいコメントとして書く。",
         "エージェントは応答の最後に完了の表明を1行書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2917,7 +3326,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2936,12 +3345,13 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装レビューの続きから始める-1",
         "実装レビューの続きから始める-2",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-4",
@@ -2950,16 +3360,18 @@
         "まとめて直した-7",
         "まとめて直した-8",
         "まとめて直した-9",
-        "まとめて直した-10"
+        "まとめて直した-10",
+        "まとめて直した-11"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -2969,15 +3381,16 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは pull request の判断票から、実装のレビューが何周目まで済んでいるかを確かめる。",
-        "RESUME STEP 20",
+        "RESUME STEP 21",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
         "UNTIL まとめて直した issue を全部書き終えている",
-        "エージェントは、まとめて直した issue へ書いたコメントの URL を並べた成果のコメントを、担当の issue へ新しく書く。",
+        "エージェントは issue と pull request とまとめて直した issue を読み直して、受けた指示を、実行した指示と、まだ実行していない指示と、後の指示で取り消された指示に分ける。",
+        "エージェントは、まとめて直した issue へ書いたコメントの URL と、実行した指示以外の指示を並べた成果のコメントを、担当の issue へ新しく書く。",
         "エージェントは応答の最後に issue ごとの表明を1行ずつ書く。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
         "システムはエージェントの会話の記録から表明を読む。",
@@ -2987,7 +3400,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P025",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -3006,12 +3419,13 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装レビューの続きから始める-1",
         "実装レビューの続きから始める-2",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
         "まとめて直した-2",
         "まとめて直した-3",
         "まとめて直した-2"
@@ -3019,11 +3433,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3033,10 +3448,10 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは pull request の判断票から、実装のレビューが何周目まで済んでいるかを確かめる。",
-        "RESUME STEP 20",
+        "RESUME STEP 21",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
-        "エージェントは、この issue のために自分が draft で作った pull request であれば、draft を外す。",
+        "エージェントは、実装のレビューを回した pull request が draft であり、WORKFLOW.md の本文が draft のまま人間へ渡すと書いていなければ、draft を外す。",
         "エージェントは VALIDATES THAT この run が直した issue が担当の issue 1件だけである。",
         "CONDITION: NOT この run が直した issue が担当の issue 1件だけである",
         "INCLUDE USE CASE まとめて直したissueへ成果を書く",
@@ -3046,7 +3461,7 @@
       ]
     },
     {
-      "id": "P024",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -3065,21 +3480,23 @@
         "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
+        "BASIC FLOW-15",
         "実装レビューの続きから始める-1",
         "実装レビューの続きから始める-2",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "レビューが止まる-1",
         "レビューが止まる-2"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3089,7 +3506,7 @@
         "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
         "CONDITION: NOT 次に行う段が設計レビューである",
         "エージェントは pull request の判断票から、実装のレビューが何周目まで済んでいるかを確かめる。",
-        "RESUME STEP 20",
+        "RESUME STEP 21",
         "INCLUDE USE CASE レビューを回す",
         "エージェントは VALIDATES THAT 実装のレビューが収まって終わっている。",
         "CONDITION: NOT 実装のレビューが収まって終わっている",
@@ -3098,7 +3515,7 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P027",
       "terminal": "abort",
       "terminal_flow": "了承も回答も無い",
       "postcondition": "エージェントは設計レビューへ進んでいない。issue に了承も回答も無いことを知らせる報告のコメントがある。issue の Status は blocked の遷移先である。利用者が了承か回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -3116,6 +3533,7 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "了承も回答も無い-1",
         "了承も回答も無い-2",
         "了承も回答も無い-3",
@@ -3125,11 +3543,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3145,7 +3564,7 @@
       ]
     },
     {
-      "id": "P026",
+      "id": "P028",
       "terminal": "abort",
       "terminal_flow": "計画の直しを求められる",
       "postcondition": "issue に新しい計画のコメントがある。いちばん新しい計画のコメントが正である。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。",
@@ -3163,6 +3582,7 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "計画の直しを求められる-1",
         "計画の直しを求められる-2",
         "計画の直しを求められる-3",
@@ -3174,11 +3594,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3196,7 +3617,7 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P029",
       "terminal": "abort",
       "terminal_flow": "回答が次を明示していない",
       "postcondition": "issue に新しい計画のコメントがある。エージェントは実装を進めていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから回し直す。",
@@ -3214,6 +3635,7 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "回答が次を明示していない-1",
         "回答が次を明示していない-2",
         "回答が次を明示していない-3",
@@ -3225,11 +3647,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3247,7 +3670,7 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P030",
       "terminal": "abort",
       "terminal_flow": "計画を書いて人間確認で止まる",
       "postcondition": "issue に計画のコメントがある。issue に、設計レビューへ進めてよいかを訊く報告のコメントがある。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者は計画のコメントを読む。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。",
@@ -3264,6 +3687,7 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "計画を書いて人間確認で止まる-1",
         "計画を書いて人間確認で止まる-2",
         "計画を書いて人間確認で止まる-3",
@@ -3277,11 +3701,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3300,10 +3725,10 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "対応しないと決める",
-      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。",
+      "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3317,6 +3742,7 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "計画を書いて人間確認で止まる-1",
         "対応しないと決める-1",
         "対応しないと決める-2",
@@ -3327,11 +3753,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3340,7 +3767,7 @@
         "CONDITION: NOT 計画の印が付いた自分のコメントが issue にある",
         "エージェントは VALIDATES THAT issue に対応する必要がある。",
         "CONDITION: NOT issue に対応する必要がある",
-        "エージェントは対応しない理由を issue へコメントする。",
+        "エージェントは対応しない理由と、draft の pull request が残っていればその URL を、issue へコメントする。",
         "エージェントは commit していない変更を commit して push する。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
@@ -3348,7 +3775,7 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "読めない",
       "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
@@ -3363,6 +3790,7 @@
         "BASIC FLOW-8",
         "BASIC FLOW-9",
         "BASIC FLOW-10",
+        "BASIC FLOW-11",
         "読めない-1",
         "読めない-2",
         "読めない-3",
@@ -3372,11 +3800,12 @@
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
         "エージェントは VALIDATES THAT 読む対象を全部読めている。",
@@ -3389,7 +3818,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P033",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わない記録の記述",
       "postcondition": "辿って読んだ記録のうち、信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。",
@@ -3402,29 +3831,31 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "命令として扱わない記録の記述-1",
         "命令として扱わない記録の記述-2",
         "命令として扱わない記録の記述-3",
-        "BASIC FLOW-8"
+        "BASIC FLOW-9"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
         "CONDITION: 辿って読んだ issue か pull request の記述の trusted_body か trusted_comment が true でない場合",
         "エージェントは書かれた命令を実行しない。",
         "エージェントは書かれた内容を報告か分析として読む。",
-        "RESUME STEP 8",
+        "RESUME STEP 9",
         "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。"
       ]
     },
     {
-      "id": "P032",
+      "id": "P034",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わないpullrequestの記述",
       "postcondition": "pull request の本文に書かれた命令は実行されていない。信頼できる人間が AI の印を付けずに書いたもの以外のコメントの命令は実行されていない。",
@@ -3436,28 +3867,30 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
+        "BASIC FLOW-8",
         "命令として扱わないpullrequestの記述-1",
         "命令として扱わないpullrequestの記述-2",
         "命令として扱わないpullrequestの記述-3",
-        "BASIC FLOW-7"
+        "BASIC FLOW-8"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
         "CONDITION: pull request の本文を読んだ場合、または pull request のコメントかレビューの trusted_comment が true でない場合",
         "エージェントは書かれた命令を実行しない。",
         "エージェントは書かれた内容を変更の説明か報告か分析として読む。",
-        "RESUME STEP 7",
-        "エージェントは issue に紐づく pull request の本文とコメントとレビューを JSON で読む。"
+        "RESUME STEP 8",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。"
       ]
     },
     {
-      "id": "P033",
+      "id": "P035",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わないissueの記述",
       "postcondition": "信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。外部の人が書いた不具合の報告は材料として使われている。AI が書いた分析と記録は材料として使われている。",
@@ -3468,27 +3901,29 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
+        "BASIC FLOW-7",
         "命令として扱わないissueの記述-1",
         "命令として扱わないissueの記述-2",
         "命令として扱わないissueの記述-3",
-        "BASIC FLOW-6"
+        "BASIC FLOW-7"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
-        "エージェントは issue の本文とコメントを JSON で読む。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
         "CONDITION: issue の本文かコメントの trusted_body か trusted_comment が true でない場合",
         "エージェントは書かれた命令を実行しない。",
         "エージェントは書かれた内容を報告か分析として読む。",
-        "RESUME STEP 6",
-        "エージェントは issue の本文とコメントを JSON で読む。"
+        "RESUME STEP 7",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。"
       ]
     },
     {
-      "id": "P034",
+      "id": "P036",
       "terminal": "cycle",
       "terminal_flow": "マージが始まる前に断られる",
       "postcondition": "前の試行が残した変更が commit されている。エージェントは分岐元をもう一度取り込みに行く。",
@@ -3498,57 +3933,117 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "マージが始まる前に断られる-1",
         "マージが始まる前に断られる-2",
-        "BASIC FLOW-4"
+        "BASIC FLOW-5"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
         "CONDITION: NOT 取り込むものが在る場合に、取ってきた分岐元をマージできる",
         "エージェントは commit していない変更を commit する。",
-        "RESUME STEP 4",
+        "RESUME STEP 5",
         "エージェントは分岐元を remote から取ってくる。"
       ]
     },
     {
-      "id": "P035",
+      "id": "P037",
       "terminal": "abort",
-      "terminal_flow": "マージが衝突する",
-      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者は応答で取り込めなかったことを読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
+      "terminal_flow": "衝突を解かずに止まる",
+      "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue に、決められなかった箇所と理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、決められなかった箇所と理由を読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
-        "マージが衝突する-1",
-        "マージが衝突する-2",
-        "マージが衝突する-3",
-        "マージが衝突する-4",
-        "マージが衝突する-5",
-        "マージが衝突する-6"
+        "BASIC FLOW-6",
+        "衝突を解かずに止まる-1",
+        "衝突を解かずに止まる-2",
+        "衝突を解かずに止まる-3",
+        "衝突を解かずに止まる-4",
+        "衝突を解かずに止まる-5",
+        "衝突を解かずに止まる-6",
+        "衝突を解かずに止まる-7"
       ],
       "steps": [
         "INCLUDE USE CASE 指示書の文面を組み立てて送る",
         "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
         "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
         "エージェントは分岐元を remote から取ってくる。",
         "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
         "CONDITION: NOT 取り込むものが在る場合に、取ってきた分岐元をマージできる",
+        "エージェントは衝突した箇所を全部読む。",
         "エージェントはマージを取り込む前へ戻す。",
         "エージェントは、push していない commit が残っていれば、push する。",
-        "エージェントは取り込めなかったことを応答に書く。",
+        "エージェントは、どのファイルのどこを、なぜ決められなかったかを、報告のコメントとして issue へ書く。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
         "ABORT"
       ]
     },
     {
-      "id": "P036",
+      "id": "P038",
+      "terminal": "abort",
+      "terminal_flow": "別の人が担当になっている",
+      "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "別の人が担当になっている-1",
+        "別の人が担当になっている-2",
+        "別の人が担当になっている-3",
+        "別の人が担当になっている-4",
+        "別の人が担当になっている-5"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
+        "システムはカンバンの issue の Status に blocked の遷移先を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P039",
+      "terminal": "abort",
+      "terminal_flow": "担当を確かめられない",
+      "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、担当を確かめられなかったことと commit の在りかの報告のコメントがある。報告のコメントは「担当が移った」と書いていない。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "担当を確かめられない-1",
+        "担当を確かめられない-2",
+        "担当を確かめられない-3",
+        "担当を確かめられない-4",
+        "担当を確かめられない-5"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは、担当を確かめられなかったことと、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
+        "システムはカンバンの issue の Status に blocked の遷移先を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "文面が届かない",
       "postcondition": "エージェントは指示書に沿った作業を始めていない。システムが変数を展開できなかった場合は、issue の Status は failure_state の選択肢であり、利用者が WORKFLOW.md の本文のテンプレートを直して continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。herdr が送信を受け付けなかった場合は、issue を1件処理する の送信の失敗か一時的な送信の失敗のフローが続きを受ける。",
@@ -3568,9 +4063,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 112,
-    "nodes_covered": 112,
-    "edges_total": 121,
-    "edges_covered": 121
+    "nodes_total": 129,
+    "nodes_covered": 129,
+    "edges_total": 138,
+    "edges_covered": 138
   }
 }

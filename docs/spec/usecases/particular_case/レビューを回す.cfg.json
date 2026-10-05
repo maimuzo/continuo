@@ -3,7 +3,7 @@
   "usecase_name": "レビューを回す",
   "source": {
     "file": "docs/spec/usecases/particular_case/レビューを回す.rucm.md",
-    "rucm_block_sha256": "128430390c7322a0604400c71fa82aa39173dcd4778466077dbc57686a84d8f6"
+    "rucm_block_sha256": "bb404152f3b3604cc9efc8f216fe9c28141f2d1dfe18a299ba34be0d620e173a"
   },
   "root": "BASIC FLOW-2",
   "flows": {
@@ -14,7 +14,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          5
+          6
         ]
       },
       "postcondition": "レビューの対象に issue が求めていない内容は残っていない。issue に削除の記録のコメントがある。見直した計画は敵対的レビューを通っている。エージェントは同じ周の判断票を貼ってから直す。"
@@ -25,7 +25,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            4
+            5
           ]
         }
       ],
@@ -37,7 +37,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            16
+            18
           ]
         }
       ],
@@ -49,11 +49,20 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            8
+            9
           ]
         }
       ],
       "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は応答で立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。"
+    },
+    "進捗報告を書く前に止まる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          14
+        ]
+      },
+      "postcondition": "エージェントは検査の終わりを待っていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。"
     }
   },
   "nodes": [
@@ -62,98 +71,112 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
+      "statement": "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。"
     },
     {
       "id": "BASIC FLOW-3",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "エージェントは指摘の重さを付け直す。"
+      "statement": "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。"
+      "statement": "エージェントは指摘の重さを付け直す。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "エージェントは VALIDATES THAT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い。"
+      "statement": "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。"
     },
     {
       "id": "BASIC FLOW-6",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "エージェントは直す前の計画を同じ判断票に書く。"
+      "statement": "エージェントは VALIDATES THAT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "IF レビューの対象が計画である THEN"
+      "statement": "エージェントは直す前の計画を同じ判断票に書く。"
     },
     {
       "id": "BASIC FLOW-8",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "エージェントは判断票を issue へコメントする。"
+      "statement": "IF レビューの対象が計画である THEN"
     },
     {
-      "id": "BASIC FLOW-10",
+      "id": "BASIC FLOW-9",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 10,
-      "statement": "エージェントは判断票を pull request へコメントする。"
+      "step": 9,
+      "statement": "エージェントは判断票を issue へコメントする。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "エージェントはレビュー結果を数える検査を回し直す。"
+      "statement": "エージェントは判断票を pull request へコメントする。"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "include",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
+      "statement": "エージェントはレビュー結果を数える検査を回し直す。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 13,
       "statement": "INCLUDE USE CASE 進捗報告を書く",
       "include": "進捗報告を書く"
     },
     {
-      "id": "BASIC FLOW-13",
-      "type": "action",
+      "id": "BASIC FLOW-14",
+      "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 13,
-      "statement": "エージェントは pull request に付いた検査の終わりを待つ。"
+      "step": 14,
+      "statement": "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "エージェントは直すと決めた指摘を直す。"
-    },
-    {
-      "id": "BASIC FLOW-16",
-      "type": "condition",
-      "flow": "BASIC FLOW",
-      "step": 16,
-      "statement": "UNTIL レビューが収まって終わっている"
+      "statement": "エージェントは pull request に付いた検査の終わりを待つ。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
+      "statement": "エージェントは直すと決めた指摘を直す。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "UNTIL レビューが収まって終わっている"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
       "statement": "エージェントはレビューを終える。"
     },
     {
@@ -189,7 +212,7 @@
       "type": "resume",
       "flow": "issueに無いものを削る",
       "step": 5,
-      "statement": "RESUME STEP 6"
+      "statement": "RESUME STEP 7"
     },
     {
       "id": "人間に訊くことが出る-1",
@@ -309,6 +332,20 @@
       "flow": "判断票が数えられない立場",
       "step": 5,
       "statement": "ABORT"
+    },
+    {
+      "id": "進捗報告を書く前に止まる-1",
+      "type": "action",
+      "flow": "進捗報告を書く前に止まる",
+      "step": 1,
+      "statement": "システムは run を終える。"
+    },
+    {
+      "id": "進捗報告を書く前に止まる-2",
+      "type": "abort",
+      "flow": "進捗報告を書く前に止まる",
+      "step": 2,
+      "statement": "ABORT"
     }
   ],
   "edges": [
@@ -328,55 +365,55 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-4",
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
       "to": "人間に訊くことが出る-1",
       "kind": "global",
       "condition": "レビューの周の途中で、人間に訊かないと決められないことが出た場合"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-6",
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "true",
       "condition": "issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い"
     },
     {
-      "from": "BASIC FLOW-5",
+      "from": "BASIC FLOW-6",
       "to": "issueに無いものを削る-1",
       "kind": "false",
       "condition": "NOT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い"
     },
     {
-      "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-7",
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-8",
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
       "kind": "true",
       "condition": "レビューの対象が計画である"
     },
     {
-      "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-10",
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-11",
       "kind": "false",
       "condition": "NOT レビューの対象が計画である"
     },
     {
-      "from": "BASIC FLOW-8",
-      "to": "BASIC FLOW-15",
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-17",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-8",
+      "from": "BASIC FLOW-9",
       "to": "判断票が数えられない立場-1",
       "kind": "global",
       "condition": "判断票を書いたアカウントの立場が OWNER でも MEMBER でも COLLABORATOR でもない場合"
-    },
-    {
-      "from": "BASIC FLOW-10",
-      "to": "BASIC FLOW-11",
-      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-11",
@@ -390,28 +427,45 @@
     },
     {
       "from": "BASIC FLOW-13",
-      "to": "BASIC FLOW-15",
+      "to": "BASIC FLOW-14",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "進捗報告を書いたあとも作業を続けている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "進捗報告を書く前に止まる-1",
+      "kind": "false",
+      "condition": "NOT 進捗報告を書いたあとも作業を続けている"
     },
     {
       "from": "BASIC FLOW-15",
-      "to": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-16",
-      "to": "BASIC FLOW-17",
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
       "kind": "true",
       "condition": "レビューが収まって終わっている"
     },
     {
-      "from": "BASIC FLOW-16",
+      "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-2",
       "kind": "loop",
       "condition": "NOT レビューが収まって終わっている"
     },
     {
-      "from": "BASIC FLOW-16",
+      "from": "BASIC FLOW-18",
       "to": "連続10回で収まらない-1",
       "kind": "global",
       "condition": "レビューを連続10回回しても CRITICAL か HIGH の指摘が残っている場合"
@@ -438,7 +492,7 @@
     },
     {
       "from": "issueに無いものを削る-5",
-      "to": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
       "kind": "resume"
     },
     {
@@ -510,6 +564,11 @@
       "from": "判断票が数えられない立場-4",
       "to": "判断票が数えられない立場-5",
       "kind": "seq"
+    },
+    {
+      "from": "進捗報告を書く前に止まる-1",
+      "to": "進捗報告を書く前に止まる-2",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -526,11 +585,13 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -556,11 +617,13 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "BASIC FLOW-2"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -571,7 +634,7 @@
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
         "CONDITION: NOT レビューが収まって終わっている",
-        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。"
       ]
     },
     {
@@ -587,8 +650,9 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "連続10回で収まらない-1",
         "連続10回で収まらない-2",
         "連続10回で収まらない-3",
@@ -597,6 +661,7 @@
         "連続10回で収まらない-6"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -628,6 +693,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "判断票が数えられない立場-1",
         "判断票が数えられない立場-2",
         "判断票が数えられない立場-3",
@@ -635,6 +701,7 @@
         "判断票が数えられない立場-5"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -662,15 +729,18 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -681,6 +751,7 @@
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
@@ -699,15 +770,18 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "BASIC FLOW-2"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -718,11 +792,12 @@
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
         "CONDITION: NOT レビューが収まって終わっている",
-        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。"
       ]
     },
     {
@@ -737,12 +812,14 @@
         "BASIC FLOW-5",
         "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "連続10回で収まらない-1",
         "連続10回で収まらない-2",
         "連続10回で収まらない-3",
@@ -751,6 +828,7 @@
         "連続10回で収まらない-6"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -761,6 +839,7 @@
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
@@ -775,6 +854,44 @@
     },
     {
       "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "進捗報告を書く前に止まる",
+      "postcondition": "エージェントは検査の終わりを待っていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "進捗報告を書く前に止まる-1",
+        "進捗報告を書く前に止まる-2"
+      ],
+      "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
+        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
+        "エージェントは指摘の重さを付け直す。",
+        "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
+        "エージェントは VALIDATES THAT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い。",
+        "エージェントは直す前の計画を同じ判断票に書く。",
+        "IF レビューの対象が計画である THEN",
+        "CONDITION: NOT レビューの対象が計画である",
+        "エージェントは判断票を pull request へコメントする。",
+        "エージェントはレビュー結果を数える検査を回し直す。",
+        "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "CONDITION: NOT 進捗報告を書いたあとも作業を続けている",
+        "システムは run を終える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "CRITICAL と HIGH の指摘は0件である。周ごとの判断票がコメントされている。計画の判断票は issue にある。実装の判断票は pull request にある。",
@@ -783,19 +900,21 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -805,7 +924,7 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
@@ -815,7 +934,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "cycle",
       "terminal_flow": "issueに無いものを削る",
       "postcondition": "レビューの対象に issue が求めていない内容は残っていない。issue に削除の記録のコメントがある。見直した計画は敵対的レビューを通っている。エージェントは同じ周の判断票を貼ってから直す。",
@@ -824,19 +943,21 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "BASIC FLOW-2"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -846,18 +967,18 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
         "CONDITION: NOT レビューが収まって終わっている",
-        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。"
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "連続10回で収まらない",
       "postcondition": "レビューは10回で止まっている。issue に方針の確認の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が方針をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run がレビューの回数を数え直す。",
@@ -866,16 +987,17 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-9",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "連続10回で収まらない-1",
         "連続10回で収まらない-2",
         "連続10回で収まらない-3",
@@ -884,6 +1006,7 @@
         "連続10回で収まらない-6"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -893,7 +1016,7 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
@@ -909,7 +1032,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "判断票が数えられない立場",
       "postcondition": "issue に判断票のコメントがある。設計のレビューを数える検査は緑になっていない。issue の Status は blocked の遷移先である。利用者は応答で立場のことを読む。利用者はアカウントの権限を直してから Status を dispatch_state の選択肢へ戻す。",
@@ -918,14 +1041,15 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "BASIC FLOW-9",
         "判断票が数えられない立場-1",
         "判断票が数えられない立場-2",
         "判断票が数えられない立場-3",
@@ -933,6 +1057,7 @@
         "判断票が数えられない立場-5"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -942,7 +1067,7 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "エージェントは判断票を issue へコメントする。",
@@ -955,7 +1080,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "CRITICAL と HIGH の指摘は0件である。周ごとの判断票がコメントされている。計画の判断票は issue にある。実装の判断票は pull request にある。",
@@ -964,22 +1089,25 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -989,13 +1117,14 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "CONDITION: NOT レビューの対象が計画である",
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
@@ -1003,7 +1132,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "cycle",
       "terminal_flow": "issueに無いものを削る",
       "postcondition": "レビューの対象に issue が求めていない内容は残っていない。issue に削除の記録のコメントがある。見直した計画は敵対的レビューを通っている。エージェントは同じ周の判断票を貼ってから直す。",
@@ -1012,22 +1141,25 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "BASIC FLOW-2"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -1037,22 +1169,23 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "CONDITION: NOT レビューの対象が計画である",
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
         "CONDITION: NOT レビューが収まって終わっている",
-        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。"
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。"
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "連続10回で収まらない",
       "postcondition": "レビューは10回で止まっている。issue に方針の確認の報告のコメントがある。issue の Status は blocked の遷移先である。利用者が方針をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run がレビューの回数を数え直す。",
@@ -1061,19 +1194,21 @@
         "BASIC FLOW-3",
         "BASIC FLOW-4",
         "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "issueに無いものを削る-1",
         "issueに無いものを削る-2",
         "issueに無いものを削る-3",
         "issueに無いものを削る-4",
         "issueに無いものを削る-5",
-        "BASIC FLOW-6",
         "BASIC FLOW-7",
-        "BASIC FLOW-10",
+        "BASIC FLOW-8",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
         "BASIC FLOW-15",
-        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "連続10回で収まらない-1",
         "連続10回で収まらない-2",
         "連続10回で収まらない-3",
@@ -1082,6 +1217,7 @@
         "連続10回で収まらない-6"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -1091,13 +1227,14 @@
         "エージェントは削った内容を issue へコメントする。",
         "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
         "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
-        "RESUME STEP 6",
+        "RESUME STEP 7",
         "エージェントは直す前の計画を同じ判断票に書く。",
         "IF レビューの対象が計画である THEN",
         "CONDITION: NOT レビューの対象が計画である",
         "エージェントは判断票を pull request へコメントする。",
         "エージェントはレビュー結果を数える検査を回し直す。",
         "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
         "エージェントは pull request に付いた検査の終わりを待つ。",
         "エージェントは直すと決めた指摘を直す。",
         "UNTIL レビューが収まって終わっている",
@@ -1111,7 +1248,56 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
+      "terminal": "abort",
+      "terminal_flow": "進捗報告を書く前に止まる",
+      "postcondition": "エージェントは検査の終わりを待っていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "issueに無いものを削る-1",
+        "issueに無いものを削る-2",
+        "issueに無いものを削る-3",
+        "issueに無いものを削る-4",
+        "issueに無いものを削る-5",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "進捗報告を書く前に止まる-1",
+        "進捗報告を書く前に止まる-2"
+      ],
+      "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
+        "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
+        "エージェントは指摘の重さを付け直す。",
+        "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
+        "エージェントは VALIDATES THAT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い。",
+        "CONDITION: NOT issue が求めていない内容のうち敵対的レビュワーを説得できなかったものがレビューの対象に無い",
+        "エージェントは説得できなかった内容をレビューの対象から削る。",
+        "エージェントは削った内容を issue へコメントする。",
+        "エージェントは計画の本文へ戻って、削ったあとの釣り合いと採用理由を見直す。",
+        "エージェントは見直した計画を敵対的レビューの subagent にレビューさせる。",
+        "RESUME STEP 7",
+        "エージェントは直す前の計画を同じ判断票に書く。",
+        "IF レビューの対象が計画である THEN",
+        "CONDITION: NOT レビューの対象が計画である",
+        "エージェントは判断票を pull request へコメントする。",
+        "エージェントはレビュー結果を数える検査を回し直す。",
+        "INCLUDE USE CASE 進捗報告を書く",
+        "エージェントは VALIDATES THAT 進捗報告を書いたあとも作業を続けている。",
+        "CONDITION: NOT 進捗報告を書いたあとも作業を続けている",
+        "システムは run を終える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "人間に訊くことが出る",
       "postcondition": "レビューの周は途中で終わっている。issue に質問の報告のコメントがある。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -1119,6 +1305,7 @@
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
+        "BASIC FLOW-5",
         "人間に訊くことが出る-1",
         "人間に訊くことが出る-2",
         "人間に訊くことが出る-3",
@@ -1127,6 +1314,7 @@
         "人間に訊くことが出る-6"
       ],
       "steps": [
+        "エージェントはレビュワーの全部の役への依頼文に、issue と pull request の URL と、本文とコメントを1件残らず読む読み方を書く。",
         "エージェントは差分を読む役の subagent と関連処理まで見る役の subagent にレビューの対象を並列にレビューさせる。",
         "エージェントは指摘の重さを付け直す。",
         "エージェントは指摘ごとの直すかどうかと理由を判断票に書く。",
@@ -1141,9 +1329,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 36,
-    "nodes_covered": 36,
-    "edges_total": 38,
-    "edges_covered": 38
+    "nodes_total": 40,
+    "nodes_covered": 40,
+    "edges_total": 42,
+    "edges_covered": 42
   }
 }

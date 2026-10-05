@@ -3,18 +3,36 @@
   "usecase_name": "成果をpushしてpullrequestを出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/成果をpushしてpullrequestを出す.rucm.md",
-    "rucm_block_sha256": "d51645cfacfe86bcf65aaabcd93960302d8fb14d202ad22c71473fe61ddfedb4"
+    "rucm_block_sha256": "686473f184d0c477c59b4365c5107f263beff772331ae4cd5bcd772c10106183"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。"
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。"
+    },
+    "別の人が担当になっている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "エージェントは push していない。push していない commit は worktree の branch に在る。エージェントは pull request を作っていない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。"
+    },
+    "担当を確かめられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "エージェントは push していない。push していない commit は worktree の branch に在る。エージェントは pull request を作っていない。issue に、担当を確かめられなかったことと commit の在りかの報告のコメントがある。報告のコメントは「担当が移った」と書いていない。issue の Status は blocked の遷移先である。"
     },
     "既にあるpullrequestを使う": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          2
+          4
         ]
       },
       "postcondition": "pull request は1本のままである。push した内容は既にある pull request に入っている。"
@@ -23,7 +41,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          3
+          5
         ]
       },
       "postcondition": "pull request は1本のままである。エージェントは blocked を表明していない。"
@@ -32,10 +50,28 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          3
+          5
         ]
       },
-      "postcondition": "pull request は出ていない。commit は remote に載っている。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出し直す。"
+      "postcondition": "エージェントは実装を終えている。pull request は出ていない。commit は remote に載っている。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出し直す。"
+    },
+    "実装の途中で作れない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
+        ]
+      },
+      "postcondition": "エージェントは実装の途中である。pull request は出ていない。commit は remote に載っている。エージェントは blocked を表明していない。エージェントは作業を続けている。"
+    },
+    "題名と本文を書き直さない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "pull request の題名と本文は、作ったときか、エージェントが読んだときのままである。実装の途中の場合は、pull request の本文に途中の目印が残っている。実装が終わっている場合は、誰かが本文を書き直していて、pull request の本文に途中の目印は無い。"
     },
     "成果がworktreeの外にある": {
       "when": "信頼できる人間が「コードは別のリポジトリにある」と書いていて、WORKFLOW.md の本文に成果の出し方が書いてある場合",
@@ -65,28 +101,133 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 1,
-      "statement": "エージェントは commit して push する。"
+      "statement": "エージェントは手元の変更を commit する。"
     },
     {
       "id": "BASIC FLOW-2",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 2,
-      "statement": "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。"
+      "statement": "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。"
     },
     {
       "id": "BASIC FLOW-3",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "エージェントは VALIDATES THAT issue を閉じる行を本文に持つ pull request を作れる。"
+      "statement": "エージェントは commit を push する。"
     },
     {
       "id": "BASIC FLOW-4",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
+      "statement": "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "エージェントは pull request の題名と本文を書き直して、途中の目印の1行を外す。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
       "statement": "エージェントは行き先の pull request の番号を控える。"
+    },
+    {
+      "id": "別の人が担当になっている-1",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 1,
+      "statement": "エージェントは commit を push しない。"
+    },
+    {
+      "id": "別の人が担当になっている-2",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 2,
+      "statement": "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "別の人が担当になっている-3",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 3,
+      "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
+    },
+    {
+      "id": "別の人が担当になっている-4",
+      "type": "action",
+      "flow": "別の人が担当になっている",
+      "step": 4,
+      "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
+    },
+    {
+      "id": "別の人が担当になっている-5",
+      "type": "abort",
+      "flow": "別の人が担当になっている",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "担当を確かめられない-1",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 1,
+      "statement": "エージェントは commit を push しない。"
+    },
+    {
+      "id": "担当を確かめられない-2",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 2,
+      "statement": "エージェントは、担当を確かめられなかったことと、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "担当を確かめられない-3",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 3,
+      "statement": "エージェントは応答の最後に判断を仰ぐ表明を1行書く。"
+    },
+    {
+      "id": "担当を確かめられない-4",
+      "type": "action",
+      "flow": "担当を確かめられない",
+      "step": 4,
+      "statement": "システムはカンバンの issue の Status に blocked の遷移先を書く。"
+    },
+    {
+      "id": "担当を確かめられない-5",
+      "type": "abort",
+      "flow": "担当を確かめられない",
+      "step": 5,
+      "statement": "ABORT"
     },
     {
       "id": "既にあるpullrequestを使う-1",
@@ -100,7 +241,7 @@
       "type": "resume",
       "flow": "既にあるpullrequestを使う",
       "step": 2,
-      "statement": "RESUME STEP 4"
+      "statement": "RESUME STEP 6"
     },
     {
       "id": "既にあると断られる-1",
@@ -114,7 +255,7 @@
       "type": "resume",
       "flow": "既にあると断られる",
       "step": 2,
-      "statement": "RESUME STEP 4"
+      "statement": "RESUME STEP 6"
     },
     {
       "id": "pullrequestを作れない-1",
@@ -145,6 +286,34 @@
       "statement": "ABORT"
     },
     {
+      "id": "実装の途中で作れない-1",
+      "type": "action",
+      "flow": "実装の途中で作れない",
+      "step": 1,
+      "statement": "エージェントは、次に push したときにもう一度試すと決める。"
+    },
+    {
+      "id": "実装の途中で作れない-2",
+      "type": "abort",
+      "flow": "実装の途中で作れない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "題名と本文を書き直さない-1",
+      "type": "action",
+      "flow": "題名と本文を書き直さない",
+      "step": 1,
+      "statement": "エージェントは pull request の題名と本文を書き直さない。"
+    },
+    {
+      "id": "題名と本文を書き直さない-2",
+      "type": "resume",
+      "flow": "題名と本文を書き直さない",
+      "step": 2,
+      "statement": "RESUME STEP 9"
+    },
+    {
       "id": "成果がworktreeの外にある-1",
       "type": "action",
       "flow": "成果がworktreeの外にある",
@@ -170,7 +339,7 @@
       "type": "resume",
       "flow": "成果がworktreeの外にある",
       "step": 4,
-      "statement": "RESUME STEP 4"
+      "statement": "RESUME STEP 9"
     },
     {
       "id": "出し方が書かれていない-1",
@@ -217,31 +386,122 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "true",
-      "condition": "いま居る branch の open な pull request がまだ無い"
+      "condition": "issue の担当が自分であるか、担当者が1人もいない"
     },
     {
       "from": "BASIC FLOW-2",
+      "to": "別の人が担当になっている-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "担当を確かめられない-1",
+      "kind": "false",
+      "condition": "NOT issue の担当が自分であるか、担当者が1人もいない"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "いま居る branch の open な pull request がまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-4",
       "to": "既にあるpullrequestを使う-1",
       "kind": "false",
       "condition": "NOT いま居る branch の open な pull request がまだ無い"
     },
     {
-      "from": "BASIC FLOW-3",
-      "to": "BASIC FLOW-4",
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
       "kind": "true",
-      "condition": "issue を閉じる行を本文に持つ pull request を作れる"
+      "condition": "issue を閉じる行と途中の目印を本文に持つ pull request を作れる"
     },
     {
-      "from": "BASIC FLOW-3",
+      "from": "BASIC FLOW-5",
       "to": "既にあると断られる-1",
       "kind": "false",
-      "condition": "NOT issue を閉じる行を本文に持つ pull request を作れる"
+      "condition": "NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる"
     },
     {
-      "from": "BASIC FLOW-3",
+      "from": "BASIC FLOW-5",
       "to": "pullrequestを作れない-1",
       "kind": "false",
-      "condition": "NOT issue を閉じる行を本文に持つ pull request を作れる"
+      "condition": "NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "実装の途中で作れない-1",
+      "kind": "false",
+      "condition": "NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "実装が終わっていて、読んだ本文に途中の目印の1行が残っている"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "題名と本文を書き直さない-1",
+      "kind": "false",
+      "condition": "NOT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-1",
+      "to": "別の人が担当になっている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-2",
+      "to": "別の人が担当になっている-3",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-3",
+      "to": "別の人が担当になっている-4",
+      "kind": "seq"
+    },
+    {
+      "from": "別の人が担当になっている-4",
+      "to": "別の人が担当になっている-5",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-1",
+      "to": "担当を確かめられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-2",
+      "to": "担当を確かめられない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-3",
+      "to": "担当を確かめられない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "担当を確かめられない-4",
+      "to": "担当を確かめられない-5",
+      "kind": "seq"
     },
     {
       "from": "既にあるpullrequestを使う-1",
@@ -250,7 +510,7 @@
     },
     {
       "from": "既にあるpullrequestを使う-2",
-      "to": "BASIC FLOW-4",
+      "to": "BASIC FLOW-6",
       "kind": "resume"
     },
     {
@@ -260,7 +520,7 @@
     },
     {
       "from": "既にあると断られる-2",
-      "to": "BASIC FLOW-4",
+      "to": "BASIC FLOW-6",
       "kind": "resume"
     },
     {
@@ -277,6 +537,21 @@
       "from": "pullrequestを作れない-3",
       "to": "pullrequestを作れない-4",
       "kind": "seq"
+    },
+    {
+      "from": "実装の途中で作れない-1",
+      "to": "実装の途中で作れない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "題名と本文を書き直さない-1",
+      "to": "題名と本文を書き直さない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "題名と本文を書き直さない-2",
+      "to": "BASIC FLOW-9",
+      "kind": "resume"
     },
     {
       "from": "成果がworktreeの外にある-1",
@@ -302,7 +577,7 @@
     },
     {
       "from": "成果がworktreeの外にある-4",
-      "to": "BASIC FLOW-4",
+      "to": "BASIC FLOW-9",
       "kind": "resume"
     },
     {
@@ -326,17 +601,27 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
-        "BASIC FLOW-4"
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
         "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
-        "エージェントは VALIDATES THAT issue を閉じる行を本文に持つ pull request を作れる。",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "エージェントは pull request の題名と本文を書き直して、途中の目印の1行を外す。",
         "エージェントは行き先の pull request の番号を控える。"
       ]
     },
@@ -344,44 +629,125 @@
       "id": "P002",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
-        "既にあると断られる-1",
-        "既にあると断られる-2",
-        "BASIC FLOW-4"
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "題名と本文を書き直さない-1",
+        "題名と本文を書き直さない-2",
+        "BASIC FLOW-9"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
         "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
-        "エージェントは VALIDATES THAT issue を閉じる行を本文に持つ pull request を作れる。",
-        "CONDITION: NOT issue を閉じる行を本文に持つ pull request を作れる",
-        "エージェントは同じ head branch の pull request を行き先にする。",
-        "RESUME STEP 4",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "CONDITION: NOT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている",
+        "エージェントは pull request の題名と本文を書き直さない。",
+        "RESUME STEP 9",
         "エージェントは行き先の pull request の番号を控える。"
       ]
     },
     {
       "id": "P003",
-      "terminal": "abort",
-      "terminal_flow": "pullrequestを作れない",
-      "postcondition": "pull request は出ていない。commit は remote に載っている。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出し直す。",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "既にあると断られる-1",
+        "既にあると断られる-2",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
+        "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "CONDITION: NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる",
+        "エージェントは同じ head branch の pull request を行き先にする。",
+        "RESUME STEP 6",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "エージェントは pull request の題名と本文を書き直して、途中の目印の1行を外す。",
+        "エージェントは行き先の pull request の番号を控える。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "既にあると断られる-1",
+        "既にあると断られる-2",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "題名と本文を書き直さない-1",
+        "題名と本文を書き直さない-2",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
+        "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "CONDITION: NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる",
+        "エージェントは同じ head branch の pull request を行き先にする。",
+        "RESUME STEP 6",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "CONDITION: NOT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている",
+        "エージェントは pull request の題名と本文を書き直さない。",
+        "RESUME STEP 9",
+        "エージェントは行き先の pull request の番号を控える。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "pullrequestを作れない",
+      "postcondition": "エージェントは実装を終えている。pull request は出ていない。commit は remote に載っている。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出し直す。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
         "pullrequestを作れない-1",
         "pullrequestを作れない-2",
         "pullrequestを作れない-3",
         "pullrequestを作れない-4"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
         "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
-        "エージェントは VALIDATES THAT issue を閉じる行を本文に持つ pull request を作れる。",
-        "CONDITION: NOT issue を閉じる行を本文に持つ pull request を作れる",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "CONDITION: NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる",
         "エージェントは pull request を作れなかった理由を報告のコメントとして issue へ書く。",
         "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
         "システムはカンバンの issue の Status に blocked の遷移先を書く。",
@@ -389,51 +755,170 @@
       ]
     },
     {
-      "id": "P004",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。",
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "実装の途中で作れない",
+      "postcondition": "エージェントは実装の途中である。pull request は出ていない。commit は remote に載っている。エージェントは blocked を表明していない。エージェントは作業を続けている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
-        "既にあるpullrequestを使う-1",
-        "既にあるpullrequestを使う-2",
-        "BASIC FLOW-4"
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "実装の途中で作れない-1",
+        "実装の途中で作れない-2"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
+        "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
+        "エージェントは VALIDATES THAT issue を閉じる行と途中の目印を本文に持つ pull request を作れる。",
+        "CONDITION: NOT issue を閉じる行と途中の目印を本文に持つ pull request を作れる",
+        "エージェントは、次に push したときにもう一度試すと決める。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "既にあるpullrequestを使う-1",
+        "既にあるpullrequestを使う-2",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
         "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
         "CONDITION: NOT いま居る branch の open な pull request がまだ無い",
         "エージェントは既にある pull request を行き先にする。",
-        "RESUME STEP 4",
+        "RESUME STEP 6",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "エージェントは pull request の題名と本文を書き直して、途中の目印の1行を外す。",
         "エージェントは行き先の pull request の番号を控える。"
       ]
     },
     {
-      "id": "P005",
+      "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "既にあるpullrequestを使う-1",
+        "既にあるpullrequestを使う-2",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "題名と本文を書き直さない-1",
+        "題名と本文を書き直さない-2",
+        "BASIC FLOW-9"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは commit を push する。",
+        "エージェントは VALIDATES THAT いま居る branch の open な pull request がまだ無い。",
+        "CONDITION: NOT いま居る branch の open な pull request がまだ無い",
+        "エージェントは既にある pull request を行き先にする。",
+        "RESUME STEP 6",
+        "エージェントは、実装が終わっていれば、行き先の pull request のいまの本文を読む。",
+        "エージェントは VALIDATES THAT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている。",
+        "CONDITION: NOT 実装が終わっていて、読んだ本文に途中の目印の1行が残っている",
+        "エージェントは pull request の題名と本文を書き直さない。",
+        "RESUME STEP 9",
+        "エージェントは行き先の pull request の番号を控える。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "別の人が担当になっている",
+      "postcondition": "エージェントは push していない。push していない commit は worktree の branch に在る。エージェントは pull request を作っていない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "別の人が担当になっている-1",
+        "別の人が担当になっている-2",
+        "別の人が担当になっている-3",
+        "別の人が担当になっている-4",
+        "別の人が担当になっている-5"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは commit を push しない。",
+        "エージェントは、いまの担当と、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
+        "システムはカンバンの issue の Status に blocked の遷移先を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "担当を確かめられない",
+      "postcondition": "エージェントは push していない。push していない commit は worktree の branch に在る。エージェントは pull request を作っていない。issue に、担当を確かめられなかったことと commit の在りかの報告のコメントがある。報告のコメントは「担当が移った」と書いていない。issue の Status は blocked の遷移先である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "担当を確かめられない-1",
+        "担当を確かめられない-2",
+        "担当を確かめられない-3",
+        "担当を確かめられない-4",
+        "担当を確かめられない-5"
+      ],
+      "steps": [
+        "エージェントは手元の変更を commit する。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "CONDITION: NOT issue の担当が自分であるか、担当者が1人もいない",
+        "エージェントは commit を push しない。",
+        "エージェントは、担当を確かめられなかったことと、push していない commit の branch と短い hash を、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に判断を仰ぐ表明を1行書く。",
+        "システムはカンバンの issue の Status に blocked の遷移先を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "commit は remote に載っている。行き先の pull request が1本ある。pull request の本文に issue を閉じる行がある。エージェントは実装を終えている。pull request の本文に途中の目印は残っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "成果がworktreeの外にある-1",
         "成果がworktreeの外にある-2",
         "成果がworktreeの外にある-3",
         "成果がworktreeの外にある-4",
-        "BASIC FLOW-4"
+        "BASIC FLOW-9"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
         "CONDITION: 信頼できる人間が「コードは別のリポジトリにある」と書いていて、WORKFLOW.md の本文に成果の出し方が書いてある場合",
         "エージェントは WORKFLOW.md の本文の指示に従って成果を出す。",
         "エージェントは VALIDATES THAT WORKFLOW.md の本文に pull request の出し方が書いてある。",
         "エージェントは WORKFLOW.md の本文の指示に従って pull request を出す。",
-        "RESUME STEP 4",
+        "RESUME STEP 9",
         "エージェントは行き先の pull request の番号を控える。"
       ]
     },
     {
-      "id": "P006",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "出し方が書かれていない",
       "postcondition": "pull request は出ていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は WORKFLOW.md の本文に pull request の出し方を書いてから Status を dispatch_state の選択肢へ戻す。",
@@ -447,7 +932,7 @@
         "出し方が書かれていない-4"
       ],
       "steps": [
-        "エージェントは commit して push する。",
+        "エージェントは手元の変更を commit する。",
         "CONDITION: 信頼できる人間が「コードは別のリポジトリにある」と書いていて、WORKFLOW.md の本文に成果の出し方が書いてある場合",
         "エージェントは WORKFLOW.md の本文の指示に従って成果を出す。",
         "エージェントは VALIDATES THAT WORKFLOW.md の本文に pull request の出し方が書いてある。",
@@ -460,9 +945,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 20,
-    "nodes_covered": 20,
-    "edges_total": 22,
-    "edges_covered": 22
+    "nodes_total": 39,
+    "nodes_covered": 39,
+    "edges_total": 42,
+    "edges_covered": 42
   }
 }
