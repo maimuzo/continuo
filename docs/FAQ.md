@@ -1826,7 +1826,7 @@ continuo の知らない Status へ書き換わると、最初の push の約10�
 直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。`continuo doctor` が `! 自動化 … tracker.automated_state_rewrite が空です` と出すカンバンが、これに当たります。
 
 **それ以外の人は、`WORKFLOW.md` に足すものも、消すものもありません**（`tracker.automated_state_rewrite` に1行でも書いている人は、下の「v0.2.2 で、いままでの操作が効かなくなるものは？」を、`status_signal_map` を自分で書いている人は、「エージェントの表明（`CONTINUO-STATUS:`）まわりで、上げたあとに変わることは？」も読んでください）。
-**エージェントの動きは、次の6つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
+**エージェントの動きは、次の6つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。**CI の検査ファイル（`continuo-ci.yaml`）を使っていて、レビュー結果を貼っても検査が緑にならない人は、検査ファイルを置き直してください**（トラブルシューティングの「レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う」）。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
 
 | 何が変わるか | 気をつけること |
 | --- | --- |
@@ -3905,6 +3905,68 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
+#### レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う
+
+**当たるのは、`continuo init` が置いた `continuo-ci.yaml` を `.github/workflows/` へ移して使っている人です。**
+`design-review-result` か `code-review-result` が赤いままになります。
+
+**原因は4つあります。順に確かめてください。**
+
+**1つ目。検査が回り直していません。**コメントを貼っても、検査は回り直しません。
+`gh run rerun <run の番号>` を打ってください（draft の pull request でも回し直せます）。
+**draft を外す `gh pr ready <番号>` でも回り直しますが、外すのは実装のレビュー結果を貼ってからにしてください。**
+
+**2つ目。貼る先が違います。**
+
+| 検査 | どこに貼るか |
+| --- | --- |
+| `design-review-result` | **その pull request が閉じる issue** のコメント（pull request の本文に `Closes #<番号>` が要ります） |
+| `code-review-result` | **その pull request** のコメント |
+
+**`Closes #<番号>` を書いてあるのに、案内が「紐づく issue が1件もありません」と言うときは、draft のせいかもしれません。**
+個人が持つ private のリポジトリで、draft の pull request に issue が紐づかず、draft を外したら紐づいた、という実測があります
+（public のリポジトリでは、draft のままでも紐づきました。どのリポジトリで起きるのかは確かめていません）。
+紐づいているかは、次で見られます。空の配列が返るなら、紐づいていません。
+
+```bash
+gh pr view <番号> --json closingIssuesReferences --jq '[.closingIssuesReferences[].number]'
+```
+
+**3つ目。目印が本文の先頭にありません。**前に引用や見出しがあると数えません。
+**置く順は、2つの検査で逆です。**
+
+| 検査 | 1行目 | 2行目（continuo が起動したエージェントだけ） |
+| --- | --- | --- |
+| `design-review-result` | `<!-- continuo:agent -->`（エージェント以外は、1行目が `<!-- design-review-result -->`） | `<!-- design-review-result -->` |
+| `code-review-result` | `<!-- code-review-result -->` | `<!-- continuo:agent -->` |
+
+**4つ目。投稿者が、検査から見て数える条件に当たっていません。**
+**自分の `gh` で `author_association` を読んで確かめないでください。**検査が使うトークン（`GITHUB_TOKEN`）から見える立場は、
+あなたのトークンから見える立場と違うことがあります（organization が持つリポジトリで、あなたには `MEMBER`、検査には `CONTRIBUTOR` と見えた報告があります。原因は確定していません）。
+
+**検査ファイルが v0.2.1 までの雛形なら、置き直してください。**古い雛形は、立場が `OWNER` / `MEMBER` / `COLLABORATOR` の投稿者しか数えません。
+**v0.2.2 の雛形は、立場が外れていても、リポジトリへ push できる投稿者なら数えます。**
+落ちたときの案内に、数えなかった投稿者と、検査から見えた立場も出ます。
+
+```bash
+grep -c 'has_pusher' .github/workflows/continuo-ci.yaml   # 自分で付けた名前に読み替えてください
+```
+
+**`0` なら古い雛形です。**置き直し方は、[upgrading.md](upgrading.md) の「CI の検査ファイル（`continuo-ci.yaml`）が、push できる投稿者のレビュー結果も数えるようになりました」にあります。
+
+**新しい雛形でも赤いときは、落ちた job の Summary を読んでください。**目印で始まるコメントが在るのに数えなかったときは、次のどれかが出ています。
+
+| 案内の文面 | 意味 |
+| --- | --- |
+| `<名前>（この検査からは <立場> と見えています）` | その人は立場が外れ、push もできません。**push できる人か、立場が当たる人に貼ってもらってください** |
+| `権限の照会が 404 でした` | その名前が存在しないか、検査のトークンからは見えません |
+| `push できるかを確かめられませんでした` | 照会が失敗しました。一時的な失敗なら、回し直すと直ります。**回し直しても同じなら、検査のトークンでは照会できていません**（fork から来た pull request では、照会できるかを確かめていません）。立場が当たる人に貼ってもらってください |
+| `権限の照会の応答から push できるかを読み取れませんでした` | 応答の値が `true` でも `false` でもありません。回し直しても変わりません。立場が当たる人に貼ってもらってください |
+
+**どれも出ていないのに「数える条件に当たる投稿者のものが1件もありません」と出るときは、投稿者のアカウントが消えています。**そのコメントは数えません。
+
+**緑になったときに `（立場は外れていますが、push できる投稿者 <名前> のコメントを数えました）` と出ることがあります。**立場ではなく、push できるかで数えたという記録です。
 
 #### PR にレビューを書いたのに、エージェントが読まずに終わる
 
