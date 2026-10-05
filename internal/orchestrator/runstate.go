@@ -10,6 +10,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/statussignal"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -251,6 +252,14 @@ type runState struct {
 	// MissingSignal は前回の turn に表明が無かったことを表す（設計 3-25 の第3層）。
 	// 真なら次の継続の指示に、表明を促す1文を差し込む。
 	MissingSignal bool
+	// InvalidSignals は、前回の turn の表明のうち取り得る値に無かったものである
+	// （issue #274 の経路2。設計 3-25）。空でなければ、次の継続の指示が
+	// 「続けてください」の代わりに、その値と取り得る値の一覧を返す。
+	//
+	// **メモリの中だけに持つ**（`MissingSignal` と同じ）。身元ファイルにも、立て直しで読む
+	// 状態にも書かない。**次の turn の終わりで上書きするまで残す。**継続の指示を組み立てた
+	// ときに空へ戻すと、レートリミット明けの送り直しで一覧が落ちる。
+	InvalidSignals []statussignal.Invalid
 	// Finished は run が終わって印から外したことを表す。
 	// turn ループが自分の goroutine を止める判定に使う。
 	Finished bool
@@ -1550,6 +1559,23 @@ func (rs *runState) missingSignal() bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.MissingSignal
+}
+
+// setInvalidSignals は、前回の turn の表明のうち取り得る値に無かったものを記録する
+// （issue #274。設計 3-25）。
+//
+// invalid: 取り得る値に無かった表明の並び。1件も無ければ nil を渡す（前の turn の分を消す）。
+func (rs *runState) setInvalidSignals(invalid []statussignal.Invalid) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.InvalidSignals = slices.Clone(invalid)
+}
+
+// invalidSignals は、前回の turn の表明のうち取り得る値に無かったものの写しを返す。
+func (rs *runState) invalidSignals() []statussignal.Invalid {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return slices.Clone(rs.InvalidSignals)
 }
 
 // addRetry はリトライを1つ積み、バックオフの期限を入れる（設計 3-21）。

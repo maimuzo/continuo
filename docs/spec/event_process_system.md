@@ -11,7 +11,7 @@
 | 何 | プロセス | 何をするか |
 | --- | --- | --- |
 | **continuo 本体** | **ロックファイル1本につき1つ**（`flock(2)` で二重起動を止める。`--id <名前>` を付けるとロックが分かれ、1台で2本以上動く。設計 3-17b） | 巡回・表明の読み取り・後片付けを、**同じプロセスの中の goroutine で回す** |
-| **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送るだけ |
+| **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで hook の socket（`hooks.sock`）へ1行送る。`Stop` の表明の値が決まり以外のときだけ、そのあとに差し戻しの JSON を標準出力へ返す（設計 3-25。issue #274） |
 | **`continuo statusline`** | **Claude Code がステータスラインを描き直すたびに起動して、すぐ終わる**（`rate_limit.source` が `none` でなく、`sl.sock` を開けているときだけ。issue #284） | 標準入力から使用率を取り出して使用率の socket（`sl.sock`）へ1行送る。そのあと、利用者の `statusLine` のコマンドを**子のプロセス**として起動し、その出力を返す。転送先が無いか転送に失敗したら、固定の `continuo` を出す（設計 3-84） |
 
 **`continuo statusline` が起動する子のプロセスは、continuo のプロセスではない。**利用者の `statusLine` のコマンド（例: `~/.claude/my-statusline.sh`）で、
@@ -113,12 +113,14 @@ flowchart LR
 **巡回と表明を読む経路は、`runState` という同じメモリを見ている。**
 **ファイルにも DB にも書いていない**（[internal/orchestrator/runstate.go:64](../../internal/orchestrator/runstate.go#L64)。「プロセスが落ちると消える。永続化層は作らない」）。
 
-**ただし、ファイルに書いているものが5つある。**`runState` の話と混ぜてはならない。
+**ただし、ファイルに書いているものが7つある。**`runState` の話と混ぜてはならない。
 **どれも `<実行時ディレクトリ>`（hook の socket を置くディレクトリ）の下か worktree の中にあり、復元に使うのは身元ファイルだけである。**
 
 | 何を | どこへ | 誰がいつ読むか |
 | --- | --- | --- |
 | **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:151](../../internal/config/default.go#L151)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
+| **issue ごとの設定ファイル**（hook のコマンド行・権限・`statusLine`。設計 3-12） | `<実行時ディレクトリ>/issues/<issue のスラグ>/settings.json` | **continuo は読まない。**その issue の Claude Code が `--settings` で読む。着手のたびに書き直す |
+| **取り得る値のファイル**（いま作業している issue の識別子・表明の印・`status_signal_map`。設計 3-25） | `<実行時ディレクトリ>/issues/<issue のスラグ>/status-signal.json` | **continuo は読まない。**`continuo hook` が、`Stop` のたびに読む。着手のときと、立て直して run を引き継ぐときに書き直す |
 | **hook が socket へ届かなかったときの逃がし先**（設計 3-19） | `pending/<時刻>-<イベント名>.json` | **continuo が次に起動したときに読む。**動いている continuo は読まない |
 | **使用率の保管値**（期間ごとの使用率と `resets_at`。設計 3-4b・3-27） | `<実行時ディレクトリ>/quota.json` | **continuo が次に起動したときに、`sl.sock` を開く前に読む。**動いている continuo は書くだけで読まない。上限の最中に立て直しても、回復待ちの判定を効かせるため |
 | **閉じ残しの statusline取得用の workspace の ID**（設計 3-4b） | `<実行時ディレクトリ>/statusline-fetch/workspaces.json` | **continuo が起動したとき（復元の前）と、statusline取得を始める前に読み、閉じる** |

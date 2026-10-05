@@ -91,7 +91,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **`blocked` が返ったら、次を投げる前に `agent.send_keys` で `["esc"]` を送る**
 - [x] **worker を止めるのは `pane.close` である**（設計 3-5）。agent だけを止めるメソッドは herdr に無い
 - [x] **表明が無かった turn の次に、それを促す1文を継続の指示へ差し込む**（設計 3-8 / 3-25）
-  - **hook から差し戻す仕組みは採らない**（設計 3-25）
+  - **表明が無かったことを理由に hook から差し戻す仕組みは採らない**（設計 3-25）。表明の値が決まり以外のときだけ、`continuo hook` がその場で差し戻す（issue #274）
 - [x] **打ち切りの時計が `PreToolUse` / `PostToolUse` でリセットされる**
 - [x] **閾値を超えたら `agent.get` を1回呼び、`agent_status` と `state_change_seq` を1回で取る**（設計 3-21）
   - **`working` なら `LastSeenAt` を現在時刻にして待ち続ける。**1つの turn に何時間かかっても打ち切らない
@@ -141,7 +141,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - **`In Progress` を候補に入れ忘れると、dispatch した直後に自分の worker を殺す**
 - **`background_tasks` が空でも turn は続く。**空だけで完了と判定してはいけない
 - **`blocked` のまま次を投げると、保留中の権限要求が承認されて実行される**（3/3 で再現）
-- **`last_assistant_message` に印は入らない**（印を書いたあと道具を呼ぶと落ちる。0/17）
+- **`last_assistant_message` に印が入るとは限らない**（印を書いたあと道具を呼ぶと落ちる。0/17）。**本体は transcript から読む**
 - **`agent_type` が空文字の `SubagentStop` を数えると壊れる**
 
 ## 実装の記録

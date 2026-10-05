@@ -73,7 +73,7 @@ ok  github.com/maimuzo/continuo/test/internal/tracker    1.431s
 | 何を測ったか | 結論 | どこに書いたか |
 | --- | --- | --- |
 | turn の終わりをどう判定するか | **hook 単独でも静止の長さでも判定できない。**herdr の待ち受けを主、`<task-notification>` の検出を従にする | 1-3 / 3-2 |
-| 表明の1行をどこから読むか | **`last_assistant_message` は使えない**（0/17）。transcript を `promptSource == "typed"` 起点で読む（17/17） | 3-25 |
+| 表明の1行をどこから読むか | **Status を動かす判定に `last_assistant_message` は使えない**（0/17。どれも印のあとに道具を呼んでいた）。transcript を `promptSource == "typed"` 起点で読む（17/17）。**`continuo hook` は、決まり以外の値をその場で差し戻すためにだけ `last_assistant_message` を読む**（issue #274） | 3-25 |
 | `dontAsk` と subagent の関係 | **subagent だから拒否されるのではない**（18対すべて一致）。許可リストは `Bash` とツール名だけで書く | 3-11 |
 | `blocked` のときの扱い | **次を投げると保留中の権限要求が承認されて実行される**（3/3）。`agent.send_keys` で `esc` を送る | 3-11 |
 | トークンの計上 | statusline は取りこぼす。**transcript の `.message.usage` を `requestId` で重複排除して集計する** | 3-15 |

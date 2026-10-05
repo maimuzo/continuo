@@ -11,6 +11,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -185,7 +186,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 	if len(args) > 0 {
 		switch args[0] {
 		case "hook":
-			return runHook(args[1:], stdin, stderr)
+			return runHook(args[1:], stdin, stdout, stderr)
 		case "statusline":
 			return runStatusline(args[1:], stdin, stdout)
 		case "init":
@@ -1814,7 +1815,7 @@ func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
 
 // runHook は `continuo hook` サブコマンドである（設計 3-2）。
 //
-// 標準入力の hook の JSON を hook 受け口の socket へ1行で転送し、応答を待たずに終わる。
+// 標準入力の hook の JSON を hook 受け口の socket へ1行で転送し、本体の応答を待たずに終わる。
 // socket へ繋がらなければ --pending-dir の下へ逃がす（設計 3-19）。実体は
 // internal/hookclient にあり、ここが決めるのは引数の受け取り方と、標準エラーへ出す文言だけである。
 //
@@ -1823,8 +1824,13 @@ func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
 // **2 を返してはならない。**Claude Code は hook の終了コード 2 を「その操作を止めろ」の
 // 合図として扱うため、Stop hook で 2 を返すとエージェントが止まれなくなる。
 //
+// **標準出力へ書くのは1つの場合だけである**（issue #274。設計 3-25）。転送できた `Stop` の
+// `last_assistant_message` に、取り得る値に無い表明が在るときに、差し戻しの JSON を1行書く
+// （`writeStopBlock`）。**それ以外は1バイトも書かない。終了コードはどちらでも 0 である。**
+//
 // args: `continuo hook` に続く引数（--socket / --pending-dir）。
 // stdin: hook の JSON の入力元。
+// stdout: 差し戻しの JSON の出力先。
 // stderr: 出力先。転送できなかった理由をここへ出す。
 // **`--socket` と `--pending-dir` は絶対パスでなければ受け付けない。**hook の cwd は
 // worktree なので（設計 1-5）、相対パスを受けると逃がし先が worktree の中に掘られ、
@@ -1832,7 +1838,7 @@ func runStatusline(args []string, stdin io.Reader, stdout io.Writer) int {
 // 受け口の側（`hookserver.New`）も同じ理由で絶対パスを要求している。
 //
 // 戻り値: 終了コード。--help / -h なら 0、引数の指定が誤っていれば 1、それ以外は常に 0。
-func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
+func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo hook", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	socketFlag := fs.String("socket", "", i18n.T(i18n.KeyCLIHookFlagSocket))
@@ -1882,5 +1888,49 @@ func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
 	case hookclient.OutcomeDropped:
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIHookDropped, result.Err))
 	}
+	writeStopBlock(stdout, result, *pendingDirFlag)
 	return 0
+}
+
+// stopBlockOutput は、`Stop` hook が差し戻すときに標準出力へ返す JSON である（issue #274）。
+//
+// Claude Code は `decision` が `block` の `Stop` hook を受けると、turn を終わらせずに、
+// `reason` を指示としてエージェントへ渡す。
+type stopBlockOutput struct {
+	Decision string `json:"decision"`
+	Reason   string `json:"reason"`
+}
+
+// writeStopBlock は、転送した `Stop` の表明を調べ、値が決まり以外なら差し戻しの JSON を
+// 標準出力へ1行書く（issue #274 の経路1。設計 3-25）。
+//
+// **差し戻すとき以外は、標準出力へ1バイトも書かない。**いままでの `continuo hook` と
+// 同じ出力のままにする。
+//
+// **転送できたときだけ調べる**（`result.Line` が入っているとき）。転送は呼び出し側が
+// 先に済ませているので、ここで何が起きても turn の終わりの通知は本体へ届いている。
+//
+// **JSON は全部組み立ててから1回で書く。**書きかけの JSON を標準出力に残さない。
+//
+// **`recover` で包む。**Go の panic は終了コード 2 になり、`Stop` hook の 2 は
+// 「その操作を止めろ」と読まれて、エージェントが turn を終えられなくなる。
+// 落ちたら何も書かずに戻り、呼び出し側が 0 を返す。
+//
+// stdout: 標準出力。
+// result: 転送の結果。
+// pendingDir: `--pending-dir` に渡された絶対パス。
+func writeStopBlock(stdout io.Writer, result hookclient.Result, pendingDir string) {
+	defer func() { _ = recover() }()
+	if len(result.Line) == 0 {
+		return
+	}
+	decision := hookclient.CheckStop(result.Line, pendingDir)
+	if !decision.Block {
+		return
+	}
+	out, err := json.Marshal(stopBlockOutput{Decision: "block", Reason: decision.Reason})
+	if err != nil {
+		return
+	}
+	_, _ = stdout.Write(append(out, '\n'))
 }

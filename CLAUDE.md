@@ -251,7 +251,7 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 { git -C "$R" diff --name-only origin/main...HEAD   # commit 済みのもの
   git -C "$R" diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
   git -C "$R" ls-files --others --exclude-standard -- :/  # 新しく足して、まだ追跡させていないもの
-} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/statuslineclient/|internal/statuslineserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/orchestrator/statuslinefetch\.go|internal/orchestrator/quota\.go|internal/daemon/daemon\.go|internal/cli/cli\.go)'
+} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/statussignal/|internal/statuslineclient/|internal/statuslineserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/orchestrator/statuslinefetch\.go|internal/orchestrator/quota\.go|internal/daemon/daemon\.go|internal/cli/cli\.go)'
 ```
 
 **`git -C "$R"` から叩くのは、cwd の下しか見ない経路を塞ぐためである。**
@@ -278,7 +278,8 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行と、statusLine のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方（`hooks.sock` と `sl.sock`）。ずれると hook と statusline の宛先が消える |
 | [internal/orchestrator/orchestrator.go:1486-1490](internal/orchestrator/orchestrator.go#L1486-L1490) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
-| [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
+| [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束。**`hookclient` は、`Stop` の表明の値が決まり以外のときに差し戻しの JSON を返すかどうかも決める**（4つ目の定義の「標準出力へ返す JSON」） |
+| [internal/statussignal/](internal/statussignal/) | 表明の読み方・取り得る値に在るかの判定・差し戻しの本文・`status-signal.json` の形。**hook と本体が同じものを呼ぶ。**読み方を変えると hook が差し戻す条件が変わり、ファイルの形を変えると、動いている本体が書いたファイルを新しい hook が読めなくなる |
 | [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・標準出力（転送先が無ければ固定の1行 `continuo`、あれば転送した出力。設計 3-84）・終了コード 0） |
 | [internal/orchestrator/statuslinefetch.go](internal/orchestrator/statuslinefetch.go) | statusline取得用の設定ファイルに statusLine を書く場所 |
 | [internal/orchestrator/quota.go](internal/orchestrator/quota.go) | 届いた1行の解釈（`OnStatusline`）。**受ける側の解釈そのもの** |

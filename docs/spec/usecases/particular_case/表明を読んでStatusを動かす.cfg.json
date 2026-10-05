@@ -3,7 +3,7 @@
   "usecase_name": "表明を読んでStatusを動かす",
   "source": {
     "file": "docs/spec/usecases/particular_case/表明を読んでStatusを動かす.rucm.md",
-    "rucm_block_sha256": "93ef97ddab7bfb97b75b3462c01ef73d09d172cff2c07e07adffac303af24437"
+    "rucm_block_sha256": "6388a88362260b9af3f0a22389ee4642c0e755367a0b6de8b018673e1819efcc"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -26,7 +26,7 @@
           4
         ]
       },
-      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。run に取り得る値の一覧を返す合図が立っている。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。"
     },
     "動かさない表明": {
       "rfs": {
@@ -187,9 +187,16 @@
     },
     {
       "id": "知らない表明-3",
-      "type": "abort",
+      "type": "action",
       "flow": "知らない表明",
       "step": 3,
+      "statement": "システムは次の継続の指示で取り得る値の一覧を返す合図を run に立てる。"
+    },
+    {
+      "id": "知らない表明-4",
+      "type": "abort",
+      "flow": "知らない表明",
+      "step": 4,
       "statement": "ABORT"
     },
     {
@@ -386,6 +393,11 @@
     {
       "from": "知らない表明-2",
       "to": "知らない表明-3",
+      "kind": "seq"
+    },
+    {
+      "from": "知らない表明-3",
+      "to": "知らない表明-4",
       "kind": "seq"
     },
     {
@@ -589,7 +601,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "知らない表明",
-      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
+      "postcondition": "システムは issue の Status を書いていない。run に表明を促す合図は立っていない。run に取り得る値の一覧を返す合図が立っている。issue に Status を動かした記録のコメントは増えていない。herdr の pane は閉じていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -597,7 +609,8 @@
         "BASIC FLOW-4",
         "知らない表明-1",
         "知らない表明-2",
-        "知らない表明-3"
+        "知らない表明-3",
+        "知らない表明-4"
       ],
       "steps": [
         "エージェントはシステムに最終応答を返す。",
@@ -607,6 +620,7 @@
         "CONDITION: NOT 表明の値が status_signal_map にある",
         "システムは表明の値が status_signal_map にないことをログに出す。",
         "システムはボードの issue の Status を動かさない。",
+        "システムは次の継続の指示で取り得る値の一覧を返す合図を run に立てる。",
         "ABORT"
       ]
     },
@@ -635,9 +649,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 29,
-    "nodes_covered": 29,
-    "edges_total": 28,
-    "edges_covered": 28
+    "nodes_total": 30,
+    "nodes_covered": 30,
+    "edges_total": 29,
+    "edges_covered": 29
   }
 }

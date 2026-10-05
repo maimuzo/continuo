@@ -9,6 +9,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/statussignal"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -48,6 +49,11 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 
 	signals := o.readSignals(ctx, rs)
 	rs.setMissingSignal(len(signals) == 0)
+	// **取り得る値に無かった表明を控える**（issue #274 の経路2。設計 3-25）。
+	// 次の継続の指示が「続けてください」の代わりに、その値と取り得る値の一覧を返す。
+	// **`applySignals` と同じ判定（`statussignal.Lookup`）で数える。**別の比べ方をすると、
+	// Status を動かした値を「決まり以外」と返すことになる。
+	rs.setInvalidSignals(statussignal.FindInvalid(signals, o.cfg.Tracker.StatusSignalMap))
 	o.applySignals(ctx, rs, signals)
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
@@ -507,12 +513,8 @@ func (o *Orchestrator) noteSignalTargetsClaimed(ctx context.Context, rs *runStat
 // 戻り値の1つ目: 遷移先の Status。nil なら動かさない。
 // 戻り値の2つ目: キーがあれば true。
 func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
-	for k, v := range m {
-		if strings.EqualFold(strings.TrimSpace(k), strings.TrimSpace(value)) {
-			return v, true
-		}
-	}
-	return nil, false
+	// **実体は `statussignal.Lookup` にある**（issue #274）。`continuo hook` も同じ判定を呼ぶ。
+	return statussignal.Lookup(m, value)
 }
 
 // refreshIssue は issue を ID 指定で取り直す。
