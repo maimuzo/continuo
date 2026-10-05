@@ -10,8 +10,14 @@
 #
 # **この2つは、利用者へ配る雛形にも同じ形で入っている**
 # （[internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) の `continuo-ci.yaml`）。
-# **判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。**
+# **目印の正規表現と job の名前を、雛形と1文字も違えないこと。**
 # 揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。
+#
+# **投稿者の絞り込みだけは、雛形のほうが広い**（issue #261）。雛形は、立場が
+# OWNER / MEMBER / COLLABORATOR のどれでもない投稿者について、**そのリポジトリへ push できるか**を
+# 照会して数える。**ここは立場だけで数えるままにしてある。**このリポジトリでは立場だけで
+# 実際に通っており、自分たちのマージの門の判定を、ここで起きていない症状のために変えない
+# （[docs/plans/continuo_design.md](../../docs/plans/continuo_design.md) の 5-3o）。
 #
 # **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、1枚目の仕掛けである。**
 # もう1枚は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) で、タグを打つ前に止める。
@@ -101,11 +107,19 @@ jobs:
           #
           # **理由は目印の次の行に書かせる。**目印の中へ書かせると、
           # 閉じの `--` を理由と読んでしまい、`<!-- design-review-skipped: -->` が通る。
-          gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
+          #
+          # **取得の失敗を守る。**守らないと `set -e` で step ごと落ち、案内が空のまま赤になる。
+          # **守りの中で必ず `exit 1` する。**`gh api` は失敗したとき、誤りの JSON を標準出力へ
+          # 1行出す（gh 2.100.0 で実測）。**先へ進めると、その1行を「断りが1件ある」と数えて緑になる。**
+          if ! gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
             .[]
             | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]"))
             | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-            | .id' > skipped.txt
+            | .id' > skipped.txt; then
+            echo "この PR のコメントを読めませんでした（\`gh run rerun\` で回し直してください）" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
           if [ "$(wc -l < skipped.txt | tr -d ' ')" -gt 0 ]; then
             echo "設計のレビューを飛ばす断りが貼られています" | tee -a "${GITHUB_STEP_SUMMARY}"
             exit 0
@@ -221,9 +235,14 @@ jobs:
             echo ""
             echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
             echo "- 投稿者が **OWNER / MEMBER / COLLABORATOR** であること"
+            echo ""
             if [ "${IS_DRAFT}" = "true" ]; then
-              echo ""
               echo "**この PR は draft です。**draft のうちは赤のままでかまいません。"
+              echo "結果を貼ってから \`gh pr ready ${PR_NUMBER}\` を打つと、この検査が回り直します。"
+            else
+              echo "**この PR は draft ではありません。**"
+              echo "**結果や断りを貼っても、本文へ \`Closes #<番号>\` を書き足しても、この検査は回り直しません。**"
+              echo "\`gh run rerun\` を使うか、commit を1つ push してください。"
             fi
           } | tee -a "${GITHUB_STEP_SUMMARY}"
 
@@ -267,11 +286,19 @@ jobs:
           #
           # **数えるのを `gh` と同じパイプラインに置かないこと。**
           # `gh` が落ちても `wc` の終了状態が返るので、**取れなかったのか無かったのかを区別できなくなる。**
-          gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
+          #
+          # **取得の失敗を守る。**守らないと `set -e` で step ごと落ち、案内が空のまま赤になる。
+          # **守りの中で必ず `exit 1` する。**理由は上の job の段1と同じである
+          # （先へ進めると、`gh api` が標準出力へ出した誤りの JSON の1行を「1件ある」と数える）。
+          if ! gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
             .[]
             | select((.body // "") | test("^[ \\t\\r\\n]*<!-- code-review-result -->"))
             | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-            | .id' > matched.txt
+            | .id' > matched.txt; then
+            echo "この PR のコメントを読めませんでした（\`gh run rerun\` で回し直してください）" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
           count="$(wc -l < matched.txt | tr -d ' ')"
 
           if [ "${count}" -gt 0 ]; then

@@ -92,7 +92,9 @@ func TestCITemplate_目印が組み込みと揃っている(t *testing.T) {
 	}
 }
 
-// 目的: 目印を数える条件が、雛形の中で既存の2箇所と1文字も違わないことを確かめる。
+// 目的: 目印の正規表現が、雛形の中で既存の2箇所と1文字も違わないことを確かめる。
+//
+// **揃えるのは目印の正規表現である。**投稿者の条件は、雛形のほうが広い（issue #261。下）。
 //
 // **`\s` を使ってはならない。**engine によって当たる範囲が違い、
 // 全角空白 U+3000 を前に置いた本文が、片方だけ通る（2026-09-02 に実測）。
@@ -100,8 +102,9 @@ func TestCITemplate_目印が組み込みと揃っている(t *testing.T) {
 // scripts/check-release-ready.sh（**正本**）と .github/workflows/review-gate.yml に揃えてある。
 //
 // 与える情報: scaffold.CITemplate() の全文。
-// 成功条件: 目印の判定が「先頭 + 並べた空白文字」の形で書かれ、`\s` が1つも無いこと。
-func TestCITemplate_目印を数える条件が既存と揃っている(t *testing.T) {
+// 成功条件: 目印の判定が「先頭 + 並べた空白文字」の形で書かれ、`\s` が1つも無く、
+// 立場の式が3つの照合のすべてに在ること。
+func TestCITemplate_目印の正規表現が既存と揃っている(t *testing.T) {
 	got := scaffold.CITemplate()
 
 	// **jq のソースの中なので、バックスラッシュは2文字で書かれている。**
@@ -116,7 +119,7 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("雛形に目印の判定 %s がありません（条件が既存の2箇所とずれています）", want)
+			t.Errorf("雛形に目印の判定 %s がありません（目印の正規表現が既存の2箇所とずれています）", want)
 		}
 	}
 
@@ -125,11 +128,14 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 		t.Error(`雛形の正規表現が \s を使っています（engine で当たる範囲が変わります）`)
 	}
 
-	// **投稿者の絞り込みを落としていないこと。**
-	// **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
+	// **立場の式が、3つの照合のすべてに在ること。**
+	// **雛形は、この式で絞り込むのではなく、振り分ける**（issue #261）。式に当たれば数え、
+	// 当たらなければ、その投稿者がリポジトリへ push できるかを照会する。
+	// **式が在ることは、絞り込みが効いていることの証拠にはならない。**
+	// 外部の人が目印を貼っても通らないことは、ci_run_test.go が `run:` を走らせて確かめる。
 	const assoc = `.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR"`
 	if n := strings.Count(got, assoc); n != 3 {
-		t.Errorf("投稿者の絞り込みが %d 箇所です（3箇所であるべきです。"+
+		t.Errorf("立場の式が %d 箇所です（3箇所であるべきです。"+
 			"設計のレビュー結果・飛ばす断り・実装のレビュー結果）", n)
 	}
 }
@@ -139,9 +145,14 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 // test/internal/scaffold からの相対パスで指す。
 const reviewGatePath = "../../../.github/workflows/review-gate.yml"
 
-// 目的: 配る雛形と、このリポジトリ自身の CI が、同じ条件で数えていることを確かめる。
+// 目的: 配る雛形と、このリポジトリ自身の CI が、同じ目印の正規表現と job の名前を持つことを確かめる。
 //
-// **2つは別のファイルで、互いのコメントで「同じ条件である」と名乗っている。**
+// **見るのは、目印の正規表現3本と job の名前だけである。投稿者の条件は見ない。**
+// 投稿者の条件は、雛形のほうが広い（issue #261）。雛形は、立場が外れた投稿者について
+// リポジトリへ push できるかを照会して数え、このリポジトリの CI は立場だけで数える
+// （理由は docs/plans/continuo_design.md の 5-3o）。
+//
+// **2つは別のファイルで、互いのコメントで「目印の正規表現は同じである」と名乗っている。**
 // **名乗っているだけでは揃わない。**同じことが既に1度起きた（2026-09-02、
 // 目印の前に全角空白を置いたコメントを、CI は数え、hook は数えなかった）。
 //
@@ -151,7 +162,7 @@ const reviewGatePath = "../../../.github/workflows/review-gate.yml"
 //
 // 与える情報: scaffold.CITemplate() と .github/workflows/review-gate.yml の全文。
 // 成功条件: 3つの判定の式が、どちらのファイルにもそのまま在ること。
-func TestCITemplate_このリポジトリのCIと同じ条件で数えている(t *testing.T) {
+func TestCITemplate_このリポジトリのCIと同じ目印とjob名を持つ(t *testing.T) {
 	raw, err := os.ReadFile(reviewGatePath)
 	if err != nil {
 		t.Fatalf("このリポジトリの CI を読めません（%s）: %v", reviewGatePath, err)

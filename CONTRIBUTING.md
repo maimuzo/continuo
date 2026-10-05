@@ -172,7 +172,12 @@ sh scripts/test-like-ci.sh
 
 **この2つの目印は、利用者へ配る雛形にも同じ形で入っています**
 （[internal/scaffold/ci_template.go](internal/scaffold/ci_template.go) の `continuo-ci.yaml`）。
-**判定の条件を直すときは、両方を同時に直してください。**
+**目印の正規表現と job の名前を直すときは、両方を同時に直してください。**
+
+**投稿者の条件だけは、雛形のほうが広くしてあります。**雛形は、立場が `OWNER` / `MEMBER` / `COLLABORATOR` の
+どれでもない投稿者について、**そのリポジトリへ push できるか**を照会して数えます。
+検査の `GITHUB_TOKEN` からは、書き込める人の立場が `MEMBER` に見えないリポジトリがあるためです。
+**このリポジトリの検査は、立場だけで数えるままです**（理由は [docs/plans/continuo_design.md](docs/plans/continuo_design.md) の 5-3o）。
 
 **通し方。**
 
