@@ -381,6 +381,10 @@ func TestMarginCut_1週間の期間で上限を超えたら切り上げてから
 	if len(texts) > 2 {
 		t.Errorf("「行き先を待つ」run に指示を送っている（%d 回）:\n%s", len(texts), texts[2])
 	}
+	// **担当を外してから released を書く**（`removeOwnAssignee`）ので、担当者が外れた直後はまだ無いことがある。
+	waitFor(t, 10*time.Second, "released のコメントが書かれる", func() bool {
+		return releasedBodyOfFixture(fx, issue) != ""
+	})
 	if body := releasedBodyOfFixture(fx, issue); !strings.Contains(body, `"reason":"weekly_wait_limit`) ||
 		strings.Contains(body, "weekly_wait_limit_not_started") {
 		t.Errorf("released の本文が、切り上げてから自分で手放した側のものではありません:\n%s", body)
