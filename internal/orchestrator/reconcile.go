@@ -575,7 +575,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **そのときは `weeklyWaitExceededWith` が全部の run で偽を返すので、1度も読まれない。**
 	//
 	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
-	// **`checkStalls` が `quotaForPoll()` の2つ目の戻り値を渡す**（新しくなければ nil）。
+	// **`checkStalls` が `readQuota()` の新しい写し（`quotaReads.fresh`）を渡す**（新しくなければ nil）。
 	// 理由は `weeklyWaitExceededWith` の doc にある。
 	// **同じ期間の中で使用率は下がらないので、古い値でも回復待ちの判定には使える。**
 	// **手放しの判定には使わない。**新しい写しだけを渡す（上のとおり）。
@@ -695,10 +695,13 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 			if !mine {
 				continue
 			}
-			handling[rs] = true
 			if exceeded && stopped {
+				// **手放しを撃った巡回では、打ち切りから守らない**（下の今までの枝と同じ決まり）。
+				// 撃って失敗し続ける run を守ると、打ち切りが1回も来ず、pane と空きを握り続ける。
 				o.releaseBecauseQuotaWaitAsync(ctx, rs, shortKinds)
+				continue
 			}
+			handling[rs] = true
 			continue
 		}
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
@@ -1165,7 +1168,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// （`pollAPI` は巡回の先頭で、この関数と同じ goroutine から呼ばれるので、並行にはならない）。
 	// **2回のあいだに差し替わると、片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	//
-	// **だから `quotaForPoll` が2つの写しを1回のロックで返す**（実装レビュー6周目の MEDIUM）。
+	// **だから `readQuota` が写しを1回のロックで返す**（実装レビュー6周目の MEDIUM。issue #262 で `quotaForPoll` から替えた）。
 	// **`quotaSnapshot` と `quotaForBid` を続けて呼ぶ形へ戻してはならない。**
 	// **あれは別々にロックを取るので、この不変条件を破る。**
 	now := o.now()
@@ -1259,7 +1262,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **立てる側と外す側で、非対称にしてはならない。**
 	// **立てる側**（下の段2 の `isQuotaWaitingWith`）**にも、古い写しの門は置いていない。**
 	// **どちらも、最後に読めた値をそのまま使う**（6周目に決着させた。設計 3-77i）。
-	// **手放しだけは別で、新しさを問う**（設計 3-27。上の `quotaForPoll` の理由）。
+	// **手放しだけは別で、新しさを問う**（設計 3-27。上の `readQuota` の理由）。
 	// **片側だけ止めると、古い写しで立った印を誰も外せなくなる。**
 	// **資格情報が切れた機械は、切れる直前の値を1日中返す。**
 	// **その値が100%だったら、待っている run の打ち切りの時計が永久に止まる。**
@@ -1527,8 +1530,14 @@ func (o *Orchestrator) reconcileAwaitDestination(ctx context.Context, usable *ra
 		if rs.terminalBusy() {
 			continue
 		}
+		// **バックオフ中の run は飛ばす**（巡回のほかの段と同じ門）。打ち切られてバックオフに入った run は、
+		// 明けると `redispatch` が着手し直す。ここで `Blocked` へ戻すと、終わらせる処理と着手し直しが同じ issue で重なる。
+		// **やり直しの新しい試行は、印を下ろして最初の turn で判定し直す**（`beginAttempt`）。
+		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
+			continue
+		}
 		if usable == nil {
-			o.returnFromAwaitDestination(rs, now, "使用率を読めていない（最後に読めてから30分を過ぎた）ので、止めずに作業へ戻します")
+			o.returnFromAwaitDestination(rs, now, "使用率を読めていない（最後に読めてから30分を過ぎたか、期間が全部リセットされた）ので、止めずに作業へ戻します")
 			continue
 		}
 		if usable.AnySelected(handoff.CannotWork()) {

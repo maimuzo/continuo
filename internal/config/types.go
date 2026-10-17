@@ -168,7 +168,8 @@ type TrackerProviderHandoffConfig struct {
 	// 状態から着手すると、人間のための取り置きへ食い込む。
 	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
 	// WeeklyMarginPercent は1週間の枠のうち、人間が自分で使うぶんとして残しておく割合（%）である
-	// （continuo は使わない。扱いは FiveHourMarginPercent と同じ。issue #262）。
+	// （continuo は使わない。issue #262）。**1以上なら、走っている run も切り上げさせ、担当が自分の issue にも着手しない。**
+	// 行き先は `failure_state` だが、リセットまでが `rate_limit.weekly_wait_limit_minutes` を超えるなら担当を手放す（設計 3-27a）。
 	//
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//

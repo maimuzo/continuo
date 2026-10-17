@@ -616,10 +616,16 @@ func runPromptExpanded(
 	// 使う `margin_status_path` を、常駐が書く `margin-status` と同じパスにするためである。
 	// **`socketpath.ResolveHookSocketPath` はディレクトリを作らない**（常駐の側も `Prepare` の中で同じ関数を呼ぶ）。
 	// **求められなかったときは空を渡す。**5-8 は出ないので、そのことを標準エラーに1行出す。
-	hookSocketPath, sockErr := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(daemon.EnvRuntimeDir))
-	if sockErr != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptWarnNoMarginStatusPath, sockErr))
-		hookSocketPath = ""
+	// **使用率を読まない設定（`rate_limit.source: none`）では求めない。**常駐も 5-8 を出さないので、
+	// 求めて失敗したときに「常駐は送る」と警告すると事実と違う。
+	hookSocketPath := ""
+	if cfg.RateLimit.Source != ratelimit.SourceNone {
+		resolved, sockErr := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(daemon.EnvRuntimeDir))
+		if sockErr != nil {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptWarnNoMarginStatusPath, sockErr))
+		} else {
+			hookSocketPath = resolved
+		}
 	}
 	data := prompt.RenderData(issue, attempt, cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
 		cfg.RateLimit, hookSocketPath)

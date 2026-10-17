@@ -106,7 +106,7 @@ type Quota struct {
 	LastReadAt *time.Time `json:"last_read_at"`
 	// Fresh は、入札に使ってよいほど新しい値かである。
 	Fresh bool `json:"fresh"`
-	// NewWorkBlocked は、入札の要る issue を取らずにいるかである（担当が既にこの機械にある issue は着手する）。
+	// NewWorkBlocked は、入札の要る issue を取らずにいるかである（担当が既にこの機械にある issue は、着手の前に別にマージンを見る。issue #262）。
 	NewWorkBlocked bool `json:"new_work_blocked"`
 	// Windows は判定に使える値の期間である。**読めていなければ空の配列**（`null` にしない）。
 	Windows []QuotaWindow `json:"windows"`

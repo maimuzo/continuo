@@ -25,7 +25,7 @@ const usableQuotaWindow = 30 * time.Minute
 //
 // **3つを別々の錠で読んではならない。**`OnStatusline` は statusline の受け口の goroutine から
 // 同じ錠を取って保管値を差し替えるので、読むあいだに差し替わると、3つが食い違う
-// （`quotaForPoll` の説明と同じ理由）。
+// （`quota.go` の `quotaForPoll` の説明と同じ理由。巡回はいまはこちらを使い、`quotaForPoll` は呼ばない）。
 type quotaReads struct {
 	// usable は「使える値」である。最後に読めてから `usableQuotaWindow` 以内なら、保管値のうち、
 	// リセットの時刻を過ぎていない期間と、リセットの時刻を読めない期間（仮の期限を過ぎていても）を持つ。
@@ -286,6 +286,11 @@ func (o *Orchestrator) quotaSentenceForStall(reads quotaReads, now time.Time) (s
 		if reads.lastReadAt.IsZero() {
 			return "そのとき continuo は、立て直してから使用率をまだ読めていませんでした。", true
 		}
+		// **最後に読めてから30分以内でも、期間が全部リセットを過ぎていると使える値は空になる。**
+		// そのときは読み取りが壊れているのではないので、【よくある原因】に読めていなかったことを足さない。
+		if now.Sub(reads.lastReadAt) <= usableQuotaWindow {
+			return "そのとき continuo が最後に読めた使用率の期間は、どれもリセットの時刻を過ぎていました。", false
+		}
 		return "そのとき continuo は使用率を読めていませんでした。" +
 			"レートリミットで止まっていたのかどうかを、continuo は判定できていません。", true
 	}
@@ -300,6 +305,11 @@ func (o *Orchestrator) quotaSentenceForStall(reads quotaReads, now time.Time) (s
 		}
 		parts = append(parts, fmt.Sprintf("%sが %d%%", name, l.Percent))
 	}
-	return fmt.Sprintf("そのとき continuo が持っていた使用率は、%s でした（最後に読めたのは %s前）。",
-		strings.Join(parts, "、"), formatDuration(now.Sub(reads.lastReadAt))), false
+	ago := formatDuration(now.Sub(reads.lastReadAt)) + "前"
+	if now.Sub(reads.lastReadAt) < time.Minute {
+		// **「1分未満前」にしない。**`formatDuration` は1分未満を「1分未満」と返す。
+		ago = "1分以内"
+	}
+	return fmt.Sprintf("そのとき continuo が持っていた使用率は、%s でした（最後に読めたのは %s）。",
+		strings.Join(parts, "、"), ago), false
 }

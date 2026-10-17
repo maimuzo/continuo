@@ -150,7 +150,8 @@ type Released struct {
 	//
 	// **空なら「他の機械に外された」である**（設計 3-77c）。
 	// **`ReleaseReasonWeeklyWaitLimit` なら「1週間の枠を待つ上限を超えて自分で手放した」である**
-	// （設計 3-27）。**この2つで本文が変わる。**
+	// （設計 3-27）。**`ReleaseReasonWeeklyWaitLimitNoPush` と `ReleaseReasonWeeklyWaitLimitNotStarted`
+	// （Claude Code も `after_run` も走らせずに手放した。issue #262）もあり、値で本文が変わる。**
 	// 外された側は「この branch へ push しないでください」だが、
 	// **自分から手放した側は、その直前に `workspace_hooks.after_run` を走らせている**（設定していれば。雛形の既定は `null` で、そのときは「確かめられなかった」と書く）。
 	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**

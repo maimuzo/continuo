@@ -20,7 +20,7 @@
 - `docs/plans/continuo_design.md#3-77i`（回復待ちの判定は、新しさを問わずに保管値を使い続ける。**待つ上限で担当を手放す判定と入札は、直前の読み取りに成功した値だけを使う**）
 - `docs/plans/continuo_design.md#3-85c`（Claude Code を起動した pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#5-2`（`rate_limit` の設定キー）
-- `internal/orchestrator/reconcile.go` の `checkStalls`（巡回の評価順）、`clearQuotaWaitWhenBack`（巡回が印を外す2つの契機）、`releaseQuotaWaitExceeded`、`paneStopped`（手放しの唯一の入口）、`stalledReason`
+- `internal/orchestrator/reconcile.go` の `checkStalls`（巡回の評価順）、`clearQuotaWaitWhenBack`（巡回が印を外す2つの契機）、`releaseQuotaWaitExceeded`、`paneStopped`（走っている run の手放しの唯一の入口。着手の前の入口は `internal/orchestrator/handoff.go` の `ownIssueMarginGate`）、`stalledReason`
 - `internal/orchestrator/reconcile.go` の `reconcileAwaitDestination`、`returnFromAwaitDestination`（「行き先を待つ」run の行き先を引き直す）
 - `internal/orchestrator/marginstatus.go` の `readQuota`（使える値）
 - `internal/orchestrator/turn.go` の `isQuotaWaitingWith`、`runIdleForTurnTimeout`、`quotaResetAtOf`

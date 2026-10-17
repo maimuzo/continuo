@@ -653,7 +653,7 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **この判定は GitHub へ2回書き、pane を閉じる。**
 	//
 	// **新しさは呼び出し側が問う**（実装レビュー4周目の MEDIUM）。
-	// **`checkStalls` が `quotaForPoll()` の2つ目の戻り値（新しくなければ nil）を渡す。**
+	// **`checkStalls` が `readQuota()` の新しい写し（`quotaReads.fresh`。新しくなければ nil）を渡す。**
 	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
 	// 資格情報が切れて写しが凍っている機械は、1件も手放さない」と決めている。**
 	// **ここで `quotaSnapshot` を渡す形へ戻してはならない。**
@@ -807,7 +807,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState, shortKinds string) bool {
 	issue := rs.issue()
 	// **`shortKinds`（どの枠に余裕が無いか）は、呼び出し側が受け取って渡す。**
-	// **ここで `quotaForPoll` を呼び直してはならない**（issue #173）。
+	// **ここで `readQuota` を呼び直してはならない**（issue #173）。
 	// **手放すと決めたのは巡回が1回のロックで取った写しであり、
 	// この goroutine が走るころには 次の巡回の `pollAPI` か、並行に走る `OnStatusline` が差し替えているか、古い印が付いている。**
 	// **読み直すと、判定した写しとログに出す数字が別々の読み取りから作られる。**
@@ -1596,7 +1596,8 @@ func (o *Orchestrator) ownIssueMarginGate(
 	cannot := usable.AnySelected(handoff.CannotWork())
 	if dest == handoff.DestRelease {
 		if handoff.Decide(fresh, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch) != handoff.DestRelease {
-			o.logger.Info("担当が自分の issue ですが、担当を外すかを新しい値で確かめられないので、この巡回では着手しません（次の巡回で判定し直します）",
+			// **Debug にする。**新しい値が無いあいだ（使える値は最長30分残る）、巡回のたびに issue ごとに出るためである。
+			o.logger.Debug("担当が自分の issue ですが、担当を外すかを新しい値で確かめられないので、この巡回では着手しません（次の巡回で判定し直します）",
 				"identifier", issue.Identifier)
 			return handoffDecision{}
 		}

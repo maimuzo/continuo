@@ -74,9 +74,9 @@ var japaneseAllowance = map[string]int{
 	// 識別子の正規化で情報が落ちたときの警告。
 	"internal/normalize": 1,
 	// 常駐プロセスの本体。引き渡しコメントの文面もここにあり、まとめて移す必要がある。
-	// **issue #262 で2件増やした**（マージンを切って `Blocked` へ戻すときの理由の文面2つ。
-	// `marginCutBlockedReason` と `ownIssueBlockedReason`）。どちらも引き渡しの通知（`buildHandoffComment`）の
-	// 中に入る文面で、通知の枠はまだ日本語で直に書いてある。**ここだけ資源へ移すと、1つの通知の中で英語と日本語が混ざる。**
+	// **issue #262 で2件増やした**（60分の打ち切りの文面の1行目に足す使用率の1文。`quotaSentenceForStall`）。
+	// 打ち切りの文面（`stalledReason`）の枠はまだ日本語で直に書いてある。
+	// **ここだけ資源へ移すと、1つの文面の中で英語と日本語が混ざる。**
 	"internal/orchestrator": 29,
 	// ダッシュボードの組み立ての誤り。
 	"internal/server": 3,

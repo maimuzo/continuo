@@ -26,7 +26,8 @@ type QuotaView struct {
 	Fresh bool
 	// NewWorkBlocked は、この巡回で入札の要る issue を取らないかである（`newWorkBlockedWith` と同じ判定）。
 	//
-	// **担当が既にこの機械にある issue は、これが真でも着手する**（`newWorkBlockedWith` の説明）。
+	// **これは入札の要る issue の話である。**担当が既にこの機械にある issue は、これとは別に、着手の前に
+	// レートリミットのマージンを見る（`ownIssueMarginGate`。issue #262）。
 	NewWorkBlocked bool
 	// Windows は「使える値」の期間の一覧である（種別の昇順）。
 	//

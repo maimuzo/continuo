@@ -256,3 +256,33 @@ func TestBuildContinuationPrompt_対応表が空なら一覧を載せない(t *t
 		t.Errorf("対応表が空なのに、一覧の頭だけを載せている:\n%s", got)
 	}
 }
+
+// TestBuildContinuationPrompt_マージンを切ったら続けてくださいの代わりに切り上げの指示を送る は、
+// 3つの分岐それぞれで、切り上げの文面になることを確かめる（issue #262。設計 3-27a）。
+//
+// 与える情報: 表明が決まりどおり・いま作業している issue の表明が決まり以外・別の issue の表明だけが決まり以外。
+// 成功条件: どれも「続けてください」を含まず切り上げの文面を含み、決まり以外の案内と打ち切りまでの回数は残ること。
+func TestBuildContinuationPrompt_マージンを切ったら続けてくださいの代わりに切り上げの指示を送る(t *testing.T) {
+	const current = "octocat/hello-world#188"
+	for _, c := range []struct {
+		name    string
+		invalid []statussignal.Invalid
+		keep    string
+	}{
+		{"表明が決まりどおり", nil, "この確認は 2 回目です"},
+		{"いま作業している issue の表明が決まり以外", []statussignal.Invalid{{Target: current, Value: "done"}}, "「done」"},
+		{"別の issue の表明だけが決まり以外", []statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, "「done」"},
+	} {
+		got := orchestrator.BuildContinuationPrompt(2, 20, false, "In Progress", signalPrefix,
+			c.invalid, defaultSignalMap(), current, true)
+		if strings.Contains(got, "続けてください") {
+			t.Errorf("%s: 切り上げのときに「続けてください」を送っている:\n%s", c.name, got)
+		}
+		if !strings.Contains(got, "レートリミットのマージンを切りました") || !strings.Contains(got, signalPrefix+" working") {
+			t.Errorf("%s: 切り上げの文面が無い:\n%s", c.name, got)
+		}
+		if !strings.Contains(got, c.keep) {
+			t.Errorf("%s: %q が残っていない:\n%s", c.name, c.keep, got)
+		}
+	}
+}
