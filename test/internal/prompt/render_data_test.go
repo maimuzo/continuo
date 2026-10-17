@@ -6,8 +6,10 @@ package prompt_test
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -30,7 +32,7 @@ import (
 // 与える情報: 作り物の issue から作った `RenderData` と、`SampleData`。
 // 成功条件: 入れ子まで含めた名前の集合が完全に一致すること。
 func TestRenderData_返す名前がSampleDataと一致する(t *testing.T) {
-	got := prompt.RenderData(tracker.Issue{}, nil, 0)
+	got := prompt.RenderData(tracker.Issue{}, nil, 0, config.RateLimitConfig{}, "")
 	want := prompt.SampleData()
 
 	if diff := nameDiff(got, want); diff != "" {
@@ -61,7 +63,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 	}
 
 	// 1回目（attempt は nil）。
-	got := prompt.RenderData(issue, nil, 3600000)
+	got := prompt.RenderData(issue, nil, 3600000, config.RateLimitConfig{}, "")
 	if got["attempt"] != nil {
 		t.Errorf("1回目の attempt が nil ではありません: %#v", got["attempt"])
 	}
@@ -74,7 +76,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 
 	// やり直し（attempt に回数が入る）。
 	n := 3
-	got = prompt.RenderData(issue, &n, 60000)
+	got = prompt.RenderData(issue, &n, 60000, config.RateLimitConfig{}, "")
 	if got["attempt"] != 3 {
 		t.Errorf("attempt が回数になっていません: %#v", got["attempt"])
 	}
@@ -83,7 +85,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 	}
 
 	// リンクも URL も無い issue。**空文字にする。**nil を入れると変数展開で落ちる。
-	got = prompt.RenderData(tracker.Issue{}, nil, 0)
+	got = prompt.RenderData(tracker.Issue{}, nil, 0, config.RateLimitConfig{}, "")
 	if got["push_branch"] != "" {
 		t.Errorf("リンクが無いのに push_branch が空文字ではありません: %#v", got["push_branch"])
 	}
@@ -112,14 +114,18 @@ func TestRenderData_組み込みの文面を実際に展開できる(t *testing.
 	frag := prompt.Build("", "/dev/null/WORKFLOW.md")
 
 	for _, c := range []struct {
-		name    string
-		attempt *int
+		name      string
+		attempt   *int
+		rateLimit config.RateLimitConfig
+		socket    string
 	}{
-		{"1回目", nil},
-		{"やり直し", func() *int { n := 2; return &n }()},
+		{"1回目", nil, config.RateLimitConfig{}, ""},
+		{"やり直し", func() *int { n := 2; return &n }(), config.RateLimitConfig{}, ""},
+		// **5-8 を出す形も展開できること**（issue #262）。`{{if .margin_status_path}}` の中も検査する。
+		{"margin-status を書く機械", nil, config.RateLimitConfig{Source: "oauth_usage_api"}, "/tmp/continuo/hooks.sock"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			out, err := frag.Render(prompt.RenderData(issue, c.attempt, 3600000))
+			out, err := frag.Render(prompt.RenderData(issue, c.attempt, 3600000, c.rateLimit, c.socket))
 			if err != nil {
 				t.Fatalf("変数展開に失敗しました: %v", err)
 			}
@@ -200,4 +206,42 @@ func indexOfTemplate(s string) int {
 		}
 	}
 	return -1
+}
+
+// 目的: `margin_status_path` を、常駐が書くパスと同じ関数で決めていることを固定する（issue #262）。
+//
+// **書く機械では、hook を受ける socket と同じディレクトリの `margin-status` になる。**
+// **書かない機械（`rate_limit.source: none`、socket のパスが空）では空文字になり、5-8 の節ごと出ない。**
+// **パスの中の単引用符は `'\\”` に置き換える。**5-8 は単引用符で囲んだ `cat` で叩かせるためである。
+//
+// 与える情報: 3つの設定と socket のパス。
+// 成功条件: 値と、組み込みの文面に 5-8 が出るかどうかが期待どおりであること。
+func TestRenderData_margin_status_pathを常駐と同じ関数で決める(t *testing.T) {
+	frag := prompt.Build("", "/dev/null/WORKFLOW.md")
+	for _, c := range []struct {
+		name      string
+		rateLimit config.RateLimitConfig
+		socket    string
+		want      string
+		show      bool
+	}{
+		{"usage API を読む機械", config.RateLimitConfig{Source: "oauth_usage_api"}, "/tmp/continuo/hooks.sock", "/tmp/continuo/margin-status", true},
+		{"使用率を読まない機械", config.RateLimitConfig{Source: "none"}, "/tmp/continuo/hooks.sock", "", false},
+		{"socket のパスを求められなかった", config.RateLimitConfig{Source: "oauth_usage_api"}, "", "", false},
+		{"単引用符を含むパス", config.RateLimitConfig{Source: "statusline"}, "/tmp/it's/hooks.sock", `/tmp/it'\''s/margin-status`, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			data := prompt.RenderData(tracker.Issue{Identifier: "octocat/hello-world#42"}, nil, 3600000, c.rateLimit, c.socket)
+			if data["margin_status_path"] != c.want {
+				t.Errorf("margin_status_path = %#v（%#v を期待）", data["margin_status_path"], c.want)
+			}
+			out, err := frag.Render(data)
+			if err != nil {
+				t.Fatalf("変数展開に失敗しました: %v", err)
+			}
+			if got := strings.Contains(out, "## 5-8. レートリミットのマージンを切ったら、切り上げる"); got != c.show {
+				t.Errorf("5-8 が出るか = %v（%v を期待）", got, c.show)
+			}
+		})
+	}
 }

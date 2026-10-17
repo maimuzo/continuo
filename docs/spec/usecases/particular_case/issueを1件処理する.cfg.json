@@ -3,7 +3,7 @@
   "usecase_name": "issueを1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issueを1件処理する.rucm.md",
-    "rucm_block_sha256": "cdbd30ad770711612633fb6163864b3a90255e2e0f9c3ad4aa205f43502a2fc8"
+    "rucm_block_sha256": "994f1073625bf05b2eb83e5908c06cedc8b3440758e258b1fff1a9d9dd87a7eb"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -429,6 +429,15 @@
         ]
       },
       "postcondition": "herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。"
+    },
+    "切り上げのturnの終わり": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          56
+        ]
+      },
+      "postcondition": "行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。"
     }
   },
   "nodes": [
@@ -816,20 +825,27 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 56,
-      "statement": "UNTIL 取り直した issue の Status が active_states に入っていない"
+      "statement": "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。"
     },
     {
       "id": "BASIC FLOW-57",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 57,
-      "statement": "システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。"
+      "statement": "UNTIL 取り直した issue の Status が active_states に入っていない"
     },
     {
       "id": "BASIC FLOW-58",
-      "type": "include",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 58,
+      "statement": "システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。"
+    },
+    {
+      "id": "BASIC FLOW-59",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 59,
       "statement": "INCLUDE USE CASE runを終えてworkerを止める",
       "include": "runを終えてworkerを止める"
     },
@@ -2066,6 +2082,56 @@
       "flow": "ボードから消えたissue",
       "step": 7,
       "statement": "ABORT"
+    },
+    {
+      "id": "切り上げのturnの終わり-1",
+      "type": "condition",
+      "flow": "切り上げのturnの終わり",
+      "step": 1,
+      "statement": "IF 使える値でマージンを切った期間の行き先が Blocked である THEN"
+    },
+    {
+      "id": "切り上げのturnの終わり-2",
+      "type": "action",
+      "flow": "切り上げのturnの終わり",
+      "step": 2,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "切り上げのturnの終わり-3",
+      "type": "action",
+      "flow": "切り上げのturnの終わり",
+      "step": 3,
+      "statement": "システムは issue にマージンを切った期間とリセットの時刻を書いた理由を1件コメントする。"
+    },
+    {
+      "id": "切り上げのturnの終わり-4",
+      "type": "include",
+      "flow": "切り上げのturnの終わり",
+      "step": 4,
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
+    },
+    {
+      "id": "切り上げのturnの終わり-6",
+      "type": "action",
+      "flow": "切り上げのturnの終わり",
+      "step": 6,
+      "statement": "システムは run に行き先を待つ印を立てる。"
+    },
+    {
+      "id": "切り上げのturnの終わり-7",
+      "type": "action",
+      "flow": "切り上げのturnの終わり",
+      "step": 7,
+      "statement": "システムは Claude Code に次の turn を送らずに turn ループを抜ける。"
+    },
+    {
+      "id": "切り上げのturnの終わり-9",
+      "type": "abort",
+      "flow": "切り上げのturnの終わり",
+      "step": 9,
+      "statement": "ABORT"
     }
   ],
   "edges": [
@@ -2684,17 +2750,29 @@
       "from": "BASIC FLOW-56",
       "to": "BASIC FLOW-57",
       "kind": "true",
-      "condition": "取り直した issue の Status が active_states に入っていない"
+      "condition": "取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い"
     },
     {
       "from": "BASIC FLOW-56",
+      "to": "切り上げのturnの終わり-1",
+      "kind": "false",
+      "condition": "NOT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い"
+    },
+    {
+      "from": "BASIC FLOW-57",
+      "to": "BASIC FLOW-58",
+      "kind": "true",
+      "condition": "取り直した issue の Status が active_states に入っていない"
+    },
+    {
+      "from": "BASIC FLOW-57",
       "to": "BASIC FLOW-39",
       "kind": "loop",
       "condition": "NOT 取り直した issue の Status が active_states に入っていない"
     },
     {
-      "from": "BASIC FLOW-57",
-      "to": "BASIC FLOW-58",
+      "from": "BASIC FLOW-58",
+      "to": "BASIC FLOW-59",
       "kind": "seq"
     },
     {
@@ -3436,6 +3514,43 @@
       "from": "ボードから消えたissue-6",
       "to": "ボードから消えたissue-7",
       "kind": "seq"
+    },
+    {
+      "from": "切り上げのturnの終わり-1",
+      "to": "切り上げのturnの終わり-2",
+      "kind": "true",
+      "condition": "使える値でマージンを切った期間の行き先が Blocked である"
+    },
+    {
+      "from": "切り上げのturnの終わり-1",
+      "to": "切り上げのturnの終わり-6",
+      "kind": "false",
+      "condition": "NOT 使える値でマージンを切った期間の行き先が Blocked である"
+    },
+    {
+      "from": "切り上げのturnの終わり-2",
+      "to": "切り上げのturnの終わり-3",
+      "kind": "seq"
+    },
+    {
+      "from": "切り上げのturnの終わり-3",
+      "to": "切り上げのturnの終わり-4",
+      "kind": "seq"
+    },
+    {
+      "from": "切り上げのturnの終わり-4",
+      "to": "切り上げのturnの終わり-9",
+      "kind": "seq"
+    },
+    {
+      "from": "切り上げのturnの終わり-6",
+      "to": "切り上げのturnの終わり-7",
+      "kind": "seq"
+    },
+    {
+      "from": "切り上げのturnの終わり-7",
+      "to": "切り上げのturnの終わり-9",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -3501,7 +3616,8 @@
         "BASIC FLOW-55",
         "BASIC FLOW-56",
         "BASIC FLOW-57",
-        "BASIC FLOW-58"
+        "BASIC FLOW-58",
+        "BASIC FLOW-59"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3558,6 +3674,7 @@
         "システムは Status を動かした記録を issue にコメントする。",
         "システムはボードの issue の Status を ID 指定で取り直す。",
         "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
         "UNTIL 取り直した issue の Status が active_states に入っていない",
         "システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。",
         "INCLUDE USE CASE runを終えてworkerを止める"
@@ -3624,6 +3741,7 @@
         "BASIC FLOW-54",
         "BASIC FLOW-55",
         "BASIC FLOW-56",
+        "BASIC FLOW-57",
         "BASIC FLOW-39"
       ],
       "steps": [
@@ -3681,6 +3799,7 @@
         "システムは Status を動かした記録を issue にコメントする。",
         "システムはボードの issue の Status を ID 指定で取り直す。",
         "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
         "UNTIL 取り直した issue の Status が active_states に入っていない",
         "CONDITION: NOT 取り直した issue の Status が active_states に入っていない",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
@@ -3688,6 +3807,267 @@
     },
     {
       "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "切り上げのturnの終わり",
+      "postcondition": "行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48",
+        "BASIC FLOW-49",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51",
+        "BASIC FLOW-52",
+        "BASIC FLOW-53",
+        "BASIC FLOW-54",
+        "BASIC FLOW-55",
+        "BASIC FLOW-56",
+        "切り上げのturnの終わり-1",
+        "切り上げのturnの終わり-2",
+        "切り上げのturnの終わり-3",
+        "切り上げのturnの終わり-4",
+        "切り上げのturnの終わり-9"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 定期の検査に落ちておらず、かつ候補の一覧を取れている。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の pane を閉じる処理が残っていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に担当者がいるか、システムが入札できる枠の余裕を持っている。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "INCLUDE USE CASE issueの担当を入札で決める",
+        "システムは VALIDATES THAT 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない。",
+        "システムは VALIDATES THAT 入札の段が、先頭の issue をこの機械が着手する相手として渡している。",
+        "システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。",
+        "システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。",
+        "システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く。",
+        "システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする。",
+        "システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは workspace_hooks の before_run を実行する。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。",
+        "システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。",
+        "システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。",
+        "システムは transcript から表明の行を読む。",
+        "システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
+        "CONDITION: NOT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い",
+        "IF 使える値でマージンを切った期間の行き先が Blocked である THEN",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは issue にマージンを切った期間とリセットの時刻を書いた理由を1件コメントする。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "切り上げのturnの終わり",
+      "postcondition": "行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48",
+        "BASIC FLOW-49",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51",
+        "BASIC FLOW-52",
+        "BASIC FLOW-53",
+        "BASIC FLOW-54",
+        "BASIC FLOW-55",
+        "BASIC FLOW-56",
+        "切り上げのturnの終わり-1",
+        "切り上げのturnの終わり-6",
+        "切り上げのturnの終わり-7",
+        "切り上げのturnの終わり-9"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 定期の検査に落ちておらず、かつ候補の一覧を取れている。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の pane を閉じる処理が残っていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に担当者がいるか、システムが入札できる枠の余裕を持っている。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "INCLUDE USE CASE issueの担当を入札で決める",
+        "システムは VALIDATES THAT 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない。",
+        "システムは VALIDATES THAT 入札の段が、先頭の issue をこの機械が着手する相手として渡している。",
+        "システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。",
+        "システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。",
+        "システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く。",
+        "システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする。",
+        "システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは workspace_hooks の before_run を実行する。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。",
+        "システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。",
+        "システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。",
+        "システムは transcript から表明の行を読む。",
+        "システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
+        "CONDITION: NOT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い",
+        "IF 使える値でマージンを切った期間の行き先が Blocked である THEN",
+        "CONDITION: NOT 使える値でマージンを切った期間の行き先が Blocked である",
+        "システムは run に行き先を待つ印を立てる。",
+        "システムは Claude Code に次の turn を送らずに turn ループを抜ける。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
       "terminal": "abort",
       "terminal_flow": "ボードから消えたissue",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -3820,7 +4200,7 @@
       ]
     },
     {
-      "id": "P004",
+      "id": "P006",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "issue の担当者はこの機械の投稿者1人のままである。印は外れている。run を終える段が成果のコメントを確かめられた場合は、issue の Status は表明の値の遷移先の選択肢であり、issue にエージェントが書いたコメントが1件以上あり、herdr の pane は閉じており、issue に Claude Code を閉じた記録のコメントが1件増えている。run を終える段が代替フローで終わった場合は、Status とコメントと pane は、runを終えてworkerを止める の代替フローの事後条件のとおりである。遷移先の選択肢が cleanup.on_states に入っていなければ、worktree と branch は残っている。",
@@ -3882,7 +4262,8 @@
         "BASIC FLOW-55",
         "BASIC FLOW-56",
         "BASIC FLOW-57",
-        "BASIC FLOW-58"
+        "BASIC FLOW-58",
+        "BASIC FLOW-59"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3941,13 +4322,14 @@
         "RESUME STEP 54",
         "システムはボードの issue の Status を ID 指定で取り直す。",
         "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
         "UNTIL 取り直した issue の Status が active_states に入っていない",
         "システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。",
         "INCLUDE USE CASE runを終えてworkerを止める"
       ]
     },
     {
-      "id": "P005",
+      "id": "P007",
       "terminal": "cycle",
       "terminal_flow": "既に同じStatus",
       "postcondition": "issue の Status は表明の値の遷移先の選択肢である。ボードへは1バイトも書いていない。Status を動かした記録のコメントは増えていない。",
@@ -4008,6 +4390,7 @@
         "BASIC FLOW-54",
         "BASIC FLOW-55",
         "BASIC FLOW-56",
+        "BASIC FLOW-57",
         "BASIC FLOW-39"
       ],
       "steps": [
@@ -4067,13 +4450,281 @@
         "RESUME STEP 54",
         "システムはボードの issue の Status を ID 指定で取り直す。",
         "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
         "UNTIL 取り直した issue の Status が active_states に入っていない",
         "CONDITION: NOT 取り直した issue の Status が active_states に入っていない",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
       ]
     },
     {
-      "id": "P006",
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "切り上げのturnの終わり",
+      "postcondition": "行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48",
+        "BASIC FLOW-49",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51",
+        "BASIC FLOW-52",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-54",
+        "BASIC FLOW-55",
+        "BASIC FLOW-56",
+        "切り上げのturnの終わり-1",
+        "切り上げのturnの終わり-2",
+        "切り上げのturnの終わり-3",
+        "切り上げのturnの終わり-4",
+        "切り上げのturnの終わり-9"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 定期の検査に落ちておらず、かつ候補の一覧を取れている。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の pane を閉じる処理が残っていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に担当者がいるか、システムが入札できる枠の余裕を持っている。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "INCLUDE USE CASE issueの担当を入札で決める",
+        "システムは VALIDATES THAT 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない。",
+        "システムは VALIDATES THAT 入札の段が、先頭の issue をこの機械が着手する相手として渡している。",
+        "システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。",
+        "システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。",
+        "システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く。",
+        "システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする。",
+        "システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは workspace_hooks の before_run を実行する。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。",
+        "システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。",
+        "システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。",
+        "システムは transcript から表明の行を読む。",
+        "システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 書く直前に取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 54",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
+        "CONDITION: NOT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い",
+        "IF 使える値でマージンを切った期間の行き先が Blocked である THEN",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは issue にマージンを切った期間とリセットの時刻を書いた理由を1件コメントする。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "切り上げのturnの終わり",
+      "postcondition": "行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45",
+        "BASIC FLOW-46",
+        "BASIC FLOW-47",
+        "BASIC FLOW-48",
+        "BASIC FLOW-49",
+        "BASIC FLOW-50",
+        "BASIC FLOW-51",
+        "BASIC FLOW-52",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-54",
+        "BASIC FLOW-55",
+        "BASIC FLOW-56",
+        "切り上げのturnの終わり-1",
+        "切り上げのturnの終わり-6",
+        "切り上げのturnの終わり-7",
+        "切り上げのturnの終わり-9"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 定期の検査に落ちておらず、かつ候補の一覧を取れている。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の pane を閉じる処理が残っていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue に担当者がいるか、システムが入札できる枠の余裕を持っている。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "INCLUDE USE CASE issueの担当を入札で決める",
+        "システムは VALIDATES THAT 入札の段が、この巡回のコメントの読み取りの上限に達して巡回の残りを打ち切っていない。",
+        "システムは VALIDATES THAT 入札の段が、先頭の issue をこの機械が着手する相手として渡している。",
+        "システムは VALIDATES THAT 入札のあいだに、先頭の issue に別の run の印が付いていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT この着手がバックオフ明けのやり直しであるか、候補の一覧で担当者だったこの機械の投稿者が、取り直した issue の担当者から外れていない。",
+        "システムは VALIDATES THAT 書く直前に取り直した issue がボードから見えており、かつ Status が running_state を書いてはいけない Status に入っていない。",
+        "システムは、書く直前に取り直した Status が running_state でなければ、ボードの issue の Status に running_state の選択肢を書く。",
+        "システムは、Status を書き込んだ場合に、Status を動かした記録を issue にコメントする。",
+        "システムは、置き場所に再利用できる worktree が無い場合に、workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは、同じリポジトリ本体で statusline取得用の workspace が開いていれば閉じるのを待ってから、worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは、worktree を新しく作った場合に、workspace_hooks の after_create を実行する。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があり、その会話の記録が在れば前回のセッション UUID への復帰つきの起動フラグを使うと決め、そうでなければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは workspace_hooks の before_run を実行する。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT Claude Code から届いた hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに、background_tasks の項目を持つ Stop hook が届いている。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の background_tasks が空配列である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit も background_tasks が空でない Stop hook も届かない。",
+        "システムは VALIDATES THAT settle_ms が過ぎた時点の agent_status が working でない。",
+        "システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue の担当者が、ほかのアカウントだけになっていない。",
+        "システムは transcript から表明の行を読む。",
+        "システムは、表明の値に遷移先が決まっていれば、ボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 書く直前に取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 54",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
+        "CONDITION: NOT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い",
+        "IF 使える値でマージンを切った期間の行き先が Blocked である THEN",
+        "CONDITION: NOT 使える値でマージンを切った期間の行き先が Blocked である",
+        "システムは run に行き先を待つ印を立てる。",
+        "システムは Claude Code に次の turn を送らずに turn ループを抜ける。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "ボードから消えたissue",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -4209,7 +4860,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "担当が移った",
       "postcondition": "issue の担当者はこの機械の投稿者ではない。この機械は branch へ1バイトも push していない。システムはこの turn の表明を読んでいない。issue の Status は running_state の選択肢のままである。herdr の pane は閉じている。issue に Claude Code を閉じた記録のコメントは増えていない。印は外れている。worktree は残っている。",
@@ -4332,7 +4983,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P012",
       "terminal": "cycle",
       "terminal_flow": "書き直しの待ち",
       "postcondition": "turn 数は増えていない。システムは settle_ms ごとに agent_status を見直している。新しい Stop hook が届かないまま agent_status が working でなくなれば、システムは turn の終わりとして先へ進む。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。",
@@ -4443,7 +5094,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P013",
       "terminal": "cycle",
       "terminal_flow": "turnの継続",
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。",
@@ -4552,7 +5203,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P014",
       "terminal": "cycle",
       "terminal_flow": "turnの継続",
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。",
@@ -4657,7 +5308,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "権限の確認",
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。herdr の pane は閉じている。印は外れている。worktree は残っている。",
@@ -4766,7 +5417,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "無音の打ち切り",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -4877,7 +5528,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "turnの終わりの取りこぼし",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。",
@@ -4986,7 +5637,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "リトライの尽き",
       "postcondition": "issue の Status は failure_state の選択肢である。印は外れている。herdr の pane は閉じている。issue に打ち切りの理由のコメントが1件ある。worktree は残っている。",
@@ -5094,7 +5745,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P019",
       "terminal": "cycle",
       "terminal_flow": "騙りのhook",
       "postcondition": "捨てた hook は Stop hook の到着に数えていない。turn 数は増えていない。システムは次の hook を待っている。issue の Status は running_state の選択肢のままである。",
@@ -5195,7 +5846,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "権限の確認",
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。herdr の pane は閉じている。印は外れている。worktree は残っている。",
@@ -5298,7 +5949,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "送信の失敗",
       "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -5401,7 +6052,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "一時的な送信の失敗",
       "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。次の巡回が turn ループを起こし、turn を送らずに turn の終わりを待つ。",
@@ -5500,7 +6151,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "本文の組み立ての失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
@@ -5599,7 +6250,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "上限での打ち切り",
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。herdr の pane は閉じている。印は外れている。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
@@ -5696,7 +6347,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P025",
       "terminal": "abort",
       "terminal_flow": "turnループの重なり",
       "postcondition": "印は残っている。issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。herdr の pane は開いたままである。worktree は残っている。",
@@ -5785,7 +6436,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "起動直後の確認画面",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。止まった起動は新しいセッション UUID の指定つきの起動である。",
@@ -5880,7 +6531,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P027",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
       "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
@@ -5975,7 +6626,7 @@
       ]
     },
     {
-      "id": "P024",
+      "id": "P028",
       "terminal": "abort",
       "terminal_flow": "起動の断念",
       "postcondition": "issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。worktree は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。断念した起動は新しいセッション UUID の指定つきの起動である。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -6075,7 +6726,7 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P029",
       "terminal": "abort",
       "terminal_flow": "起動の確認の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。リトライの回数は増えていない。turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は外れている。worktree は残っている。失敗した起動は新しいセッション UUID の指定つきの起動である。",
@@ -6171,7 +6822,7 @@
       ]
     },
     {
-      "id": "P026",
+      "id": "P030",
       "terminal": "abort",
       "terminal_flow": "未登録のまま作業中",
       "postcondition": "Claude Code は pane の中で走っている。hook の引き当ての索引は張り替えていない。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。次の巡回が turn ループを起こし、turn を送らずに走っている turn の終わりを待つ。1回目の turn の本文は、走っている turn が終わった次の周で送る。",
@@ -6262,7 +6913,7 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P031",
       "terminal": "cycle",
       "terminal_flow": "復帰の失敗",
       "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
@@ -6363,7 +7014,7 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -6454,7 +7105,7 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P033",
       "terminal": "cycle",
       "terminal_flow": "復帰の失敗",
       "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
@@ -6553,7 +7204,7 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P034",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
       "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。",
@@ -6640,7 +7291,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "paneの断念",
       "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。印は外れている。worktree は残っている。",
@@ -6732,7 +7383,7 @@
       ]
     },
     {
-      "id": "P032",
+      "id": "P036",
       "terminal": "cycle",
       "terminal_flow": "復帰の失敗",
       "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
@@ -6829,7 +7480,7 @@
       ]
     },
     {
-      "id": "P033",
+      "id": "P037",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -6916,7 +7567,7 @@
       ]
     },
     {
-      "id": "P034",
+      "id": "P038",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7001,7 +7652,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P039",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7084,7 +7735,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7165,7 +7816,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P041",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7244,7 +7895,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P042",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7321,7 +7972,7 @@
       ]
     },
     {
-      "id": "P039",
+      "id": "P043",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7396,7 +8047,7 @@
       ]
     },
     {
-      "id": "P040",
+      "id": "P044",
       "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
@@ -7465,7 +8116,7 @@
       ]
     },
     {
-      "id": "P041",
+      "id": "P045",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。印は外れている。",
@@ -7537,7 +8188,7 @@
       ]
     },
     {
-      "id": "P042",
+      "id": "P046",
       "terminal": "abort",
       "terminal_flow": "worktreeの用意のやり直し",
       "postcondition": "issue の Status は running_state の選択肢のままである。システムはこの着手で worktree を作っていない。herdr の pane は開いていない。印は残っている。バックオフが明けた巡回が、着手の直前の検査から着手をやり直す。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。",
@@ -7604,7 +8255,7 @@
       ]
     },
     {
-      "id": "P043",
+      "id": "P047",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7673,7 +8324,7 @@
       ]
     },
     {
-      "id": "P044",
+      "id": "P048",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。印は外れている。作りかけの worktree は残っている。turn の本文は Claude Code に届いていない。worktree を herdr の workspace として開いたあとで失敗した場合は、システムが着手で新しく開いた pane は閉じている。既に開いていた workspace の pane は閉じていない。running_state の書き込みそのものが失敗した場合は、worktree は作られていない。",
@@ -7738,7 +8389,7 @@
       ]
     },
     {
-      "id": "P045",
+      "id": "P049",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。システムはこの着手で worktree を作っていない。やり直しの着手では、前の着手で作った worktree が残っている。issue に Status を動かした記録のコメントは付いていない。issue に人間へ引き渡す通知のコメントは付いていない。印は外れている。担当者を外せなかった場合は、書いた担当者が issue に残っている。",
@@ -7799,7 +8450,7 @@
       ]
     },
     {
-      "id": "P046",
+      "id": "P050",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。システムはこの着手で worktree を作っていない。やり直しの着手では、前の着手で作った worktree が残っている。issue に Status を動かした記録のコメントは付いていない。issue に人間へ引き渡す通知のコメントは付いていない。印は外れている。担当者を外せなかった場合は、書いた担当者が issue に残っている。",
@@ -7858,7 +8509,7 @@
       ]
     },
     {
-      "id": "P047",
+      "id": "P051",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。システムはこの着手で worktree を作っていない。やり直しの着手では、前の着手で作った worktree が残っている。issue に Status を動かした記録のコメントは付いていない。issue に人間へ引き渡す通知のコメントは付いていない。印は外れている。担当者を外せなかった場合は、書いた担当者が issue に残っている。",
@@ -7915,7 +8566,7 @@
       ]
     },
     {
-      "id": "P048",
+      "id": "P052",
       "terminal": "abort",
       "terminal_flow": "印の取り損ね",
       "postcondition": "システムは新しい印を付けていない。issue の Status はボードにある選択肢のままである。worktree は作られていない。担当者を外せなかった場合は、書いた担当者が issue に残っている。他の候補の dispatch は続いている。",
@@ -7966,7 +8617,7 @@
       ]
     },
     {
-      "id": "P049",
+      "id": "P053",
       "terminal": "abort",
       "terminal_flow": "入札で降りた",
       "postcondition": "システムは印を付けていない。システムは issue の Status を書いていない。worktree は作っていない。入札の段が issue に書いたコメントと担当者は、入札の記述の事後条件のとおりである。他の候補の dispatch は続いている。",
@@ -8013,7 +8664,7 @@
       ]
     },
     {
-      "id": "P050",
+      "id": "P054",
       "terminal": "abort",
       "terminal_flow": "入札での巡回の打ち切り",
       "postcondition": "印の件数は変わっていない。issue の Status はボードにある選択肢のままである。worktree は作っていない。入札の段が書いたものは、入札の記述の事後条件のとおりである。残りの候補は、次の巡回で上から見直す。",
@@ -8058,7 +8709,7 @@
       ]
     },
     {
-      "id": "P051",
+      "id": "P055",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -8101,7 +8752,7 @@
       ]
     },
     {
-      "id": "P052",
+      "id": "P056",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -8142,7 +8793,7 @@
       ]
     },
     {
-      "id": "P053",
+      "id": "P057",
       "terminal": "abort",
       "terminal_flow": "枠の余裕なし",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。入札のコメントは書いていない。branch の使われ方と worktree の置き場所は検査していない。他の候補の dispatch は続いている。",
@@ -8181,7 +8832,7 @@
       ]
     },
     {
-      "id": "P054",
+      "id": "P058",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status はボードにある選択肢のままである。worktree は作られていない。",
@@ -8218,7 +8869,7 @@
       ]
     },
     {
-      "id": "P055",
+      "id": "P059",
       "terminal": "abort",
       "terminal_flow": "ラベルの不足",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -8253,7 +8904,7 @@
       ]
     },
     {
-      "id": "P056",
+      "id": "P060",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。信頼登録の承認を促すコメントは、対象リポジトリにつき1件だけである。",
@@ -8290,7 +8941,7 @@
       ]
     },
     {
-      "id": "P057",
+      "id": "P061",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。failure_state を書けていた失敗では、人間がボードの Status を動かすまで、システムはこの issue を拾わない。failure_state を書けなかった失敗では、最後の失敗から agent.max_retry_backoff_ms が過ぎると、システムは失敗の記録を消して拾い直す。",
@@ -8321,7 +8972,7 @@
       ]
     },
     {
-      "id": "P058",
+      "id": "P062",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -8350,7 +9001,7 @@
       ]
     },
     {
-      "id": "P059",
+      "id": "P063",
       "terminal": "abort",
       "terminal_flow": "閉じ終えていないpane",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。印は付いていない。閉じる前の pane へ Claude Code の起動を要求していない。他の候補の dispatch は続いている。",
@@ -8377,7 +9028,7 @@
       ]
     },
     {
-      "id": "P060",
+      "id": "P064",
       "terminal": "abort",
       "terminal_flow": "走行中のissue",
       "postcondition": "先に印を取った run は走り続けている。ボードへは1バイトも書いていない。印の件数は変わっていない。他の候補の dispatch は続いている。",
@@ -8400,7 +9051,7 @@
       ]
     },
     {
-      "id": "P061",
+      "id": "P065",
       "terminal": "abort",
       "terminal_flow": "巡回のdispatchの見送り",
       "postcondition": "ボードへは1バイトも書いていない。印の件数は変わっていない。走っている run の照合と片付けと停滞の検知は、同じ巡回で続いている。",
@@ -8424,9 +9075,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 232,
-    "nodes_covered": 232,
-    "edges_total": 255,
-    "edges_covered": 255
+    "nodes_total": 240,
+    "nodes_covered": 240,
+    "edges_total": 264,
+    "edges_covered": 264
   }
 }

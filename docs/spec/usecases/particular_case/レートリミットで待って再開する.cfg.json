@@ -3,12 +3,12 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "bac1e172b6ac9ee5520b81ab8401cd7e373c3821975aa681e9837721b3eb0a36"
+    "rucm_block_sha256": "27f677d73c8b8d6adfc8873b0ac7d8be6ac1ad5e48191bfaa48db5b1d3abbd25"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "run の枠待ちの印は外れている。run の turn 数は1つ増えている。Claude Code は継続の指示を1回受けている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。"
+      "postcondition": "run の枠待ちの印は外れている。run の turn 数は1つ増えている。Claude Code は継続の指示を1回受けている。継続の指示は、使える値でほかの期間がまだマージンを切っていて Claude Code が動けるなら、続けてくださいの代わりに切り上げの文面である。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。"
     },
     "枠待ちではない待ち受け": {
       "rfs": {
@@ -781,7 +781,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "run の枠待ちの印は外れている。run の turn 数は1つ増えている。Claude Code は継続の指示を1回受けている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
+      "postcondition": "run の枠待ちの印は外れている。run の turn 数は1つ増えている。Claude Code は継続の指示を1回受けている。継続の指示は、使える値でほかの期間がまだマージンを切っていて Claude Code が動けるなら、続けてくださいの代わりに切り上げの文面である。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

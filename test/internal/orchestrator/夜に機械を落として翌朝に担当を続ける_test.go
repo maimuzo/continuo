@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "bc3b56a0bd973d7f298f21111aadb8a09916228f7dec19719e9aa52fbb7f0ba8", "SOURCE": "docs/spec/usecases/scenario/夜に機械を落として翌朝に担当を続ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "da97e659b9342689a66f1fddbb0cef726ac63f838492c313f733a8c7fdb7f93e", "SOURCE": "docs/spec/usecases/scenario/夜に機械を落として翌朝に担当を続ける.cfg.json"}
 //
 // **ユースケース記述「夜に機械を落として翌朝に担当を続ける」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

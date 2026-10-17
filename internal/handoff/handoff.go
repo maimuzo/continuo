@@ -150,7 +150,8 @@ type Released struct {
 	//
 	// **空なら「他の機械に外された」である**（設計 3-77c）。
 	// **`ReleaseReasonWeeklyWaitLimit` なら「1週間の枠を待つ上限を超えて自分で手放した」である**
-	// （設計 3-27）。**この2つで本文が変わる。**
+	// （設計 3-27）。**`ReleaseReasonWeeklyWaitLimitNoPush` と `ReleaseReasonWeeklyWaitLimitNotStarted`
+	// （Claude Code も `after_run` も走らせずに手放した。issue #262）もあり、値で本文が変わる。**
 	// 外された側は「この branch へ push しないでください」だが、
 	// **自分から手放した側は、その直前に `workspace_hooks.after_run` を走らせている**（設定していれば。雛形の既定は `null` で、そのときは「確かめられなかった」と書く）。
 	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**
@@ -179,6 +180,14 @@ const (
 	// **本文を分ける。**「実行済みです。remote の続きから始めてください」と断言すると、
 	// **次に拾う機械が、入っていない commit の続きから始める。**
 	ReleaseReasonWeeklyWaitLimitNoPush = "weekly_wait_limit_no_push"
+	// ReleaseReasonWeeklyWaitLimitNotStarted は、担当が自分の issue に着手する前に、1週間の枠を待つ上限を
+	// 超えていて、しかも Claude Code が動けない（使用率100%）ので、**Claude Code も
+	// `workspace_hooks.after_run` も走らせずに**手放したことを表す（issue #262）。
+	//
+	// **`ReleaseReasonWeeklyWaitLimitNoPush` と分ける。**あちらは `after_run` を走らせて失敗した（か、
+	// 設定していない）ことを表すので、同じ本文だと、issue を読む人が「走って失敗した」のか
+	// 「走らせていない」のかを見分けられない。
+	ReleaseReasonWeeklyWaitLimitNotStarted = "weekly_wait_limit_not_started"
 )
 
 // Margins は余裕値を作るときに引くマージンである（単位は %）。
@@ -204,7 +213,7 @@ const (
 	// **`rate_limit.pause_above_percent` を見る段は、ここから消えた**
 	// （人間の決定。2026-09-06。issue #173）。**余裕値と同じことを2つの閾値で言っていて、
 	// 使い分けができていなかった。**
-	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**（その後 issue #262 で、担当が自分の issue も、着手の前にレートリミットのマージンを見るようになった。設計 3-27a）
 	// **キーごと消えた。**statusline取得を開くかの判定も同じ余裕値の線を使う
 	// （`internal/orchestrator/statuslinefetch.go` の `statuslineFetchPointless`）。
 	// **別の閾値をもう1本置いてはならない。**置くと、入札が黙る使用率と

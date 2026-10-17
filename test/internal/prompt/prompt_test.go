@@ -413,6 +413,8 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		"push_branch":               true,
 		"attempt":                   true,
 		"progress_interval_minutes": true,
+		// **組み込みの指示書の 5-8 が使う**（issue #262）。
+		"margin_status_path": true,
 	}
 	got := prompt.SampleData()
 

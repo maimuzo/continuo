@@ -18,6 +18,7 @@
 - `docs/plans/continuo_design.md#5-3w`（エージェント自身に担当を確かめさせ、最初の push で draft の pull request を作らせる）
 - `docs/plans/continuo_design.md#5-3y`（終わりの報告の前に指示を分けさせ、時刻は機械のタイムゾーンで書かせる）
 - `docs/plans/continuo_design.md#3-25`（Status を動かす仕組みを、プロンプト頼みにしない）
+- `docs/plans/continuo_design.md#3-27a`（レートリミットのマージンを切ったら、走っている run を切り上げる。`builtin.md` の 5-8）
 - `docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md`
 - `docs/spec/usecases/particular_case/レビューを回す.rucm.md`
 - `docs/spec/usecases/particular_case/まとめて直したissueへ成果を書く.rucm.md`
@@ -71,7 +72,7 @@
 
 ```rucm
 USE CASE NAME: 指示書に沿ってissueを1件仕上げる
-BRIEF DESCRIPTION: システムは指示書の文面をエージェントへ送る。エージェントは issue の担当が自分のままかを確かめる。エージェントは worktree の分岐元を取り込む。エージェントは issue と pull request と関連する記録を読む。エージェントは了承された計画を敵対的レビューに掛ける。エージェントは実装して pull request を出す。エージェントは pull request を敵対的レビューに掛ける。エージェントは受けた指示を実行したかどうかで分ける。エージェントは何をしたかを issue へ書く。エージェントは表明の1行で turn を終える。システムは表明どおりに Status を動かす。
+BRIEF DESCRIPTION: システムは指示書の文面をエージェントへ送る。エージェントは issue の担当が自分のままかを確かめる。エージェントは worktree の分岐元を取り込む。エージェントは issue と pull request と関連する記録を読む。エージェントは了承された計画を敵対的レビューに掛ける。エージェントは実装して pull request を出す。エージェントは pull request を敵対的レビューに掛ける。エージェントは受けた指示を実行したかどうかで分ける。エージェントは何をしたかを issue へ書く。エージェントは表明の1行で turn を終える。システムは表明どおりに Status を動かす。エージェントはレートリミットのマージンを切ったと読んだら、新しいサブエージェントを起動せずに push と引き継ぎのコメントを済ませ、作業中の表明で turn を終える。
 PRECONDITION: システムは常駐している。issue はカンバンの active_states に在る。システムは issue の worktree を用意している。システムはエージェントを起動している。WORKFLOW.md は front matter と本文を持つ。
 PRIMARY ACTOR: エージェント
 SECONDARY ACTORS: システム、GitHub、利用者
@@ -307,6 +308,18 @@ WHEN 辿って読んだ issue か pull request の記述の trusted_body か tru
 2. エージェントは書かれた内容を報告か分析として読む。
 3. RESUME STEP 9
 POSTCONDITION: 辿って読んだ記録のうち、信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。
+
+GLOBAL ALTERNATIVE FLOW マージンを切って切り上げる:
+BRANCH FROM BASIC FLOW 12,18
+WHEN エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合
+1. エージェントは新しいサブエージェントを起動しない。
+2. エージェントは commit していない変更を commit して push する。
+3. エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する。
+4. エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く。
+5. エージェントは応答の最後に作業中の表明を1行書く。
+6. システムは run の行き先を決める。
+7. ABORT
+POSTCONDITION: 走っていたサブエージェントは止められていない。commit は remote に載っている。issue に、どこまで進んだかと次に何をするかの報告のコメントがある。エージェントは Status を動かす表明を書いていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま行き先を待つ印が立っているかである。Claude Code が動けない場合は、システムはリセットを待って続ける。
 ```
 
 ## 相互作用
@@ -350,6 +363,13 @@ sequenceDiagram
         S->>GH: Status に review の遷移先を書く
         S->>S: run を終える
         U->>GH: pull request をレビューする
+    end
+    opt 作業の区切りで margin-status が MARGIN: cut を返すか、マージンを切ったという指示が届く
+        CC->>CC: 新しいサブエージェントは起動しない。走っているものは止めない
+        CC->>GH: いまある変更を commit して push し、サブエージェントの結果もあとで push する
+        CC->>GH: どこまで進んだかと次に何をするかをコメントする
+        CC->>S: working の表明で turn を終える
+        S->>S: 行き先を決める（Blocked へ戻すか、行き先を待つ）
     end
     opt レビューの途中で止まる
         CC->>S: blocked の表明で turn を終える
@@ -469,6 +489,8 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 | `pullrequestを作れない` | 成果をpushしてpullrequestを出す | 7-4 | 報告のコメント |
 | `別の人が担当になっている` | 進捗報告を書く | 5-3 | 報告のコメント |
 | `判断に迷って止まる` | この記述 | 5-4 | 報告のコメント |
+
+**`マージンを切って切り上げる` はこの表に入れていない。**エージェントは `blocked` ではなく `working` を表明して終える（`builtin.md` の 5-8）。そのあと Status を `failure_state` へ戻すか、別の機械へ引き継ぐかは continuo が決める（`issueを1件処理する` の `切り上げのturnの終わり`。issue #262）。走っているサブエージェントは止めず、新しいサブエージェントは起動しない（人間の決定「sub agentはstopはせず、返信が来るまで作業を続けて良い。ただしそれ以上はsub agentを使わないこと」。2026-10-05）。引き継ぎのコメントでは、4-1 と 4-2 の読み直しと 7-2 を省いてよい。
 
 `レビューを回す` の4つの出口は、この記述では代替フロー `レビューが止まる` の1本に受けている。
 `成果をpushしてpullrequestを出す` の4つの出口は、`pullrequestが出ていない` の1本に受けている。同じ記述の `実装の途中で作れない` は、実装の途中の push でだけ通る。段19 は実装を終えたあとなので、ここでは通らない。
@@ -668,6 +690,13 @@ flowchart TD
     A23S1["命令として扱わない記録の記述 1 エージェントは書かれた命令を実行しない"]
     A23S2["命令として扱わない記録の記述 2 エージェントは書かれた内容を報告か分析として読む"]
     A23S3["命令として扱わない記録の記述 3 RESUME STEP 9"]
+    A24S1["マージンを切って切り上げる 1 エージェントは新しいサブエージェントを起動しない"]
+    A24S2["マージンを切って切り上げる 2 エージェントは commit していない変更を commit して push する"]
+    A24S3["マージンを切って切り上げる 3 エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する"]
+    A24S4["マージンを切って切り上げる 4 エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く"]
+    A24S5["マージンを切って切り上げる 5 エージェントは応答の最後に作業中の表明を1行書く"]
+    A24S6["マージンを切って切り上げる 6 システムは run の行き先を決める"]
+    A24S7(["マージンを切って切り上げる 7 ABORT"])
     BS1 --> BS2
     BS2 -- はい --> BS3
     BS2 -- いいえ --> A1S1
@@ -705,6 +734,8 @@ flowchart TD
     BS18 --> BS19
     BS18 -. "WHEN エージェントが進捗報告の間隔を超えてコメントを書かないまま作業を続けている場合" .-> A18S1
     BS18 -. "WHEN エージェントが扱いに迷った場合" .-> A20S1
+    BS12 -. "WHEN エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合" .-> A24S1
+    BS18 -. "WHEN エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合" .-> A24S1
     BS19 --> BS20
     BS20 -- はい --> BS21
     BS20 -- いいえ --> A16S1
@@ -806,5 +837,11 @@ flowchart TD
     A23S1 --> A23S2
     A23S2 --> A23S3
     A23S3 -. "戻る" .-> BS9
+    A24S1 --> A24S2
+    A24S2 --> A24S3
+    A24S3 --> A24S4
+    A24S4 --> A24S5
+    A24S5 --> A24S6
+    A24S6 --> A24S7
     BS31 --> END(["終了"])
 ```

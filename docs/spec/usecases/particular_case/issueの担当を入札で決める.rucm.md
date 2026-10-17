@@ -10,6 +10,7 @@
 - `docs/plans/continuo_design.md#3-27`（usage API と statusline の切り替え・保管値の規則・新しさの幅・statusline取得）
 - `docs/plans/continuo_design.md#3-77i`（値が新しくなければ入札しない。usage API の次の読み取りか statusline取得で値が入ってから入札する）
 - `docs/plans/continuo_design.md#3-4f`（巡回は、statusline取得の値が届いた知らせでも回す）
+- `docs/plans/continuo_design.md#3-27a`（担当が自分の issue の着手の前に、使える値でマージンを見る。行き先の表）
 - `docs/plans/continuo_design.md#3-16`（着手の段の順番。担当が決まったあとに続く段）
 - `docs/plans/continuo_design.md#3-77j`（入札を見送った理由を、既定のログの水準で1行出す）
 - `internal/ratelimit/ratelimit.go` の `Snapshot`、`Snapshot.AnySelected`、`Snapshot.SelectedKinds`
@@ -28,7 +29,7 @@
 
 ```rucm
 USE CASE NAME: issueの担当を入札で決める
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは候補の先頭の issue の担当者を読む。システムは担当者が1人もいない issue に、枠の余裕値から出した判定スコアを書いた入札のコメントを1件書く。システムは締め切りの前の巡回では担当者を決めない。システムは締め切りを過ぎた巡回で今の回の入札を比べ、判定スコアがいちばん大きい入札がこの機械の投稿者の入札であれば、この機械の投稿者を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者がこの機械の投稿者である issue には入札せず、そのまま着手と引き継ぎへ渡す。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは候補の先頭の issue の担当者を読む。システムは担当者が1人もいない issue に、枠の余裕値から出した判定スコアを書いた入札のコメントを1件書く。システムは締め切りの前の巡回では担当者を決めない。システムは締め切りを過ぎた巡回で今の回の入札を比べ、判定スコアがいちばん大きい入札がこの機械の投稿者の入札であれば、この機械の投稿者を担当者に加えて hold のコメントを1件書く。システムは期限の切れた担当を外したときは、担当が外れたことを知らせる released のコメントを1件書く。システムは担当者がこの機械の投稿者である issue には入札しない。システムはその issue について、使える値でマージンを切った期間か Claude Code が動けない期間があれば、行き先の表で行き先を決め、Status を failure_state へ戻すか、Claude Code を起動せずに担当を外すか、そのまま着手させて最初の turn で切り上げさせる。どの期間も無ければ、そのまま着手と引き継ぎへ渡す。
 PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの active_states の Status に issue が1件以上ある。先頭の issue は draft issue ではない。先頭の issue は、呼び出し元の issueを1件処理する が担当の判定より前に行う検査をすべて通っている。担当者が1人もいない先頭の issue は、呼び出し元の枠の判定を通っている。同じボードを見張っている機械が1台以上ある。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、ほかの機械
@@ -61,10 +62,34 @@ BASIC FLOW:
 23. ELSE
 24.   システムは入札のコメントを1件も書かない。
 25.   システムは hold のコメントを1件も書かない。
-26. ENDIF
-27. システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。
-28. システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。
-POSTCONDITION: 先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。
+26.   システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。
+27.   システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。
+28. ENDIF
+29. システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。
+30. システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。
+POSTCONDITION: 先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。
+
+SPECIFIC ALTERNATIVE FLOW マージンを切った担当が自分のissue:
+RFS BASIC FLOW 27
+1. IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN
+2.   システムはこの巡回では着手も手放しもしないことを INFO で記録に残す。
+3. ELSE
+4.   システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。
+5.   IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN
+6.     システムは何もしないことを INFO で記録に残す。
+7.   ELSEIF 行き先が担当を外す THEN
+8.     システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。
+9.     システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻と理由の値 weekly_wait_limit_not_started を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。
+10.   ELSE
+11.     システムは GitHub Projects v2 に、先頭の issue の Status を failure_state へ動かすことを要求する。
+12.     IF GitHub Projects v2 が Status を書いた THEN
+13.       システムは当てた期間とリセットの時刻を書いた理由のコメントを issue に1件書く。
+14.     ENDIF
+15.   ENDIF
+16. ENDIF
+17. システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。
+18. ABORT
+POSTCONDITION: システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。
 
 SPECIFIC ALTERNATIVE FLOW 担当者が2人以上:
 RFS BASIC FLOW 3
@@ -203,7 +228,7 @@ POSTCONDITION: システムは先頭の issue に着手していない。先頭�
 | 見えているもの | どこで受けるか | どうするか |
 | --- | --- | --- |
 | 担当者が1人もいない | 基本フローのステップ11 の真の側 | 入札する |
-| 担当者がこの機械の投稿者1人 | 基本フローのステップ11 の偽の側 | 入札せずに着手と引き継ぎへ進む |
+| 担当者がこの機械の投稿者1人 | 基本フローのステップ11 の偽の側 | 入札しない。使える値でマージンを切った期間か Claude Code が動けない期間があれば、`マージンを切った担当が自分のissue` で行き先を決める（issue #262。設計 3-27a の着手の前）。無ければ着手と引き継ぎへ進む |
 | 担当者が他人1人＋その担当者を名指しする hold あり＋期限内 | `期限内の担当` | 触らない。**入札もしない** |
 | 担当者が他人1人＋その担当者を名指しする hold あり＋期限切れ | `他人の担当` のステップ3〜9 | 担当を外し、released のコメントを1件書くことを要求して入札をやり直す（基本フローのステップ12 の「今の回にこの機械の投稿者の入札が在るか」の判定へ戻る） |
 | 担当者が他人1人＋その担当者を名指しする hold が1件も無い | `人間が付けた担当` | 触らない。**人間が付けた担当である。WARN を出す**（issue #131）。条件が揃えば案内のコメントを1件書く |
@@ -304,7 +329,8 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 「continuo は動いているのに `Ready` の issue が動かない」としか見えなかった。**
 **門も1本に揃えた**（人間の決定。2026-09-06。issue #173）。
 **以前は `rate_limit.pause_above_percent`（既定95）を見る段がもう1つあったが、
-既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手するようになった（v0.2.0）。**
+**issue #262 からは、担当が自分の issue も、使える値でマージンを切っていれば（マージン0の期間は使用率100なら）着手の前に止まる**（`マージンを切った担当が自分のissue`。`internal/orchestrator/handoff.go` の `ownIssueMarginGate`）。
 **いまは余裕値だけが仕事を取るかを決める。**`rate_limit.pause_above_percent` はキーごと消えた。
 **statusline取得を開くかの判定も同じ余裕値の線を使う。**
 
@@ -358,7 +384,7 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 
 ## 入札と hold と released のコメントを、エージェントに読ませない
 
-**言いたいこと。**入札はコメントに書くが、**エージェントへ渡す入力には混ぜない**（ステップ28。外すのは、エージェントへ渡すコメントを取る `internal/tracker/adapter.go` の `keepNewestUnmarked` である）。
+**言いたいこと。**入札はコメントに書くが、**エージェントへ渡す入力には混ぜない**（ステップ30。外すのは、エージェントへ渡すコメントを取る `internal/tracker/adapter.go` の `keepNewestUnmarked` である）。
 外すのは `<!-- continuo:bid -->` と `<!-- continuo:hold -->` と `<!-- continuo:released -->` の3つだけで、
 **`<!-- continuo:agent -->` と `<!-- continuo:self -->` は今までどおり渡す**
 （`internal/config/default.go` の `Marker` と `SelfMarker`）。
@@ -519,8 +545,23 @@ flowchart TD
     BS22{"22 GitHub Projects v2 が hold のコメントを受け付ける"}
     BS24["24 システムは入札のコメントを1件も書かない"]
     BS25["25 システムは hold のコメントを1件も書かない"]
-    BS27["27 システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す"]
-    BS28["28 システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す"]
+    BS26["26 システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める"]
+    BS27{"27 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける"}
+    BS29["29 システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す"]
+    BS30["30 システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す"]
+    M0S1{"マージンを切った担当が自分のissue 1 IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN"}
+    M0S2["マージンを切った担当が自分のissue 2 システムはこの巡回では着手も手放しもしないことを INFO で記録に残す"]
+    M0S4["マージンを切った担当が自分のissue 4 システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する"]
+    M0S5{"マージンを切った担当が自分のissue 5 IF 取り直せないか、Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN"}
+    M0S6["マージンを切った担当が自分のissue 6 システムは何もしないことを INFO で記録に残す"]
+    M0S7{"マージンを切った担当が自分のissue 7 ELSEIF 行き先が担当を外す THEN"}
+    M0S8["マージンを切った担当が自分のissue 8 システムはこの機械の投稿者を担当者から外すことを要求する"]
+    M0S9["マージンを切った担当が自分のissue 9 システムは理由の値 weekly_wait_limit_not_started を書いた released のコメントを書くことを要求する"]
+    M0S11["マージンを切った担当が自分のissue 11 システムは Status を failure_state へ動かすことを要求する"]
+    M0S12{"マージンを切った担当が自分のissue 12 IF GitHub Projects v2 が Status を書いた THEN"}
+    M0S13["マージンを切った担当が自分のissue 13 システムは当てた期間とリセットの時刻を書いた理由のコメントを issue に1件書く"]
+    M0S17["マージンを切った担当が自分のissue 17 システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す"]
+    M0S18(["マージンを切った担当が自分のissue 18 ABORT"])
     A1S1["担当者が2人以上 1 システムは担当者が2人以上いることを WARN で記録に残す"]
     A1S2{"担当者が2人以上 2 IF 案内のコメントを書く条件が揃っている THEN"}
     A1S3["担当者が2人以上 3 システムは担当者を1人も付いていない状態にする案内のコメントを issue に1件書く"]
@@ -617,11 +658,30 @@ flowchart TD
     BS20 -- はい --> BS21
     BS20 -- いいえ --> A13S1
     BS21 --> BS22
-    BS22 -- はい --> BS27
+    BS22 -- はい --> BS29
     BS22 -- いいえ --> A14S1
     BS24 --> BS25
-    BS25 --> BS27
-    BS27 --> BS28
+    BS25 --> BS26
+    BS26 --> BS27
+    BS27 -- はい --> BS29
+    BS27 -- いいえ --> M0S1
+    BS29 --> BS30
+    M0S1 -- はい --> M0S2
+    M0S1 -- いいえ --> M0S4
+    M0S2 --> M0S17
+    M0S4 --> M0S5
+    M0S5 -- はい --> M0S6
+    M0S5 -- いいえ --> M0S7
+    M0S6 --> M0S17
+    M0S7 -- はい --> M0S8
+    M0S7 -- いいえ --> M0S11
+    M0S8 --> M0S9
+    M0S9 --> M0S17
+    M0S11 --> M0S12
+    M0S12 -- はい --> M0S13
+    M0S12 -- いいえ --> M0S17
+    M0S13 --> M0S17
+    M0S17 --> M0S18
     A1S1 --> A1S2
     A1S2 -- はい --> A1S3
     A1S2 -- いいえ --> A1S5
@@ -681,7 +741,7 @@ flowchart TD
     A15S1 --> A15S2
     A15S2 --> A15S3
     A15S3 --> A15S4
-    BS28 --> END(["終了"])
+    BS30 --> END(["終了"])
 ```
 
 ## シーケンス図
@@ -720,6 +780,17 @@ sequenceDiagram
             Note over S: ABORT 入札もしない
         else 担当者がこの機械の投稿者1人
             S->>S: 入札のコメントも hold のコメントも書かない
+            S->>S: 使える値でマージンを切った期間と Claude Code が動けない期間を選び、行き先を決める
+            opt 行き先が Blocked か、担当を外すで Claude Code が動けないか、新しい値で担当を外すと決まらない
+                Note over S: 新しい値で決まらなければ、着手も手放しもせず ABORT
+                S->>GH: 先頭の issue を ID で取り直す
+                alt 行き先が担当を外す
+                    S->>GH: この機械の投稿者を担当者から外し、weekly_wait_limit_not_started の released を投稿する
+                else 行き先が Blocked
+                    S->>GH: Status を failure_state へ動かし、書けたら理由のコメントを投稿する
+                end
+                Note over S: ABORT Claude Code は起動しない
+            end
         else 担当者が1人もいないか、担当者の最後の進捗報告から idle_timeout_ms を過ぎた
             opt 担当者の最後の進捗報告から idle_timeout_ms を過ぎた
                 Note over S: 担当者のノード ID を引けないときは ABORT

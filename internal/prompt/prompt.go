@@ -36,6 +36,9 @@ import (
 	// **それでも、壊れたテンプレートが見過ごされることは無い。**常駐は起動時に落ち、
 	// `continuo doctor` は `prompt vars` を赤にする。
 	"github.com/maimuzo/continuo/internal/tracker"
+
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/marginstatus"
 )
 
 // Marker は builtin.md を前半と後半に切る目印の行である。
@@ -648,8 +651,17 @@ func (f Fragments) Validate() error {
 //	**分へ直すのはこの中である。**呼び出し側で割らせない。
 //	割り算が2箇所に散ると、片方を直したときにずれる。
 //
+// rateLimit: 設定の `rate_limit`（`margin_status_path` を決めるのに使う。issue #262）。
+// hookSocketPath: hook を受ける socket の絶対パス。求められなかったときは空文字（`margin_status_path` も空になる）。
+//
+//	**`margin_status_path` を決めるのはこの中である。**`internal/marginstatus` の `Path` を呼ぶ。
+//	常駐が `margin-status` を書くパスも同じ関数で決めるので、指示書が指すパスとずれない。
+//
 // 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
-func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[string]any {
+func RenderData(
+	issue tracker.Issue, attempt *int, progressIntervalMs int,
+	rateLimit config.RateLimitConfig, hookSocketPath string,
+) map[string]any {
 	url := ""
 	if issue.URL != nil {
 		url = *issue.URL
@@ -685,6 +697,12 @@ func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[s
 		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
 		// **「3600000ミリ秒以上黙らないでください」では通じない。**
 		"progress_interval_minutes": progressIntervalMs / 60000,
+		// **`margin-status` のパス**（issue #262。設計 5-3 の 5-8）。組み込みの指示書の 5-8 が
+		// `cat '{{.margin_status_path}}'` の形で使う。**中の単引用符は `'\''` に置き換えてある**
+		// （パスに単引用符を含む利用者でも、単引用符で囲んだ `cat` が壊れない）。
+		// **書かない機械（`rate_limit.source: none`）では空文字である。**5-8 は `{{if}}` で囲んであるので、節ごと出ない。
+		// **キーは空でも必ず入れる**（`missingkey=error`）。
+		"margin_status_path": marginstatus.ShellQuote(marginstatus.Path(rateLimit, hookSocketPath)),
 	}
 }
 
@@ -716,6 +734,8 @@ func SampleData() map[string]any {
 		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
 		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
 		"progress_interval_minutes": 60,
+		// **`margin-status` のパス**（issue #262）。空にすると、組み込みの指示書の 5-8 の中身が検査されない。
+		"margin_status_path": "/tmp/continuo/margin-status",
 	}
 }
 

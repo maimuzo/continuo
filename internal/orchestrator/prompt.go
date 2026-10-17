@@ -37,7 +37,8 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	// **変数はここで組み立てない**（issue #183）。`continuo prompt --show --url` も
 	// **同じ `prompt.RenderData` を呼ぶ。**別々に組み立てると、片方を直したときにずれ、
 	// **あのコマンドが「送られる文面」ではないものを見せることになる。**
-	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs)
+	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
+		o.cfg.RateLimit, o.socketPath)
 
 	out, err := o.promptFragments.Render(data)
 	if err != nil {
@@ -70,6 +71,11 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 //
 // **どちらでもないとき（決まりどおりの値を書いた turn の次）の文面は、変えていない。**
 //
+// **レートリミットのマージンを切っていたら、「続けてください」の代わりに切り上げの文面を送る**
+// （issue #262。設計 3-27a）。いま作業している issue の表明が決まり以外だったときは、その案内のあとに足す。
+// **切り上げの文面のあとにも、表明の決まり（`working` で終える）と、表明が無かったときの促しは残す。**
+// 切り上げの turn の終わりを、continuo は表明と Status で読むためである。
+//
 // turnCount: この turn が continuo にとって何回目か（1始まり）。
 // maxDispatchTurns: 打ち切りまでの上限（`agent.max_dispatch_turns`）。
 // missingSignal: 前回の turn に表明が無かったかどうか（設計 3-25 の第3層）。
@@ -78,6 +84,7 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 // invalid: 前回の turn の表明のうち、取り得る値に無かったもの。無ければ nil。
 // signalMap: 取り得る値と行き先（`tracker.status_signal_map`）。
 // currentIdentifier: いま作業している issue の識別子（別の issue を指す表明を見分ける）。
+// marginCut: レートリミットのマージンを切っていて、切り上げさせるなら true。
 // 戻り値: 送る本文。
 func BuildContinuationPrompt(
 	turnCount int,
@@ -88,6 +95,7 @@ func BuildContinuationPrompt(
 	invalid []statussignal.Invalid,
 	signalMap map[string]*string,
 	currentIdentifier string,
+	marginCut bool,
 ) string {
 	remaining := maxDispatchTurns - turnCount
 	if remaining < 0 {
@@ -97,17 +105,32 @@ func BuildContinuationPrompt(
 	var b strings.Builder
 	switch {
 	case len(invalid) == 0:
-		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+		if marginCut {
+			writeMarginCutContinuation(&b, signalPrefix)
+			fmt.Fprintf(&b, "この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+		} else {
+			fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+		}
 	case statussignal.HasTarget(invalid, currentIdentifier):
 		// **いま作業している issue の表明が決まり以外だった。**終えたつもりのエージェントに
 		// 「続けてください」を送らない。
 		statussignal.WriteInvalidGuidance(&b, "前回の応答", "作業を進める前に",
 			signalPrefix, currentIdentifier, invalid, signalMap)
 		fmt.Fprintf(&b, "この確認は %d 回目です。あと %d 回で打ち切ります。\n", turnCount, remaining)
+		if marginCut {
+			// **案内のあとに足す。**書き直しの案内を消すと、決まり以外の値がまた書かれる。
+			b.WriteString("\n")
+			writeMarginCutContinuation(&b, signalPrefix)
+		}
 	default:
 		// **決まり以外だったのは、別の issue を指す行だけである。**自分の作業は途中かも
 		// しれないので、「続けてください」は残し、そのあとに一覧を足す。
-		fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n\n", turnCount, remaining)
+		if marginCut {
+			writeMarginCutContinuation(&b, signalPrefix)
+			fmt.Fprintf(&b, "この確認は %d 回目です。あと %d 回で打ち切ります。\n\n", turnCount, remaining)
+		} else {
+			fmt.Fprintf(&b, "続けてください。この確認は %d 回目です。あと %d 回で打ち切ります。\n\n", turnCount, remaining)
+		}
 		statussignal.WriteInvalidGuidance(&b, "前回の応答", "作業を進める前に",
 			signalPrefix, currentIdentifier, invalid, signalMap)
 	}
@@ -126,6 +149,32 @@ func BuildContinuationPrompt(
 		signalPrefix)
 	return b.String()
 }
+
+// writeMarginCutContinuation は、turn の終わりにマージンを切っていたときに送る切り上げの文面を書く
+// （issue #262。設計 3-27a）。
+//
+// **組み込みの指示書の 5-8 と同じ手順を、ここでも言い切る。**Claude Code が 5-8 を忘れていても、
+// この文面だけで切り上げられるようにするためである。**済んでいれば何もせずに終えさせる。**
+// Claude Code が自分で切り上げていた場合にも、この文面は1回届く。
+//
+// b: 書き込む先。
+// signalPrefix: 表明の印（`tracker.status_signal_prefix`）。
+func writeMarginCutContinuation(b *strings.Builder, signalPrefix string) {
+	fmt.Fprintf(b,
+		"レートリミットのマージンを切りました（組み込みの指示書の 5-8）。"+
+			"新しいサブエージェントは起動しないでください。走っているサブエージェントは止めずに、結果が返るのを待ってください。"+
+			"いまある変更を先に commit して push し、サブエージェントの結果もあとで commit して push し、"+
+			"どこまで進んだか・次に何をするかを issue のコメントに書いて、応答の最後に %s working を書いて終えてください。"+
+			"済んでいれば、何もせずに %s working で終えてください。\n",
+		signalPrefix, signalPrefix)
+}
+
+// marginCutFirstTurnNote は、最初の turn（指示書を送る turn）でマージンを切っていたときに、
+// 指示書と人間のコメントの節のいちばん後ろに添える文である（issue #262。設計 3-27a）。
+//
+// **いちばん後ろに置く。**指示書の本文と人間のコメントを読んだあとに、作業を始めずに切り上げることを
+// 最後に読ませるためである。**中で 5-8 を名指しする。**組み込みの指示書の 5-8 の番号を変えたら、ここも直すこと。
+const marginCutFirstTurnNote = "\n\n---\n\nレートリミットのマージンを切っています。作業は始めずに、組み込みの指示書の 5-8 の切り上げだけを行ってください。\n"
 
 // buildCommentRequestPrompt は「作業の内容を issue のコメントに書いてください」だけを送る
 // 本文を組み立てる（設計 3-25 の9段の段7）。

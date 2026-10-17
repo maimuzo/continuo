@@ -613,6 +613,10 @@ func FormatReleased(r Released) string {
 	case ReleaseReasonWeeklyWaitLimitNoPush:
 		// **`after_run` が走らなかった。**remote に続きが入っていない可能性がある。
 		second = i18n.T(i18n.KeyHandoffReleasedWeeklyWaitLimitNoPush, r.From)
+	case ReleaseReasonWeeklyWaitLimitNotStarted:
+		// **Claude Code も `after_run` も走らせていない**（issue #262）。使用率100%で起動できなかった。
+		// **この case を落とすと `default` の「push しないでください」になり、手放した本人がそう書くことになる。**
+		second = i18n.T(i18n.KeyHandoffReleasedWeeklyWaitLimitNotStarted, r.From)
 	default:
 		// **理由が空なら、他の機械に外された側である**（設計 3-77c）。
 		second = i18n.T(i18n.KeyHandoffReleasedDoNotPush, r.From)

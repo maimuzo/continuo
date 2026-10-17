@@ -75,7 +75,7 @@ func TestIssueSlug_識別子から設定ファイルの置き場所のスラグ�
 // 成功条件: 回数と残り回数と blocked の促しが入り、**1回目の本文は入らない**。
 func TestBuildContinuationPrompt_残り回数を必ず入れる(t *testing.T) {
 	got := orchestrator.BuildContinuationPrompt(3, 20, false, "In Progress", signalPrefix,
-		nil, defaultSignalMap(), "octocat/hello-world#188")
+		nil, defaultSignalMap(), "octocat/hello-world#188", false)
 
 	// **決まりどおりの値を書いた turn の次の文面は、issue #274 の前後で1文字も変えていない。**
 	want := "続けてください。この確認は 3 回目です。あと 17 回で打ち切ります。\n" +
@@ -110,7 +110,7 @@ func TestBuildContinuationPrompt_残り回数を必ず入れる(t *testing.T) {
 // エージェントの手を止めない）。
 func TestBuildContinuationPrompt_表明が無かった次のturnで促す(t *testing.T) {
 	got := orchestrator.BuildContinuationPrompt(2, 20, true, "In Progress", signalPrefix,
-		nil, defaultSignalMap(), "octocat/hello-world#188")
+		nil, defaultSignalMap(), "octocat/hello-world#188", false)
 
 	if !strings.Contains(got, "In Progress のままです") {
 		t.Fatalf("表明を促す1文が入っていない: %q", got)
@@ -150,7 +150,7 @@ func defaultSignalMap() map[string]*string {
 func TestBuildContinuationPrompt_決まり以外の値なら続けてくださいを差し替える(t *testing.T) {
 	const current = "octocat/hello-world#188"
 	got := orchestrator.BuildContinuationPrompt(2, 20, false, "In Progress", signalPrefix,
-		[]statussignal.Invalid{{Target: current, Value: "done"}}, defaultSignalMap(), current)
+		[]statussignal.Invalid{{Target: current, Value: "done"}}, defaultSignalMap(), current, false)
 
 	if strings.Contains(got, "続けてください") {
 		t.Fatalf("終えたつもりのエージェントに「続けてください」を送っている:\n%s", got)
@@ -218,7 +218,7 @@ func TestDispatch_agent名が重複したら末尾に連番を付ける(t *testi
 func TestBuildContinuationPrompt_別のissueの表明だけが決まり以外なら続けてくださいを残す(t *testing.T) {
 	const current = "octocat/hello-world#188"
 	got := orchestrator.BuildContinuationPrompt(2, 20, false, "In Progress", signalPrefix,
-		[]statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, defaultSignalMap(), current)
+		[]statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, defaultSignalMap(), current, false)
 
 	if !strings.HasPrefix(got, "続けてください。この確認は 2 回目です。あと 18 回で打ち切ります。\n") {
 		t.Fatalf("自分の issue の表明は正しいのに、「続けてください」を外している:\n%s", got)
@@ -247,12 +247,42 @@ func TestBuildContinuationPrompt_別のissueの表明だけが決まり以外な
 // 成功条件: 促しの1文は入り、「取り得る値は次のとおりです」は入らない。
 func TestBuildContinuationPrompt_対応表が空なら一覧を載せない(t *testing.T) {
 	got := orchestrator.BuildContinuationPrompt(2, 20, true, "In Progress", signalPrefix,
-		nil, map[string]*string{}, "octocat/hello-world#188")
+		nil, map[string]*string{}, "octocat/hello-world#188", false)
 
 	if !strings.Contains(got, "行頭から1行で書いてください") {
 		t.Errorf("表明を促す1文が入っていない:\n%s", got)
 	}
 	if strings.Contains(got, "取り得る値は次のとおりです") {
 		t.Errorf("対応表が空なのに、一覧の頭だけを載せている:\n%s", got)
+	}
+}
+
+// TestBuildContinuationPrompt_マージンを切ったら続けてくださいの代わりに切り上げの指示を送る は、
+// 3つの分岐それぞれで、切り上げの文面になることを確かめる（issue #262。設計 3-27a）。
+//
+// 与える情報: 表明が決まりどおり・いま作業している issue の表明が決まり以外・別の issue の表明だけが決まり以外。
+// 成功条件: どれも「続けてください」を含まず切り上げの文面を含み、決まり以外の案内と打ち切りまでの回数は残ること。
+func TestBuildContinuationPrompt_マージンを切ったら続けてくださいの代わりに切り上げの指示を送る(t *testing.T) {
+	const current = "octocat/hello-world#188"
+	for _, c := range []struct {
+		name    string
+		invalid []statussignal.Invalid
+		keep    string
+	}{
+		{"表明が決まりどおり", nil, "この確認は 2 回目です"},
+		{"いま作業している issue の表明が決まり以外", []statussignal.Invalid{{Target: current, Value: "done"}}, "「done」"},
+		{"別の issue の表明だけが決まり以外", []statussignal.Invalid{{Target: "octocat/hello-world#45", Value: "done"}}, "「done」"},
+	} {
+		got := orchestrator.BuildContinuationPrompt(2, 20, false, "In Progress", signalPrefix,
+			c.invalid, defaultSignalMap(), current, true)
+		if strings.Contains(got, "続けてください") {
+			t.Errorf("%s: 切り上げのときに「続けてください」を送っている:\n%s", c.name, got)
+		}
+		if !strings.Contains(got, "レートリミットのマージンを切りました") || !strings.Contains(got, signalPrefix+" working") {
+			t.Errorf("%s: 切り上げの文面が無い:\n%s", c.name, got)
+		}
+		if !strings.Contains(got, c.keep) {
+			t.Errorf("%s: %q が残っていない:\n%s", c.name, c.keep, got)
+		}
 	}
 }

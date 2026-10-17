@@ -3,7 +3,7 @@
   "usecase_name": "枠待ちのrunの打ち切りを止める",
   "source": {
     "file": "docs/spec/usecases/particular_case/枠待ちのrunの打ち切りを止める.rucm.md",
-    "rucm_block_sha256": "45ff3727ef7c75ae04a5add9cbce5a969345498b1f4955d9dbf64bbcf8b7689a"
+    "rucm_block_sha256": "3c23476e13c31c28e87a3d59786cb571370c6deb79a7095f756f3dcbcbcd8968"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -93,6 +93,42 @@
         }
       ],
       "postcondition": "issue の担当者から自分は外れている。issue に Claude Code を閉じた記録のコメントは増えていない。印は外れている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
+    },
+    "行き先を待つrunを作業へ戻す": {
+      "when": "run に行き先を待つ印が立っていて、run が direct chat に入っておらず、run を終わらせる処理が走っておらず、使える値が無いか、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無くマージンを切った枠も無い場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            1
+          ]
+        }
+      ],
+      "postcondition": "run の行き先を待つ印は外れている。run の最後に動いていた時刻は進んでいる。run には継続の指示を送る印が立っていて、同じ巡回の後ろで turn ループが起きる。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。"
+    },
+    "行き先を待つrunをBlockedへ戻す": {
+      "when": "run に行き先を待つ印が立っていて、run が direct chat に入っておらず、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無く、行き先の表の行き先が Blocked で、システムが run を終わらせる権利を取れる場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            1
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に理由のコメントが1件ある。issue の担当者はこの機械のままである。印は外れている。worktree は残っている。"
+    },
+    "行き先を待つrunを打ち切らない": {
+      "when": "run に行き先を待つ印が立っていて、herdr から読んだ agent の状態が止まっている場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            1
+          ]
+        }
+      ],
+      "postcondition": "run の行き先を待つ印は立ったままである。herdr の pane は閉じていない。run のリトライの回数は増えていない。issue の Status は running_state の選択肢のままである。"
     }
   },
   "nodes": [
@@ -411,6 +447,84 @@
       "flow": "待つ上限を超えた",
       "step": 6,
       "statement": "ABORT"
+    },
+    {
+      "id": "行き先を待つrunを作業へ戻す-1",
+      "type": "action",
+      "flow": "行き先を待つrunを作業へ戻す",
+      "step": 1,
+      "statement": "システムは run から行き先を待つ印を下ろす。"
+    },
+    {
+      "id": "行き先を待つrunを作業へ戻す-2",
+      "type": "action",
+      "flow": "行き先を待つrunを作業へ戻す",
+      "step": 2,
+      "statement": "システムは run の最後に動いていた時刻を現在時刻に進める。"
+    },
+    {
+      "id": "行き先を待つrunを作業へ戻す-3",
+      "type": "action",
+      "flow": "行き先を待つrunを作業へ戻す",
+      "step": 3,
+      "statement": "システムは run に継続の指示を送る印を立てる。"
+    },
+    {
+      "id": "行き先を待つrunを作業へ戻す-4",
+      "type": "resume",
+      "flow": "行き先を待つrunを作業へ戻す",
+      "step": 4,
+      "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "行き先を待つrunをBlockedへ戻す-1",
+      "type": "action",
+      "flow": "行き先を待つrunをBlockedへ戻す",
+      "step": 1,
+      "statement": "システムは run から行き先を待つ印を下ろす。"
+    },
+    {
+      "id": "行き先を待つrunをBlockedへ戻す-2",
+      "type": "action",
+      "flow": "行き先を待つrunをBlockedへ戻す",
+      "step": 2,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "行き先を待つrunをBlockedへ戻す-3",
+      "type": "action",
+      "flow": "行き先を待つrunをBlockedへ戻す",
+      "step": 3,
+      "statement": "システムはマージンを切った枠とリセットの時刻を書いた理由を issue に1件コメントする。"
+    },
+    {
+      "id": "行き先を待つrunをBlockedへ戻す-4",
+      "type": "include",
+      "flow": "行き先を待つrunをBlockedへ戻す",
+      "step": 4,
+      "statement": "INCLUDE USE CASE runを終えてworkerを止める",
+      "include": "runを終えてworkerを止める"
+    },
+    {
+      "id": "行き先を待つrunをBlockedへ戻す-5",
+      "type": "abort",
+      "flow": "行き先を待つrunをBlockedへ戻す",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "行き先を待つrunを打ち切らない-1",
+      "type": "action",
+      "flow": "行き先を待つrunを打ち切らない",
+      "step": 1,
+      "statement": "システムはこの巡回で run の打ち切りの判定を飛ばす。"
+    },
+    {
+      "id": "行き先を待つrunを打ち切らない-2",
+      "type": "resume",
+      "flow": "行き先を待つrunを打ち切らない",
+      "step": 2,
+      "statement": "RESUME STEP 1"
     }
   ],
   "edges": [
@@ -442,6 +556,24 @@
       "to": "待つ上限を超えた-1",
       "kind": "global",
       "condition": "余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいない場合"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "行き先を待つrunを作業へ戻す-1",
+      "kind": "global",
+      "condition": "run に行き先を待つ印が立っていて、run が direct chat に入っておらず、run を終わらせる処理が走っておらず、使える値が無いか、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無くマージンを切った枠も無い場合"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "行き先を待つrunをBlockedへ戻す-1",
+      "kind": "global",
+      "condition": "run に行き先を待つ印が立っていて、run が direct chat に入っておらず、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無く、行き先の表の行き先が Blocked で、システムが run を終わらせる権利を取れる場合"
+    },
+    {
+      "from": "BASIC FLOW-1",
+      "to": "行き先を待つrunを打ち切らない-1",
+      "kind": "global",
+      "condition": "run に行き先を待つ印が立っていて、herdr から読んだ agent の状態が止まっている場合"
     },
     {
       "from": "BASIC FLOW-2",
@@ -662,6 +794,56 @@
       "from": "待つ上限を超えた-5",
       "to": "待つ上限を超えた-6",
       "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを作業へ戻す-1",
+      "to": "行き先を待つrunを作業へ戻す-2",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを作業へ戻す-2",
+      "to": "行き先を待つrunを作業へ戻す-3",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを作業へ戻す-3",
+      "to": "行き先を待つrunを作業へ戻す-4",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを作業へ戻す-4",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
+    },
+    {
+      "from": "行き先を待つrunをBlockedへ戻す-1",
+      "to": "行き先を待つrunをBlockedへ戻す-2",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunをBlockedへ戻す-2",
+      "to": "行き先を待つrunをBlockedへ戻す-3",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunをBlockedへ戻す-3",
+      "to": "行き先を待つrunをBlockedへ戻す-4",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunをBlockedへ戻す-4",
+      "to": "行き先を待つrunをBlockedへ戻す-5",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを打ち切らない-1",
+      "to": "行き先を待つrunを打ち切らない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "行き先を待つrunを打ち切らない-2",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
     }
   ],
   "paths": [
@@ -928,12 +1110,77 @@
         "システムは印を外す。",
         "ABORT"
       ]
+    },
+    {
+      "id": "P011",
+      "terminal": "cycle",
+      "terminal_flow": "行き先を待つrunを作業へ戻す",
+      "postcondition": "run の行き先を待つ印は外れている。run の最後に動いていた時刻は進んでいる。run には継続の指示を送る印が立っていて、同じ巡回の後ろで turn ループが起きる。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "行き先を待つrunを作業へ戻す-1",
+        "行き先を待つrunを作業へ戻す-2",
+        "行き先を待つrunを作業へ戻す-3",
+        "行き先を待つrunを作業へ戻す-4",
+        "BASIC FLOW-1"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "CONDITION: run に行き先を待つ印が立っていて、run が direct chat に入っておらず、run を終わらせる処理が走っておらず、使える値が無いか、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無くマージンを切った枠も無い場合",
+        "システムは run から行き先を待つ印を下ろす。",
+        "システムは run の最後に動いていた時刻を現在時刻に進める。",
+        "システムは run に継続の指示を送る印を立てる。",
+        "RESUME STEP 1",
+        "巡回タイマーはシステムに巡回の開始を要求する。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "行き先を待つrunをBlockedへ戻す",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue に理由のコメントが1件ある。issue の担当者はこの機械のままである。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "行き先を待つrunをBlockedへ戻す-1",
+        "行き先を待つrunをBlockedへ戻す-2",
+        "行き先を待つrunをBlockedへ戻す-3",
+        "行き先を待つrunをBlockedへ戻す-4",
+        "行き先を待つrunをBlockedへ戻す-5"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "CONDITION: run に行き先を待つ印が立っていて、run が direct chat に入っておらず、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無く、行き先の表の行き先が Blocked で、システムが run を終わらせる権利を取れる場合",
+        "システムは run から行き先を待つ印を下ろす。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムはマージンを切った枠とリセットの時刻を書いた理由を issue に1件コメントする。",
+        "INCLUDE USE CASE runを終えてworkerを止める",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "cycle",
+      "terminal_flow": "行き先を待つrunを打ち切らない",
+      "postcondition": "run の行き先を待つ印は立ったままである。herdr の pane は閉じていない。run のリトライの回数は増えていない。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "行き先を待つrunを打ち切らない-1",
+        "行き先を待つrunを打ち切らない-2",
+        "BASIC FLOW-1"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "CONDITION: run に行き先を待つ印が立っていて、herdr から読んだ agent の状態が止まっている場合",
+        "システムはこの巡回で run の打ち切りの判定を飛ばす。",
+        "RESUME STEP 1",
+        "巡回タイマーはシステムに巡回の開始を要求する。"
+      ]
     }
   ],
   "coverage": {
-    "nodes_total": 45,
-    "nodes_covered": 45,
-    "edges_total": 47,
-    "edges_covered": 47
+    "nodes_total": 56,
+    "nodes_covered": 56,
+    "edges_total": 60,
+    "edges_covered": 60
   }
 }

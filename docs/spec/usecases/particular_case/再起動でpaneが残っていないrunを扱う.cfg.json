@@ -3,12 +3,12 @@
   "usecase_name": "再起動でpaneが残っていないrunを扱う",
   "source": {
     "file": "docs/spec/usecases/particular_case/再起動でpaneが残っていないrunを扱う.rucm.md",
-    "rucm_block_sha256": "25342f2c2dd1edcb281abeb5a902151ba6cb27180635344744f168e2d1ea2a87"
+    "rucm_block_sha256": "3d5621e9be1e4c3e4174134f97206414a4c82229395b77ae95b7cb0faec63605"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。"
+      "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。次の巡回の着手は、担当が自分の issue の着手の前の判定を通る。"
     },
     "取り直しの失敗": {
       "rfs": {
@@ -404,7 +404,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。",
+      "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。次の巡回の着手は、担当が自分の issue の着手の前の判定を通る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

@@ -3,7 +3,7 @@
   "usecase_name": "指示書に沿ってissueを1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿ってissueを1件仕上げる.rucm.md",
-    "rucm_block_sha256": "3eeeb5471b9c2863e0c04d364ec4f43a6910e4873b40893dea12f85da9da7831"
+    "rucm_block_sha256": "cd021331ff113c5349980a0a592b9b4595fc19a1e24f99e800926b41d3b6b420"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -232,6 +232,19 @@
         }
       ],
       "postcondition": "辿って読んだ記録のうち、信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。"
+    },
+    "マージンを切って切り上げる": {
+      "when": "エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            12,
+            18
+          ]
+        }
+      ],
+      "postcondition": "走っていたサブエージェントは止められていない。commit は remote に載っている。issue に、どこまで進んだかと次に何をするかの報告のコメントがある。エージェントは Status を動かす表明を書いていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま行き先を待つ印が立っているかである。Claude Code が動けない場合は、システムはリセットを待って続ける。"
     }
   },
   "nodes": [
@@ -1143,6 +1156,55 @@
       "flow": "命令として扱わない記録の記述",
       "step": 3,
       "statement": "RESUME STEP 9"
+    },
+    {
+      "id": "マージンを切って切り上げる-1",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 1,
+      "statement": "エージェントは新しいサブエージェントを起動しない。"
+    },
+    {
+      "id": "マージンを切って切り上げる-2",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 2,
+      "statement": "エージェントは commit していない変更を commit して push する。"
+    },
+    {
+      "id": "マージンを切って切り上げる-3",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 3,
+      "statement": "エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する。"
+    },
+    {
+      "id": "マージンを切って切り上げる-4",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 4,
+      "statement": "エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く。"
+    },
+    {
+      "id": "マージンを切って切り上げる-5",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 5,
+      "statement": "エージェントは応答の最後に作業中の表明を1行書く。"
+    },
+    {
+      "id": "マージンを切って切り上げる-6",
+      "type": "action",
+      "flow": "マージンを切って切り上げる",
+      "step": 6,
+      "statement": "システムは run の行き先を決める。"
+    },
+    {
+      "id": "マージンを切って切り上げる-7",
+      "type": "abort",
+      "flow": "マージンを切って切り上げる",
+      "step": 7,
+      "statement": "ABORT"
     }
   ],
   "edges": [
@@ -1265,6 +1327,12 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-12",
+      "to": "マージンを切って切り上げる-1",
+      "kind": "global",
+      "condition": "エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合"
+    },
+    {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
       "kind": "true",
@@ -1357,6 +1425,12 @@
       "to": "判断に迷って止まる-1",
       "kind": "global",
       "condition": "エージェントが扱いに迷った場合"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "マージンを切って切り上げる-1",
+      "kind": "global",
+      "condition": "エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合"
     },
     {
       "from": "BASIC FLOW-19",
@@ -1874,6 +1948,36 @@
       "from": "命令として扱わない記録の記述-3",
       "to": "BASIC FLOW-9",
       "kind": "resume"
+    },
+    {
+      "from": "マージンを切って切り上げる-1",
+      "to": "マージンを切って切り上げる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切って切り上げる-2",
+      "to": "マージンを切って切り上げる-3",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切って切り上げる-3",
+      "to": "マージンを切って切り上げる-4",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切って切り上げる-4",
+      "to": "マージンを切って切り上げる-5",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切って切り上げる-5",
+      "to": "マージンを切って切り上げる-6",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切って切り上げる-6",
+      "to": "マージンを切って切り上げる-7",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -2379,6 +2483,67 @@
     {
       "id": "P009",
       "terminal": "abort",
+      "terminal_flow": "マージンを切って切り上げる",
+      "postcondition": "走っていたサブエージェントは止められていない。commit は remote に載っている。issue に、どこまで進んだかと次に何をするかの報告のコメントがある。エージェントは Status を動かす表明を書いていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま行き先を待つ印が立っているかである。Claude Code が動けない場合は、システムはリセットを待って続ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "マージンを切って切り上げる-1",
+        "マージンを切って切り上げる-2",
+        "マージンを切って切り上げる-3",
+        "マージンを切って切り上げる-4",
+        "マージンを切って切り上げる-5",
+        "マージンを切って切り上げる-6",
+        "マージンを切って切り上げる-7"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
+        "エージェントは分岐元を remote から取ってくる。",
+        "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
+        "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
+        "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
+        "エージェントは VALIDATES THAT 読む対象を全部読めている。",
+        "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。",
+        "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。",
+        "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。",
+        "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
+        "INCLUDE USE CASE レビューを回す",
+        "エージェントは VALIDATES THAT 計画のレビューが収まって終わっている。",
+        "エージェントは実装する。",
+        "CONDITION: エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合",
+        "エージェントは新しいサブエージェントを起動しない。",
+        "エージェントは commit していない変更を commit して push する。",
+        "エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する。",
+        "エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に作業中の表明を1行書く。",
+        "システムは run の行き先を決める。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
       "node_ids": [
@@ -2426,7 +2591,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
@@ -2499,7 +2664,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2579,7 +2744,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -2646,7 +2811,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2706,7 +2871,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "pullrequestが出ていない",
       "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。",
@@ -2762,7 +2927,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
       "terminal": "cycle",
       "terminal_flow": "進捗報告の間隔を超える",
       "postcondition": "issue に進捗報告のコメントがある。エージェントは作業を続けている。",
@@ -2818,7 +2983,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "進捗報告を書く前に止まる",
       "postcondition": "進捗報告のコメントは増えていない。エージェントは push していない。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。",
@@ -2875,7 +3040,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "判断に迷って止まる",
       "postcondition": "issue に迷った内容の報告のコメントがある。commit は remote に載っている。issue の Status は blocked の遷移先である。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -2933,7 +3098,69 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P019",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切って切り上げる",
+      "postcondition": "走っていたサブエージェントは止められていない。commit は remote に載っている。issue に、どこまで進んだかと次に何をするかの報告のコメントがある。エージェントは Status を動かす表明を書いていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま行き先を待つ印が立っているかである。Claude Code が動けない場合は、システムはリセットを待って続ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "実装の続きから始める-1",
+        "実装の続きから始める-2",
+        "BASIC FLOW-18",
+        "マージンを切って切り上げる-1",
+        "マージンを切って切り上げる-2",
+        "マージンを切って切り上げる-3",
+        "マージンを切って切り上げる-4",
+        "マージンを切って切り上げる-5",
+        "マージンを切って切り上げる-6",
+        "マージンを切って切り上げる-7"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
+        "エージェントは分岐元を remote から取ってくる。",
+        "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
+        "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
+        "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
+        "エージェントは VALIDATES THAT 読む対象を全部読めている。",
+        "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。",
+        "エージェントは VALIDATES THAT 計画の印が付いた自分のコメントが issue にある。",
+        "エージェントは VALIDATES THAT 人間の了承か、次にすることを明示した回答が、自分の問いより後にある。",
+        "エージェントは VALIDATES THAT 次に行う段が設計レビューである。",
+        "CONDITION: NOT 次に行う段が設計レビューである",
+        "エージェントは前の run の commit と会話から、実装がどこまで済んでいるかを確かめる。",
+        "RESUME STEP 18",
+        "エージェントは実装する。",
+        "CONDITION: エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合",
+        "エージェントは新しいサブエージェントを起動しない。",
+        "エージェントは commit していない変更を commit して push する。",
+        "エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する。",
+        "エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に作業中の表明を1行書く。",
+        "システムは run の行き先を決める。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P020",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
@@ -3004,7 +3231,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -3082,7 +3309,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P022",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -3147,7 +3374,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -3205,7 +3432,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "pullrequestが出ていない",
       "postcondition": "エージェントは行き先の pull request を控えていない。issue に理由の報告のコメントがある。issue の Status は blocked の遷移先である。pull request を作れなかった場合と、出し方が書かれていない場合は、利用者が原因を直してから Status を dispatch_state の選択肢へ戻すと、次の run が pull request を出すところから続ける。別の人が担当になっていた場合と、担当を確かめられなかった場合は、commit は push されていない。",
@@ -3259,7 +3486,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P025",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "pull request がある。issue に計画のコメントと計画の判断票と成果のコメントがある。成果のコメントに、実行した指示以外の指示か、実行していない指示が無いことの1行がある。pull request に実装の判断票がある。commit は remote に載っている。issue の Status は review の遷移先である。システムは run を終えている。",
@@ -3326,7 +3553,7 @@
       ]
     },
     {
-      "id": "P024",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -3400,7 +3627,7 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P027",
       "terminal": "cycle",
       "terminal_flow": "まとめて直した",
       "postcondition": "pull request の本文に、直した issue ごとの閉じる行がある。まとめて直した同じリポジトリの issue それぞれに、グループの印が付いた成果報告がある。担当の issue の成果のコメントに、成果報告の URL が並んでいる。表明が指す issue のうちシステムが書けた issue の Status は、それぞれの表明の値の遷移先である。書けなかった issue の Status は変わっていない。別のリポジトリの issue は直されていない。システムは run を終えている。",
@@ -3461,7 +3688,7 @@
       ]
     },
     {
-      "id": "P026",
+      "id": "P028",
       "terminal": "abort",
       "terminal_flow": "レビューが止まる",
       "postcondition": "レビューは収まっていない。issue の Status は blocked の遷移先である。利用者は issue の報告のコメントか応答で、止まった理由を読む。利用者が回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -3515,7 +3742,7 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P029",
       "terminal": "abort",
       "terminal_flow": "了承も回答も無い",
       "postcondition": "エージェントは設計レビューへ進んでいない。issue に了承も回答も無いことを知らせる報告のコメントがある。issue の Status は blocked の遷移先である。利用者が了承か回答をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が続ける。",
@@ -3564,7 +3791,7 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P030",
       "terminal": "abort",
       "terminal_flow": "計画の直しを求められる",
       "postcondition": "issue に新しい計画のコメントがある。いちばん新しい計画のコメントが正である。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。",
@@ -3617,7 +3844,7 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "回答が次を明示していない",
       "postcondition": "issue に新しい計画のコメントがある。エージェントは実装を進めていない。issue の Status は blocked の遷移先である。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから回し直す。",
@@ -3670,7 +3897,7 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "計画を書いて人間確認で止まる",
       "postcondition": "issue に計画のコメントがある。issue に、設計レビューへ進めてよいかを訊く報告のコメントがある。設計レビューは始まっていない。issue の Status は blocked の遷移先である。利用者は計画のコメントを読む。利用者が了承をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が設計レビューから続ける。",
@@ -3725,7 +3952,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "対応しないと決める",
       "postcondition": "issue に対応しない理由のコメントがある。エージェントは issue を閉じていない。エージェントは draft の pull request を閉じていない。draft の pull request が残っている場合は、その URL がコメントに書いてある。計画は書かれていない。issue の Status は blocked の遷移先である。利用者は理由を読む。利用者は issue を閉じるか、対応させる指示をコメントしてから Status を dispatch_state の選択肢へ戻す。",
@@ -3775,7 +4002,56 @@
       ]
     },
     {
-      "id": "P032",
+      "id": "P034",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切って切り上げる",
+      "postcondition": "走っていたサブエージェントは止められていない。commit は remote に載っている。issue に、どこまで進んだかと次に何をするかの報告のコメントがある。エージェントは Status を動かす表明を書いていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま行き先を待つ印が立っているかである。Claude Code が動けない場合は、システムはリセットを待って続ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "マージンを切って切り上げる-1",
+        "マージンを切って切り上げる-2",
+        "マージンを切って切り上げる-3",
+        "マージンを切って切り上げる-4",
+        "マージンを切って切り上げる-5",
+        "マージンを切って切り上げる-6",
+        "マージンを切って切り上げる-7"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 指示書の文面を組み立てて送る",
+        "エージェントは VALIDATES THAT 指示書の文面を受け取っている。",
+        "エージェントは VALIDATES THAT issue の担当が自分であるか、担当者が1人もいない。",
+        "エージェントは worktree の分岐元の名前を、身元ファイルの base の値、WORKFLOW.md の本文の指定、issue にリンクされた branch、リポジトリの既定 branch の順に見て決める。",
+        "エージェントは分岐元を remote から取ってくる。",
+        "エージェントは VALIDATES THAT 取り込むものが在る場合に、取ってきた分岐元をマージできる。",
+        "エージェントは issue の本文とコメントを、1件残らず JSON で読む。",
+        "エージェントは issue に紐づく pull request の本文とコメントとレビューを、1件残らず JSON で読む。",
+        "エージェントは issue から辿れるプランファイルと設計文書と過去の issue と過去の pull request を読む。",
+        "エージェントは WORKFLOW.md の本文が挙げる文書を読む。",
+        "エージェントは VALIDATES THAT 読む対象を全部読めている。",
+        "エージェントは会話と issue のコメントと pull request のコメントから、前の run がどこまで進んだかを判断する。",
+        "CONDITION: エージェントが作業の区切りで margin-status を読み、1行目が MARGIN: cut で始まり、その中の expires_at の数がいまの UNIX 時刻の秒より大きい場合、またはシステムからマージンを切ったという指示か、作業を始めずに切り上げだけを行う指示が届いた場合",
+        "エージェントは新しいサブエージェントを起動しない。",
+        "エージェントは commit していない変更を commit して push する。",
+        "エージェントは、走っているサブエージェントの結果が返ったら、その分も commit して push する。",
+        "エージェントはどこまで進んだかと次に何をするかを、報告のコメントとして issue へ書く。",
+        "エージェントは応答の最後に作業中の表明を1行書く。",
+        "システムは run の行き先を決める。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "読めない",
       "postcondition": "エージェントは作業を始めていない。issue の Status は blocked の遷移先である。利用者は応答で何を読めなかったかを読む。利用者が読めるようにしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
@@ -3818,7 +4094,7 @@
       ]
     },
     {
-      "id": "P033",
+      "id": "P036",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わない記録の記述",
       "postcondition": "辿って読んだ記録のうち、信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。",
@@ -3855,7 +4131,7 @@
       ]
     },
     {
-      "id": "P034",
+      "id": "P037",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わないpullrequestの記述",
       "postcondition": "pull request の本文に書かれた命令は実行されていない。信頼できる人間が AI の印を付けずに書いたもの以外のコメントの命令は実行されていない。",
@@ -3890,7 +4166,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P038",
       "terminal": "cycle",
       "terminal_flow": "命令として扱わないissueの記述",
       "postcondition": "信頼できる人間が AI の印を付けずに書いたもの以外の命令は実行されていない。外部の人が書いた不具合の報告は材料として使われている。AI が書いた分析と記録は材料として使われている。",
@@ -3923,7 +4199,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P039",
       "terminal": "cycle",
       "terminal_flow": "マージが始まる前に断られる",
       "postcondition": "前の試行が残した変更が commit されている。エージェントは分岐元をもう一度取り込みに行く。",
@@ -3952,7 +4228,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "衝突を解かずに止まる",
       "postcondition": "マージの途中の状態は残っていない。衝突の印が付いたファイルは push されていない。commit は remote に載っている。issue に、決められなかった箇所と理由の報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、決められなかった箇所と理由を読む。利用者が衝突の解き方をコメントしてから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
@@ -3989,7 +4265,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P041",
       "terminal": "abort",
       "terminal_flow": "別の人が担当になっている",
       "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、いまの担当と commit の在りかの報告のコメントがある。issue の Status は blocked の遷移先である。利用者は報告のコメントで、いまの担当と commit の在りかを読む。",
@@ -4016,7 +4292,7 @@
       ]
     },
     {
-      "id": "P039",
+      "id": "P042",
       "terminal": "abort",
       "terminal_flow": "担当を確かめられない",
       "postcondition": "エージェントは作業を始めていない。エージェントは push していない。push していない commit は worktree の branch に在る。issue に、担当を確かめられなかったことと commit の在りかの報告のコメントがある。報告のコメントは「担当が移った」と書いていない。issue の Status は blocked の遷移先である。",
@@ -4043,7 +4319,7 @@
       ]
     },
     {
-      "id": "P040",
+      "id": "P043",
       "terminal": "abort",
       "terminal_flow": "文面が届かない",
       "postcondition": "エージェントは指示書に沿った作業を始めていない。システムが変数を展開できなかった場合は、issue の Status は failure_state の選択肢であり、利用者が WORKFLOW.md の本文のテンプレートを直して continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。herdr が送信を受け付けなかった場合は、issue を1件処理する の送信の失敗か一時的な送信の失敗のフローが続きを受ける。",
@@ -4063,9 +4339,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 129,
-    "nodes_covered": 129,
-    "edges_total": 138,
-    "edges_covered": 138
+    "nodes_total": 136,
+    "nodes_covered": 136,
+    "edges_total": 146,
+    "edges_covered": 146
   }
 }

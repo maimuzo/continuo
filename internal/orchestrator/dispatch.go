@@ -266,7 +266,8 @@ func (o *Orchestrator) ownAssigneeLostSinceSnapshot(
 //
 // **「巡回を止める」とは呼ばない。**止まるのは入札の要る issue だけで、
 // **巡回そのもの（走っている run の面倒・枠の読み直し・期限切れの担当を外す経路）は続く。**
-// **担当が既にこの機械にある issue も着手する。**
+// **担当が既にこの機械にある issue は、ここでは落とさない。**着手の前に `handoffGate` が
+// レートリミットのマージンを見て、切っていれば Claude Code を起こさずに Status を戻す（issue #262。設計 3-27a）。
 //
 // **判定は1段だけになった**（人間の決定。2026-09-06）。
 // **`rate_limit.pause_above_percent` を見る段は消えた。**理由は
@@ -428,7 +429,7 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **マージンをいくら下げても動き出さない。**同じ文面にすると、
 	// **人間はマージンを触って、効かないまま原因を探し続ける。**
 	msg := "枠に余裕が無いので、入札の要る issue には着手しません" +
-		"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+		"（担当が既にこの機械にある issue は、マージンを見て着手するかを決めます。走っている run は、マージンを切ったら切り上げさせます）。" +
 		"枠が戻れば自分で再開します。すぐ動かしたいときは " +
 		"tracker.provider.handoff の2つのマージンを見てください"
 	// **使用率100 の枠があるときは、マージンでは動き出さない**（実装レビュー4周目の MEDIUM）。
@@ -449,12 +450,12 @@ func (o *Orchestrator) logNewWorkBlocked(
 				"Claude Code のアカウントを替えたなら、continuo を止めて quota.json を消し、立て直してください）"
 		}
 		msg = "枠を使い切っているので、入札の要る issue には着手しません" +
-			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"（担当が既にこの機械にある issue は、マージンを見て着手するかを決めます。走っている run は、マージンを切ったら切り上げさせます）。" +
 			"枠が戻れば自分で再開します。マージンを下げても動き出しません" + retake
 	}
 	if skip == handoff.SkipQuotaUnreadable {
 		msg = "枠を読めないので、入札の要る issue には着手しません" +
-			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"（担当が既にこの機械にある issue は、マージンを見て着手するかを決めます。走っている run は、マージンを切ったら切り上げさせます）。" +
 			"マージンを下げても動き出しません。読めた値が古くなっただけのこともあります。" +
 			"rate_limit.source が oauth_usage_api なら rate_limit.token_source と資格情報を、" +
 			"statusline なら statusline取得の WARN が出ていないかを確かめてください"
@@ -524,7 +525,10 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **判定とログがそれぞれロックを取ると、
 	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
 	// **だから写しは、ここで1回だけ取って両方へ渡す。**
-	blockedSnap := o.quotaForBid()
+	// **3つの写しを1回の錠で取る**（issue #262）。`fresh` は今の `quotaForBid` と同じもので、
+	// 新しい着手を止めるかと入札は今どおりこれを使う。`usable` は、担当が自分の issue の着手の前の判定が使う。
+	reads := o.readQuota()
+	blockedSnap := reads.fresh
 	blocked := o.newWorkBlockedWith(blockedSnap)
 	// **「入札の要る候補」が1件も無いときは出さない**（issue #173）。
 	// **候補が0件のときだけでは足りない。**候補が全部
@@ -554,7 +558,8 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// 通らなくなる**ので、詰まったカンバンを誰も解けない。
 	//
 	// **止めるのは `handoffGate` が issue ごとに行う。**
-	// **担当者のいない issue は入札が要るので落ちる。担当が既にこの機械にある issue は通る。**
+	// **担当者のいない issue は入札が要るので落ちる。担当が既にこの機械にある issue は通る**
+	// （そのあと `handoffGate` がレートリミットのマージンを見る。issue #262）。
 
 	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
 	o.resetHandoffFetchBudget()
@@ -676,10 +681,11 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		//	2. **再起動のあとの拾い直し**（`restart.orphan_running_action: redispatch`）**が、この経路である。**
 		//	   落とすと、自分が `In Progress` にした issue を自分で拾い直せない
 		//
-		// **代償がある。**枠に余裕が無いまま2の経路を通ると、**動けない Claude Code を1つ起こす。**
-		// **使用率100なら枠待ちの印が立って打ち切りの時計が止まるが、90〜99%の帯では立たない**ので、
-		// **`claude.turn_timeout_ms`（既定1時間）でリトライを1つ焼く。**
-		// **それでも落とさない。**落とすほうは issue が誰にも解かれずに残る。
+		// **ここで落とさない代わりに、`handoffGate` がマージンを見る**（issue #262。設計 3-27a）。
+		// 担当が自分の issue でマージンを切っていれば（マージン0の機械では使用率100%なら）、
+		// **Claude Code を起こさずに Status を戻すか、担当を外す。**以前は、枠に余裕が無いまま2の経路を通ると
+		// 動けない Claude Code を1つ起こし、`claude.turn_timeout_ms`（既定1時間）でリトライを1つ焼いていた。
+		// **それでも、ここでは落とさない。**落とすほうは issue が誰にも解かれずに残る。
 		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
 			// **枠が実際に落とした1件目で、この巡回の理由を1回だけ出す**（issue #173）。
 			if !blockedLogged {
@@ -705,7 +711,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
 		// **入札の判定にも、この巡回で1回だけ読んだ写しを渡す**（issue #173）。
 		// **`handoffGate` の中で取り直すと、上の `blocked` と別の読み取りになる。**
-		decision := o.handoffGate(ctx, issue, blockedSnap)
+		decision := o.handoffGate(ctx, issue, blockedSnap, reads.usable)
 		if decision.stop {
 			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**

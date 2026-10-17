@@ -36,6 +36,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/marginstatus"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -379,6 +380,14 @@ type Orchestrator struct {
 	quotaWriteMu sync.Mutex
 	// quotaPath は quota.json の絶対パスである。空なら置かない。
 	quotaPath string
+	// marginStatusPath は margin-status の絶対パスである（issue #262。設計 3-27a）。空なら書かない。
+	//
+	// **`internal/marginstatus` の `Path` で決める。**組み込みの指示書へパスを入れる `RenderData` も
+	// 同じ関数を呼ぶので、指示書が指すパスと、本体が書くパスはずれない。
+	// **空の機械（`rate_limit.source: none`）では、切り上げの判定も行わない**（もともと使用率が無い）。
+	marginStatusPath string
+	// marginStatusWarnOnce は、margin-status を書けなかったときの Warn を1回だけ出すためのものである。
+	marginStatusWarnOnce sync.Once
 	// statuslineNotify は、statusline取得で値が届いたことを巡回のループへ知らせる（容量1）。
 	statuslineNotify chan struct{}
 	// fetchListMu は statusline取得の閉じ残しの一覧の読み書きを1本にする。
@@ -637,6 +646,7 @@ func New(opts Options) (*Orchestrator, error) {
 		statuslineNotify: make(chan struct{}, 1),
 	}
 	// **quota.json は実行時ディレクトリに置く**（issue #284）。使用率を読む設定（`none` 以外）のときだけ。
+	orc.marginStatusPath = marginstatus.Path(opts.Config.RateLimit, opts.HookSocketPath)
 	if opts.Config.RateLimit.Source != ratelimit.SourceNone && opts.HookSocketPath != "" {
 		orc.quotaPath = filepath.Join(orc.runtimeDir, quotaFileName)
 	}
@@ -1180,6 +1190,7 @@ func (o *Orchestrator) warnAPISwitched(err error, credErr *ratelimit.CredentialE
 //	一、余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。
 //	    既定（マージン10）では、担当者のいない issue には余裕値が先に効く。あちら（96から）が効いていたのは、
 //	    担当が自分の issue の着手だけである。消したので、96以上でも担当が自分の issue は着手する
+//	    （その後 issue #262 で、担当が自分の issue も、着手の前にレートリミットのマージンを見るようになった。設計 3-27a）
 //	二、丸ごとやめると、`handoffGate` の中にある「期限切れの担当を外す」経路も通らない。
 //	    詰まったカンバンを誰も解けなくなる
 //	三、マージンは5時間と1週間で別々に持てる。あちらは全部の枠の最大値ひとつでしか判定できない
@@ -1721,6 +1732,10 @@ type RunView struct {
 	BackoffUntil time.Time
 	// WaitingQuota は枠待ちと判定して時計を止めていることを表す。
 	WaitingQuota bool
+	// WaitingHandoff は、切り上げを終え、行き先を待っていることを表す（「行き先を待つ」印。
+	// runState の AwaitDestination。issue #262 / #273。設計 3-27a）。
+	// **このあいだ continuo は turn を送らない。**担当を外すかは巡回の手放しが決める。
+	WaitingHandoff bool
 	// State は最後に取り直した Status である。
 	State string
 	// Title は issue のタイトルである。
@@ -1755,19 +1770,20 @@ func (o *Orchestrator) RunViews() []RunView {
 	for _, rs := range o.runs {
 		snap := rs.snapshot()
 		out = append(out, RunView{
-			Identifier:   snap.Identifier,
-			TurnCount:    snap.TurnCount,
-			RetryCount:   snap.RetryCount,
-			BackoffUntil: snap.BackoffUntil,
-			WaitingQuota: snap.WaitingQuota,
-			State:        snap.State,
-			Title:        snap.Title,
-			URL:          snap.URL,
-			StartedAt:    snap.StartedAt,
-			LastHookAt:   snap.LastHookAt,
-			StallClockAt: snap.LastSeenAt,
-			Tokens:       snap.Tokens,
-			TokensAt:     snap.TokensAt,
+			Identifier:     snap.Identifier,
+			TurnCount:      snap.TurnCount,
+			RetryCount:     snap.RetryCount,
+			BackoffUntil:   snap.BackoffUntil,
+			WaitingQuota:   snap.WaitingQuota,
+			WaitingHandoff: snap.AwaitDestination,
+			State:          snap.State,
+			Title:          snap.Title,
+			URL:            snap.URL,
+			StartedAt:      snap.StartedAt,
+			LastHookAt:     snap.LastHookAt,
+			StallClockAt:   snap.LastSeenAt,
+			Tokens:         snap.Tokens,
+			TokensAt:       snap.TokensAt,
 		})
 	}
 	return out

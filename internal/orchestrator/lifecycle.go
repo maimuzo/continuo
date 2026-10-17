@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/statussignal"
@@ -114,6 +115,14 @@ func (o *Orchestrator) decideAfterTurn(
 		// **外から動かされていた記録は消す**（設計 3-50 / 3-74）。表明で戻ったのだから、
 		// 猶予の起点も捨てる。
 		rs.clearExternalMove()
+		// **切り上げの指示を送った turn の終わりなら、行き先を決める**（issue #262。設計 3-27a）。
+		// **Status がまだ作業中のときだけ、ここへ来る。**Claude Code の表明で Status が動いていれば
+		// （完了や質問）、上の枝の今の流れが先である。
+		// **フラグはこの枝で読んで下ろす。**書き戻しのあとの判定し直し（`rewriteAndDecide`）も、
+		// 書けたらこの枝へ来るので、入口で下ろすと判定し直しの側で読めなくなる。
+		if rs.takeMarginCutSent() {
+			return o.decideAfterMarginCut(ctx, rs)
+		}
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
 		if mayRewrite {
@@ -129,6 +138,55 @@ func (o *Orchestrator) decideAfterTurn(
 		// 引き渡し（In Review / Blocked）。**worker は止めるが worktree は残す**（設計 3-5）。
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました（人間へ引き渡します）", current.State))
 		return true
+	}
+}
+
+// decideAfterMarginCut は、切り上げの指示を送った turn の終わりに、行き先を決める
+// （issue #262。設計 3-27a の turn の終わりの段1〜5）。
+//
+// **段1（direct chat）と段2（Status が動いた）は、呼び出し側の `decideAfterTurn` が先に当てている。**
+// ここは残りの3つを、上から順に当てる。**使える値はここで1回だけ取る。**切り上げの turn は長くなりうるので、
+// 送ったときの値は使わない。
+//
+//	Claude Code が動けない（5時間の期間か全体の1週間の期間が使用率100%） … 今の動き（次の turn へ。使用率100%の待ちに任せる）
+//	マージンを切った期間が在る                                           … 行き先の表（Blocked へ戻すか、「行き先を待つ」印）
+//	どれも無い（切り上げのあいだにリセットされたか、使用率を読めていない） … 次の turn へ（「続けてください」）
+//
+// **Claude Code が動けないときに今の動きへ回すのは、人間の回答「リセットを待つで良い。100%になってるのだから
+// リセットまで何もできない」（2026-10-17）のとおりである。**次の turn は、使用率100%のあいだに組み立てるので
+// 「続けてください」になり（`marginCutForTurn` は動けないとき偽）、Claude Code が応答しないまま今の使用率100%の
+// 待ちに入る。**リセットのあとに切り上げの指示が届くとは限らない。**ほかの期間がまだ切っていれば、Claude Code が
+// 5-8 で自分で確かめて切り上げるか、その次の turn の終わりの判定が止める。
+//
+// **「行き先を待つ」印を立てたら、何も送らずに turn ループを抜ける。**担当を外すのは、今の巡回の手放し
+// （`releaseQuotaWaitExceeded`）である。印の立った run の扱いは `reconcileAwaitDestination` にある。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: この run の turn ループを止めるなら true。
+func (o *Orchestrator) decideAfterMarginCut(ctx context.Context, rs *runState) bool {
+	usable := o.readQuota().usable
+	if usable != nil && usable.AnySelected(handoff.CannotWork()) {
+		o.logger.Info("切り上げの turn が終わりましたが、使用率100%の期間があるので、今どおりリセットを待ちます",
+			"identifier", rs.issue().Identifier)
+		return false
+	}
+	switch handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), o.now(), handoff.PhaseRunning) {
+	case handoff.DestBlocked:
+		o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, o.marginCutBlockedReason(usable))
+		return true
+	case handoff.DestAwait:
+		if rs.setAwaitDestination() {
+			o.logger.Info("切り上げの turn が終わりました。1週間の期間で担当を外しうるので、行き先を巡回に決めさせます（何も送りません）",
+				"identifier", rs.issue().Identifier,
+				"マージンを切った期間", o.marginCutKinds(usable),
+				"待つ上限", o.weeklyWaitLimit())
+		}
+		return true
+	default:
+		o.logger.Info("切り上げの turn が終わりましたが、マージンを切った期間がもう無い（または使用率を読めていない）ので、作業を続けさせます",
+			"identifier", rs.issue().Identifier)
+		return false
 	}
 }
 

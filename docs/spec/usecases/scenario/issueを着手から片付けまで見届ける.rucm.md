@@ -13,6 +13,7 @@
 
 - `docs/plans/continuo_design.md#3-5`（完了検知の3層。1つの turn で何が起きるか）
 - `docs/plans/continuo_design.md#3-8`（turn ループと巡回のループの分担）
+- `docs/plans/continuo_design.md#3-27a`（走っている run がマージンを切ったら切り上げ、Blocked へ戻すか別の機械へ引き継ぐ）
 - `docs/plans/continuo_design.md#3-9`（worktree と branch の後始末。手順7 が完了の見張りである）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番）
 - `docs/plans/continuo_design.md#3-25`（表明を読んでStatusを動かす）
@@ -153,6 +154,26 @@ RFS 常駐の再起動 2
 1. システムは前回の run に継続の指示を送らない。
 2. ABORT
 POSTCONDITION: システムは前回の run を引き継いでいない。continuo が常駐しているかどうかと、herdr の pane と worktree と issue の Status の状態は、再起動して実行中のissueを引き継ぐ が止まった代替フローの事後条件のとおりである。
+
+GLOBAL ALTERNATIVE FLOW マージンの切り上げ:
+BRANCH FROM BASIC FLOW 5
+WHEN 走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合
+1. システムは Claude Code から、変更の push と引き継ぎのコメントを済ませて作業中の表明で終えた turn の終わりを受ける。
+2. システムは VALIDATES THAT 行き先が Blocked である。
+3. システムはボードの issue の Status に failure_state の選択肢を書く。
+4. システムはマージンを切った期間とリセットの時刻を書いた理由を issue にコメントする。
+5. 利用者はリセットのあとにボードの issue の Status に dispatch_state の選択肢を書く。
+6. RESUME STEP 5
+POSTCONDITION: issue の Status は dispatch_state の選択肢である。issue に引き継ぎのコメントと理由のコメントがある。issue の担当者はこの機械の投稿者のままである。commit は remote に載っている。worktree と branch は残っている。前の run の herdr の pane は閉じている。
+
+SPECIFIC ALTERNATIVE FLOW 別の機械へ引き継ぐ:
+RFS マージンの切り上げ 2
+1. システムは run に行き先を待つ印を立てる。
+2. システムは workspace_hooks の after_run を実行する。
+3. システムは issue の担当者からこの機械の投稿者を外す。
+4. システムは担当を外したことを issue にコメントする。
+5. ABORT
+POSTCONDITION: issue の担当者からこの機械の投稿者は外れている。issue に引き継ぎのコメントと released のコメントがある。issue の Status は running_state の選択肢のままである。worktree は残っている。余裕のある別の機械が入札して続きを拾える。
 ```
 
 ## この時系列で Status がどう動くか
@@ -183,6 +204,8 @@ Status の名前は既定の値で書いている。
 | 代替フロー 判断の依頼 | 人間に判断を渡す | エージェントが判断を仰ぐ表明を書いたところから先を、ステップ5 の残りの代わりに受け持つ |
 | 代替フロー 枠の上限 | レートリミットで待って再開する | 処理の途中のどの時点でも起こりうる |
 | 代替フロー 常駐の再起動 | 再起動して実行中のissueを引き継ぐ | 処理の途中のどの時点でも起こりうる |
+
+**`マージンの切り上げ` と `別の機械へ引き継ぐ` は、取り込む先の particular_case を1つに絞れないので、直接の段で書いている**（issue #262。設計 3-27a）。エージェントの側は `指示書に沿ってissueを1件仕上げる` の `マージンを切って切り上げる`、turn の終わりの行き先は `issueを1件処理する` の `切り上げのturnの終わり`、担当を外すのは `枠待ちのrunの打ち切りを止める` の手放しの4本が持つ。**`枠の上限` は使用率100%（Claude Code が動けない）のときだけで、そのときは今どおりリセットを待つ**（人間の回答「リセットを待つで良い」。2026-10-17）。
 
 `システムによる引き渡し` と `人間が引き取る` は、取り込む先の particular_case が無いので、直接の段で書いている。
 
@@ -252,6 +275,17 @@ flowchart TD
     A9S3["常駐の再起動 3 RESUME STEP 5"]
     A10S1["引き継がれない再起動 1 システムは前回の run に継続の指示を送らない"]
     A10S2(["引き継がれない再起動 2 ABORT"])
+    A11S1["マージンの切り上げ 1 システムは Claude Code から、変更の push と引き継ぎのコメントを済ませて作業中の表明で終えた turn の終わりを受ける"]
+    A11S2{"マージンの切り上げ 2 行き先が Blocked である"}
+    A11S3["マージンの切り上げ 3 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A11S4["マージンの切り上げ 4 システムはマージンを切った期間とリセットの時刻を書いた理由を issue にコメントする"]
+    A11S5["マージンの切り上げ 5 利用者はリセットのあとにボードの issue の Status に dispatch_state の選択肢を書く"]
+    A11S6["マージンの切り上げ 6 RESUME STEP 5"]
+    A12S1["別の機械へ引き継ぐ 1 システムは run に行き先を待つ印を立てる"]
+    A12S2["別の機械へ引き継ぐ 2 システムは workspace_hooks の after_run を実行する"]
+    A12S3["別の機械へ引き継ぐ 3 システムは issue の担当者からこの機械の投稿者を外す"]
+    A12S4["別の機械へ引き継ぐ 4 システムは担当を外したことを issue にコメントする"]
+    A12S5(["別の機械へ引き継ぐ 5 ABORT"])
     BS1 --> BS2
     BS2 --> BS3
     BS3 --> BS4
@@ -262,6 +296,7 @@ flowchart TD
     BS5 -. "WHEN issue の担当者がこの機械の投稿者1人であり、利用者が走行中の issue の Status に direct_chat_state の選択肢を書いた場合" .-> A5S1
     BS5 -. "WHEN 走行中の run が枠を使い切った場合" .-> A7S1
     BS5 -. "WHEN continuo のプロセスが落ちて利用者が continuo を起動し直す場合" .-> A9S1
+    BS5 -. "WHEN 走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合" .-> A11S1
     BS6 --> BS7
     BS7 --> BS8
     BS8 --> BS9
@@ -306,6 +341,17 @@ flowchart TD
     A9S2 -- いいえ --> A10S1
     A9S3 -. "戻る" .-> BS5
     A10S1 --> A10S2
+    A11S1 --> A11S2
+    A11S2 -- はい --> A11S3
+    A11S2 -- いいえ --> A12S1
+    A11S3 --> A11S4
+    A11S4 --> A11S5
+    A11S5 --> A11S6
+    A11S6 -. "戻る" .-> BS5
+    A12S1 --> A12S2
+    A12S2 --> A12S3
+    A12S3 --> A12S4
+    A12S4 --> A12S5
     BS11 --> END(["終了"])
 ```
 
@@ -358,6 +404,17 @@ sequenceDiagram
         U->>GH: Status への dispatch_state の書き込みを要求する
         Note over S: Status が dispatch_state でなければ ABORT（回答を待たずに終わる）
         Note over S: RESUME STEP 5 もう一度 issue を処理する
+    else 走行中にマージンを切り、Claude Code が動ける
+        CC->>GH: 変更を push し、引き継ぎのコメントを書いて working で終える
+        alt 行き先が Blocked
+            S->>GH: Status への failure_state の書き込みと理由のコメントの投稿を要求する
+            U->>GH: リセットのあとに Status への dispatch_state の書き込みを要求する
+            Note over S: RESUME STEP 5 もう一度 issue を処理する
+        else 行き先を待つ（1週間の期間で待つ上限を超える）
+            S->>S: 行き先を待つ印を立てる
+            S->>GH: after_run を走らせ、担当者からの自分の削除と released の投稿を要求する
+            Note over S: ABORT 余裕のある別の機械が拾う
+        end
     else システムが run を打ち切る
         S->>GH: Status への failure_state の書き込みを要求する
         S->>GH: 人間へ引き渡す通知のコメントの投稿を要求する

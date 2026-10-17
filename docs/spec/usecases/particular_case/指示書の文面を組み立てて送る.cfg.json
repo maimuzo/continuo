@@ -3,7 +3,7 @@
   "usecase_name": "指示書の文面を組み立てて送る",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md",
-    "rucm_block_sha256": "7128cfa47cd2afc093333cf734f553d3e0577a9c1ea32b68cc2a2186ebb4375f"
+    "rucm_block_sha256": "a2785a7c22f74f3555927ef26b59dc93afa79aa285f66b7884b85f41c54a3cb6"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -37,14 +37,23 @@
       },
       "postcondition": "文面の末尾に人間のコメントの節は無い。システムは run を失敗にしていない。"
     },
+    "マージンを切っている最初のturn": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "文面のいちばん後ろに切り上げの文がある。切り上げの文は人間のコメントの節より後ろにある。run に切り上げの指示を送った印はまだ立っていない。"
+    },
     "送信を受け付けられない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          9
+          10
         ]
       },
-      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。"
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。"
     }
   },
   "nodes": [
@@ -99,23 +108,37 @@
     },
     {
       "id": "BASIC FLOW-8",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは run の turn 数を1つ増やす。"
+      "statement": "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。"
+      "statement": "システムは run の turn 数を1つ増やす。"
     },
     {
       "id": "BASIC FLOW-10",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 10,
+      "statement": "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
       "statement": "システムはエージェントの turn の終わりを待ち始める。"
     },
     {
@@ -181,6 +204,20 @@
       "flow": "付けるコメントが無い",
       "step": 2,
       "statement": "RESUME STEP 8"
+    },
+    {
+      "id": "マージンを切っている最初のturn-1",
+      "type": "action",
+      "flow": "マージンを切っている最初のturn",
+      "step": 1,
+      "statement": "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。"
+    },
+    {
+      "id": "マージンを切っている最初のturn-2",
+      "type": "resume",
+      "flow": "マージンを切っている最初のturn",
+      "step": 2,
+      "statement": "RESUME STEP 9"
     },
     {
       "id": "送信を受け付けられない-1",
@@ -257,19 +294,36 @@
     {
       "from": "BASIC FLOW-8",
       "to": "BASIC FLOW-9",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "マージンを切っている最初のturn-1",
+      "kind": "false",
+      "condition": "NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない"
     },
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
       "kind": "true",
       "condition": "herdr がエージェントへの文面の送信を受け付ける"
     },
     {
-      "from": "BASIC FLOW-9",
+      "from": "BASIC FLOW-10",
       "to": "送信を受け付けられない-1",
       "kind": "false",
       "condition": "NOT herdr がエージェントへの文面の送信を受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
     },
     {
       "from": "変数を展開できない-1",
@@ -312,6 +366,16 @@
       "kind": "resume"
     },
     {
+      "from": "マージンを切っている最初のturn-1",
+      "to": "マージンを切っている最初のturn-2",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切っている最初のturn-2",
+      "to": "BASIC FLOW-9",
+      "kind": "resume"
+    },
+    {
       "from": "送信を受け付けられない-1",
       "to": "送信を受け付けられない-2",
       "kind": "seq"
@@ -333,7 +397,9 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
-        "BASIC FLOW-10"
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
       ],
       "steps": [
         "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
@@ -343,8 +409,10 @@
         "システムは GitHub に issue のコメントを要求する。",
         "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
         "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
         "システムはエージェントの turn の終わりを待ち始める。"
       ]
     },
@@ -352,7 +420,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "送信を受け付けられない",
-      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -363,6 +431,7 @@
         "BASIC FLOW-7",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "送信を受け付けられない-1",
         "送信を受け付けられない-2"
       ],
@@ -374,6 +443,7 @@
         "システムは GitHub に issue のコメントを要求する。",
         "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
         "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
         "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
@@ -393,11 +463,14 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
-        "付けるコメントが無い-1",
-        "付けるコメントが無い-2",
+        "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
         "BASIC FLOW-9",
-        "BASIC FLOW-10"
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
       ],
       "steps": [
         "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
@@ -406,11 +479,14 @@
         "システムは VALIDATES THAT relay を試みる条件を満たしている。",
         "システムは GitHub に issue のコメントを要求する。",
         "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
-        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
-        "システムは文面に節を付けない。",
-        "RESUME STEP 8",
+        "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
         "システムはエージェントの turn の終わりを待ち始める。"
       ]
     },
@@ -418,7 +494,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "送信を受け付けられない",
-      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -426,10 +502,12 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
-        "付けるコメントが無い-1",
-        "付けるコメントが無い-2",
+        "BASIC FLOW-7",
         "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "送信を受け付けられない-1",
         "送信を受け付けられない-2"
       ],
@@ -440,9 +518,11 @@
         "システムは VALIDATES THAT relay を試みる条件を満たしている。",
         "システムは GitHub に issue のコメントを要求する。",
         "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
-        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
-        "システムは文面に節を付けない。",
-        "RESUME STEP 8",
+        "システムは選んだコメントを文面の末尾に節として付ける。",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
         "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
@@ -460,22 +540,30 @@
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
-        "relayを試みない-1",
-        "relayを試みない-2",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
-        "BASIC FLOW-10"
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
       ],
       "steps": [
         "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
         "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
         "システムは展開した断片を空行1つで継ぎ合わせる。",
         "システムは VALIDATES THAT relay を試みる条件を満たしている。",
-        "CONDITION: NOT relay を試みる条件を満たしている",
-        "システムは issue のコメントを読まない。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
         "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
         "システムはエージェントの turn の終わりを待ち始める。"
       ]
     },
@@ -483,7 +571,130 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "送信を受け付けられない",
-      "postcondition": "run の turn 数は1つ増えている。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
+        "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "付けるコメントが無い-1",
+        "付けるコメントが無い-2",
+        "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "システムは GitHub に issue のコメントを要求する。",
+        "システムは VALIDATES THAT いちばん新しい閉じた記録より後に、渡してよいコメントがある。",
+        "CONDITION: NOT いちばん新しい閉じた記録より後に、渡してよいコメントがある",
+        "システムは文面に節を付けない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -493,6 +704,40 @@
         "relayを試みない-2",
         "BASIC FLOW-8",
         "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "CONDITION: NOT relay を試みる条件を満たしている",
+        "システムは issue のコメントを読まない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "relayを試みない-1",
+        "relayを試みない-2",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
         "送信を受け付けられない-1",
         "送信を受け付けられない-2"
       ],
@@ -504,6 +749,7 @@
         "CONDITION: NOT relay を試みる条件を満たしている",
         "システムは issue のコメントを読まない。",
         "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
         "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
@@ -512,7 +758,84 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "herdr は文面の送信を受け付けている。システムは turn の終わりを待っている。文面は起動時に組み立てた断片の順である。文面の末尾に信頼できる人間のコメントの節がある。run の turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "relayを試みない-1",
+        "relayを試みない-2",
+        "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "CONDITION: NOT relay を試みる条件を満たしている",
+        "システムは issue のコメントを読まない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "システムは、文面に切り上げの文を添えた場合に、run に切り上げの指示を送った印を立てる。",
+        "システムはエージェントの turn の終わりを待ち始める。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "送信を受け付けられない",
+      "postcondition": "run の turn 数は1つ増えている。run に切り上げの指示を送った印は立っていない。この記述はここで終わる。続きは issueを1件処理する の代替フローが受ける。herdr が送信を断った場合は、送信の失敗のフローが受ける。herdr の呼び出しが一時的な理由で失敗した場合は、一時的な送信の失敗のフローが受ける。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "relayを試みない-1",
+        "relayを試みない-2",
+        "BASIC FLOW-8",
+        "マージンを切っている最初のturn-1",
+        "マージンを切っている最初のturn-2",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "送信を受け付けられない-1",
+        "送信を受け付けられない-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに着手した issue への最初の turn の送信を要求する。",
+        "システムは VALIDATES THAT 起動時に組み立てた断片のそれぞれの変数を issue の値で展開できる。",
+        "システムは展開した断片を空行1つで継ぎ合わせる。",
+        "システムは VALIDATES THAT relay を試みる条件を満たしている。",
+        "CONDITION: NOT relay を試みる条件を満たしている",
+        "システムは issue のコメントを読まない。",
+        "RESUME STEP 8",
+        "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
+        "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
+        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "RESUME STEP 9",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
+        "CONDITION: NOT herdr がエージェントへの文面の送信を受け付ける",
+        "システムは送信の結果を turn ループへ返す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "変数を展開できない",
       "postcondition": "文面はエージェントに届いていない。run の turn 数は増えていない。issue の Status は failure_state の選択肢である。issue に WORKFLOW.md の本文のテンプレートを直す案内のコメントがある。印は外れている。worktree は残っている。pane とコメントの後始末は、runを終えてworkerを止める の終わり方のとおりである。利用者はテンプレートを直す。本文の変更は continuo の再起動のあとで効く。利用者が continuo を再起動してから Status を dispatch_state の選択肢へ戻すと、次の run が始まる。",
@@ -538,9 +861,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 21,
-    "nodes_covered": 21,
-    "edges_total": 22,
-    "edges_covered": 22
+    "nodes_total": 25,
+    "nodes_covered": 25,
+    "edges_total": 27,
+    "edges_covered": 27
   }
 }

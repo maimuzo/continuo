@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "ec59a5d332f78d1efcf7eeff73269419e144583452d84191fb352fb9686680ab", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2082dc5fed2ac7554cc675cd56d0906bf53d9400ea737f298622750e01ec5db", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **ユースケース記述「人間に判断を渡す」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -66,9 +66,9 @@ func Test_人間に判断を渡す_P001_reviewの表明で遷移先へ書いて�
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P011"}
 //
-// Test_人間に判断を渡す_P010_知らないStatusで止めるときはissueに理由を書く は、設計 3-50 を確かめる。
+// Test_人間に判断を渡す_P011_知らないStatusで止めるときはissueに理由を書く は、設計 3-50 を確かめる。
 //
 // 目的: 設定に名前が出てこない Status へ動かされた issue を、continuo は黙って止めていた。
 // **その issue は `active_states` に入らないので二度と拾われず、カンバンにも issue にも
@@ -79,7 +79,7 @@ func Test_人間に判断を渡す_P001_reviewの表明で遷移先へ書いて�
 // 成功条件: issue に continuo のコメントが1件付き、そこに
 // 「どの Status になったか（元の値も）」「なぜ止めたか」「続けるにはどうするか」が書かれていること。
 // **Status は continuo が書き換えないこと**（人間の操作を巻き戻さない）。
-func Test_人間に判断を渡す_P010_知らないStatusで止めるときはissueに理由を書く(t *testing.T) {
+func Test_人間に判断を渡す_P011_知らないStatusで止めるときはissueに理由を書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.VerifyStatesEvery = 0
@@ -124,9 +124,9 @@ func Test_人間に判断を渡す_P010_知らないStatusで止めるときはi
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
-// Test_人間に判断を渡す_P011_turnが動いている間は知らないStatusでもすぐには止めない は、設計 3-50 を確かめる。
+// Test_人間に判断を渡す_P012_turnが動いている間は知らないStatusでもすぐには止めない は、設計 3-50 を確かめる。
 //
 // 目的: エージェントが turn の最後に `CONTINUO-STATUS:` を書けば、continuo が正しい Status へ
 // 戻す（3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
@@ -137,7 +137,7 @@ func Test_人間に判断を渡す_P010_知らないStatusで止めるときはi
 //   - 猶予の内側では worker を止めない（pane も閉じない。コメントも書かない）
 //   - 待っていることをログに出す（人間が止めたいときに遅れることを黙って隠さない）
 //   - 猶予を過ぎたら止めて、理由を issue へ書く
-func Test_人間に判断を渡す_P011_turnが動いている間は知らないStatusでもすぐには止めない(t *testing.T) {
+func Test_人間に判断を渡す_P012_turnが動いている間は知らないStatusでもすぐには止めない(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,
@@ -184,9 +184,9 @@ func Test_人間に判断を渡す_P011_turnが動いている間は知らない
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
-// Test_人間に判断を渡す_P008_自動化が動かした知らないStatusではworkerを止めない は、
+// Test_人間に判断を渡す_P009_自動化が動かした知らないStatusではworkerを止めない は、
 // 設計 3-54 を確かめる（issue #33 の本体）。
 //
 // 目的: エージェントが PR を作った3秒後に、カンバンの組み込みの自動化が Status を
@@ -199,7 +199,7 @@ func Test_人間に判断を渡す_P011_turnが動いている間は知らない
 //   - worker を止めない（pane を閉じない・印を外さない）
 //   - Status を `In Progress (AI)` へ戻す
 //   - 戻したことを issue に1件残す（設計 3-29）
-func Test_人間に判断を渡す_P008_自動化が動かした知らないStatusではworkerを止めない(t *testing.T) {
+func Test_人間に判断を渡す_P009_自動化が動かした知らないStatusではworkerを止めない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	itemID := startRunForAutomation(t, fx)
 	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
@@ -238,9 +238,9 @@ func Test_人間に判断を渡す_P008_自動化が動かした知らないStat
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P010"}
 //
-// Test_人間に判断を渡す_P009_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-56 を確かめる。
+// Test_人間に判断を渡す_P010_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-56 を確かめる。
 //
 // 目的: **押し合いの上限は「continuo とカンバンが押し合っている」ことを数えるためにある。**
 // 押し合いはカンバンが実際に動いたときにだけ起きる。**通信の失敗で数えてしまうと、
@@ -251,7 +251,7 @@ func Test_人間に判断を渡す_P008_自動化が動かした知らないStat
 // **押し合いの上限（3回）ぶんの書き戻しを続けて行わせる。**
 // 成功条件: 失敗のあとでも3回とも書き戻せること。**上限に達したというログを出さないこと。**
 // **枠を食い潰していれば、2回の失敗で残りが1回になり、2回目の書き戻しで止まる。**
-func Test_人間に判断を渡す_P009_書き込みが失敗しても書き戻しの回数を食い潰さない(t *testing.T) {
+func Test_人間に判断を渡す_P010_書き込みが失敗しても書き戻しの回数を食い潰さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	// **書き込みの失敗は、このテストが自分で起こしているものである。**
 	fx.AllowLog("対応表にある Status を戻せませんでした")

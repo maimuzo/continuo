@@ -15,6 +15,9 @@ import (
 //
 // **JavaScript は1行も使わない。**更新は `<meta http-equiv="refresh">` で行う。
 //
+// **レートリミットの区画をいちばん上に置く**（issue #273）。run が黙ったときに、人間が最初に知りたいのは
+// 「待てば直るのか（レートリミットで止まっているのか）」であり、その答えがこの区画にあるためである。
+//
 // **画面に出る文言はこのファイルに書かない**（設計 3-35）。`t` に渡したキーで
 // internal/i18n の資源から引く。`lang` は `<html lang="...">` に入れる言語の名前である。
 // **キーの文字列はここにしか現れないので、test/internal/i18n がこのファイルを読んで
@@ -45,6 +48,49 @@ section { margin-bottom: 2rem; }
 <body>
 <h1>continuo</h1>
 <p class="meta">{{ t "dashboard.meta" (.GeneratedAt.Format "2006-01-02 15:04:05 MST") .Counts.Running .Counts.Retrying refreshSeconds }}</p>
+
+<section>
+<table>
+<caption>{{ t "dashboard.caption_quota" }}</caption>
+<thead>
+<tr>
+<th>{{ t "dashboard.col_quota_kind" }}</th>
+<th class="num">{{ t "dashboard.col_quota_percent" }}</th>
+<th class="num">{{ t "dashboard.col_quota_margin" }}</th>
+<th>{{ t "dashboard.col_quota_resets" }}</th>
+</tr>
+</thead>
+<tbody>
+{{- if .Quota.Windows }}
+{{- range .Quota.Windows }}
+<tr>
+<td>{{ .KindText }}</td>
+<td class="num">{{ .Percent }}%
+{{- if .Short }} <span class="badge">{{ t "dashboard.badge_quota_short" }}</span>{{ end }}
+{{- if .Full }} <span class="badge">{{ t "dashboard.badge_quota_full" }}</span>{{ end }}
+</td>
+<td class="num">{{ .MarginPercent }}%</td>
+<td>{{ if .ResetsAt }}{{ formatTime .ResetsAt }}<span class="title">{{ .ResetsIn }}</span>{{ else }}{{ t "dashboard.quota_resets_unknown" }}{{ end }}</td>
+</tr>
+{{- end }}
+{{- else if .Quota.Disabled }}
+<tr><td colspan="4" class="empty">{{ t "dashboard.quota_disabled" }}</td></tr>
+{{- else if .Quota.LastReadAt }}
+<tr><td colspan="4" class="empty">{{ t "dashboard.quota_unusable" (formatTime .Quota.LastReadAt) .Quota.LastReadAgo }}</td></tr>
+{{- else }}
+<tr><td colspan="4" class="empty">{{ t "dashboard.quota_never_read" }}</td></tr>
+{{- end }}
+</tbody>
+</table>
+{{- if not .Quota.Disabled }}
+<p class="meta">
+{{- if .Quota.Windows }}{{ t "dashboard.quota_last_read" (formatTime .Quota.LastReadAt) .Quota.LastReadAgo }}{{ end }}
+{{- if and .Quota.Windows (not .Quota.Fresh) }} <span class="badge">{{ t "dashboard.badge_quota_stale" }}</span>{{ end }}
+{{- if .Quota.NewWorkBlocked }} <span class="badge">{{ t "dashboard.badge_new_work_blocked" }}</span>{{ end }}
+</p>
+<p class="meta">{{ t "dashboard.note_quota" }}</p>
+{{- end }}
+</section>
 
 <section>
 <table>
@@ -106,6 +152,7 @@ section { margin-bottom: 2rem; }
 <td>
 {{ .State }}
 {{- if .WaitingQuota }} <span class="badge">{{ t "dashboard.badge_waiting_quota" }}</span>{{ end }}
+{{- if .WaitingHandoff }} <span class="badge">{{ t "dashboard.badge_waiting_handoff" }}</span>{{ end }}
 {{- if .RetryCount }} <span class="badge">{{ t "dashboard.badge_retry" .RetryCount }}</span>{{ end }}
 {{- if .BackoffUntil }} <span class="badge">{{ t "dashboard.badge_resume" (formatTime .BackoffUntil) }}</span>{{ end }}
 </td>

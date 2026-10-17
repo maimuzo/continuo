@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "57e366a0068d219f84a1beaf1df26aad2b206dc3111b078635f50b6bf19a4612", "SOURCE": "docs/spec/usecases/particular_case/issueの担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "c9c5bdf2301646da071d64fd433bf69f728a8746ca78fe4eb9e79fafdb839f57", "SOURCE": "docs/spec/usecases/particular_case/issueの担当を入札で決める.cfg.json"}
 //
 // **ユースケース記述「issueの担当を入札で決める」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -302,21 +302,21 @@ func Test_issueの担当を入札で決める_P014_枠を読めなくても自�
 
 // {"RUCM-PATH": "P014"}
 //
-// Test_issueの担当を入札で決める_P014_枠が逼迫していても担当が自分のissueには着手する は、
-// 止める範囲が入札の要る issue だけであることを確かめる（設計 3-27。issue #173）。
+// Test_issueの担当を入札で決める_P014_枠が逼迫していたら担当が自分のissueも起動せずにBlockedへ戻す は、
+// 担当が自分の issue の着手の前に、レートリミットのマージンを見ることを確かめる（issue #262。設計 3-27a）。
 //
-// 目的: **巡回を丸ごと打ち切ってはならない。**
-// **以前は `rate_limit.pause_above_percent` を超えると `dispatchCandidates` が即 `return` していた。**
-// **その設定は消えた**（人間の決定。2026-09-06）。**打ち切ると、この機械が既に担当者に
-// なっている issue まで着手されなくなる**（印が無いのでこの経路からしか拾えない）。
-// **再起動で復元した run も拾えない**（`restart.orphan_running_action` の既定 `redispatch` は
-// 復元では何もせず、次の巡回に委ねる）。**`handoffGate` の中にある「期限切れの担当を外す」
-// 経路も通らなくなる**ので、詰まったカンバンを誰も解けない。
+// 目的: **以前は「担当が自分の issue には逼迫していても着手する」を固定していた**（設計 3-27。issue #173）。
+// **人間の決定で変わった**（2026-10-05。「担当になっているが一度blockedなどになっている状態で、余裕%が0%以下なら、
+// In Progressステータスなどに遷移しても新たにrunを開始せず即座にblockedに遷移する」）。
+// **巡回を丸ごと打ち切らないことは変わらない**（同じ P014 の「枠を読めなくても自分が担当のissueには着手する」が固定する）。
+// **止めるのは `handoffGate` が issue ごとに行う。**
 //
-// 与える情報: 1回目は 99% を返し、2回目以降は 500 を返す usage API。
+// 与える情報: 1回目は 99% を返し、2回目以降は 500 を返す usage API（5時間の期間。リセットの時刻は null）。
 // **この機械が担当者の `Ready` の issue が1件**（入札を要さない経路）。
-// 成功条件: その issue に着手すること。
-func Test_issueの担当を入札で決める_P014_枠が逼迫していても担当が自分のissueには着手する(t *testing.T) {
+// 成功条件: その issue に着手せず、Status が `Blocked` になり、担当者がこの機械のままであること。
+// **2回目以降に読めなくなっても、最後に読めてから30分以内なので、99% を使える値として判定に使う**
+// （リセットの時刻を読めない期間も含む）。
+func Test_issueの担当を入札で決める_P014_枠が逼迫していたら担当が自分のissueも起動せずにBlockedへ戻す(t *testing.T) {
 	var reads atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if reads.Add(1) > 1 {
@@ -335,7 +335,6 @@ func Test_issueの担当を入札で決める_P014_枠が逼迫していても�
 	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_STALE")
 
 	fx := newStubFixture(t, stubFixtureOptions{
-		// **ログを溜める。**止めた理由が既定の水準で出ることを検査する（issue #173）。
 		Logs:      true,
 		RateLimit: reader,
 		Mutate: func(cfg *config.Config) {
@@ -352,22 +351,26 @@ func Test_issueの担当を入札で決める_P014_枠が逼迫していても�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#192" {
-			return
+			t.Fatalf("マージンを切っているのに、担当が自分の issue に着手しています:\n%s", fx.Logs.String())
 		}
 	}
-	t.Fatalf("担当が自分の issue にまで着手していない（巡回を丸ごと打ち切っている）:\n%s",
-		fx.Logs.String())
+	if got := fx.Tracker.StateOf("PVTI_item192"); got != "Blocked" {
+		t.Errorf("Status = %q（Blocked を期待）:\n%s", got, fx.Logs.String())
+	}
+	if got := assigneeLoginsOf(fx, "PVTI_item192"); len(got) != 1 || got[0] != testGHLogin {
+		t.Errorf("担当者を残していません: %v", got)
+	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P020"}
 //
-// Test_issueの担当を入札で決める_P015_期限切れの担当を外してreleasedを書く は、設計 3-77c を確かめる。
+// Test_issueの担当を入札で決める_P020_期限切れの担当を外してreleasedを書く は、設計 3-77c を確かめる。
 //
 // 目的: 「担当者の最後のコメントから idle_timeout_ms を過ぎたら、担当を外して入札をやり直す」。
 // 与える情報: ほかの機械が担当していて、その機械の最後のコメントが19時間前にある issue。
 // 成功条件: 担当者からその機械が外れ、released のコメントが1件増え、
 // **その本文に外したアカウントの名前が入っていて、引き継ぐアカウントの名前は入っていない**こと。
-func Test_issueの担当を入札で決める_P015_期限切れの担当を外してreleasedを書く(t *testing.T) {
+func Test_issueの担当を入札で決める_P020_期限切れの担当を外してreleasedを書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
@@ -399,9 +402,9 @@ func Test_issueの担当を入札で決める_P015_期限切れの担当を外�
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P020"}
 //
-// Test_issueの担当を入札で決める_P015_期限切れの担当を外したあと前の回の入札に負けない は、設計 3-77e を確かめる。
+// Test_issueの担当を入札で決める_P020_期限切れの担当を外したあと前の回の入札に負けない は、設計 3-77e を確かめる。
 //
 // 目的: **担当を外した直後は、前の回に勝った機械の入札が必ず issue に残っている。**
 // それを数えると、担当を外した機械は毎回その入札に負ける。**担当者は誰にも書かれず、
@@ -411,7 +414,7 @@ func Test_issueの担当を入札で決める_P015_期限切れの担当を外�
 // 与える情報: ほかの機械が担当していて、その機械の hold が19時間前、
 // **その機械が前の回に勝ったときの入札（判定スコア 300）がその1分前**にある issue。
 // 成功条件: 担当が外れ、この機械が担当者になって着手すること。
-func Test_issueの担当を入札で決める_P015_期限切れの担当を外したあと前の回の入札に負けない(t *testing.T) {
+func Test_issueの担当を入札で決める_P020_期限切れの担当を外したあと前の回の入札に負けない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
@@ -443,14 +446,14 @@ func Test_issueの担当を入札で決める_P015_期限切れの担当を外�
 	}
 }
 
-// {"RUCM-PATH": "P031"}
+// {"RUCM-PATH": "P036"}
 //
-// Test_issueの担当を入札で決める_P031_期限内の他人の担当には入札もしない は、設計 3-77b の表の1行を確かめる。
+// Test_issueの担当を入札で決める_P036_期限内の他人の担当には入札もしない は、設計 3-77b の表の1行を確かめる。
 //
 // 目的: 「他人1人 ＋ hold あり ＋ 期限内」は触らない（入札もしない）。
 // 与える情報: ほかの機械が担当していて、その機械の hold と進捗のコメントが1時間前にある issue。
 // 成功条件: 入札も hold も1件も増えず、担当者が変わらないこと。
-func Test_issueの担当を入札で決める_P031_期限内の他人の担当には入札もしない(t *testing.T) {
+func Test_issueの担当を入札で決める_P036_期限内の他人の担当には入札もしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
@@ -471,16 +474,16 @@ func Test_issueの担当を入札で決める_P031_期限内の他人の担当�
 	}
 }
 
-// {"RUCM-PATH": "P033"}
+// {"RUCM-PATH": "P038"}
 //
-// Test_issueの担当を入札で決める_P033_holdの無い担当は奪わない は、設計 3-77b の「人間が付けた担当」を確かめる。
+// Test_issueの担当を入札で決める_P038_holdの無い担当は奪わない は、設計 3-77b の「人間が付けた担当」を確かめる。
 //
 // 目的: **hold のコメントがあることが「その担当者は機械である」の唯一の証拠である。**
 // 無ければ人間が付けた担当なので、continuo は取り上げない。
 // 与える情報: ほかの人が担当していて、hold のコメントが1件も無い issue
 // （**進捗のコメントは1年前**。期限だけで判定していれば奪ってしまう）。
 // 成功条件: 入札も hold も増えず、担当者が変わらないこと。
-func Test_issueの担当を入札で決める_P033_holdの無い担当は奪わない(t *testing.T) {
+func Test_issueの担当を入札で決める_P038_holdの無い担当は奪わない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
 	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
@@ -499,7 +502,7 @@ func Test_issueの担当を入札で決める_P033_holdの無い担当は奪わ�
 	}
 }
 
-// {"RUCM-PATH": "P033"}
+// {"RUCM-PATH": "P038"}
 //
 // 目的: 人間が引き継いだ issue を、既に居ない continuo の古い hold を根拠に取り上げないことを
 // 確認する（設計 3-77b）。
@@ -511,7 +514,7 @@ func Test_issueの担当を入札で決める_P033_holdの無い担当は奪わ�
 // 与える情報: いまの担当者は人間（`octocat-human`）。issue には、別の担当者（`octocat-bot-b`）
 // として20時間前に書かれた hold が1件残っている。人間の最後のコメントは19時間前。
 // 成功条件: released のコメントが1件も書かれず、人間の担当が外れないこと。
-func Test_issueの担当を入札で決める_P033_他の担当者のholdでは人間の担当を外さない(t *testing.T) {
+func Test_issueの担当を入札で決める_P038_他の担当者のholdでは人間の担当を外さない(t *testing.T) {
 	const humanLogin = "octocat-human"
 
 	fx := newFixture(t, fixtureOptions{})
@@ -541,7 +544,7 @@ func Test_issueの担当を入札で決める_P033_他の担当者のholdでは�
 	}
 }
 
-// {"RUCM-PATH": "P033"}
+// {"RUCM-PATH": "P038"}
 //
 // 目的: 案内を issue へ書くのは、3巡回目かつ最初に止めてから60秒たったあとの1回だけであることを
 // 確かめる（#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く））。
@@ -551,7 +554,7 @@ func Test_issueの担当を入札で決める_P033_他の担当者のholdでは�
 //
 // 与える情報: 人間が担当者になっている issue 1件と、1巡回ごとに30秒進む時計。
 // 成功条件: 1巡回目と2巡回目では0件、3巡回目で1件、そのあと何度まわしても1件のままであること。
-func Test_issueの担当を入札で決める_P033_案内は3巡回目に1回だけ書く(t *testing.T) {
+func Test_issueの担当を入札で決める_P038_案内は3巡回目に1回だけ書く(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{Now: clock.Now})
 	holdPrompt(fx)
@@ -590,14 +593,14 @@ func Test_issueの担当を入札で決める_P033_案内は3巡回目に1回だ
 	}
 }
 
-// {"RUCM-PATH": "P038"}
+// {"RUCM-PATH": "P043"}
 //
-// Test_issueの担当を入札で決める_P038_担当者が2人以上なら触らない は、設計 3-77b の表の1行を確かめる。
+// Test_issueの担当を入札で決める_P043_担当者が2人以上なら触らない は、設計 3-77b の表の1行を確かめる。
 //
 // 目的: 担当者が2人以上いるのは人間が触っている合図なので、continuo は触らず WARN を出す。
 // 与える情報: 担当者が2人いる issue。
 // 成功条件: 持ち回りのコメントが1件も増えず、担当者が2人のままであること。
-func Test_issueの担当を入札で決める_P038_担当者が2人以上なら触らない(t *testing.T) {
+func Test_issueの担当を入札で決める_P043_担当者が2人以上なら触らない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.AllowLog("担当者が2人以上いるので触りません")
 	holdPrompt(fx)
@@ -614,14 +617,14 @@ func Test_issueの担当を入札で決める_P038_担当者が2人以上なら�
 	}
 }
 
-// {"RUCM-PATH": "P038"}
+// {"RUCM-PATH": "P043"}
 //
 // 目的: 担当者が2人以上で、そこに gh の持ち主が混じっていないときは、
 // 案内も記録も作ることを確かめる（#136（担当者が2人以上いる issue も、着手できないことを知らせる））。
 //
 // 与える情報: 人間2人が担当者になっている issue 1件。
 // 成功条件: 理由が `many_assignees` で、3巡回目に案内が1件書かれること。
-func Test_issueの担当を入札で決める_P038_担当者が2人以上なら人間だけのときに案内する(t *testing.T) {
+func Test_issueの担当を入札で決める_P043_担当者が2人以上なら人間だけのときに案内する(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{Now: clock.Now})
 	holdPrompt(fx)
@@ -646,7 +649,7 @@ func Test_issueの担当を入札で決める_P038_担当者が2人以上なら�
 	}
 }
 
-// {"RUCM-PATH": "P038"}
+// {"RUCM-PATH": "P043"}
 //
 // 目的: 担当者が2人以上で、そこに gh の持ち主が混じっているときは、
 // **issue へは書かず、記録は作る**ことを確かめる（設計 8-3）。
@@ -660,7 +663,7 @@ func Test_issueの担当を入札で決める_P038_担当者が2人以上なら�
 // 与える情報: 人間1人と gh の持ち主が担当者になっている issue 1件。
 // 成功条件: 案内が0件で、写しの理由が `many_assignees_with_self`、
 // `NoticeSkip` が `unclear_owner` になっていること。
-func Test_issueの担当を入札で決める_P038_担当者にghの持ち主が混じっていたら書かずに記録だけ残す(t *testing.T) {
+func Test_issueの担当を入札で決める_P043_担当者にghの持ち主が混じっていたら書かずに記録だけ残す(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{Now: clock.Now})
 	holdPrompt(fx)

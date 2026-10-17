@@ -315,6 +315,10 @@ const (
 	//
 	// **remote に続きが入っていない可能性がある。**次に拾う機械へそれを伝える。
 	KeyHandoffReleasedWeeklyWaitLimitNoPush Key = "handoff.released.weekly_wait_limit_no_push"
+	// KeyHandoffReleasedWeeklyWaitLimitNotStarted は、担当が自分の issue に着手する前に、1週間の枠を待つ
+	// 上限を超えていて使用率100%なので、Claude Code も `after_run` も走らせずに手放したときの2行目に出る
+	// （gh のアカウント名を差し込む。issue #262）。
+	KeyHandoffReleasedWeeklyWaitLimitNotStarted Key = "handoff.released.weekly_wait_limit_not_started"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
@@ -1310,6 +1314,53 @@ const (
 	KeyDashboardBadgeNoticeNoBody Key = "dashboard.badge_notice_no_body"
 	// KeyDashboardBadgeNoticeFailed は、案内の投稿に失敗した行の印に出る。
 	KeyDashboardBadgeNoticeFailed Key = "dashboard.badge_notice_failed"
+	// KeyDashboardCaptionQuota はレートリミットの区画の見出しに出る（issue #273）。
+	KeyDashboardCaptionQuota Key = "dashboard.caption_quota"
+	// KeyDashboardColQuotaKind はレートリミットの期間の列に出る（issue #273）。
+	KeyDashboardColQuotaKind Key = "dashboard.col_quota_kind"
+	// KeyDashboardColQuotaPercent は使用率の列に出る（issue #273）。
+	KeyDashboardColQuotaPercent Key = "dashboard.col_quota_percent"
+	// KeyDashboardColQuotaMargin はマージンの列に出る（issue #273）。
+	KeyDashboardColQuotaMargin Key = "dashboard.col_quota_margin"
+	// KeyDashboardColQuotaResets はリセットの時刻の列に出る（issue #273）。
+	KeyDashboardColQuotaResets Key = "dashboard.col_quota_resets"
+	// KeyDashboardBadgeQuotaShort はマージンを切った期間の印に出る（issue #273）。
+	KeyDashboardBadgeQuotaShort Key = "dashboard.badge_quota_short"
+	// KeyDashboardBadgeQuotaFull は使い切っている期間の印に出る（issue #273）。
+	KeyDashboardBadgeQuotaFull Key = "dashboard.badge_quota_full"
+	// KeyDashboardBadgeQuotaStale は入札に使うには古い値のときの印に出る（issue #273）。
+	KeyDashboardBadgeQuotaStale Key = "dashboard.badge_quota_stale"
+	// KeyDashboardBadgeNewWorkBlocked は入札の要る issue を取らずにいるときの印に出る（issue #273）。
+	KeyDashboardBadgeNewWorkBlocked Key = "dashboard.badge_new_work_blocked"
+	// KeyDashboardBadgeWaitingHandoff は切り上げを終えて行き先を待っている run の印に出る（issue #273）。
+	KeyDashboardBadgeWaitingHandoff Key = "dashboard.badge_waiting_handoff"
+	// KeyDashboardQuotaDisabled は rate_limit.source: none の機械のレートリミットの区画に出る（issue #273）。
+	KeyDashboardQuotaDisabled Key = "dashboard.quota_disabled"
+	// KeyDashboardQuotaNeverRead は起動してからまだ使用率を読めていないときのレートリミットの区画に出る（issue #273）。
+	KeyDashboardQuotaNeverRead Key = "dashboard.quota_never_read"
+	// KeyDashboardQuotaUnusable は最後に読めた値が古すぎて判定に使えないときのレートリミットの区画に出る
+	// （最後に読めた時刻と経過を差し込む。issue #273）。
+	KeyDashboardQuotaUnusable Key = "dashboard.quota_unusable"
+	// KeyDashboardQuotaLastRead はレートリミットの区画の下に、最後に読めた時刻と経過を出す（issue #273）。
+	KeyDashboardQuotaLastRead Key = "dashboard.quota_last_read"
+	// KeyDashboardQuotaResetsUnknown はリセットの時刻を読めない期間のリセットの列に出る（issue #273）。
+	KeyDashboardQuotaResetsUnknown Key = "dashboard.quota_resets_unknown"
+	// KeyDashboardQuotaKindSession は5時間の期間の名前に出る（issue #273）。
+	KeyDashboardQuotaKindSession Key = "dashboard.quota_kind_session"
+	// KeyDashboardQuotaKindWeeklyAll は全体の1週間の期間の名前に出る（issue #273）。
+	KeyDashboardQuotaKindWeeklyAll Key = "dashboard.quota_kind_weekly_all"
+	// KeyDashboardQuotaKindWeeklyScoped はモデル別の1週間の期間の名前に出る（issue #273）。
+	KeyDashboardQuotaKindWeeklyScoped Key = "dashboard.quota_kind_weekly_scoped"
+	// KeyDashboardUntilSeconds は1分未満の残りに出る（issue #273）。
+	KeyDashboardUntilSeconds Key = "dashboard.until_seconds"
+	// KeyDashboardUntilMinutes は1時間未満の残りに出る（issue #273）。
+	KeyDashboardUntilMinutes Key = "dashboard.until_minutes"
+	// KeyDashboardUntilHours は1日未満の残りに出る（issue #273）。
+	KeyDashboardUntilHours Key = "dashboard.until_hours"
+	// KeyDashboardUntilDays は1日以上の残りに出る（issue #273）。
+	KeyDashboardUntilDays Key = "dashboard.until_days"
+	// KeyDashboardNoteQuota はレートリミットの区画の下の注記に出る（issue #273）。
+	KeyDashboardNoteQuota Key = "dashboard.note_quota"
 )
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
@@ -2674,6 +2725,9 @@ const (
 	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
 	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がカンバンから組み立てられないときに出る。
 	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
+	// KeyCLIPromptWarnNoMarginStatusPath は、`continuo prompt --show --url` で hook を受ける socket のパスを
+	// 求められず、組み込みの指示書の 5-8（レートリミットのマージン）を出さないときに標準エラーへ出る（issue #262）。
+	KeyCLIPromptWarnNoMarginStatusPath Key = "cli.prompt.warn_no_margin_status_path"
 	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
 	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
 	// KeyCLIPromptBreakdownExpanded は--url で変数を展開したときの内訳の1行である。
@@ -2799,6 +2853,7 @@ var allKeys = []Key{
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffReleasedWeeklyWaitLimit,
 	KeyHandoffReleasedWeeklyWaitLimitNoPush,
+	KeyHandoffReleasedWeeklyWaitLimitNotStarted,
 	KeyHandoffLostReason,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
@@ -3198,6 +3253,29 @@ var allKeys = []Key{
 	KeyDashboardBadgeNoticeUnclearOwner,
 	KeyDashboardBadgeNoticeNoBody,
 	KeyDashboardBadgeNoticeFailed,
+	KeyDashboardCaptionQuota,
+	KeyDashboardColQuotaKind,
+	KeyDashboardColQuotaPercent,
+	KeyDashboardColQuotaMargin,
+	KeyDashboardColQuotaResets,
+	KeyDashboardBadgeQuotaShort,
+	KeyDashboardBadgeQuotaFull,
+	KeyDashboardBadgeQuotaStale,
+	KeyDashboardBadgeNewWorkBlocked,
+	KeyDashboardBadgeWaitingHandoff,
+	KeyDashboardQuotaDisabled,
+	KeyDashboardQuotaNeverRead,
+	KeyDashboardQuotaUnusable,
+	KeyDashboardQuotaLastRead,
+	KeyDashboardQuotaResetsUnknown,
+	KeyDashboardQuotaKindSession,
+	KeyDashboardQuotaKindWeeklyAll,
+	KeyDashboardQuotaKindWeeklyScoped,
+	KeyDashboardUntilSeconds,
+	KeyDashboardUntilMinutes,
+	KeyDashboardUntilHours,
+	KeyDashboardUntilDays,
+	KeyDashboardNoteQuota,
 	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,
@@ -3686,6 +3764,7 @@ var allKeys = []Key{
 	KeyCLIPromptErrAttemptNeedsURL,
 	KeyCLIPromptErrFetchFailed,
 	KeyCLIPromptErrIssueNotOnBoard,
+	KeyCLIPromptWarnNoMarginStatusPath,
 	KeyCLIPromptErrRenderFailed,
 	KeyCLIPromptBreakdownExpanded,
 	KeyCLIPromptBreakdownAttempt,
