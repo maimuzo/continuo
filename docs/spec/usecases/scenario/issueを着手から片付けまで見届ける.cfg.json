@@ -3,7 +3,7 @@
   "usecase_name": "issueを着手から片付けまで見届ける",
   "source": {
     "file": "docs/spec/usecases/scenario/issueを着手から片付けまで見届ける.rucm.md",
-    "rucm_block_sha256": "169a7095e9f1506d53d94aa0c460ced3b8aa28f2380cc07bf56c74fdace7966c"
+    "rucm_block_sha256": "dfc497477153ac877e82db7badd94ef63cdf515d192ffdace4772fe641c959bb"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -114,6 +114,27 @@
         ]
       },
       "postcondition": "システムは前回の run を引き継いでいない。continuo が常駐しているかどうかと、herdr の pane と worktree と issue の Status の状態は、再起動して実行中のissueを引き継ぐ が止まった代替フローの事後条件のとおりである。"
+    },
+    "マージンの切り上げ": {
+      "when": "走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に引き継ぎのコメントと理由のコメントがある。issue の担当者はこの機械の投稿者のままである。commit は remote に載っている。worktree と branch は残っている。前の run の herdr の pane は閉じている。"
+    },
+    "別の機械へ引き継ぐ": {
+      "rfs": {
+        "flow": "マージンの切り上げ",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "issue の担当者からこの機械の投稿者は外れている。issue に引き継ぎのコメントと released のコメントがある。issue の Status は running_state の選択肢のままである。worktree は残っている。余裕のある別の機械が入札して続きを拾える。"
     }
   },
   "nodes": [
@@ -457,6 +478,83 @@
       "flow": "引き継がれない再起動",
       "step": 2,
       "statement": "ABORT"
+    },
+    {
+      "id": "マージンの切り上げ-1",
+      "type": "action",
+      "flow": "マージンの切り上げ",
+      "step": 1,
+      "statement": "システムは Claude Code から、変更の push と引き継ぎのコメントを済ませて作業中の表明で終えた turn の終わりを受ける。"
+    },
+    {
+      "id": "マージンの切り上げ-2",
+      "type": "condition",
+      "flow": "マージンの切り上げ",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 行き先が Blocked である。"
+    },
+    {
+      "id": "マージンの切り上げ-3",
+      "type": "action",
+      "flow": "マージンの切り上げ",
+      "step": 3,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "マージンの切り上げ-4",
+      "type": "action",
+      "flow": "マージンの切り上げ",
+      "step": 4,
+      "statement": "システムはマージンを切った期間とリセットの時刻を書いた理由を issue にコメントする。"
+    },
+    {
+      "id": "マージンの切り上げ-5",
+      "type": "action",
+      "flow": "マージンの切り上げ",
+      "step": 5,
+      "statement": "利用者はリセットのあとにボードの issue の Status に dispatch_state の選択肢を書く。"
+    },
+    {
+      "id": "マージンの切り上げ-6",
+      "type": "resume",
+      "flow": "マージンの切り上げ",
+      "step": 6,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "別の機械へ引き継ぐ-1",
+      "type": "action",
+      "flow": "別の機械へ引き継ぐ",
+      "step": 1,
+      "statement": "システムは run に行き先を待つ印を立てる。"
+    },
+    {
+      "id": "別の機械へ引き継ぐ-2",
+      "type": "action",
+      "flow": "別の機械へ引き継ぐ",
+      "step": 2,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "別の機械へ引き継ぐ-3",
+      "type": "action",
+      "flow": "別の機械へ引き継ぐ",
+      "step": 3,
+      "statement": "システムは issue の担当者からこの機械の投稿者を外す。"
+    },
+    {
+      "id": "別の機械へ引き継ぐ-4",
+      "type": "action",
+      "flow": "別の機械へ引き継ぐ",
+      "step": 4,
+      "statement": "システムは担当を外したことを issue にコメントする。"
+    },
+    {
+      "id": "別の機械へ引き継ぐ-5",
+      "type": "abort",
+      "flow": "別の機械へ引き継ぐ",
+      "step": 5,
+      "statement": "ABORT"
     }
   ],
   "edges": [
@@ -514,6 +612,12 @@
       "to": "常駐の再起動-1",
       "kind": "global",
       "condition": "continuo のプロセスが落ちて利用者が continuo を起動し直す場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "マージンの切り上げ-1",
+      "kind": "global",
+      "condition": "走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合"
     },
     {
       "from": "BASIC FLOW-6",
@@ -745,6 +849,63 @@
     {
       "from": "引き継がれない再起動-1",
       "to": "引き継がれない再起動-2",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンの切り上げ-1",
+      "to": "マージンの切り上げ-2",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンの切り上げ-2",
+      "to": "マージンの切り上げ-3",
+      "kind": "true",
+      "condition": "行き先が Blocked である"
+    },
+    {
+      "from": "マージンの切り上げ-2",
+      "to": "別の機械へ引き継ぐ-1",
+      "kind": "false",
+      "condition": "NOT 行き先が Blocked である"
+    },
+    {
+      "from": "マージンの切り上げ-3",
+      "to": "マージンの切り上げ-4",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンの切り上げ-4",
+      "to": "マージンの切り上げ-5",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンの切り上げ-5",
+      "to": "マージンの切り上げ-6",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンの切り上げ-6",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "別の機械へ引き継ぐ-1",
+      "to": "別の機械へ引き継ぐ-2",
+      "kind": "seq"
+    },
+    {
+      "from": "別の機械へ引き継ぐ-2",
+      "to": "別の機械へ引き継ぐ-3",
+      "kind": "seq"
+    },
+    {
+      "from": "別の機械へ引き継ぐ-3",
+      "to": "別の機械へ引き継ぐ-4",
+      "kind": "seq"
+    },
+    {
+      "from": "別の機械へ引き継ぐ-4",
+      "to": "別の機械へ引き継ぐ-5",
       "kind": "seq"
     }
   ],
@@ -1158,12 +1319,83 @@
         "システムは前回の run に継続の指示を送らない。",
         "ABORT"
       ]
+    },
+    {
+      "id": "P013",
+      "terminal": "cycle",
+      "terminal_flow": "マージンの切り上げ",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に引き継ぎのコメントと理由のコメントがある。issue の担当者はこの機械の投稿者のままである。commit は remote に載っている。worktree と branch は残っている。前の run の herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "マージンの切り上げ-1",
+        "マージンの切り上げ-2",
+        "マージンの切り上げ-3",
+        "マージンの切り上げ-4",
+        "マージンの切り上げ-5",
+        "マージンの切り上げ-6",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: 走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合",
+        "システムは Claude Code から、変更の push と引き継ぎのコメントを済ませて作業中の表明で終えた turn の終わりを受ける。",
+        "システムは VALIDATES THAT 行き先が Blocked である。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムはマージンを切った期間とリセットの時刻を書いた理由を issue にコメントする。",
+        "利用者はリセットのあとにボードの issue の Status に dispatch_state の選択肢を書く。",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issueを1件処理する"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "別の機械へ引き継ぐ",
+      "postcondition": "issue の担当者からこの機械の投稿者は外れている。issue に引き継ぎのコメントと released のコメントがある。issue の Status は running_state の選択肢のままである。worktree は残っている。余裕のある別の機械が入札して続きを拾える。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "マージンの切り上げ-1",
+        "マージンの切り上げ-2",
+        "別の機械へ引き継ぐ-1",
+        "別の機械へ引き継ぐ-2",
+        "別の機械へ引き継ぐ-3",
+        "別の機械へ引き継ぐ-4",
+        "別の機械へ引き継ぐ-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issueを1件処理する",
+        "CONDITION: 走行中の run でレートリミットのマージンを切り、Claude Code が動ける場合",
+        "システムは Claude Code から、変更の push と引き継ぎのコメントを済ませて作業中の表明で終えた turn の終わりを受ける。",
+        "システムは VALIDATES THAT 行き先が Blocked である。",
+        "CONDITION: NOT 行き先が Blocked である",
+        "システムは run に行き先を待つ印を立てる。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは issue の担当者からこの機械の投稿者を外す。",
+        "システムは担当を外したことを issue にコメントする。",
+        "ABORT"
+      ]
     }
   ],
   "coverage": {
-    "nodes_total": 48,
-    "nodes_covered": 48,
-    "edges_total": 54,
-    "edges_covered": 54
+    "nodes_total": 59,
+    "nodes_covered": 59,
+    "edges_total": 66,
+    "edges_covered": 66
   }
 }

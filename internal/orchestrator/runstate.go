@@ -167,6 +167,27 @@ type runState struct {
 	// **写し（runSnapshot）に載せる**（issue #173）。**読むのは巡回と手放しの2箇所で、どちらも写しを通して読む。**
 	// **欄を直に読む経路を別に作らないこと。**写しを通さない古い値を正だと思って読む人が出る。
 	WeeklyShortSince time.Time
+	// MarginCutSent は、この run へレートリミットのマージンを切ったときの切り上げの指示を送ったことを表す
+	// （切り上げ済みフラグ。issue #262。設計 3-27a）。
+	//
+	// **立てるのは、turn ループが切り上げの文面を実際に送れたときだけである。**`buildTurnText` が文面を
+	// 返しても、送らずに戻る道（direct chat に入った・待ちのコンテキストが切れた）と、届いたか分からない
+	// 一時的な失敗（`turnTransient`）では立てない。**送っていない切り上げを送ったことにすると、
+	// push と引き継ぎのコメントを書かせる turn が飛ぶ。**
+	//
+	// **下ろすのは、turn の終わりの行き先の判定（`decideAfterTurn`）と、新しい試行の始まりと、
+	// direct chat に入れたとき・戻したときである。**メモリだけに持つ（continuo を起動し直すと消える）。
+	MarginCutSent bool
+	// AwaitDestination は、切り上げを終えた run の行き先を turn の終わりに決めきれず、
+	// 巡回に決め直させていることを表す（「行き先を待つ」印。issue #262。設計 3-27a）。
+	//
+	// **立てるのは、1週間の期間で担当を外しうるときである**（リセットまでが待つ上限を超えるか、
+	// リセットの時刻を読めない）。このとき turn ループは何も送らずに抜けている。
+	// **担当を外すのは今の巡回の手放し（`releaseQuotaWaitExceeded`）で、印の立った run は、そこの3つの待ちを飛ばす。**
+	//
+	// **下ろすのは、巡回が行き先を決め直したときと、新しい試行の始まりと、direct chat に入れたとき・
+	// 戻したときである。**メモリだけに持つ。
+	AwaitDestination bool
 	// QuotaProbeStateSeq は、手放してよいかを見るときに読んだ
 	// herdr の `state_change_seq`（agent の状態が変わるたびに増える連番）である
 	// （設計 3-27。issue #173 / #197）。
@@ -616,6 +637,8 @@ func (rs *runState) snapshot() runSnapshot {
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
 		WeeklyShortSince: rs.WeeklyShortSince,
+		MarginCutSent:    rs.MarginCutSent,
+		AwaitDestination: rs.AwaitDestination,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
 		LastBusyHookAt:   rs.LastBusyHookAt,
@@ -650,6 +673,10 @@ type runSnapshot struct {
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
 	WeeklyShortSince time.Time
+	// MarginCutSent は、切り上げの指示を送ったか（切り上げ済みフラグ。issue #262）である。
+	MarginCutSent bool
+	// AwaitDestination は「行き先を待つ」印が立っているか（issue #262）である。
+	AwaitDestination bool
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
 	// LastBusyHookAt は、**turn を処理している間にしか出ない** hook を最後に受けた時刻である。
@@ -2065,6 +2092,10 @@ func (rs *runState) enterDirectChatMode() bool {
 	// **「直接抜けた」印は、入るときに下ろす**（設計 3-83b の段3）。打ち切りで run が続いたあと、
 	// 後の正常な終わりで成果のコメントの確認を飛ばさないためである。
 	rs.directExitToTerminal = false
+	// **切り上げ済みフラグと「行き先を待つ」印も下ろす**（issue #262）。人間が話している最中に、
+	// 担当が外れたり、人間と話した turn の終わりを切り上げの turn として読んだりしないためである。
+	rs.MarginCutSent = false
+	rs.AwaitDestination = false
 	cancel := rs.directChatPauseCancel
 	rs.mu.Unlock()
 	if cancel != nil {
@@ -2098,6 +2129,10 @@ func (rs *runState) leaveDirectChatMode() bool {
 	// 指示を送らずに待つだけの turn ループを起こす（約1時間後に stall で打ち切られる）。
 	// **応答を書いている最中かは、送る直前の確認（`busyCheckBeforeSend`）が受け持つ。**
 	rs.awaitTurnEnd = false
+	// **戻したときも、切り上げ済みフラグと「行き先を待つ」印を下ろす**（issue #262）。
+	// 戻したあとの turn は、そのときの使用率で切り上げさせるかを決め直す（`buildTurnText`）。
+	rs.MarginCutSent = false
+	rs.AwaitDestination = false
 	return true
 }
 
@@ -2495,6 +2530,10 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	// **新しい pane が2巡回だけ静かにしていれば、1分も待たずに手放すことになる。**
 	// **新しく始めた run はこの欄がゼロ値なので、そちらと揃える。**
 	rs.WeeklyShortSince = time.Time{}
+	// **切り上げ済みフラグと「行き先を待つ」印も忘れる**（issue #262）。やり直した attempt は、
+	// 最初の turn でそのときの使用率から切り上げさせるかを決め直す（`buildTurnText`）。
+	rs.MarginCutSent = false
+	rs.AwaitDestination = false
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。
@@ -2738,4 +2777,52 @@ func (rs *runState) endTerminal() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.terminating = false
+}
+
+// setMarginCutSent は切り上げ済みフラグを立てる（issue #262。設計 3-27a）。
+//
+// **turn ループが切り上げの文面を実際に送れたときだけ呼ぶ**（`MarginCutSent` の説明）。
+func (rs *runState) setMarginCutSent() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.MarginCutSent = true
+}
+
+// takeMarginCutSent は切り上げ済みフラグを読んで下ろす（issue #262。設計 3-27a）。
+//
+// **turn の終わりの行き先の判定（`decideAfterTurn`）が、どの枝に当たっても下ろすので、読むと同時に下ろす。**
+//
+// 戻り値: 立っていたなら true。
+func (rs *runState) takeMarginCutSent() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	sent := rs.MarginCutSent
+	rs.MarginCutSent = false
+	return sent
+}
+
+// setAwaitDestination は「行き先を待つ」印を立てる（issue #262。設計 3-27a）。
+//
+// 戻り値: この呼び出しで初めて立てたら true（ログを1回だけ出すため）。
+func (rs *runState) setAwaitDestination() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.AwaitDestination {
+		return false
+	}
+	rs.AwaitDestination = true
+	return true
+}
+
+// clearAwaitDestination は「行き先を待つ」印を下ろす（issue #262。設計 3-27a）。
+//
+// 戻り値: 立っていたなら true（ログを1回だけ出すため）。
+func (rs *runState) clearAwaitDestination() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !rs.AwaitDestination {
+		return false
+	}
+	rs.AwaitDestination = false
+	return true
 }

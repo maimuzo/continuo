@@ -60,11 +60,13 @@ tracker:
                                             # 指示どおりに書いていても書く前に担当が外れる
       recheck_interval_ms: 3600000          # 走っている最中に担当を確かめ直す間隔。3600000 なら1時間。
                                             # 担当が移っていたら、その turn の終わりで止めて push しない。0 なら確かめ直さない
-      five_hour_margin_percent: 10          # 5時間の枠のうち、continuo のために残しておきたい割合。
+      five_hour_margin_percent: 10          # 5時間の枠のうち、人間が自分で使うぶんとして残しておく割合（continuo は使わない）。
                                             # 5時間余裕値 = 100 − 5時間の使用率 − この値
-      weekly_margin_percent: 10             # 1週間の枠のうち、continuo のために残しておきたい割合。
+      weekly_margin_percent: 10             # 1週間の枠のうち、人間が自分で使うぶんとして残しておく割合（continuo は使わない）。
                                             # 1週間余裕値 = 100 − 1週間の使用率 − この値。
-                                            # どちらかの余裕値が0以下なら入札しない（既定10なら使用率90%から）
+                                            # どちらかの余裕値が0以下なら入札しない（既定10なら使用率90%から）。
+                                            # 走っている run も切り上げさせて Blocked へ戻し、担当が自分の issue にも着手しない。
+                                            # 0 にした期間では切り上げない（使用率100%まで使う）
       on_assignee_gate: warn_and_comment    # 担当者が付いていて着手できないとき（1人でも2人以上でも）の扱い。
                                             # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
@@ -231,11 +233,11 @@ rate_limit:
   refresh_interval_ms: 300000               # 入札に使ってよい使用率の古さの上限で、statusline取得の間隔でもある。polling.interval_ms より長く
   weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
                                             # 「あと何分以内にリセットされるなら待つか」であって「何分待つか」ではない。
-                                            # 超える issue は、Claude Code が止まってから担当を手放し、入札からやり直させる
+                                            # 超える issue は、Claude Code に切り上げさせ、止まってから担当を手放し、入札からやり直させる
                                             # （worktree は残し、Status も動かさない）。5時間の枠には効かない。
                                             # 止まったと見なすのは、hook が claude.turn_timeout_ms のあいだ来ていないときである。
                                             # workspace_hooks.after_run が null のままだと、push せずに手放す。
-                                            # 0 なら上限を設けず、いつまでも待つ（idle_timeout_ms とは 0 の意味が逆）。
+                                            # 0 なら上限を設けず、担当を手放さない（マージンを切った run は Blocked へ戻す。idle_timeout_ms とは 0 の意味が逆）。
                                             # 複数の機械で見張るなら idle_timeout_ms より短くすること
 
 trust:

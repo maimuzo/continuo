@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -70,7 +71,7 @@ type handoffDecision struct {
 //
 //	担当者が2人以上                                触らない。WARN を出す
 //	担当者が無い                                   入札する。勝ったら自分を担当者に加えて hold を書く
-//	自分のアカウント1人                            そのまま着手・引き継ぎへ進む（入札しない）
+//	自分のアカウント1人                            着手・引き継ぎへ進む（入札しない）。マージンを切っていれば、行き先の表で決める（issue #262）
 //	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である。WARN を出す
 //	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
 //	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外し、released を書いてから入札をやり直す
@@ -86,9 +87,10 @@ type handoffDecision struct {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手しようとしている issue。
 // quotaSnap: この巡回で1回だけ読んだ、入札の判定に使ってよい写し（読めていなければ nil）。
+// usable: 同じ錠で読んだ使える値（issue #262）。担当が自分の issue の、着手の前の判定に使う。
 // 戻り値: 着手してよいか・この巡回で担当者になったか・この巡回を打ち切るか。
 func (o *Orchestrator) handoffGate(
-	ctx context.Context, issue tracker.Issue, quotaSnap *ratelimit.Snapshot,
+	ctx context.Context, issue tracker.Issue, quotaSnap, usable *ratelimit.Snapshot,
 ) handoffDecision {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
@@ -197,7 +199,9 @@ func (o *Orchestrator) handoffGate(
 
 	switch assessment.Action {
 	case handoff.ActionProceed:
-		return handoffDecision{proceed: true}
+		// **担当が既にこの機械にある issue である。**着手の前に、レートリミットのマージンを見る
+		// （issue #262。設計 3-27a）。
+		return o.ownIssueMarginGate(ctx, issue, nodeID, viewer, quotaSnap, usable)
 	case handoff.ActionSkipManyAssignees:
 		// **上の早い戻りで既に処理している。**ここへは来ない。
 		return handoffDecision{}
@@ -733,6 +737,8 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 		// `currentWorker` は `terminating` を見るが、**turn ループはそれで抜けずに待つ**
 		// （`turn.go` の `workerRetired` と `terminatingPollInterval`）。
 		// **`endTerminal` が印を下ろせば、そのまま指示を送る側へ戻る。**
+		// **「行き先を待つ」印の立った run は例外で、turn ループは抜けている**（issue #262）。
+		// 見送ったあとは、印が立ったままなので、次の巡回の手放しが試し直す。
 		//
 		// **立て直してはならない。**`awaitFirst` を真にすると来ない `Stop` を待って空回りし、
 		// **偽にすると `max_dispatch_turns` を1つ焼いて `LastSeenAt` を進めるので、
@@ -861,10 +867,19 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// **理由を読みやすくするのが issue #173 の目的なので、そこを埋めてはならない。**
 		// **見えなくなった run は `reconcileRunning` が止める。**
 		if rs.noteQuotaReleaseUnknown() {
-			o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
-				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）。"+
-				"無音が claude.turn_timeout_ms を超えているので、同じ巡回の打ち切りが先に拾うこともあります",
-				"identifier", issue.Identifier)
+			// **「行き先を待つ」run では、打ち切りは来ない**（issue #262）。その run は止まっている限り
+			// 打ち切りの対象から外してある（`releaseQuotaWaitExceeded`）。**来ない打ち切りを案内してはならない。**
+			if rs.snapshot().AwaitDestination {
+				o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
+					"（次の巡回でやり直します。この行は run ごとに1回だけ出します）。"+
+					"この run は切り上げを終えて行き先を待っているので、打ち切りは来ません",
+					"identifier", issue.Identifier)
+			} else {
+				o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
+					"（次の巡回でやり直します。この行は run ごとに1回だけ出します）。"+
+					"無音が claude.turn_timeout_ms を超えているので、同じ巡回の打ち切りが先に拾うこともあります",
+					"identifier", issue.Identifier)
+			}
 		}
 		rs.endTerminal()
 		return false
@@ -1533,4 +1548,116 @@ func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState,
 	// **閉じた記録も書かない**（設計 3-85）。この機械はもうこの issue の担当ではない。
 	o.stopWorker(cleanupCtx, rs, closedRecordSkip)
 	o.release(rs)
+}
+
+// ownIssueMarginGate は、担当が既にこの機械にある issue に着手する前に、レートリミットのマージンを見る
+// （issue #262。設計 3-27a の着手の前）。
+//
+// **人間の決定は「担当になっているが一度blockedなどになっている状態で、余裕%が0%以下なら、
+// In Progressステータスなどに遷移しても新たにrunを開始せず即座にblockedに遷移する」である**（2026-10-05）。
+// **当てる期間は、マージンを切った期間と、Claude Code が動けない期間（マージン0の期間を含む）である。**
+//
+//	行き先が無い（どちらの期間も無い・使用率を読めていない） … 今どおり着手する
+//	Blocked                                                … Claude Code を起動せずに Status を戻す
+//	担当を外す。Claude Code が動ける                        … いつもどおり着手する（最初の turn で切り上げの文が添わる）
+//	担当を外す。Claude Code が動けない                      … run を始めずに担当を外す
+//
+// **「担当を外す」は、新しい値（`fresh`）でもう1度判定して同じ答えのときだけ当てる。**
+// 担当を外すと戻せないためである。新しい値が無いか、答えが違えば、その巡回では着手も手放しもせず、
+// `Ready` のまま残して次の巡回で判定し直す。
+//
+// **Status を戻すか担当を外す前に、issue を ID で取り直し、Status と担当者がまだそのままかを確かめる。**
+// 候補の一覧は反映が遅れ、直前に `Blocked` にした issue が着手待ちのまま返ることがある。
+//
+// **Status を書かなかったとき（既に `failure_state` だった・人間が動かしていた）は、何も投稿しない。**
+// 今の着手が Status を書けなかったときと同じく、静かに見送る。**書けなかったときは、着手しないまま
+// 次の巡回で試し直す。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 着手しようとしている issue。
+// nodeID: issue のノード ID。
+// viewer: gh の持ち主（この機械）。
+// fresh: この巡回で読んだ新しい値。新しくなければ nil。
+// usable: 同じ錠で読んだ使える値。読めていなければ nil。
+// 戻り値: 着手してよいか。
+func (o *Orchestrator) ownIssueMarginGate(
+	ctx context.Context, issue tracker.Issue, nodeID string, viewer tracker.Assignee,
+	fresh, usable *ratelimit.Snapshot,
+) handoffDecision {
+	if o.marginStatusPath == "" {
+		// **使用率を読まない設定（`rate_limit.source: none`）では、もともと使用率が無い。**
+		return handoffDecision{proceed: true}
+	}
+	now := o.now()
+	dest := handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch)
+	if dest == handoff.DestNone {
+		return handoffDecision{proceed: true}
+	}
+	cannot := usable.AnySelected(handoff.CannotWork())
+	if dest == handoff.DestRelease {
+		if handoff.Decide(fresh, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch) != handoff.DestRelease {
+			o.logger.Info("担当が自分の issue ですが、担当を外すかを新しい値で確かめられないので、この巡回では着手しません（次の巡回で判定し直します）",
+				"identifier", issue.Identifier)
+			return handoffDecision{}
+		}
+		if !cannot {
+			o.logger.Info("担当が自分の issue で、1週間の期間で待つ上限を超えています。着手して、最初の turn で切り上げさせてから担当を外します",
+				"identifier", issue.Identifier, "マージンを切った期間", o.marginCutKinds(usable))
+			return handoffDecision{proceed: true}
+		}
+	}
+	if !o.ownIssueStillAsCandidate(ctx, issue, viewer) {
+		return handoffDecision{}
+	}
+	if dest == handoff.DestRelease {
+		// **Claude Code が動けない。**人間の「レートリミットに達していたらもう何もできないので
+		// 途中までのものは諦める」（2026-10-05）のとおり、Claude Code も `after_run` も走らせずに外す。
+		o.logger.Info("使用率100%で Claude Code を起動できないので、Claude Code も after_run も走らせずに担当を外します",
+			"identifier", issue.Identifier)
+		o.removeOwnAssignee(ctx, issue, nodeID, viewer,
+			"使用率100%で担当を外そうとしましたが", handoff.ReleaseReasonWeeklyWaitLimitNotStarted)
+		return handoffDecision{}
+	}
+	moved, err := o.writeFailureState(ctx, issue)
+	if err != nil {
+		return handoffDecision{}
+	}
+	if !moved.Wrote {
+		o.logger.Info("着手の前に Status を戻そうとしましたが、書きませんでした（既に戻っているか、人間が動かしています）",
+			"identifier", issue.Identifier)
+		return handoffDecision{}
+	}
+	o.logger.Info("担当が自分の issue ですが、レートリミットのマージンを切っているので、Claude Code を起動せずに Status を戻しました",
+		"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState)
+	o.postFailureNotice(ctx, issue, o.ownIssueBlockedReason(usable), handoffContext{}, moved)
+	return handoffDecision{}
+}
+
+// ownIssueStillAsCandidate は、issue を ID で取り直し、Status がまだ着手する Status で、
+// 担当者がまだこの機械だけかを確かめる（issue #262）。
+//
+// 戻り値: そのままなら true。取り直せないときも false（次の巡回でやり直す）。
+func (o *Orchestrator) ownIssueStillAsCandidate(ctx context.Context, issue tracker.Issue, viewer tracker.Assignee) bool {
+	ok, state, logins := o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier)
+	if !ok {
+		return false
+	}
+	if len(logins) != 1 || !strings.EqualFold(logins[0], viewer.Login) {
+		o.logger.Info("着手の前に取り直したら担当者が変わっていたので、何もしません",
+			"identifier", issue.Identifier, "Status", state, "担当者", strings.Join(logins, ", "))
+		return false
+	}
+	return true
+}
+
+// ownIssueBlockedReason は、着手の前に Status を戻すときの理由を組み立てる（issue #262）。
+//
+// usable: 判定に使った使える値。
+// 戻り値: 人間へ見せる理由。
+func (o *Orchestrator) ownIssueBlockedReason(usable *ratelimit.Snapshot) string {
+	return fmt.Sprintf(
+		"担当がこの機械の issue ですが、レートリミットのマージンを切っている（または使用率100%%）ので、"+
+			"**Claude Code を起動せずに** Status を戻しました。**担当者はこの機械のままです。**%s"+
+			"\n【対処】リセットのあとに Status を着手待ちへ戻してください。リセットの前に戻すと、もう1度この Status へ戻ります。",
+		describeMarginPeriods(o.beforeDispatchPeriods(usable)))
 }

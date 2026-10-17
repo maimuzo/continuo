@@ -9,6 +9,7 @@
 //
 //	実行中の run の一覧を出す   … issue / Status / turn 数 / 最後に hook を受けた時刻
 //	トークンの集計を出す        … `requestId` で重複排除済みの累計（設計 3-15）
+//	レートリミットを出す        … 使用率・リセットの時刻・最後に読めた時刻（issue #273）
 //	それを HTML と JSON で返す  … GET だけ
 //
 // **書き込みの経路は作らない。**run を止める・Status を書くといった操作は
@@ -108,6 +109,9 @@ type RunSource interface {
 	// TokenTotals は run をまたぐトークンの累計を返す（issue #238）。
 	// **`RunViews` より後に呼ぶこと**（`Server.snapshot` の理由を見よ）。
 	TokenTotals() orchestrator.TokenUsage
+	// QuotaView はレートリミットの写しを返す（issue #273）。
+	// **保管値には何も書かない。**run の写しとは別の錠（使用率の保管値の錠）で取るので、順序の約束は無い。
+	QuotaView() orchestrator.QuotaView
 }
 
 // **本番の実装がこのインタフェースを満たすことを、コンパイル時に確かめる。**
@@ -384,7 +388,8 @@ func (s *Server) handleAPIState(w http.ResponseWriter, r *http.Request) {
 func (s *Server) snapshot() Snapshot {
 	runs := s.source.RunViews()
 	gates := s.source.GateViews()
-	return NewSnapshot(runs, gates, s.source.TokenTotals(), s.now())
+	cumulative := s.source.TokenTotals()
+	return NewSnapshot(runs, gates, cumulative, s.source.QuotaView(), s.now())
 }
 
 // withHostCheck は `Host` ヘッダが手元のダッシュボードを指していないリクエストを落とす。

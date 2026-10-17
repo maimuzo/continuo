@@ -3,6 +3,7 @@
 ## 根拠資料
 
 - `docs/plans/continuo_design.md#3-2`（turn の終わりの判定の規則。settle_ms と task-notification）
+- `docs/plans/continuo_design.md#3-27a`（切り上げの指示を送った turn の終わりに、使える値で行き先を決める。Blocked へ戻すか「行き先を待つ」印を立てる）
 - `docs/plans/continuo_design.md#3-3b`（再着手は前回のセッションへ復帰する。戻れなければ新しいセッションで始め直す）
 - `docs/plans/continuo_design.md#3-5`（完了検知の3層と、1つの turn で何が起きるか）
 - `docs/plans/continuo_design.md#3-6`（dispatch の直前に issue ごとに検査するもの）
@@ -51,7 +52,7 @@
 
 ```rucm
 USE CASE NAME: issueを1件処理する
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムはボードから候補を取り、着手できることを確かめ、入札で担当を決めてから先頭の1件に印を付けて worktree と worker を用意する。システムは既存の身元ファイルを読んでどのセッションで起動するかを決め、復帰つきの起動が完了しなければ会話を捨てて新しいセッションで立て直す。システムは turn を送り、Stop hook で turn の終わりを判定する。システムは turn の終わりごとに、担当が自分のままかを recheck_interval_ms に1回確かめ、transcript の表明を読み、表明の値どおりにボードの Status を書く。システムは取り直した Status が active_states から外れたら、run を終えて worker を止める。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムはボードから候補を取り、着手できることを確かめ、入札で担当を決めてから先頭の1件に印を付けて worktree と worker を用意する。システムは既存の身元ファイルを読んでどのセッションで起動するかを決め、復帰つきの起動が完了しなければ会話を捨てて新しいセッションで立て直す。システムは turn を送り、Stop hook で turn の終わりを判定する。システムは turn の終わりごとに、担当が自分のままかを recheck_interval_ms に1回確かめ、transcript の表明を読み、表明の値どおりにボードの Status を書く。システムは取り直した Status が active_states から外れたら、run を終えて worker を止める。システムは切り上げの指示を送った turn の終わりに Status が作業中のままなら、使える値でマージンを切った期間の行き先を決め、Status を failure_state へ戻すか、行き先を待つ印を立てて turn ループを抜ける。
 PRECONDITION: システムは常駐している。システムはロックファイルの flock を取っている。ボードの Status の選択肢名は設定と一致する。ボードの active_states の Status に issue が1件以上ある。herdr は待ち受けている。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code、ほかの機械
@@ -114,9 +115,10 @@ BASIC FLOW:
 53.   システムは Status を動かした記録を issue にコメントする。
 54.   システムはボードの issue の Status を ID 指定で取り直す。
 55.   システムは VALIDATES THAT 取り直した issue がボードから見えている。
-56. UNTIL 取り直した issue の Status が active_states に入っていない
-57. システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。
-58. INCLUDE USE CASE runを終えてworkerを止める
+56.   システムは VALIDATES THAT 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。
+57. UNTIL 取り直した issue の Status が active_states に入っていない
+58. システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ。
+59. INCLUDE USE CASE runを終えてworkerを止める
 POSTCONDITION: issue の担当者はこの機械の投稿者1人のままである。印は外れている。run を終える段が成果のコメントを確かめられた場合は、issue の Status は表明の値の遷移先の選択肢であり、issue にエージェントが書いたコメントが1件以上あり、herdr の pane は閉じており、issue に Claude Code を閉じた記録のコメントが1件増えている。run を終える段が代替フローで終わった場合は、Status とコメントと pane は、runを終えてworkerを止める の代替フローの事後条件のとおりである。遷移先の選択肢が cleanup.on_states に入っていなければ、worktree と branch は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 巡回のdispatchの見送り:
@@ -470,6 +472,19 @@ RFS BASIC FLOW 55
 6. システムはバックオフの期限を印に書く。
 7. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。この事後条件は、リトライの回数が agent.max_retries に達していない場合のものである。達していた場合は、リトライの尽きと同じ段を通る。
+
+SPECIFIC ALTERNATIVE FLOW 切り上げのturnの終わり:
+RFS BASIC FLOW 56
+1. IF 使える値でマージンを切った期間の行き先が Blocked である THEN
+2.   システムはボードの issue の Status に failure_state の選択肢を書く。
+3.   システムは issue にマージンを切った期間とリセットの時刻を書いた理由を1件コメントする。
+4.   INCLUDE USE CASE runを終えてworkerを止める
+5. ELSE
+6.   システムは run に行き先を待つ印を立てる。
+7.   システムは Claude Code に次の turn を送らずに turn ループを抜ける。
+8. ENDIF
+9. ABORT
+POSTCONDITION: 行き先が Blocked だった場合は、issue の Status は failure_state の選択肢であり、issue に理由のコメントが1件あり、issue の担当者はこの機械の投稿者のままであり、herdr の pane は閉じていて、印は外れている。行き先を待つ場合は、issue の Status は running_state の選択肢のままであり、run に行き先を待つ印が立っていて、herdr の pane は開いたままで、印は残っている。担当を外すかは巡回の手放しが決める。どちらの場合も worktree は残っている。
 ```
 
 ## 段は名前で指す
@@ -894,7 +909,7 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | 3 | 表明の値に遷移先が決まっていれば、Status を書く | `applySignals` |
 | 4 | 書き込んだなら、動かした記録をコメントする | `postStatusMove` |
 | 5 | Status を ID 指定で取り直す | `refreshIssue` |
-| 6 | 取り直した Status で、続けるか終えるかを決める | `decideAfterTurn` |
+| 6 | 取り直した Status で、続けるか終えるかを決める。**作業中のままで、この turn が切り上げの指示を送った turn なら、使える値で行き先を決める**（issue #262。設計 3-27a。Claude Code が動けないときと、マージンを切った期間がもう無いときは次の turn へ進む） | `decideAfterTurn`、`decideAfterMarginCut` |
 
 **turn ループを抜ける条件は、表明の値ではなく、取り直した Status である。**`active_states` に入っていれば次の turn を送り、
 入っていなければ run を終える。表明が `working` のとき（`status_signal_map` の値が null）は、順3 で書かず、順4 のコメントも書かない。
@@ -931,6 +946,7 @@ Status は `running_state` のままなので、次の turn へ進む。**表明
 | 待ち受けから戻ったあと | 待っている間に人間が引き取った | pane を閉じずに抜ける |
 | turn の終わり（順0） | 人間が引き取っている | 表明を読まずに抜ける |
 | turn の終わり（順6） | 取り直した Status が `direct_chat_state` である | 後始末をせずに、送る印を立てて抜ける（次の巡回が direct chat へ入れる） |
+| turn の終わり（順6） | 切り上げの指示を送った turn で、行き先が「行き先を待つ」である | 何も送らずに、行き先を待つ印を立てて抜ける（`切り上げのturnの終わり`。rucm ブロックに書いた。行き先は巡回が引き直す。`枠待ちのrunの打ち切りを止める`） |
 
 **turn ループが待ち受けを打ち切らずに待ち直す枝もある。**`agent.prompt` の待ちが `claude.turn_timeout_ms` で timeout しても、
 枠待ちでなければ、打ち切らずに Stop hook を待ち直す（`sendTurn`）。打ち切るかどうかは、巡回の停滞の検知だけが決める（`無音の打ち切り`）。
@@ -1143,9 +1159,10 @@ flowchart TD
     BS53["53 システムは Status を動かした記録を issue にコメントする"]
     BS54["54 システムはボードの issue の Status を ID 指定で取り直す"]
     BS55{"55 取り直した issue がボードから見えている"}
-    BS56{"56 UNTIL 取り直した issue の Status が active_states に入っていない"}
-    BS57["57 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
-    BS58[["58 INCLUDE USE CASE runを終えてworkerを止める"]]
+    BS56{"56 取り直した issue の Status が active_states に入っていないか、この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い"}
+    BS57{"57 UNTIL 取り直した issue の Status が active_states に入っていない"}
+    BS58["58 システムは、Stop hook が申告したバックグラウンド処理が残っていれば、申告が空になるのを claude.poll_wait_ms まで待つ"]
+    BS59[["59 INCLUDE USE CASE runを終えてworkerを止める"]]
     A1S1["巡回のdispatchの見送り 1 システムは dispatch を見送る理由を記録に残す"]
     A1S2["巡回のdispatchの見送り 2 システムはこの巡回で issue を1件も dispatch しない"]
     A1S3(["巡回のdispatchの見送り 3 ABORT"])
@@ -1321,6 +1338,13 @@ flowchart TD
     A42S5["ボードから消えたissue 5 システムはリトライの回数を1つ増やす"]
     A42S6["ボードから消えたissue 6 システムはバックオフの期限を印に書く"]
     A42S7(["ボードから消えたissue 7 ABORT"])
+    A43S1{"切り上げのturnの終わり 1 IF 使える値でマージンを切った期間の行き先が Blocked である THEN"}
+    A43S2["切り上げのturnの終わり 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A43S3["切り上げのturnの終わり 3 システムは issue にマージンを切った期間とリセットの時刻を書いた理由を1件コメントする"]
+    A43S4[["切り上げのturnの終わり 4 INCLUDE USE CASE runを終えてworkerを止める"]]
+    A43S6["切り上げのturnの終わり 6 システムは run に行き先を待つ印を立てる"]
+    A43S7["切り上げのturnの終わり 7 システムは Claude Code に次の turn を送らずに turn ループを抜ける"]
+    A43S9(["切り上げのturnの終わり 9 ABORT"])
     BS1 --> BS2
     BS2 --> BS3
     BS3 -- はい --> BS4
@@ -1428,8 +1452,10 @@ flowchart TD
     BS55 -- はい --> BS56
     BS55 -- いいえ --> A42S1
     BS56 -- はい --> BS57
-    BS56 -. "繰り返す" .-> BS39
-    BS57 --> BS58
+    BS56 -- いいえ --> A43S1
+    BS57 -- はい --> BS58
+    BS57 -. "繰り返す" .-> BS39
+    BS58 --> BS59
     A1S1 --> A1S2
     A1S2 --> A1S3
     A2S1 --> A2S2
@@ -1576,7 +1602,14 @@ flowchart TD
     A42S4 --> A42S5
     A42S5 --> A42S6
     A42S6 --> A42S7
-    BS58 --> END(["終了"])
+    A43S1 -- はい --> A43S2
+    A43S1 -- いいえ --> A43S6
+    A43S2 --> A43S3
+    A43S3 --> A43S4
+    A43S4 --> A43S9
+    A43S6 --> A43S7
+    A43S7 --> A43S9
+    BS59 --> END(["終了"])
 ```
 
 ## シーケンス図
@@ -1733,6 +1766,14 @@ sequenceDiagram
                             alt issue がボードから返らない
                                 S->>H: pane の close を要求する
                                 Note over S: ABORT リトライを1つ積む
+                            else Status が作業中のままで、切り上げの指示を送った turn で、Claude Code が動け、マージンを切った期間がある
+                                alt 行き先が Blocked
+                                    S->>GH: Status への failure_state の書き込みと、理由のコメントの投稿を要求する
+                                    Note over S: ABORT INCLUDE USE CASE runを終えてworkerを止める。担当者は残す
+                                else 行き先を待つ
+                                    S->>S: 行き先を待つ印を立てる
+                                    Note over S: ABORT 次の turn を送らずに turn ループを抜ける。行き先は巡回が引き直す
+                                end
                             end
                         end
                     end

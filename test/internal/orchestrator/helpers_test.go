@@ -2593,7 +2593,7 @@ func assistantLine(requestID, text string, sidechain bool) any {
 // `Methods()` を読んでしまう。**
 //
 // 手元では間に合っていたが、**CI の `-race` で隙間が開いて落ちた**
-// （`Test_issueを1件処理する_P016_blockedが返ったらescを送ってから人間へ渡す` が
+// （`Test_issueを1件処理する_P020_blockedが返ったらescを送ってから人間へ渡す` が
 // 「人間へ渡すときに worker を止めていない」で落ちた。設計 6-9）。
 //
 // **run が `o.runs` から外れるのは最後である**（`release`）。だからここが空になれば、

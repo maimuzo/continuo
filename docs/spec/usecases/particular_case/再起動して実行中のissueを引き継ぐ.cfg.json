@@ -3,12 +3,12 @@
   "usecase_name": "再起動して実行中のissueを引き継ぐ",
   "source": {
     "file": "docs/spec/usecases/particular_case/再起動して実行中のissueを引き継ぐ.rucm.md",
-    "rucm_block_sha256": "6460b6b4c1ed2be646ef2f6c461be665e3473cb2376a389d80714fbace1f9940"
+    "rucm_block_sha256": "53945e3b792f3cd3b7774ec7b892de8c393fb36562f8b7c001067a531eeba57c"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。"
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。"
     },
     "設定の不備": {
       "rfs": {
@@ -1952,7 +1952,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2133,7 +2133,7 @@
       "id": "P003",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2316,7 +2316,7 @@
       "id": "P005",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2507,7 +2507,7 @@
       "id": "P007",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2694,7 +2694,7 @@
       "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2873,7 +2873,7 @@
       "id": "P011",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3048,7 +3048,7 @@
       "id": "P013",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3219,7 +3219,7 @@
       "id": "P015",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3386,7 +3386,7 @@
       "id": "P017",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3553,7 +3553,7 @@
       "id": "P019",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3730,7 +3730,7 @@
       "id": "P021",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3899,7 +3899,7 @@
       "id": "P023",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4058,7 +4058,7 @@
       "id": "P025",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4209,7 +4209,7 @@
       "id": "P027",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4356,7 +4356,7 @@
       "id": "P029",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4503,7 +4503,7 @@
       "id": "P031",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4630,7 +4630,7 @@
       "id": "P033",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4769,7 +4769,7 @@
       "id": "P035",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4904,7 +4904,7 @@
       "id": "P037",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5031,7 +5031,7 @@
       "id": "P039",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5154,7 +5154,7 @@
       "id": "P041",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
+      "postcondition": "continuo は常駐している。hook を受ける socket は listen している。システムが引き継ぐと決めた run は印の集合に入っている。システムが引き継ぐと決めた run の herdr の pane は閉じていない。システムが引き継ぐと決めた run の branch は残っている。システムが引き継ぐと決めた run の turn 数は 1 から数え直している。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、次の turn を要する印を持つ run に継続の指示を送る。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、切り上げの文面である。最初の巡回は、印を持つ run の担当者がほかのアカウント1人でなければ、turn の終わりを待つ印を持つ run の Stop hook を待つ。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

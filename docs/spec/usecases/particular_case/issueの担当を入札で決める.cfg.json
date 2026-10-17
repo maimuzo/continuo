@@ -3,12 +3,21 @@
   "usecase_name": "issueの担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issueの担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "04e49fa4beb949d69cc86a05c502d1f16ab772d81df6c760fd832ec53c23b9fd"
+    "rucm_block_sha256": "6007884cf2a1bd4780265e0a498052bc990faca4c93d979571f7967e4458017a"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
+    },
+    "マージンを切った担当が自分のissue": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          27
+        ]
+      },
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。"
     },
     "担当者が2人以上": {
       "rfs": {
@@ -310,18 +319,123 @@
       "statement": "システムは hold のコメントを1件も書かない。"
     },
     {
-      "id": "BASIC FLOW-27",
+      "id": "BASIC FLOW-26",
       "type": "action",
       "flow": "BASIC FLOW",
+      "step": 26,
+      "statement": "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。"
+    },
+    {
+      "id": "BASIC FLOW-27",
+      "type": "condition",
+      "flow": "BASIC FLOW",
       "step": 27,
+      "statement": "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。"
+    },
+    {
+      "id": "BASIC FLOW-29",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 29,
       "statement": "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
     },
     {
-      "id": "BASIC FLOW-28",
+      "id": "BASIC FLOW-30",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 28,
+      "step": 30,
       "statement": "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-1",
+      "type": "condition",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 1,
+      "statement": "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-2",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 2,
+      "statement": "システムはこの巡回では着手も手放しもしないことを INFO で記録に残す。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-4",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 4,
+      "statement": "システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-5",
+      "type": "condition",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 5,
+      "statement": "IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-6",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 6,
+      "statement": "システムは何もしないことを INFO で記録に残す。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-7",
+      "type": "condition",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 7,
+      "statement": "ELSEIF 行き先が担当を外す THEN"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-8",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 8,
+      "statement": "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-9",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 9,
+      "statement": "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻と理由の値 weekly_wait_limit_not_started を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-11",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 11,
+      "statement": "システムは GitHub Projects v2 に、先頭の issue の Status を failure_state へ動かすことを要求する。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-12",
+      "type": "condition",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 12,
+      "statement": "IF GitHub Projects v2 が Status を書いた THEN"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-13",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 13,
+      "statement": "システムは当てた期間とリセットの時刻を書いた理由のコメントを issue に1件書く。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-17",
+      "type": "action",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 17,
+      "statement": "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。"
+    },
+    {
+      "id": "マージンを切った担当が自分のissue-18",
+      "type": "abort",
+      "flow": "マージンを切った担当が自分のissue",
+      "step": 18,
+      "statement": "ABORT"
     },
     {
       "id": "担当者が2人以上-1",
@@ -959,7 +1073,7 @@
     },
     {
       "from": "BASIC FLOW-22",
-      "to": "BASIC FLOW-27",
+      "to": "BASIC FLOW-29",
       "kind": "true",
       "condition": "GitHub Projects v2 が hold のコメントを受け付ける"
     },
@@ -976,12 +1090,117 @@
     },
     {
       "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-26",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-26",
       "to": "BASIC FLOW-27",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-27",
-      "to": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
+      "kind": "true",
+      "condition": "行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける"
+    },
+    {
+      "from": "BASIC FLOW-27",
+      "to": "マージンを切った担当が自分のissue-1",
+      "kind": "false",
+      "condition": "NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける"
+    },
+    {
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-1",
+      "to": "マージンを切った担当が自分のissue-2",
+      "kind": "true",
+      "condition": "行き先が担当を外すで、新しい値では担当を外すと決まらない"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-1",
+      "to": "マージンを切った担当が自分のissue-4",
+      "kind": "false",
+      "condition": "NOT 行き先が担当を外すで、新しい値では担当を外すと決まらない"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-2",
+      "to": "マージンを切った担当が自分のissue-17",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-4",
+      "to": "マージンを切った担当が自分のissue-5",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-5",
+      "to": "マージンを切った担当が自分のissue-6",
+      "kind": "true",
+      "condition": "先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-5",
+      "to": "マージンを切った担当が自分のissue-7",
+      "kind": "false",
+      "condition": "NOT 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-6",
+      "to": "マージンを切った担当が自分のissue-17",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-7",
+      "to": "マージンを切った担当が自分のissue-8",
+      "kind": "true",
+      "condition": "行き先が担当を外す"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-7",
+      "to": "マージンを切った担当が自分のissue-11",
+      "kind": "false",
+      "condition": "NOT 行き先が担当を外す"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-8",
+      "to": "マージンを切った担当が自分のissue-9",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-9",
+      "to": "マージンを切った担当が自分のissue-17",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-11",
+      "to": "マージンを切った担当が自分のissue-12",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-12",
+      "to": "マージンを切った担当が自分のissue-13",
+      "kind": "true",
+      "condition": "GitHub Projects v2 が Status を書いた"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-12",
+      "to": "マージンを切った担当が自分のissue-17",
+      "kind": "false",
+      "condition": "NOT GitHub Projects v2 が Status を書いた"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-13",
+      "to": "マージンを切った担当が自分のissue-17",
+      "kind": "seq"
+    },
+    {
+      "from": "マージンを切った担当が自分のissue-17",
+      "to": "マージンを切った担当が自分のissue-18",
       "kind": "seq"
     },
     {
@@ -1301,7 +1520,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1324,8 +1543,8 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1694,7 +1913,7 @@
       "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1715,8 +1934,8 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2024,7 +2243,7 @@
       "id": "P014",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2039,8 +2258,10 @@
         "BASIC FLOW-11",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
+        "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2057,15 +2278,307 @@
         "CONDITION: NOT 先頭の issue に担当者が1人もいない",
         "システムは入札のコメントを1件も書かない。",
         "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
         "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。",
         "システムはエージェントへ渡すコメントから、入札の印と hold の印と released の印が先頭に付いたコメントを外す。"
       ]
     },
     {
       "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切った担当が自分のissue",
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "マージンを切った担当が自分のissue-1",
+        "マージンを切った担当が自分のissue-2",
+        "マージンを切った担当が自分のissue-17",
+        "マージンを切った担当が自分のissue-18"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
+        "CONDITION: NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける",
+        "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN",
+        "システムはこの巡回では着手も手放しもしないことを INFO で記録に残す。",
+        "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P016",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切った担当が自分のissue",
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "マージンを切った担当が自分のissue-1",
+        "マージンを切った担当が自分のissue-4",
+        "マージンを切った担当が自分のissue-5",
+        "マージンを切った担当が自分のissue-6",
+        "マージンを切った担当が自分のissue-17",
+        "マージンを切った担当が自分のissue-18"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
+        "CONDITION: NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける",
+        "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN",
+        "CONDITION: NOT 行き先が担当を外すで、新しい値では担当を外すと決まらない",
+        "システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。",
+        "IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN",
+        "システムは何もしないことを INFO で記録に残す。",
+        "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P017",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切った担当が自分のissue",
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "マージンを切った担当が自分のissue-1",
+        "マージンを切った担当が自分のissue-4",
+        "マージンを切った担当が自分のissue-5",
+        "マージンを切った担当が自分のissue-7",
+        "マージンを切った担当が自分のissue-8",
+        "マージンを切った担当が自分のissue-9",
+        "マージンを切った担当が自分のissue-17",
+        "マージンを切った担当が自分のissue-18"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
+        "CONDITION: NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける",
+        "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN",
+        "CONDITION: NOT 行き先が担当を外すで、新しい値では担当を外すと決まらない",
+        "システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。",
+        "IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN",
+        "CONDITION: NOT 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない",
+        "ELSEIF 行き先が担当を外す THEN",
+        "システムは GitHub Projects v2 に、この機械の投稿者を先頭の issue の担当者から外すことを要求する。",
+        "システムは GitHub Projects v2 に、この機械の投稿者のアカウント名と branch の名前と時刻と理由の値 weekly_wait_limit_not_started を書いた released のコメントを、released の印を先頭に置いて issue に1件書くことを要求する。",
+        "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P018",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切った担当が自分のissue",
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "マージンを切った担当が自分のissue-1",
+        "マージンを切った担当が自分のissue-4",
+        "マージンを切った担当が自分のissue-5",
+        "マージンを切った担当が自分のissue-7",
+        "マージンを切った担当が自分のissue-11",
+        "マージンを切った担当が自分のissue-12",
+        "マージンを切った担当が自分のissue-13",
+        "マージンを切った担当が自分のissue-17",
+        "マージンを切った担当が自分のissue-18"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
+        "CONDITION: NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける",
+        "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN",
+        "CONDITION: NOT 行き先が担当を外すで、新しい値では担当を外すと決まらない",
+        "システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。",
+        "IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN",
+        "CONDITION: NOT 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない",
+        "ELSEIF 行き先が担当を外す THEN",
+        "CONDITION: NOT 行き先が担当を外す",
+        "システムは GitHub Projects v2 に、先頭の issue の Status を failure_state へ動かすことを要求する。",
+        "IF GitHub Projects v2 が Status を書いた THEN",
+        "システムは当てた期間とリセットの時刻を書いた理由のコメントを issue に1件書く。",
+        "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P019",
+      "terminal": "abort",
+      "terminal_flow": "マージンを切った担当が自分のissue",
+      "postcondition": "システムは Claude Code を起動していない。workspace_hooks.after_run は走っていない。新しい値で担当を外すと決まらなかったときと、取り直した issue が変わっていたときは、担当者も Status も変わっておらず、次の巡回が同じ判定をやり直す。行き先が担当を外すだったときは、GitHub Projects v2 が受け付けた場合に担当者からこの機械の投稿者が外れ、理由の値 weekly_wait_limit_not_started の released のコメントが1件増えていて、Status は着手する Status のままである。行き先が Blocked だったときは、GitHub Projects v2 が Status を書いた場合に Status が failure_state へ動き、理由のコメントが1件増えていて、担当者はこの機械の投稿者のままである。Status を書かなかったときはコメントは増えていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "マージンを切った担当が自分のissue-1",
+        "マージンを切った担当が自分のissue-4",
+        "マージンを切った担当が自分のissue-5",
+        "マージンを切った担当が自分のissue-7",
+        "マージンを切った担当が自分のissue-11",
+        "マージンを切った担当が自分のissue-12",
+        "マージンを切った担当が自分のissue-17",
+        "マージンを切った担当が自分のissue-18"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を、各 issue の担当者と一緒に取る。",
+        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
+        "システムは保管している使用率とマージンから、入札できるかを判定する。",
+        "システムは gh からこの機械の投稿者のアカウント名を取る。",
+        "システムは VALIDATES THAT システムがこの機械の投稿者のアカウント名を持っている。",
+        "システムは VALIDATES THAT この巡回でコメントを読んだ issue の数が10件より少ない。",
+        "システムは GitHub Projects v2 に先頭の issue のコメントの全件を要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が先頭の issue のコメントを応答する。",
+        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
+        "IF 先頭の issue に担当者が1人もいない THEN",
+        "CONDITION: NOT 先頭の issue に担当者が1人もいない",
+        "システムは入札のコメントを1件も書かない。",
+        "システムは hold のコメントを1件も書かない。",
+        "システムは使える値から、マージンを切った期間と Claude Code が動けない期間を選び、行き先の表で行き先を決める。",
+        "システムは VALIDATES THAT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける。",
+        "CONDITION: NOT 行き先が無いか、行き先が担当を外すで、新しい値でも担当を外すと決まり、Claude Code が動ける",
+        "IF 行き先が担当を外すで、新しい値では担当を外すと決まらない THEN",
+        "CONDITION: NOT 行き先が担当を外すで、新しい値では担当を外すと決まらない",
+        "システムは GitHub Projects v2 に先頭の issue を ID で取り直すことを要求する。",
+        "IF 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない THEN",
+        "CONDITION: NOT 先頭の issue を取り直せないか、取り直した issue の Status が着手する Status ではないか、担当者がこの機械の投稿者1人ではない",
+        "ELSEIF 行き先が担当を外す THEN",
+        "CONDITION: NOT 行き先が担当を外す",
+        "システムは GitHub Projects v2 に、先頭の issue の Status を failure_state へ動かすことを要求する。",
+        "IF GitHub Projects v2 が Status を書いた THEN",
+        "CONDITION: NOT GitHub Projects v2 が Status を書いた",
+        "システムは Claude Code を起動せずに、先頭の issue を着手の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P020",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2096,8 +2609,8 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2135,7 +2648,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
       "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
@@ -2217,7 +2730,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
       "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
@@ -2302,7 +2815,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
       "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -2376,7 +2889,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "入札に負けた",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
@@ -2446,7 +2959,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P025",
       "terminal": "abort",
       "terminal_flow": "締め切り前",
       "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
@@ -2512,7 +3025,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "入札を書けない",
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
@@ -2574,10 +3087,10 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P027",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者がこの機械の投稿者だった issue で行き先が担当を外すだったときは、最初の turn で Claude Code に切り上げさせる。担当者が1人もいなかった issue には、今の回にこの機械の投稿者の入札のコメントが1件と hold のコメントが1件ある。期限の切れた担当を外してから入札した issue には、GitHub Projects v2 が受け付けた released のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2606,8 +3119,8 @@
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
-        "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2644,7 +3157,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P028",
       "terminal": "abort",
       "terminal_flow": "holdを書けない",
       "postcondition": "システムは先頭の issue に着手していない。hold のコメントは1件も増えていない。先頭の issue に担当者は1人もいない。GitHub Projects v2 が消し戻しの released のコメントを受け付けた場合、消し戻しの released のコメントが1件増えている。GitHub Projects v2 が消し戻しの released のコメントを受け付けなかった場合、システムは WARN を記録に残していて、消し戻しの released のコメントは増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントも1件増えている。issue の Status は変わっていない。次の巡回が入札をやり直す。",
@@ -2723,7 +3236,7 @@
       ]
     },
     {
-      "id": "P024",
+      "id": "P029",
       "terminal": "abort",
       "terminal_flow": "担当者を消し戻せない",
       "postcondition": "システムは先頭の issue に着手していない。先頭の issue の担当者はこの機械の投稿者のまま残っている。hold のコメントと消し戻しの released のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、担当を外したときに GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回は担当者がこの機械の投稿者である issue として、入札せずに着手へ進む。",
@@ -2805,7 +3318,7 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P030",
       "terminal": "abort",
       "terminal_flow": "担当者を書けない",
       "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -2876,7 +3389,7 @@
       ]
     },
     {
-      "id": "P026",
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "入札に負けた",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。issue の Status は変わっていない。",
@@ -2943,7 +3456,7 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "締め切り前",
       "postcondition": "先頭の issue に担当者は1人もいない。今の回にこの機械の投稿者の入札のコメントが1件ある。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、GitHub Projects v2 が受け付けた released のコメントが1件増えている。巡回は締め切りを待たずに次の候補へ進んでいる。締め切りを過ぎた後の巡回が勝敗を決める。",
@@ -3006,7 +3519,7 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "外したあと入札できない",
       "postcondition": "先頭の issue に担当者は1人もいない。GitHub Projects v2 が released のコメントを受け付けた場合、issue に released の印が先頭に付いたコメントが1件増えている。この機械は入札のコメントを1件も書いていない。issue の Status は変わっていない。入札できる機械が次の巡回で先頭の issue を拾う。",
@@ -3062,7 +3575,7 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "担当を外せない",
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -3112,7 +3625,7 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "担当を外せない",
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -3158,7 +3671,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P036",
       "terminal": "abort",
       "terminal_flow": "期限内の担当",
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
@@ -3202,7 +3715,7 @@
       ]
     },
     {
-      "id": "P032",
+      "id": "P037",
       "terminal": "abort",
       "terminal_flow": "人間が付けた担当",
       "postcondition": "担当者は人間が付けたまま変わっていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。issue の Status は変わっていない。",
@@ -3246,7 +3759,7 @@
       ]
     },
     {
-      "id": "P033",
+      "id": "P038",
       "terminal": "abort",
       "terminal_flow": "人間が付けた担当",
       "postcondition": "担当者は人間が付けたまま変わっていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。issue の Status は変わっていない。",
@@ -3289,7 +3802,7 @@
       ]
     },
     {
-      "id": "P034",
+      "id": "P039",
       "terminal": "abort",
       "terminal_flow": "コメントを読めない",
       "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -3324,7 +3837,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "コメントの読み取りの上限",
       "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が候補の先頭から見直す。",
@@ -3355,7 +3868,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P041",
       "terminal": "abort",
       "terminal_flow": "投稿者を取れない",
       "postcondition": "担当者は変わっていない。issue にコメントは1件も増えていない。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。次の巡回が同じ判定をやり直す。",
@@ -3384,7 +3897,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P042",
       "terminal": "abort",
       "terminal_flow": "担当者が2人以上",
       "postcondition": "担当者は1人も増えず、1人も減っていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。",
@@ -3411,7 +3924,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P043",
       "terminal": "abort",
       "terminal_flow": "担当者が2人以上",
       "postcondition": "担当者は1人も増えず、1人も減っていない。入札のコメントと hold のコメントと released のコメントは1件も増えていない。案内のコメントは、書く条件が揃った巡回で1件だけ増えている。システムは先頭の issue のコメントを読んでいない。issue の Status は変わっていない。",
@@ -3438,9 +3951,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 90,
-    "nodes_covered": 90,
-    "edges_total": 95,
-    "edges_covered": 95
+    "nodes_total": 105,
+    "nodes_covered": 105,
+    "edges_total": 114,
+    "edges_covered": 114
   }
 }

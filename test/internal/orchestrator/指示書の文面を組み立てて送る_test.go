@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "df5264d3de84bc130f20c4fc7e705822c18e521ca5273e5f376d0e84f46d33ee", "SOURCE": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.cfg.json"}
+// {"RUCM-CFG-SHA256": "628b41d6be93d5f58263e321c01177c20e36ef80bbb98723b21dd996a1fcbdf2", "SOURCE": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.cfg.json"}
 //
 // **ユースケース記述「指示書の文面を組み立てて送る」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -47,7 +47,7 @@ func Test_指示書の文面を組み立てて送る_P001_最初のメッセー�
 	}
 }
 
-// {"RUCM-PATH": "P003"}
+// {"RUCM-PATH": "P005"}
 //
 // 目的: コメントを読めないときと、期限を過ぎたときは、節を付けずに最初のメッセージだけを送ることを固定する。
 //
@@ -56,7 +56,7 @@ func Test_指示書の文面を組み立てて送る_P001_最初のメッセー�
 //
 // 与える情報: 上と同じ issue。relay 専用の読み取りが失敗する / 期限まで返らない（期限は 200 ミリ秒に縮める）。
 // 成功条件: どちらも最初のメッセージが送られ、節が無く、1回目の本文は残っていること。
-func Test_指示書の文面を組み立てて送る_P003_読めないときと期限切れのときは付けずに送る(t *testing.T) {
+func Test_指示書の文面を組み立てて送る_P005_読めないときと期限切れのときは付けずに送る(t *testing.T) {
 	for _, name := range []string{"読めない", "期限切れ"} {
 		t.Run(name, func(t *testing.T) {
 			fx := newFixture(t, fixtureOptions{})
@@ -86,13 +86,13 @@ func Test_指示書の文面を組み立てて送る_P003_読めないときと�
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P009"}
 //
 // 目的: relay が無効なら、コメントを読まず、節も付けないことを固定する。
 //
 // 与える情報: 上と同じ issue。`agent.relay_trusted_comments: false` と、`permission_mode: dontAsk` の2通り。
 // 成功条件: どちらも最初のメッセージに節が無く、relay 専用の読み取りが1回も呼ばれないこと。
-func Test_指示書の文面を組み立てて送る_P005_relayが無効なら読まずに付けない(t *testing.T) {
+func Test_指示書の文面を組み立てて送る_P009_relayが無効なら読まずに付けない(t *testing.T) {
 	for name, mutate := range map[string]func(cfg *config.Config){
 		"設定が false": func(cfg *config.Config) { cfg.Agent.RelayTrustedComments = false },
 		"dontAsk":   func(cfg *config.Config) { cfg.Claude.PermissionMode = config.ClaudePermissionModeDontAsk },

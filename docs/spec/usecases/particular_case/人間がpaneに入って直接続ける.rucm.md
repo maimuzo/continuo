@@ -4,6 +4,7 @@
 
 - `docs/plans/continuo_design.md` の「3-83. direct chat — 人間が pane で直接続けるあいだ、continuo は手を出さない」（direct chat のあいだにしないことの表、既定値、カンバンに選択肢が無いときの扱い）
 - `docs/plans/continuo_design.md` の「3-83b. direct chat の候補は、専用の1パスへ分ける」（巡回の段1〜段5）
+- `docs/plans/continuo_design.md` の「3-27a」（direct chat に入れたときと戻したときに、行き先を待つ印と切り上げの指示を送った印を下ろす）
 - `docs/plans/continuo_design.md` の「3-83f. 印を外す道は、門とは別に6本ある」（終わらせる処理をやめる判定、送る側が控えの Status でも見ること）
 - `docs/plans/continuo_design.md` の「3-83g. direct chat から出るとき — 出口と後始末」（出口の表）
 - `docs/plans/continuo_design.md` の「3-83h. direct chat に入れるのは、担当者が1人で、それが自分のアカウントのときだけ」（判定の表、手を離す経路、戻したときの hold）
@@ -39,6 +40,7 @@ continuo がまだ着手していない issue（印を持っていない issue�
 | Claude Code へ指示を送る | `wakeRuns` と `turnLoop` の先頭。印だけでなく、控えの Status が direct chat のときも送らない（`cardInDirectChat`） |
 | turn の終わりに表明を読んで Status を動かす | `handleTurnEnd` の先頭。turn の終わりのほうが巡回より先に direct chat を見たときは、`decideAfterTurn` が後始末をせずに戻る |
 | 画面が止まっている run を打ち切る（stall の検知）・レートリミット待ちの上限で手放す | `checkStalls` |
+| 「行き先を待つ」run の行き先を引き直す・担当を外す | `reconcileAwaitDestination` と `releaseQuotaWaitExceeded`。**行き先を待つ印は、direct chat に入れたとき（段5）に下ろしてある**（issue #262。設計 3-27a）。人間が話している最中に担当が外れたり、`after_run` が走ったりしない |
 | pane を閉じる | `stopWorker` の入口の門 |
 | 印を外す | `stopAndReleaseAsync` の入口の門。issue がカンバンから見えなくなった巡回でも外さない |
 | 走っていた終わらせる処理を続ける | `abortTerminalForHuman`。その pane で Claude Code の起動が済んでいれば、終わらせる処理をやめて印を残す。済んでいなければ、自分で開いた pane を閉じて印を外し、次の巡回で pane を用意し直す |
@@ -80,6 +82,8 @@ Status を書けても、理由のコメントの投稿が誤りを返したと�
 
 段21 の検証（応答を書いている最中か）で、herdr から状態を読めなかったときは、送る側に倒す（段22 へ進む）。
 
+**段22 の継続の指示の文面は、そのときの判定で決まる**（issue #262。設計 3-27a）。使える値でマージンを切った期間が在り、Claude Code が動けるなら、「続けてください」の代わりに切り上げの文面になる（`人間に判断を渡す` の継続の指示の表）。direct chat に入る前に切り上げの指示を送っていても、段5 と段13 で切り上げの指示を送った印を下ろしてあるので、戻したあとはもう1度この判定を通る。**direct chat のあいだも、Claude Code は組み込みの指示書の 5-8 を覚えているので、自分で切り上げうる。**人間がそのまま作業させたいときは、「マージンは気にせず続けて」と書けば続く。
+
 ## 継続の指示を送る手前で run が終わる場合
 
 段16 を通った run でも、次のどれかに当たると、段22 の継続の指示は届かない。
@@ -120,7 +124,7 @@ direct chat のあいだにしないこと（上の表）のうち、stall の�
 
 ```rucm
 USE CASE NAME: 人間がpaneに入って直接続ける
-BRIEF DESCRIPTION: 利用者はカンバンの issue の Status を tracker.direct_chat_state の選択肢へ動かす。システムは Claude Code への指示の送信を止める。システムは pane と worktree を残す。利用者は herdr の pane で Claude Code と直接話す。利用者が Status を作業中の選択肢へ戻すと、システムは同じ pane へ継続の指示を送る。
+BRIEF DESCRIPTION: 利用者はカンバンの issue の Status を tracker.direct_chat_state の選択肢へ動かす。システムは Claude Code への指示の送信を止める。システムは pane と worktree を残す。利用者は herdr の pane で Claude Code と直接話す。利用者が Status を作業中の選択肢へ戻すと、システムは同じ pane へ継続の指示を送る。システムは direct chat に入れたときと戻したときに、run の行き先を待つ印と切り上げの指示を送った印を下ろす。
 PRECONDITION: システムは常駐している。tracker.direct_chat_state に Status 名が設定されている。カンバンに tracker.direct_chat_state の選択肢がある。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: GitHub Projects v2、herdr、Claude Code
@@ -132,7 +136,7 @@ BASIC FLOW:
 2. IF システムが issue の印を持っている THEN
 3.   システムは VALIDATES THAT issue の担当者が1人である。
 4.   システムは VALIDATES THAT issue の担当者が別のアカウントでない。
-5.   システムは run に direct chat の印を立てる。
+5.   システムは run に direct chat の印を立て、run の行き先を待つ印と切り上げの指示を送った印を下ろす。
 6. ELSE
 7.   INCLUDE USE CASE directchatのpaneを用意する
 8.   システムは VALIDATES THAT run が direct chat の印を持っている。
@@ -140,7 +144,7 @@ BASIC FLOW:
 10. システムは run への指示の送信と表明の読み取りと stall の検知を止める。
 11. 利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する。
 12. システムは GitHub Projects v2 に run の issue の Status と担当者を要求する。
-13. システムは run の direct chat の印を下ろす。
+13. システムは run の direct chat の印と、行き先を待つ印と、切り上げの指示を送った印を下ろす。
 14. システムは run の stall の時計を引き直す。
 15. システムは VALIDATES THAT issue の Status が terminal_states に入っていない。
 16. システムは VALIDATES THAT issue の Status が active_states に入っている。
@@ -201,13 +205,13 @@ flowchart TD
     BS2{"2 IF システムが issue の印を持っている THEN"}
     BS3{"3 issue の担当者が1人である"}
     BS4{"4 issue の担当者が別のアカウントでない"}
-    BS5["5 システムは run に direct chat の印を立てる"]
+    BS5["5 システムは run に direct chat の印を立て、run の行き先を待つ印と切り上げの指示を送った印を下ろす"]
     BS7[["7 INCLUDE USE CASE directchatのpaneを用意する"]]
     BS8{"8 run が direct chat の印を持っている"}
     BS10["10 システムは run への指示の送信と表明の読み取りと stall の検知を止める"]
     BS11["11 利用者はシステムに、カンバンの issue の Status を別の選択肢にして、direct chat の終了を要求する"]
     BS12["12 システムは GitHub Projects v2 に run の issue の Status と担当者を要求する"]
-    BS13["13 システムは run の direct chat の印を下ろす"]
+    BS13["13 システムは run の direct chat の印と、行き先を待つ印と、切り上げの指示を送った印を下ろす"]
     BS14["14 システムは run の stall の時計を引き直す"]
     BS15{"15 issue の Status が terminal_states に入っていない"}
     BS16{"16 issue の Status が active_states に入っている"}
@@ -292,7 +296,7 @@ sequenceDiagram
             システム->>herdr: pane を閉じる
             システム->>システム: 印を外す
         else 担当者が自分の1人である、またはログイン名が取れない
-            システム->>システム: run に direct chat の印を立てる
+            システム->>システム: run に direct chat の印を立て、行き先を待つ印と切り上げの指示を送った印を下ろす
         end
     else 印を持っていない
         システム->>システム: directchatのpaneを用意する（INCLUDE）
@@ -302,7 +306,7 @@ sequenceDiagram
     利用者->>GitHub: issue の Status を別の選択肢へ動かす
     Note over システム: 次の巡回
     システム->>GitHub: run の issue の Status と担当者を要求する
-    システム->>システム: direct chat の印を下ろし、stall の時計を引き直す
+    システム->>システム: direct chat の印と行き先を待つ印と切り上げの指示を送った印を下ろし、stall の時計を引き直す
     alt Status が terminal_states に入っている
         システム->>システム: 直接抜けた印を立てる
         システム->>システム: runを終えてworkerを止める（INCLUDE。成果のコメントは書かせない）

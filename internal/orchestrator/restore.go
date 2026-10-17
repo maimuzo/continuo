@@ -1054,16 +1054,49 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // reason: 人間へ見せる理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
-	// **`protectedStates()` を渡す**（設計 3-83）。`terminal_states` だけでは
-	// **人間が置いた direct chat のカードへ `failure_state` を書いてしまう。**
-	// 書かれるとカードが direct chat から外れ、以後この機能が効かない。
+	moved, err := o.writeFailureState(ctx, issue)
+	if err != nil {
+		return
+	}
+	// **書かなかったとき（既に `failure_state` だった・人間が動かしていた）も通知を投稿する。**
+	// 今の3か所の呼び出し元の動きである。**着手の前の判定（issue #262）は、書いたときだけ投稿したいので、
+	// この関数ではなく `writeFailureState` と `postFailureNotice` を直に呼ぶ。**
+	o.postFailureNotice(ctx, issue, reason, hc, moved)
+}
+
+// writeFailureState は Status を `failure_state` へ書く（`moveToFailure` から切り出した。issue #262）。
+//
+// **書く前に必ず ID 指定で取り直す**（`UpdateStatus` が内部で行う）。
+// **`protectedStates()` を渡す**（設計 3-83）。`terminal_states` だけでは
+// **人間が置いた direct chat のカードへ `failure_state` を書いてしまう。**
+// 書かれるとカードが direct chat から外れ、以後この機能が効かない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// 戻り値の1つ目: 書き込みの結果（`Wrote` が偽なら、書かなかった）。
+// 戻り値の2つ目: 書き込みに失敗したらその誤り（ログは出し済み）。
+func (o *Orchestrator) writeFailureState(ctx context.Context, issue tracker.Issue) (tracker.StatusWrite, error) {
 	moved, err := o.tracker.UpdateStatus(
 		ctx, issue.ID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
-		return
+		return tracker.StatusWrite{}, err
 	}
+	return moved, nil
+}
+
+// postFailureNotice は、Status を `failure_state` へ動かしたことと理由を、引き渡しの通知として issue へ書く
+// （`moveToFailure` から切り出した。issue #262）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// reason: 人間へ見せる理由。
+// hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
+// moved: `writeFailureState` の結果。
+func (o *Orchestrator) postFailureNotice(
+	ctx context.Context, issue tracker.Issue, reason string, hc handoffContext, moved tracker.StatusWrite,
+) {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		return

@@ -14,6 +14,8 @@
 - `docs/plans/continuo_design.md#3-29`（Status を動かした記録）
 - `internal/orchestrator/restore.go` の `Restore`、`decideAdoptions`、`restoreWithoutPane`、`applyOrphanRunningAction`、`issueAgreesWithPath`、`moveToFailure`、`cleanupInto`
 - `internal/orchestrator/comment.go` の `postStatusMove`
+- `docs/plans/continuo_design.md#3-27a`（拾い直しの着手にも、担当が自分の issue の着手の前の判定が当たる）
+- `internal/orchestrator/handoff.go` の `ownIssueMarginGate`
 
 ## RUCM
 
@@ -34,7 +36,7 @@ BASIC FLOW:
 5. システムは VALIDATES THAT 取り直した Status が active_states に入っている。
 6. システムは VALIDATES THAT 設定の restart.orphan_running_action が redispatch である。
 7. システムは issue を次の巡回に委ねることを記録に残す。
-POSTCONDITION: issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。
+POSTCONDITION: issue は印の集合に入っていない。worktree は残っている。issue の Status は変わっていない。システムは issue にコメントを書いていない。次の巡回は issue を着手の候補に出す。次の巡回の着手は、担当が自分の issue の着手の前の判定を通る。
 
 SPECIFIC ALTERNATIVE FLOW 取り直しの失敗:
 RFS BASIC FLOW 2
@@ -102,6 +104,8 @@ herdr から一覧を取れなかった起動では、この扱いを1件も行�
 
 **`redispatch` で、復元の中から dispatch してはならない。**着手の待ちで最大1時間止まる。
 次の巡回は、Status が active_states のままのこの issue を候補に出し、同じ worktree で着手し直す。
+
+**次の巡回の着手は、ふつうの着手と同じ担当の判定を通る**（issue #262。設計 3-27a）。担当がこの機械の issue なので入札はしないが、使える値でマージンを切っているか、Claude Code が動けないなら、`issueの担当を入札で決める` の `マージンを切った担当が自分のissue` が行き先を決める。Status を `failure_state` へ戻すときと、Claude Code が動けずに担当を外すときは、Claude Code を起動しない（人間の決定「In Progressステータスなどに遷移しても新たにrunを開始せず即座にblockedに遷移する」。2026-10-05）。拾い直しの Status は `In Progress` のままのことがあるので、担当を外したときも Status は動かない。
 
 **`restart.orphan_running_action` の値は、`to_dispatch_state` と `to_failure_state` のどちらでもなければ `redispatch` として扱う**（`applyOrphanRunningAction` の `switch` の `default`）。
 

@@ -5,6 +5,7 @@
 > 2つは別の goroutine が独立に行うので、1本に並べると経路が掛け算で増える。分けて書く（人間の決定。2026-10-02）。
 >
 > **巡回は継続の指示を送らない。**印を立て、打ち切りを飛ばし、枠が明けたら印を外して時計を進めるところまでである。
+> **「行き先を待つ」run（issue #262。設計 3-27a）を作業へ戻すときも、巡回は継続の指示を送る印を立てるだけである。**送るのは turn ループで、文面はそのときの判定で決まる（`指示書の文面を組み立てて送る`）。
 > **pane を閉じてリトライを積む処理（`abandonRun`）は `issueを1件処理する` と同じ実装を通る。**
 > この記述には、枠待ちの判定から出る入口と、終わったときの状態だけを書く。
 
@@ -14,11 +15,14 @@
 - `docs/plans/continuo_design.md#3-15`（使用率とリセット時刻の読み取り）
 - `docs/plans/continuo_design.md#3-21`（打ち切りは `agent_status` で測る）
 - `docs/plans/continuo_design.md#3-27`（レートリミットで止まっても自分で再開する。2条件と評価順・保管値の規則・1週間の枠を待つ上限）
+- `docs/plans/continuo_design.md#3-27a`（レートリミットのマージンを切ったら、走っている run を切り上げる。「行き先を待つ」印・使える値）
 - `docs/plans/continuo_design.md#3-77c`（担当を外された機械は push してはならない）
 - `docs/plans/continuo_design.md#3-77i`（回復待ちの判定は、新しさを問わずに保管値を使い続ける。**待つ上限で担当を手放す判定と入札は、直前の読み取りに成功した値だけを使う**）
 - `docs/plans/continuo_design.md#3-85c`（Claude Code を起動した pane を閉じたら、閉じた記録を書く）
 - `docs/plans/continuo_design.md#5-2`（`rate_limit` の設定キー）
 - `internal/orchestrator/reconcile.go` の `checkStalls`（巡回の評価順）、`clearQuotaWaitWhenBack`（巡回が印を外す2つの契機）、`releaseQuotaWaitExceeded`、`paneStopped`（手放しの唯一の入口）、`stalledReason`
+- `internal/orchestrator/reconcile.go` の `reconcileAwaitDestination`、`returnFromAwaitDestination`（「行き先を待つ」run の行き先を引き直す）
+- `internal/orchestrator/marginstatus.go` の `readQuota`（使える値）
 - `internal/orchestrator/turn.go` の `isQuotaWaitingWith`、`runIdleForTurnTimeout`、`quotaResetAtOf`
 - `internal/orchestrator/runstate.go` の `setWaitingQuota`、`clearWaitingQuota`（印を外すと同時に時計を進める）、`noteWorking`、`noteQuotaProbe`、`addRetry`
 - `internal/orchestrator/lifecycle.go` の `abandonRunAsync`、`abandonRunClaimed`（リトライが残る枝と使い切った枝）、`runAfterRunOK`、`stopWorker`
@@ -33,7 +37,7 @@
 
 ```rucm
 USE CASE NAME: 枠待ちのrunの打ち切りを止める
-BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは進んだ形跡が turn_timeout_ms のあいだ無い run の agent_status を herdr から読む。システムは Claude の usage API か Claude Code のステータスラインから受けて保管している枠の使用率を読む。システムは使用率が 100 の枠があれば run に枠待ちの印を立てる。システムは枠待ちの印がある run の打ち切りの判定を飛ばす。システムは枠が明けたら枠待ちの印を外す。
+BRIEF DESCRIPTION: 巡回タイマーが巡回を起こす。巡回は statusline取得の値が届いた知らせでも起きる。システムは進んだ形跡が turn_timeout_ms のあいだ無い run の agent_status を herdr から読む。システムは Claude の usage API か Claude Code のステータスラインから受けて保管している枠の使用率を読む。システムは使用率が 100 の枠があれば run に枠待ちの印を立てる。システムは枠待ちの印がある run の打ち切りの判定を飛ばす。システムは枠が明けたら枠待ちの印を外す。システムは切り上げを終えて行き先を待つ印が立った run の行き先を、巡回のたびに使える値で引き直し、作業へ戻すか Status を failure_state へ戻す。システムは行き先を待つ印が立って止まっている run の打ち切りの判定を飛ばす。
 PRECONDITION: システムは常駐している。走行中の run が1件以上ある。run は herdr の agent 名を持っている。run は direct chat に入っていない。run はバックオフの期限の内側にない。設定の claude.turn_timeout_ms は 0 より大きい。設定の rate_limit.source は none ではない。issue の Status は running_state の選択肢である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: herdr
@@ -124,6 +128,32 @@ WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明�
 5. システムは印を外す。
 6. ABORT
 POSTCONDITION: issue の担当者から自分は外れている。issue に Claude Code を閉じた記録のコメントは増えていない。印は外れている。worktree は残っている。issue の Status は running_state の選択肢のままである。
+
+GLOBAL ALTERNATIVE FLOW 行き先を待つrunを作業へ戻す:
+BRANCH FROM BASIC FLOW 1
+WHEN run に行き先を待つ印が立っていて、run が direct chat に入っておらず、run を終わらせる処理が走っておらず、使える値が無いか、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無くマージンを切った枠も無い場合
+1. システムは run から行き先を待つ印を下ろす。
+2. システムは run の最後に動いていた時刻を現在時刻に進める。
+3. システムは run に継続の指示を送る印を立てる。
+4. RESUME STEP 1
+POSTCONDITION: run の行き先を待つ印は外れている。run の最後に動いていた時刻は進んでいる。run には継続の指示を送る印が立っていて、同じ巡回の後ろで turn ループが起きる。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。
+
+GLOBAL ALTERNATIVE FLOW 行き先を待つrunをBlockedへ戻す:
+BRANCH FROM BASIC FLOW 1
+WHEN run に行き先を待つ印が立っていて、run が direct chat に入っておらず、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無く、行き先の表の行き先が Blocked で、システムが run を終わらせる権利を取れる場合
+1. システムは run から行き先を待つ印を下ろす。
+2. システムはボードの issue の Status に failure_state の選択肢を書く。
+3. システムはマージンを切った枠とリセットの時刻を書いた理由を issue に1件コメントする。
+4. INCLUDE USE CASE runを終えてworkerを止める
+5. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue に理由のコメントが1件ある。issue の担当者はこの機械のままである。印は外れている。worktree は残っている。
+
+GLOBAL ALTERNATIVE FLOW 行き先を待つrunを打ち切らない:
+BRANCH FROM BASIC FLOW 1
+WHEN run に行き先を待つ印が立っていて、herdr から読んだ agent の状態が止まっている場合
+1. システムはこの巡回で run の打ち切りの判定を飛ばす。
+2. RESUME STEP 1
+POSTCONDITION: run の行き先を待つ印は立ったままである。herdr の pane は閉じていない。run のリトライの回数は増えていない。issue の Status は running_state の選択肢のままである。
 ```
 
 ## この記述で使う言葉
@@ -133,6 +163,8 @@ POSTCONDITION: issue の担当者から自分は外れている。issue に Clau
 | **枠待ちの印** | run が持つ `WaitingQuota`。立っているあいだ、巡回はその run の打ち切りの判定を飛ばす |
 | **印** | 走行中の run の登録（`o.runs`）。外れるとスロットが空く。**枠待ちの印とは別物である** |
 | **最後に動いていた時刻** | run が持つ `LastSeenAt`。打ち切りの時計である。hook を受けたとき・turn を送ったとき・`working` を見たとき・枠待ちの印を外したときに進む |
+| **行き先を待つ印** | run が持つ `AwaitDestination`（issue #262。設計 3-27a）。Claude Code が切り上げを終えた turn の終わりに、1週間の枠で担当を外しうるときに立つ。立っているあいだ continuo は turn を送らない。direct chat に入れたとき・戻したとき・新しい試行を始めたときにも下りる |
+| **使える値** | 最後に使用率を読めてから30分以内なら、保管値のうちリセットの時刻を過ぎていない枠と、リセットの時刻を読めない枠。それより古ければ無い（`internal/orchestrator/marginstatus.go` の `readQuota`） |
 | **枠が明ける** | 「使用率が 100 の枠のリセット時刻を過ぎた」か「保管している期限内の枠に使用率が 100 の枠が無くなった」のどちらかが成り立つこと |
 
 ## 段にしていない分岐
@@ -159,13 +191,14 @@ POSTCONDITION: issue の担当者から自分は外れている。issue に Clau
 **枠待ちの印は「使用率100」、新しい仕事を取るかと1週間の枠を待つ上限は「余裕値が0以下」。**
 **`rate_limit.pause_above_percent` は、仕事を取るかを決める門から消えた**
 （人間の決定。2026-09-06。issue #173）。**余裕値と同じことを2つの閾値で言っていて、
-既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手するようになった（v0.2.0）。**
+**issue #262 からは、担当が自分の issue も、使える値でマージンを切っていれば着手の前に止まる**（`issueの担当を入札で決める` の `マージンを切った担当が自分のissue`）。
 **キーごと消えた。**statusline取得を開くかの判定も同じ余裕値の線を使う
 （`internal/orchestrator/statuslinefetch.go` の `statuslineFetchPointless`）。
 
 | 判定 | 条件 | 何が起きるか |
 | --- | --- | --- |
-| 新規の着手を止める | **余裕値が 0 以下の枠がある**（`余裕値が0以下`）か、**使用率を1件も読めていない**（`枠を読めない`） | 入札の要る issue を取らない。**担当が既に自分にある issue は取る。**走行中の turn は止めない。時計も止めない。**どちらの理由で止めたかを、既定のログの水準で1行出す**（issue #173） |
+| 新規の着手を止める | **余裕値が 0 以下の枠がある**（`余裕値が0以下`）か、**使用率を1件も読めていない**（`枠を読めない`） | 入札の要る issue を取らない。**担当が既に自分にある issue は、マージンを切っていなければ取る**（issue #262）。この判定では走行中の turn を止めない（走っている run を切り上げさせるのは turn の終わりの判定。`issueを1件処理する`）。時計も止めない。**どちらの理由で止めたかを、既定のログの水準で1行出す**（issue #173） |
 | この run は枠待ちである | 使い切っている枠（使用率100）がある。かつ、その run から turn_timeout_ms のあいだ hook が届かない。**巡回では、その手前で `agent_status` が `working` でないことを見る** | 打ち切りの判定を飛ばす |
 | 担当を手放す | 余裕値（`100 − 使用率 − マージン`。1週間のマージンは `tracker.provider.handoff.weekly_margin_percent`）が 0 以下の枠に1週間の枠が含まれ、待ち時間が weekly_wait_limit_minutes を超える。**かつ pane が完全に止まっている**（agent の状態の連番が変わらず、agent_status が idle か done）。かつ担当者に自分が入っているか、担当者が1人もいない。**枠待ちの印は見ない。****門の一覧は設計 3-27 の「段0 へ入る前に外すもの」が持つ**（ここには写さない） | after_run を走らせ、担当者から自分を外し、`released` を書き、pane を閉じて印を外す。**閉じた記録は書かない。**worktree と Status はそのまま |
 | 人間が引き取っているので手放さない | 上の条件に当たるが、カードの Status が `tracker.direct_chat_state` の値である（設計 3-83） | 何もしない。**打ち切りの判定へも回さない。**pane も worktree も担当者もそのまま残す。**手放すと、人間の書きかけの木で after_run（利用者が書いた git push）が走り、担当者が外れ、released が出て、別の機械の入札を呼ぶ** |
@@ -173,6 +206,7 @@ POSTCONDITION: issue の担当者から自分は外れている。issue に Clau
 | 確かめられないので手放さない | 上の条件に当たるが、`gh` の持ち主か issue の担当者を読めない。または draft issue である | 何もしない。枠待ちの印はそのまま。次の巡回でやり直す（`手放さずに待ち続ける`） |
 | 外せなかったので手放さない | 上の条件に当たり、after_run も走らせたが、担当者から自分を外す書き込みが失敗した | pane を閉じない。印も外さない。次の巡回でやり直す（`担当を外せない`）。**after_run はこの attempt ではもう走らない** |
 | まだ止まっていないので手放さない | 上の条件に当たるが、pane が動いている（agent_status が working / blocked / unknown、または agent の状態の連番が2回続けて同じでない） | 手放さない。**`working` なら待つ。`blocked` と `unknown` と、`agent.get` を読めなかった run は、同じ巡回の打ち切りの判定へ回る**（基本フローの段2 以降。**使用率が100の枠があるあいだは閉じず、枠待ちとして残す**）。**打ち切りの判定から外れるのは、連番を初めて控えた巡回の1回だけである**（`paneStopped` が返す2つ目の値）。2回目以降の観測で連番が変わっていた run は、同じ巡回の打ち切りの判定へ落ちる。`weekly_wait_limit_minutes` を超過しうる |
+| 行き先を待つ run の手放し | run に行き先を待つ印が立っていて、上の「担当を手放す」の条件に当たる | **手放しの3つの待ち（最後に忙しい hook を受けてからの経過・`runIdleForTurnTimeout`・打ち切りを切っている機械の待つ上限）を飛ばす。**その run は Claude Code が turn を終えた合図を受けたあとだからである。pane が止まっているかの確かめはそのまま通すので、外れるのは早くて印を立ててから2回目の巡回である。**手放しの判定が偽でも、agent の状態を読めて止まっている限り、打ち切りの判定から外す**（`行き先を待つrunを打ち切らない`） |
 | 担当が移っているので手放さない | 上の条件に当たるが、issue の担当者が1人以上いて、自分が入っていない | after_run を走らせずに pane を閉じ、印を外す。担当者にもコメントにも触らない（`担当が移っていた`） |
 
 ## 巡回の中で、どれが先に効くか
@@ -267,11 +301,25 @@ flowchart TD
     A8S4["待つ上限を超えた 4 システムは herdr の pane を閉じる"]
     A8S5["待つ上限を超えた 5 システムは印を外す"]
     A8S6(["待つ上限を超えた 6 ABORT"])
+    A9S1["行き先を待つrunを作業へ戻す 1 システムは run から行き先を待つ印を下ろす"]
+    A9S2["行き先を待つrunを作業へ戻す 2 システムは run の最後に動いていた時刻を現在時刻に進める"]
+    A9S3["行き先を待つrunを作業へ戻す 3 システムは run に継続の指示を送る印を立てる"]
+    A9S4["行き先を待つrunを作業へ戻す 4 RESUME STEP 1"]
+    A10S1["行き先を待つrunをBlockedへ戻す 1 システムは run から行き先を待つ印を下ろす"]
+    A10S2["行き先を待つrunをBlockedへ戻す 2 システムはボードの issue の Status に failure_state の選択肢を書く"]
+    A10S3["行き先を待つrunをBlockedへ戻す 3 システムはマージンを切った枠とリセットの時刻を書いた理由を issue に1件コメントする"]
+    A10S4[["行き先を待つrunをBlockedへ戻す 4 INCLUDE USE CASE runを終えてworkerを止める"]]
+    A10S5(["行き先を待つrunをBlockedへ戻す 5 ABORT"])
+    A11S1["行き先を待つrunを打ち切らない 1 システムはこの巡回で run の打ち切りの判定を飛ばす"]
+    A11S2["行き先を待つrunを打ち切らない 2 RESUME STEP 1"]
     BS1 --> BS2
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっているが、いまの担当を確かめられないか、外す相手を決められない場合" .-> A5S1
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいないが、issue の担当者から自分を外す書き込みが失敗する場合" .-> A6S1
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者が1人以上いて、issue の担当者に自分が入っていない場合" .-> A7S1
     BS1 -. "WHEN 余裕値が 0 以下の枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、pane が完全に止まっており、issue の担当者に自分が入っているか、issue の担当者が1人もいない場合" .-> A8S1
+    BS1 -. "WHEN run に行き先を待つ印が立っていて、run が direct chat に入っておらず、run を終わらせる処理が走っておらず、使える値が無いか、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無くマージンを切った枠も無い場合" .-> A9S1
+    BS1 -. "WHEN run に行き先を待つ印が立っていて、run が direct chat に入っておらず、使える値に使用率 100 の5時間の枠と1週間の全体の枠が無く、行き先の表の行き先が Blocked で、システムが run を終わらせる権利を取れる場合" .-> A10S1
+    BS1 -. "WHEN run に行き先を待つ印が立っていて、herdr から読んだ agent の状態が止まっている場合" .-> A11S1
     BS2 -- はい --> BS3
     BS2 -- いいえ --> A1S1
     BS3 --> BS4
@@ -314,6 +362,16 @@ flowchart TD
     A8S3 --> A8S4
     A8S4 --> A8S5
     A8S5 --> A8S6
+    A9S1 --> A9S2
+    A9S2 --> A9S3
+    A9S3 --> A9S4
+    A9S4 -. "戻る" .-> BS1
+    A10S1 --> A10S2
+    A10S2 --> A10S3
+    A10S3 --> A10S4
+    A10S4 --> A10S5
+    A11S1 --> A11S2
+    A11S2 -. "戻る" .-> BS1
     BS11 --> END(["終了"])
 ```
 
@@ -328,6 +386,17 @@ sequenceDiagram
 
     T->>S: 巡回の開始を要求する
     Note over S: source が oauth_usage_api なら、巡回の先頭で usage API から読んだ値も保管値へ入る
+    opt run に行き先を待つ印が立っていて、direct chat に入っていない
+        alt 使える値が無いか、マージンを切った枠がもう無い
+            S->>S: 行き先を待つ印を下ろし、最後に動いていた時刻を進め、継続の指示を送る印を立てる
+            Note over S: RESUME STEP 1 同じ巡回の後ろで turn ループが起きる
+        else 使用率 100 の枠が無く、行き先が Blocked
+            S->>GH: Status への failure_state の書き込みと、理由のコメントの投稿を要求する
+            Note over S: INCLUDE runを終えてworkerを止める。ABORT
+        else agent の状態が止まっている
+            Note over S: RESUME STEP 1 打ち切りの判定を飛ばす。手放しは下の判定が3つの待ちを飛ばして見る
+        end
+    end
     opt 1週間の枠の余裕値が0以下で、明けるまでが weekly_wait_limit_minutes を超え、pane が完全に止まっている
         Note over S: 枠待ちの印は見ない。run を1件ずつ見るループより前に判定する
         S->>GH: issue の担当者の読み直しを要求する

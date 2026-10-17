@@ -30,6 +30,8 @@ type fakeSource struct {
 	gates []orchestrator.GateView
 	// cumulative は TokenTotals が返す run をまたぐ累計である（issue #238）。
 	cumulative orchestrator.TokenUsage
+	// quota は QuotaView が返すレートリミットの写しである（issue #273）。
+	quota orchestrator.QuotaView
 	// calls は RunViews が呼ばれた回数である。
 	calls int
 	// tokenCallOrder は TokenTotals を呼んだ時点の calls の値である（issue #238）。
@@ -64,6 +66,13 @@ func (f *fakeSource) GateViews() []orchestrator.GateView {
 func (f *fakeSource) TokenTotals() orchestrator.TokenUsage {
 	f.tokenCallOrder = f.calls
 	return f.cumulative
+}
+
+// QuotaView はレートリミットの写しを返す（issue #273）。
+//
+// 戻り値: 設定しておいた写し。
+func (f *fakeSource) QuotaView() orchestrator.QuotaView {
+	return f.quota
 }
 
 // testTime はテストで使う固定の時刻である（経過の表示を決定的にするため）。

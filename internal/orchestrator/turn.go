@@ -261,7 +261,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				return
 			}
 
-			text, relayTried, err := o.buildTurnText(waitCtx, rs, snap)
+			text, relayTried, marginCut, err := o.buildTurnText(waitCtx, rs, snap)
 			if err != nil {
 				o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
 				o.failRun(ctx, rs, fmt.Sprintf(
@@ -303,6 +303,15 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			}
 
 			outcome, sendErr = o.sendTurn(waitCtx, rs, text)
+			// **切り上げ済みフラグは、切り上げの文面が届いたと言えるときだけ立てる**（issue #262。設計 3-27a）。
+			//
+			// **送れなかった（`turnSendFailed`）・届いたか分からない（`turnTransient`）・止められた
+			// （`turnAborted`）では立てない。**送っていない切り上げを送ったことにすると、turn の終わりで
+			// push と引き継ぎのコメントを経ずに `Blocked` へ戻すことになる。立てなかったときは、次の turn の
+			// 終わりにもう1度切り上げの指示を送る（turn 1回ぶんを使う）。
+			if marginCut && outcome != turnSendFailed && outcome != turnTransient && outcome != turnAborted {
+				rs.setMarginCutSent()
+			}
 		}
 		if rs.workerRetired(epoch) {
 			// **待っている間に、巡回の stall 検知などが先にこの run を諦めていた。**
@@ -713,9 +722,18 @@ func permissionRemedyText(mode string, relay bool) string {
 // snap: 判定に使う写し。
 // 戻り値の1つ目: 送る本文。
 // 戻り値の2つ目: relay を試みたなら true（呼び出し側は送る前の確認をもう一度通す）。
-// 戻り値の3つ目: 1回目のテンプレートの変数展開に失敗した場合のエラー
+// 戻り値の3つ目: レートリミットのマージンを切っていて、切り上げの文面を返したなら true
+// （呼び出し側は、送れたときだけ切り上げ済みフラグを立てる。issue #262）。
+// 戻り値の4つ目: 1回目のテンプレートの変数展開に失敗した場合のエラー
 // （`missingkey=error` なので、5-3 の一覧に無い変数を書くとここで落ちる）。
-func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap runSnapshot) (string, bool, error) {
+//
+// **「切り上げさせるか」の判定は、ここの1か所だけである**（issue #262。設計 3-27a）。
+// **使える値を1回だけ取り、マージンを切った期間が在り、かつ Claude Code が動けるなら切り上げさせる。**
+// continuo を立て直して引き継いだ run も、使用率100%のリセットを待ったあとの run も、バックオフを挟んだ
+// やり直しの最初の turn も、ここを通る。**着手の前に「担当を外す」と決めて始めた run も、最初の turn の
+// この判定で切り上げの文が添わる**（着手の前の判定から数秒しか経っていない）。
+func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap runSnapshot) (string, bool, bool, error) {
+	marginCut := o.marginCutForTurn(o.readQuota().usable)
 	if !snap.SendFirstPrompt {
 		return BuildContinuationPrompt(
 			snap.TurnCount+1,
@@ -726,7 +744,8 @@ func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap run
 			rs.invalidSignals(),
 			o.cfg.Tracker.StatusSignalMap,
 			snap.Identifier,
-		), false, nil
+			marginCut,
+		), false, marginCut, nil
 	}
 	var attempt *int
 	if snap.RetryCount > 0 {
@@ -736,10 +755,14 @@ func (o *Orchestrator) buildTurnText(ctx context.Context, rs *runState, snap run
 	}
 	text, err := o.renderFirstPrompt(rs.issue(), attempt)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	section, tried := o.relaySectionFor(ctx, rs)
-	return text + section, tried, nil
+	if marginCut {
+		// **指示書と人間のコメントの節の、さらに後ろ（いちばん最後）に添える。**
+		return text + section + marginCutFirstTurnNote, tried, true, nil
+	}
+	return text + section, tried, false, nil
 }
 
 // sendTurn は turn を1つ送り、turn の終わりまで待つ（設計 3-2 の「判定の規則」）。
@@ -855,7 +878,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	}
 
 	// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
-	// **手放しの入口は巡回の1本だけである。**
+	// **走っている run の手放しの入口は巡回の1本だけである**（着手の前の入口は `ownIssueMarginGate`。issue #262）。
 	//
 	// **なぜ待ちループから外したか。**手放すかどうかを決めるには、
 	// **pane が止まっているか**（`agent_status`・`state_change_seq`）を読む必要がある。

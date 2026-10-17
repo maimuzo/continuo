@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
 // Snapshot はダッシュボードが1回の要求で返す写しである。
@@ -21,6 +23,11 @@ type Snapshot struct {
 	GeneratedAt time.Time `json:"generated_at"`
 	// Counts は run の件数の内訳である（`SPEC.md` 13.7.2 の `counts`）。
 	Counts Counts `json:"counts"`
+	// Quota は continuo がいまレートリミットをどう見ているかである（issue #273）。
+	//
+	// **仕様（`SPEC.md` 13.7.2）に無い鍵である。**continuo は Claude Code のレートリミットで止まりうるので、
+	// 走っている run が黙ったときに「待てば直るのか」を画面から判断できるように足した。
+	Quota Quota `json:"quota"`
 	// Runs は実行中の run である。**identifier で昇順に並べてある**
 	// （`RunViews` の順序は不定なので、そのまま出すと表示が毎回入れ替わる）。
 	//
@@ -86,6 +93,63 @@ type Gated struct {
 	NoticeBadge string `json:"notice_badge"`
 }
 
+// Quota はレートリミットの区画の写しである（issue #273）。
+//
+// **API の値は言語によらない形にする**（時刻は UTC、残りは秒の整数）。「あと3時間5分」のような
+// 人間向けの言い回しは HTML の側だけで使い、JSON には出さない（`json:"-"` の欄）。
+type Quota struct {
+	// Source は `rate_limit.source` の値である。
+	Source string `json:"source"`
+	// Readable は、判定に使える値（最後に読めてから30分以内の値）を1つ以上持っているかである。
+	Readable bool `json:"readable"`
+	// LastReadAt は最後に使用率を読めた時刻（UTC）である。立て直してからまだ読めていなければ nil。
+	LastReadAt *time.Time `json:"last_read_at"`
+	// Fresh は、入札に使ってよいほど新しい値かである。
+	Fresh bool `json:"fresh"`
+	// NewWorkBlocked は、入札の要る issue を取らずにいるかである（担当が既にこの機械にある issue は着手する）。
+	NewWorkBlocked bool `json:"new_work_blocked"`
+	// Windows は判定に使える値の期間である。**読めていなければ空の配列**（`null` にしない）。
+	Windows []QuotaWindow `json:"windows"`
+
+	// LastReadAgo は LastReadAt からの経過を人間向けに書いたものである（HTML だけで使う）。
+	LastReadAgo string `json:"-"`
+	// Disabled は `rate_limit.source: none`（使用率を読まない設定）であるかである（HTML だけで使う）。
+	Disabled bool `json:"-"`
+}
+
+// QuotaWindow はレートリミットの1つの期間の写しである（issue #273）。
+type QuotaWindow struct {
+	// Kind は期間の種別である（`session` / `weekly_all` / `weekly_scoped`）。
+	Kind string `json:"kind"`
+	// Percent は使用率（整数の百分率）である。
+	Percent int `json:"percent"`
+	// ResetsAt はリセットの時刻（UTC）である。リセットの時刻を読めない期間は nil。
+	ResetsAt *time.Time `json:"resets_at"`
+	// ResetsInSeconds は、写しを作った時刻からリセットまでの秒数である。過ぎていれば0。
+	// リセットの時刻を読めない期間は nil。
+	ResetsInSeconds *int64 `json:"resets_in_seconds"`
+	// MarginPercent は、この期間から引くマージン（%）である。
+	MarginPercent int `json:"margin_percent"`
+	// Short は、マージンを切ったかである（マージンが0の期間は、使用率100でも偽）。
+	Short bool `json:"short"`
+	// Full は、使い切っているか（使用率100）である。
+	Full bool `json:"full"`
+
+	// KindText は期間の名前を人間向けに書いたものである（HTML だけで使う）。
+	KindText string `json:"-"`
+	// ResetsIn はリセットまでの残りを人間向けに書いたものである（HTML だけで使う）。
+	ResetsIn string `json:"-"`
+}
+
+// quotaKindKeys は、期間の種別を画面の文言のキーへ写す表である（issue #273）。
+//
+// **キーを文字列から組み立てない**（`gateReasonKeys` と同じ理由）。表に無い種別は、種別の文字列をそのまま出す。
+var quotaKindKeys = map[string]i18n.Key{
+	handoff.LimitKindSession:      i18n.KeyDashboardQuotaKindSession,
+	handoff.LimitKindWeeklyAll:    i18n.KeyDashboardQuotaKindWeeklyAll,
+	handoff.LimitKindWeeklyScoped: i18n.KeyDashboardQuotaKindWeeklyScoped,
+}
+
 // gateReasonKeys は、止めた理由をダッシュボードの文言のキーへ写す表である（issue #134）。
 //
 // **キーを文字列から組み立てない。**組み立てると internal/i18n の `allKeys` に載らない
@@ -130,6 +194,9 @@ type Run struct {
 	RetryCount int `json:"retry_count"`
 	// WaitingQuota は枠待ちで時計を止めていることを表す（設計 3-27）。
 	WaitingQuota bool `json:"waiting_quota"`
+	// WaitingHandoff は、切り上げを終え、行き先を待っていることを表す（issue #262 / #273。設計 3-27a）。
+	// **このあいだ continuo は turn を送らない。**`counts.running` の数え方は変えない（バックオフ中でなければ running に数える）。
+	WaitingHandoff bool `json:"waiting_handoff"`
 	// LastHookAt は最後に hook を実際に受けた時刻である。まだ1件も受けていなければ nil。
 	// **stall の時計（StallClockAt）とは別である。**
 	LastHookAt *time.Time `json:"last_hook_at"`
@@ -179,12 +246,14 @@ type Tokens struct {
 // gates: `orchestrator.GateViews` が返した写し（issue #134）。
 // cumulative: `orchestrator.TokenTotals` が返した run をまたぐ累計（issue #238）。
 // **`views` より後に取ったものを渡すこと**（`Server.snapshot` の理由を見よ）。
+// quota: `orchestrator.QuotaView` が返したレートリミットの写し（issue #273）。
 // now: いまの時刻（経過の計算に使う）。
 // 戻り値: 表示用のスナップショット。
 func NewSnapshot(
 	views []orchestrator.RunView,
 	gates []orchestrator.GateView,
 	cumulative orchestrator.TokenUsage,
+	quota orchestrator.QuotaView,
 	now time.Time,
 ) Snapshot {
 	runs := make([]Run, 0, len(views))
@@ -193,20 +262,21 @@ func NewSnapshot(
 	for _, v := range views {
 		tokens := newTokens(v.Tokens)
 		runs = append(runs, Run{
-			Identifier:   v.Identifier,
-			Title:        v.Title,
-			URL:          v.URL,
-			State:        v.State,
-			TurnCount:    v.TurnCount,
-			RetryCount:   v.RetryCount,
-			WaitingQuota: v.WaitingQuota,
-			LastHookAt:   optionalTime(v.LastHookAt),
-			LastHookAgo:  humanizeSince(v.LastHookAt, now),
-			StallClockAt: optionalTime(v.StallClockAt),
-			StartedAt:    optionalTime(v.StartedAt),
-			BackoffUntil: optionalTime(v.BackoffUntil),
-			Tokens:       tokens,
-			TokensAt:     optionalTime(v.TokensAt),
+			Identifier:     v.Identifier,
+			Title:          v.Title,
+			URL:            v.URL,
+			State:          v.State,
+			TurnCount:      v.TurnCount,
+			RetryCount:     v.RetryCount,
+			WaitingQuota:   v.WaitingQuota,
+			WaitingHandoff: v.WaitingHandoff,
+			LastHookAt:     optionalTime(v.LastHookAt),
+			LastHookAgo:    humanizeSince(v.LastHookAt, now),
+			StallClockAt:   optionalTime(v.StallClockAt),
+			StartedAt:      optionalTime(v.StartedAt),
+			BackoffUntil:   optionalTime(v.BackoffUntil),
+			Tokens:         tokens,
+			TokensAt:       optionalTime(v.TokensAt),
 		})
 		if v.BackoffUntil.After(now) {
 			counts.Retrying++
@@ -239,10 +309,83 @@ func NewSnapshot(
 	return Snapshot{
 		GeneratedAt:      now,
 		Counts:           counts,
+		Quota:            newQuota(quota, now),
 		Runs:             runs,
 		Gated:            gated,
 		Totals:           totals,
 		CumulativeTotals: newTokens(cumulative),
+	}
+}
+
+// newQuota は、レートリミットの写しを表示用の形へ組み替える（issue #273）。
+//
+// **判定はしない。**short / full / 新しい着手を止めているかは、orchestrator が判定と同じ関数で決めたものを写す。
+// ここで決め直すと、画面と判定の線が2本に割れる。
+//
+// v: `orchestrator.QuotaView` が返した写し。
+// now: 写しを作った時刻（リセットまでの残りと、最後に読めてからの経過の計算に使う）。
+// 戻り値: 表示用の区画。
+func newQuota(v orchestrator.QuotaView, now time.Time) Quota {
+	q := Quota{
+		Source:         v.Source,
+		Readable:       len(v.Windows) > 0,
+		Fresh:          v.Fresh,
+		NewWorkBlocked: v.NewWorkBlocked,
+		Windows:        make([]QuotaWindow, 0, len(v.Windows)),
+		Disabled:       v.Source == ratelimit.SourceNone,
+	}
+	if !v.LastReadAt.IsZero() {
+		at := v.LastReadAt.UTC()
+		q.LastReadAt = &at
+		q.LastReadAgo = humanizeSince(v.LastReadAt, now)
+	}
+	for _, w := range v.Windows {
+		qw := QuotaWindow{
+			Kind:          w.Kind,
+			Percent:       w.Percent,
+			MarginPercent: w.MarginPercent,
+			Short:         w.Short,
+			Full:          w.Full,
+			KindText:      w.Kind,
+			ResetsIn:      i18n.T(i18n.KeyDashboardQuotaResetsUnknown),
+		}
+		if key, ok := quotaKindKeys[w.Kind]; ok {
+			qw.KindText = i18n.T(key)
+		}
+		if w.ResetsAt != nil {
+			at := w.ResetsAt.UTC()
+			qw.ResetsAt = &at
+			d := at.Sub(now)
+			if d < 0 {
+				// 写しを作るあいだにリセットを過ぎた場合。負の秒数を見せない。
+				d = 0
+			}
+			secs := int64(d / time.Second)
+			qw.ResetsInSeconds = &secs
+			qw.ResetsIn = humanizeUntil(d)
+		}
+		q.Windows = append(q.Windows, qw)
+	}
+	return q
+}
+
+// humanizeUntil は、ある時刻までの残りを人間向けに書く（issue #273）。
+//
+// **リセットまでの残りを、頭の中で引き算せずに読めるようにする。**絶対時刻（UTC）だけでは、
+// 手元の時刻との差を計算しないと「待てばすぐ直るのか」が分からない。
+//
+// d: 残りの長さ。0 以上であること。
+// 戻り値: 「あと42秒」「あと12分」「あと3時間5分」「あと3日11時間」など（文言は internal/i18n から引く）。
+func humanizeUntil(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return i18n.T(i18n.KeyDashboardUntilSeconds, int(d.Seconds()))
+	case d < time.Hour:
+		return i18n.T(i18n.KeyDashboardUntilMinutes, int(d.Minutes()))
+	case d < 24*time.Hour:
+		return i18n.T(i18n.KeyDashboardUntilHours, int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return i18n.T(i18n.KeyDashboardUntilDays, int(d.Hours())/24, int(d.Hours())%24)
 	}
 }
 

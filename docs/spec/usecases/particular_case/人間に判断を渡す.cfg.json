@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "c8e6f391673b01259ae59bbf9f2c7ad60491098169d6165bcb144a625c11cee2"
+    "rucm_block_sha256": "994ad13054c51c2b097072754410aff9b84ac1c7bd701d34267458da654ea713"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -35,7 +35,16 @@
           5
         ]
       },
-      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。"
+      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、続けてくださいの代わりに切り上げの文面である。herdr の pane は閉じていない。印は残っている。"
+    },
+    "切り上げを終えた": {
+      "rfs": {
+        "flow": "作業中のまま",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "エージェントは継続の指示を受けていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま run に行き先を待つ印が立っているかである。issue の担当者は自分のままである。"
     },
     "turnの終わりの書き戻し": {
       "rfs": {
@@ -259,17 +268,45 @@
     },
     {
       "id": "作業中のまま-2",
-      "type": "action",
+      "type": "condition",
       "flow": "作業中のまま",
       "step": 2,
-      "statement": "システムはエージェントに継続の指示を送る。"
+      "statement": "システムは VALIDATES THAT この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。"
     },
     {
       "id": "作業中のまま-3",
-      "type": "resume",
+      "type": "action",
       "flow": "作業中のまま",
       "step": 3,
+      "statement": "システムはエージェントに継続の指示を送る。"
+    },
+    {
+      "id": "作業中のまま-4",
+      "type": "resume",
+      "flow": "作業中のまま",
+      "step": 4,
       "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "切り上げを終えた-1",
+      "type": "action",
+      "flow": "切り上げを終えた",
+      "step": 1,
+      "statement": "システムは使える値でマージンを切った期間の行き先を決める。"
+    },
+    {
+      "id": "切り上げを終えた-2",
+      "type": "action",
+      "flow": "切り上げを終えた",
+      "step": 2,
+      "statement": "システムはエージェントに継続の指示を送らない。"
+    },
+    {
+      "id": "切り上げを終えた-3",
+      "type": "abort",
+      "flow": "切り上げを終えた",
+      "step": 3,
+      "statement": "ABORT"
     },
     {
       "id": "turnの終わりの書き戻し-1",
@@ -644,12 +681,34 @@
     {
       "from": "作業中のまま-2",
       "to": "作業中のまま-3",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い"
+    },
+    {
+      "from": "作業中のまま-2",
+      "to": "切り上げを終えた-1",
+      "kind": "false",
+      "condition": "NOT この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い"
     },
     {
       "from": "作業中のまま-3",
+      "to": "作業中のまま-4",
+      "kind": "seq"
+    },
+    {
+      "from": "作業中のまま-4",
       "to": "BASIC FLOW-1",
       "kind": "resume"
+    },
+    {
+      "from": "切り上げを終えた-1",
+      "to": "切り上げを終えた-2",
+      "kind": "seq"
+    },
+    {
+      "from": "切り上げを終えた-2",
+      "to": "切り上げを終えた-3",
+      "kind": "seq"
     },
     {
       "from": "turnの終わりの書き戻し-1",
@@ -939,7 +998,7 @@
       "id": "P005",
       "terminal": "cycle",
       "terminal_flow": "作業中のまま",
-      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。",
+      "postcondition": "issue の Status は active_states の選択肢のままである。エージェントは継続の指示を受けている。継続の指示は、使える値でマージンを切った期間が在り Claude Code が動けるなら、続けてくださいの代わりに切り上げの文面である。herdr の pane は閉じていない。印は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -949,6 +1008,7 @@
         "作業中のまま-1",
         "作業中のまま-2",
         "作業中のまま-3",
+        "作業中のまま-4",
         "BASIC FLOW-1"
       ],
       "steps": [
@@ -959,6 +1019,7 @@
         "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
         "CONDITION: NOT 取り直した Status が active_states に入っていない",
         "システムは run が外から動かされた記録を消す。",
+        "システムは VALIDATES THAT この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
         "システムはエージェントに継続の指示を送る。",
         "RESUME STEP 1",
         "INCLUDE USE CASE 表明を読んでStatusを動かす"
@@ -966,6 +1027,38 @@
     },
     {
       "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "切り上げを終えた",
+      "postcondition": "エージェントは継続の指示を受けていない。行き先は issueを1件処理する の切り上げのturnの終わりのとおりで、issue の Status は failure_state の選択肢か、running_state の選択肢のまま run に行き先を待つ印が立っているかである。issue の担当者は自分のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "作業中のまま-1",
+        "作業中のまま-2",
+        "切り上げを終えた-1",
+        "切り上げを終えた-2",
+        "切り上げを終えた-3"
+      ],
+      "steps": [
+        "INCLUDE USE CASE 表明を読んでStatusを動かす",
+        "システムは GitHub Projects v2 に issue の取り直しを要求する。",
+        "システムは VALIDATES THAT GitHub Projects v2 が issue の取り直しに応答する。",
+        "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っていない。",
+        "CONDITION: NOT 取り直した Status が active_states に入っていない",
+        "システムは run が外から動かされた記録を消す。",
+        "システムは VALIDATES THAT この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い。",
+        "CONDITION: NOT この turn が切り上げの指示を送った turn ではないか、使える値で Claude Code が動けないか、使える値でマージンを切った期間がもう無い",
+        "システムは使える値でマージンを切った期間の行き先を決める。",
+        "システムはエージェントに継続の指示を送らない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
       "terminal": "abort",
       "terminal_flow": "完了済みのissue",
       "postcondition": "システムは Status を巻き戻していない。印は外れている。取り直した Status が cleanup.on_states に入っている場合、システムは worktree と branch の片付けを済ませている。",
@@ -990,7 +1083,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P008",
       "terminal": "cycle",
       "terminal_flow": "取り直しの失敗",
       "postcondition": "控えてある issue の写しの Status は active_states の選択肢である。エージェントは継続の指示を受けている。herdr の pane は閉じていない。印は残っている。",
@@ -1017,7 +1110,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P009",
       "terminal": "cycle",
       "terminal_flow": "自動化の書き戻し",
       "postcondition": "herdr の pane は閉じていない。印は残っている。worktree は残っている。Status を戻す先の選択肢へ書き換えた場合、issue に Status を動かした記録のコメントが1件ある。",
@@ -1042,7 +1135,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "cycle",
       "terminal_flow": "自動化の書き戻し",
       "postcondition": "herdr の pane は閉じていない。印は残っている。worktree は残っている。Status を戻す先の選択肢へ書き換えた場合、issue に Status を動かした記録のコメントが1件ある。",
@@ -1068,7 +1161,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "知らないStatus",
       "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。システムは worktree を片付けていない。システムは成果の報告を確かめていない。",
@@ -1095,7 +1188,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "cycle",
       "terminal_flow": "知らないStatus",
       "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。システムは worktree を片付けていない。システムは成果の報告を確かめていない。",
@@ -1121,7 +1214,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "巡回が先に見つけた引き渡し",
       "postcondition": "issue の Status は引き渡しの選択肢のままである。herdr の pane は閉じている。印は外れている。worktree は残っている。システムは成果の報告を確かめていない。システムはバックグラウンド処理の申告を待っていない。",
@@ -1145,9 +1238,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 53,
-    "nodes_covered": 53,
-    "edges_total": 58,
-    "edges_covered": 58
+    "nodes_total": 57,
+    "nodes_covered": 57,
+    "edges_total": 62,
+    "edges_covered": 62
   }
 }

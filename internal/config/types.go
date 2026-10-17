@@ -156,15 +156,19 @@ type TrackerProviderHandoffConfig struct {
 	// **担当が自分でなくなっていたら、その turn の終わりで止める。push しない**（設計 3-77c）。
 	// **0 以下なら確かめ直さない。**
 	RecheckIntervalMs int `yaml:"recheck_interval_ms"`
-	// FiveHourMarginPercent は5時間の枠のうち continuo のために残しておきたい割合（%）である。
+	// FiveHourMarginPercent は5時間の枠のうち、人間が自分で使うぶんとして残しておく割合（%）である
+	// （continuo は使わない）。
 	//
 	//	5時間余裕値 = 100 − 5時間の使用率 − FiveHourMarginPercent
 	//
 	// **余裕値が 0 以下になったら入札しない**（処理する余裕が無いという意味である）。
+	// **1以上なら、走っている run も切り上げさせて `failure_state` へ戻し、担当が自分の issue にも着手しない**
+	// （issue #262。設計 3-27a）。**0 の期間では切り上げない**（使用率100%まで使う）。
 	// **0 も含めるのは人間の決定である**（2026-09-06。issue #173）。マージンをちょうど食い潰した
 	// 状態から着手すると、人間のための取り置きへ食い込む。
 	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
-	// WeeklyMarginPercent は1週間の枠のうち continuo のために残しておきたい割合（%）である。
+	// WeeklyMarginPercent は1週間の枠のうち、人間が自分で使うぶんとして残しておく割合（%）である
+	// （continuo は使わない。扱いは FiveHourMarginPercent と同じ。issue #262）。
 	//
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//
@@ -665,7 +669,7 @@ type RateLimitConfig struct {
 	// **`PauseAbovePercent` は消えた**（人間の決定。2026-09-06。issue #173）。
 	//
 	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
-	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**
+	// **既定（マージン10）では、担当者のいない issue には余裕値が先に効くので、95%のこちらが効いていたのは、担当が自分の issue の着手だけだった（96%以上で、その巡回の着手を全部やめていた）。キーを消したので、96%以上でも担当が自分の issue は着手する。**（その後 issue #262 で、担当が自分の issue も、着手の前にレートリミットのマージンを見るようになった。設計 3-27a）
 	// **仕事を取るかどうかを決めるのは `tracker.provider.handoff` の2つのマージンだけである**
 	// （`internal/handoff/handoff.go` の `Evaluate`）。
 	// **statusline取得を開くかの判定も同じ線を使う**（`statuslineFetchPointless`）。
@@ -716,7 +720,8 @@ type RateLimitConfig struct {
 	// （**「使い切っている」ではない。**線は「余裕値が0以下」である。設計 3-27）
 	// （2026-08-26 の人間の決定「5時間枠 → 待つ。担当は変えない」）。
 	//
-	// **0 なら上限を設けない**（負の値は起動時の検査が弾く）。`claude.turn_timeout_ms` と
+	// **0 なら上限を設けない**（負の値は起動時の検査が弾く）。**マージンを切って切り上げた run は、
+	// 担当を手放さずに `failure_state` へ戻す**（issue #262。設計 3-27a）。`claude.turn_timeout_ms` と
 	// `tracker.provider.handoff.recheck_interval_ms` と同じ向きである
 	// （`idle_timeout_ms` の「0 なら既定へ倒す」とは逆なので、雛形のコメントで断っている）。
 	//

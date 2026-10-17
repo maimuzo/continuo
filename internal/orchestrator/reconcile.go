@@ -518,7 +518,9 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // releaseQuotaWaitExceeded は、1週間の枠を待つ上限を超えた run を手放す
 // （設計 3-27。issue #197）。
 //
-// **手放しの入口はここ1本だけである**（人間の決定。2026-09-06）。
+// **走っている run の手放しの入口はここ1本だけである**（人間の決定。2026-09-06）。
+// **着手の前（run が無い）にだけ、もう1つ入口がある**（`ownIssueMarginGate`。issue #262）。
+// Claude Code が動いていないので、下の「判断に要る材料」が要らない。
 // turn 側の待ちループからは手放さない。**判断に要る材料を読むのが、この経路しかないためである。**
 //
 // **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
@@ -670,6 +672,35 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if snap.SendFirstPrompt {
 			continue
 		}
+		// **「行き先を待つ」run は、下の3つの待ちを飛ばす**（issue #262。設計 3-27a の巡回の側の段3〜4）。
+		//
+		// **その run は、Claude Code が切り上げて turn を終えた合図（Stop）を受けたあとである。**
+		// 下の3つの待ち（hook の届いた時刻・`runIdleForTurnTimeout`・打ち切りを無効にしている機械の
+		// 待つ上限）は「指示を送った直後の run を手放さない」ためのもので、この run には当たらない。
+		// **pane が止まっているかの確かめ（`paneStopped`）はそのまま通す**（1回目は必ず「まだ」と答えるので、
+		// 担当が外れるのは早くて印を立ててから2回目の巡回）。
+		//
+		// **`paneStopped` は1回の巡回で1つの run に1回だけ呼ぶ。**前の呼び出しと比べて止まっているかを
+		// 判定するので、2回呼ぶと2回目が「止まっている」と読む。その答えを、担当を外すかと、
+		// 打ち切りから外すかの両方に使う。
+		//
+		// **Claude Code の状態を読めて止まっている限り、手放しの判定が偽でも打ち切りから外す**
+		// （`handling` に入れる）。リセットの時刻を読めず、経過が待つ上限に届かないあいだに60分で打ち切ると、
+		// やり直しの新しい試行が経過の起点（`WeeklyShortSince`）を消し、担当を外せないまま「固まった」で終わる。
+		// **外しても失うものは無い。**その機械は1週間の期間のマージンを切っていて、新しい着手も止めている。
+		// **読めない run と、動き出した run は、今どおり打ち切りに任せる**（`mine` が偽）。
+		if snap.AwaitDestination {
+			exceeded := o.weeklyWaitExceededWith(quotaSnap, rs)
+			stopped, mine := o.paneStopped(ctx, rs, exceeded)
+			if !mine {
+				continue
+			}
+			handling[rs] = true
+			if exceeded && stopped {
+				o.releaseBecauseQuotaWaitAsync(ctx, rs, shortKinds)
+			}
+			continue
+		}
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
 		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
 		// **印を門にすると、100%でしか手放せなくなり、
@@ -764,7 +795,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 				continue
 			}
 		}
-		stopped, mine := o.paneStopped(ctx, rs)
+		stopped, mine := o.paneStopped(ctx, rs, true)
 		if !mine {
 			// **この経路では二度と進まない run である**（`agent.get` を読めない、
 			// または `working` / `blocked` / `unknown`）。**打ち切りに任せる。**
@@ -837,6 +868,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
+// exceeded: この run が1週間の枠を待つ上限を超えているか。**偽で呼ぶのは「行き先を待つ」run だけである**
+// （issue #262）。読めなかったときのログの文面が変わる（下の本体）。
 // 戻り値: 完全に止まっていれば true。
 // 戻り値の2つ目は「手放しの判定が面倒を見ている run か」である（issue #173）。
 //
@@ -848,8 +881,17 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 //
 // **真になるのは `idle` か `done` を読めたときだけである。**
 // **守りたいのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけであり、それで足りる。**
-func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, bool) {
+func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState, exceeded bool) (bool, bool) {
 	agent, err := o.agentInfo(ctx, rs)
+	if err != nil && !exceeded {
+		// **上限を超えていない「行き先を待つ」run である**（issue #262）。
+		// **「上限を超えていても手放しません」と書いてはならない。**超えていない。
+		// **1回だけ出す印も使わない。**本当に超えたときに、そちらの1行が出なくなる。
+		// 巡回のたびに出るので Debug にする。
+		o.logger.Debug("画面の状態を読めないので、打ち切りの判定へ回します（行き先を待っている run）",
+			"identifier", rs.issue().Identifier, "error", err)
+		return false, false
+	}
 	if err != nil {
 		// **run ごとに1回だけ出す**（issue #173。見送りの `Warn` と同じ理由）。
 		// **人間が pane を閉じた run は、ここで永久に読めない。**
@@ -1127,7 +1169,19 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **`quotaSnapshot` と `quotaForBid` を続けて呼ぶ形へ戻してはならない。**
 	// **あれは別々にロックを取るので、この不変条件を破る。**
 	now := o.now()
-	quotaSnap, quotaFresh := o.quotaForPoll()
+	// **3つの写しを1回の錠で取る**（issue #262）。`stale` と `fresh` は、今の `quotaForPoll` の
+	// 2つと同じものである。`usable` は、マージンを切ったかの判定（`margin-status` と
+	// 「行き先を待つ」run）が使う（設計 3-27a）。
+	reads := o.readQuota()
+	quotaSnap, quotaFresh := reads.stale, reads.fresh
+	// **`margin-status` を巡回のたびに書き直す**（issue #262）。Claude Code は作業の区切りでこれを読み、
+	// マージンを切っていれば自分で切り上げる。**下の `silence <= 0` より前に置く。**
+	// 打ち切りを無効にしている機械でも、書き直さないと `expires_at` が過ぎて Claude Code が信じなくなる。
+	o.writeMarginStatus(reads.usable)
+	// **「行き先を待つ」run の行き先を決め直す**（issue #262。設計 3-27a の巡回の側の段1〜2）。
+	// **手放し（`releaseQuotaWaitExceeded`）より前に置く。**リセットされた run や `Blocked` に当たる run を、
+	// 手放しの判定より先に外すためである。**`silence <= 0` より前に置く**（打ち切りを無効にしている機械でも動かす）。
+	o.reconcileAwaitDestination(ctx, reads.usable, now)
 	// **手放しと、その起点の記録にだけは、新しさを問う写しを渡す**（設計 3-27。実装レビュー3周目の HIGH）。
 	//
 	// **設計 3-27 が「判定に使う枠の写しは、直前の読み取りに成功しているものだけである。
@@ -1309,7 +1363,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// **古い写しでも立てる**（issue #173。上の `clearQuotaWaitWhenBack` と同じ理由）。
 		if o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
-			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
+			// **走っている run の手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
 			// **ここで何もしなくても、次の巡回でそちらが拾う**（そちらは枠待ちの印を見ない）。
 			// **遅れるのは巡回1回ぶん（既定30秒）である。**
 			//
@@ -1326,7 +1380,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// **「版が止まったまま」ではない**（issue #173）。**画面の版を見る形は消した。**
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
-		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, err, now))
+		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, err, now, reads))
 	}
 }
 
@@ -1342,8 +1396,9 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 // （`agentInfo` が誤りのときにそう埋めて返す）。読めたかどうかは getErr で見分ける。
 // getErr: agent.get の誤り。読めたときは nil。
 // now: いまの時刻。
+// reads: この巡回で1回だけ読んだ写し（1行目の末尾に足す使用率の1文に使う。issue #273）。
 // 戻り値: issue のコメントとログに載せる理由の文字列。
-func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, getErr error, now time.Time) string {
+func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, getErr error, now time.Time, reads quotaReads) string {
 	// **`agent.get` が誤りを返したときは、状態を1つも読めていない。**
 	// **「`working` ではありませんでした」とも「`unknown` でした」とも書かない**
 	// （実装レビュー2周目と3周目の LOW）。読めていない観測を言い切ることになる。
@@ -1387,6 +1442,14 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, getErr
 		check = "この run は worktree も会話の記録もまだ持っていません。" +
 			"continuo は pane を閉じ、リトライの回数が残っていれば着手からやり直します。"
 	}
+	// **そのとき continuo が持っていた使用率を、1行目の末尾に載せる**（issue #273）。
+	// 打ち切られた issue を開いた人が、レートリミットが関係していたのかを判断できるようにする。
+	// **値は、この巡回で1回だけ読んだ使える値である。**中で読み直さない。
+	quotaSentence, quotaUnread := o.quotaSentenceForStall(reads, now)
+	quotaCause := ""
+	if quotaUnread {
+		quotaCause = " / レートリミットに達していたが、continuo が使用率を読めていなかった"
+	}
 	return fmt.Sprintf(
 		"continuo は herdr へ `agent.get` を投げて Claude Code の状態（`agent_status`）を見ています。"+
 			// **「hook が1件も届かなかった」と書いてはならない**（issue #173）。
@@ -1396,16 +1459,16 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, getErr
 			// 名乗るが、明ける直前までは届いていたかもしれない。**
 			// **読んだ人を hook の socket の調査へ走らせることになる。**
 			"%s のあいだ、この run が進んだ形跡がありませんでした。%s"+
-			"**止まったものと判断して打ち切りました。**"+
+			"**止まったものと判断して打ち切りました。**%s"+
 			"\n【確かめ方】%s"+
 			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / "+
-			"応答の来ない相手を待ち続けていた / エージェントが応答を返し終えたまま次の指示を待っていた。"+
+			"応答の来ない相手を待ち続けていた / エージェントが応答を返し終えたまま次の指示を待っていた%s。"+
 			"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
 			"何も動かないまま待つ時間は WORKFLOW.md の `claude.turn_timeout_ms` で変えられます"+
 			"（いまは %d ミリ秒）。**この値は turn の総実行時間の上限ではありません。**"+
 			"`agent_status` が `working` である限り、1つの指示に何時間かかっても打ち切りません。",
-		formatDuration(now.Sub(snap.LastSeenAt)), observed,
-		check, o.cfg.Claude.TurnTimeoutMs)
+		formatDuration(now.Sub(snap.LastSeenAt)), observed, quotaSentence,
+		check, quotaCause, o.cfg.Claude.TurnTimeoutMs)
 }
 
 // formatDuration は経過時間を人間が読める日本語にする（`1時間3分` の形）。
@@ -1429,4 +1492,83 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d時間", total/60)
 	}
 	return fmt.Sprintf("%d時間%d分", total/60, total%60)
+}
+
+// reconcileAwaitDestination は、「行き先を待つ」印の立った run の行き先を決め直す
+// （issue #262。設計 3-27a の巡回の側の段1〜2）。
+//
+// **巡回のたびに、`checkStalls` の頭（`silence <= 0` の早い戻りより前）で呼ぶ。**
+// 打ち切りを無効にしている機械でも、印を下ろしたり `Blocked` へ戻したりできるようにするためである。
+//
+//	direct chat のあいだ                     … 何もしない（入れたときに印は下りている）
+//	この run を終わらせる処理が走っている     … 何もしない（巡回の手放しが担当を外そうとしているなど）
+//	使用率を読めていない（使える値が無い）     … 印を下ろし、作業へ戻す（設計 3-77i）
+//	Claude Code が動けない（使用率100%）      … 何もしない（リセットを待つ。担当を外すかは巡回の手放しが見る）
+//	マージンを切った期間がもう無い             … 印を下ろし、作業へ戻す
+//	行き先が Blocked                          … 印を下ろし、Status を Blocked へ動かす
+//	行き先が「行き先を待つ」のまま             … 何もしない（担当を外すのは巡回の手放し）
+//
+// **作業へ戻すときは、60分の打ち切りの時計を今に引き直してから `NeedsPrompt` を立てる。**
+// 引き直さないと、同じ巡回の後ろの打ち切りが、turn ループを起こし直す前に「固まった」として打ち切る。
+// 同じ巡回の後ろの `wakeRuns` が turn ループを起こし、そのときの `buildTurnText` が指示を決める。
+//
+// **使える値は、リセットの時刻を過ぎた期間を含まず、最後に読めてから30分は残る。**
+// だからリセットの直後の数分（新しい値が無い）にも、印は下りない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// usable: この巡回で1回だけ読んだ使える値。
+// now: いまの時刻。
+func (o *Orchestrator) reconcileAwaitDestination(ctx context.Context, usable *ratelimit.Snapshot, now time.Time) {
+	for _, rs := range o.snapshotRuns() {
+		snap := rs.snapshot()
+		if !snap.AwaitDestination || snap.DirectChatMode {
+			continue
+		}
+		if rs.terminalBusy() {
+			continue
+		}
+		if usable == nil {
+			o.returnFromAwaitDestination(rs, now, "使用率を読めていない（最後に読めてから30分を過ぎた）ので、止めずに作業へ戻します")
+			continue
+		}
+		if usable.AnySelected(handoff.CannotWork()) {
+			continue
+		}
+		switch handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseRunning) {
+		case handoff.DestNone:
+			o.returnFromAwaitDestination(rs, now, "マージンを切った期間がもう無いので、作業へ戻します")
+		case handoff.DestBlocked:
+			// **今の `finishRunAsync` と同じ組み立てで終わらせる。**`finishRun` を呼ばないのは、
+			// 中の `claimTerminal` が、先に取った権利を「ほかが取っている」と読んで何もせずに戻るためである。
+			// **権利を取れたときだけ印を下ろす。**取れなければ、印を立てたまま次の巡回で引き直す。
+			if rs.beginTerminal() != terminalClaimed {
+				continue
+			}
+			rs.clearAwaitDestination()
+			rs.takeNeedsPrompt()
+			reason := o.marginCutBlockedReason(usable)
+			o.logger.Info("行き先を待っていた run の行き先が Blocked に変わったので、Status を戻します",
+				"identifier", snap.Identifier, "マージンを切った期間", o.marginCutKinds(usable))
+			o.wg.Add(1)
+			go func() {
+				defer o.wg.Done()
+				o.finishRunClaimed(ctx, rs, o.cfg.Tracker.FailureState, reason)
+			}()
+		}
+	}
+}
+
+// returnFromAwaitDestination は、「行き先を待つ」印を下ろして作業へ戻す（issue #262）。
+//
+// rs: 対象の run。
+// now: いまの時刻（60分の打ち切りの時計を引き直す）。
+// why: ログに出す理由。
+func (o *Orchestrator) returnFromAwaitDestination(rs *runState, now time.Time, why string) {
+	if !rs.clearAwaitDestination() {
+		return
+	}
+	rs.resetStallClock(now)
+	rs.setNeedsPrompt()
+	o.logger.Info("行き先を待っていた run の印を下ろしました。"+why,
+		"identifier", rs.issue().Identifier)
 }

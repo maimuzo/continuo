@@ -36,6 +36,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/statuslineclient"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
@@ -558,7 +559,7 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		n := *attemptFlag
 		attempt = &n
 	}
-	return runPromptExpanded(d, identifier, attempt, loaded.Config.Tracker, frag, stdout, stderr)
+	return runPromptExpanded(d, identifier, attempt, loaded.Config, frag, stdout, stderr)
 }
 
 // runPromptExpanded は `continuo prompt --show --url` の後半である（設計 5-3f。issue #183）。
@@ -570,7 +571,8 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 // d: 外部へ繋ぐ処理。
 // identifier: `--url` から作った `<owner>/<repo>#<番号>`。**形の検査は呼び出し側で済んでいる。**
 // attempt: 何回目として展開するか。**nil なら1回目。**
-// trackerCfg: front matter の tracker セクション。
+// cfg: front matter の設定の全体（tracker セクションと、`margin_status_path` を決める `rate_limit` と
+// `claude.hook_bridge.listen` を読む。issue #262）。
 // frag: 組み立てた断片。
 // stdout / stderr: 出力先。
 // 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった。**2 は返さない。**
@@ -580,7 +582,7 @@ func runPromptExpanded(
 	d Deps,
 	identifier string,
 	attempt *int,
-	trackerCfg config.TrackerConfig,
+	cfg config.Config,
 	frag prompt.Fragments,
 	stdout, stderr io.Writer,
 ) int {
@@ -596,7 +598,7 @@ func runPromptExpanded(
 	ctx, cancel := context.WithTimeout(context.Background(), promptFetchTimeout)
 	defer cancel()
 
-	issue, ok, err := d.PromptFetchIssue(ctx, trackerCfg, endpoint, identifier)
+	issue, ok, err := d.PromptFetchIssue(ctx, cfg.Tracker, endpoint, identifier)
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrFetchFailed, err))
 		return 1
@@ -610,7 +612,17 @@ func runPromptExpanded(
 		return 1
 	}
 
-	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
+	// **hook を受ける socket のパスを、常駐と同じ規則で求める**（issue #262）。組み込みの指示書の 5-8 が
+	// 使う `margin_status_path` を、常駐が書く `margin-status` と同じパスにするためである。
+	// **`socketpath.ResolveHookSocketPath` はディレクトリを作らない**（常駐の側も `Prepare` の中で同じ関数を呼ぶ）。
+	// **求められなかったときは空を渡す。**5-8 は出ないので、そのことを標準エラーに1行出す。
+	hookSocketPath, sockErr := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(daemon.EnvRuntimeDir))
+	if sockErr != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptWarnNoMarginStatusPath, sockErr))
+		hookSocketPath = ""
+	}
+	data := prompt.RenderData(issue, attempt, cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
+		cfg.RateLimit, hookSocketPath)
 	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
 	// 同じ解釈と実行を2回することになる。
 	text, rendered, err := frag.RenderAll(data)
