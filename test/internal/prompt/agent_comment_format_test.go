@@ -185,7 +185,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **途中経過の報告（5-3）と、まとめて直したときの報告（7-2）は当たらない。**
 	// 5-3 が書かせるのは `- <日時> いま <何をしているか>` の1行だけで、7つを置く場所が無い。
 	// 7-2 も先頭の1文と足す行の形が決まっており、7つを入れると積み上げ式のコメントが読めなくなる。
-	target, exempt := splitAtNextLine(t, section, "**次の2つは当たりません。**")
+	target, exempt := splitAtNextLine(t, section, "次の2つは当たりません。")
 
 	for _, want := range []struct {
 		where  string

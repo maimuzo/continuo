@@ -31,7 +31,7 @@ import (
 func TestTemplate_成果がworktreeの外にあるときは4_4へ譲る(t *testing.T) {
 	body := prompt.Builtin()
 
-	const escape = "**成果がこの worktree の外にあるとき**は、この段の代わりに 4-4 の指示に従います。"
+	const escape = "成果がこの worktree の外にあるときは、この段の代わりに 4-4 の指示に従います。"
 	at := strings.Index(body, escape)
 	if at < 0 {
 		t.Fatalf("組み込みのプロンプトに逃げ道がありません（%q）。"+
