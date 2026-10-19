@@ -7,7 +7,7 @@ import (
 	"github.com/maimuzo/continuo/internal/prompt"
 )
 
-// 節の見出し。**文面を直すときは、設計 5-3 の写しも同時に直すこと。**
+// 節の見出し。
 const (
 	commitPushHeading   = "## 3-4. commit して push する"
 	reviewLoopHeading   = "## 5-6. レビューの回し方"

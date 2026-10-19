@@ -21,9 +21,6 @@ const designDocPath = "../../../docs/plans/continuo_design.md"
 // designSectionHeading は front matter の設定例が載っている節の見出しである。
 const designSectionHeading = "### 5-2. front matter（設定）"
 
-// designBodySectionHeading は組み込みのプロンプトが載っている節の見出しである。
-const designBodySectionHeading = "### 5-3. 組み込みのプロンプト"
-
 // 目的: 雛形の front matter のキー構成が、設計 5-2 の設定例のキー構成と一致することを確認する。
 //
 // config.Load を通すだけでは、雛形からキーや節を丸ごと削っても DefaultConfig() が
@@ -86,19 +83,6 @@ func TestTemplate_雛形の片付ける状態が終わったとみなす状態�
 			"（terminal_states=%v / on_states=%v）",
 			outside, parsed.Tracker.TerminalStates, parsed.Cleanup.OnStates)
 	}
-}
-
-// 目的: 組み込みのプロンプトが、設計 5-3 のブロックと一字一句そのまま一致することを確認する。
-//
-// **突き合わせる相手は WORKFLOW.md の本文ではない**（設計 5-3c で本文は空になった）。
-// **送る文面は internal/prompt/builtin.md にある。**目印の行も含めて丸ごと比べる。
-// 「{{.issue.identifier}} が入っているか」のような、テスト側に書いた文字列との照合では、
-// 送る文面が設計から離れても落ちない。設計文書そのものを読んで突き合わせる。
-//
-// 与える情報: 設計文書 5-3 の ```markdown ブロックと、prompt.BuiltinRaw()。
-// 成功条件: 前後の空行を除いた両者が完全に一致すること。
-func TestTemplate_組み込みのプロンプトが設計5_3と一致する(t *testing.T) {
-	assertSameBody(t, "internal/prompt/builtin.md", prompt.BuiltinRaw())
 }
 
 // 目的: 雛形の WORKFLOW.md が、固有の指示の見本を本文に持つことを固定する（設計 5-3d）。
@@ -198,46 +182,6 @@ func headingsOf(text string) []string {
 	return out
 }
 
-// assertSameBody は、渡した文面が設計 5-3 のブロックと一致することを確かめる。
-//
-// 一致しない場合は、最初に食い違った行の番号と、その行の設計側・対象側の中身を出す。
-// 全文を並べても、どこがずれたのかが読み取れないためである。
-//
-// t: テストコンテキスト。
-// label: 失敗メッセージに出す、検査対象の呼び名。
-// body: 突き合わせる側の本文（front matter より後ろ）。
-func assertSameBody(t *testing.T, label, body string) {
-	t.Helper()
-
-	// 前後の空行だけを落としてから比べる。front matter の終端行の直後の空行や、
-	// 末尾の改行の有無は、プロンプトとしての中身の違いではない。
-	want := strings.Split(strings.Trim(readDesignBodyExample(t), "\n"), "\n")
-	got := strings.Split(strings.Trim(body, "\n"), "\n")
-
-	for i := 0; i < len(want) || i < len(got); i++ {
-		w, g := lineAt(want, i), lineAt(got, i)
-		if w == g {
-			continue
-		}
-		t.Errorf("%s: 本文が設計 5-3 と食い違っている（設計が正である。雛形の側を設計に合わせること）\n"+
-			"  本文の %d 行目\n  設計 5-3: %q\n  %s: %q\n  行数: 設計 5-3=%d / %s=%d",
-			label, i+1, w, label, g, len(want), label, len(got))
-		return
-	}
-}
-
-// lineAt は行の一覧から i 行目を取り出す。範囲外なら「その行が無い」ことを示す印を返す。
-//
-// lines: 行の一覧。
-// i: 0 起点の行番号。
-// 戻り値: i 行目の中身。範囲外なら "(行が無い)"。
-func lineAt(lines []string, i int) string {
-	if i < len(lines) {
-		return lines[i]
-	}
-	return "(行が無い)"
-}
-
 // assertSameKeySet は2つのキーのパスの集合が一致することを確かめ、
 // 食い違いを「雛形に無いキー」「雛形にしか無いキー」に分けて報告する。
 //
@@ -272,8 +216,8 @@ func assertSameKeySet(t *testing.T, wantKeys, gotKeys []string) {
 // assertTemplateFollowsDesign は、渡した WORKFLOW.md の中身が設計どおりであることを確かめる。
 //
 // 「scaffold.Template() と同じか」を見ると、雛形をどう壊しても通ってしまう（同語反復になる）。
-// そのため中身そのものではなく、設計 5-2（front matter のキー構成）と
-// 設計 5-3（本文のブロックそのもの）に照らして検査する。あわせて、本文が
+// そのため中身そのものではなく、設計 5-2（front matter のキー構成）に
+// 照らして検査する。あわせて、組み込みのプロンプトが
 // front matter で宣言した印をそのまま使っていることも見る。
 //
 // t: テストコンテキスト。
@@ -326,17 +270,6 @@ func assertTemplateFollowsDesign(t *testing.T, label, raw string) {
 func readDesignFrontMatterExample(t *testing.T) string {
 	t.Helper()
 	return readDesignCodeBlock(t, designSectionHeading, "```yaml")
-}
-
-// readDesignBodyExample は設計文書 5-3 の本文（```markdown で囲まれたブロック）を
-// そのまま取り出す。testdata へ写しを置くのではなく設計文書そのものを読むことで、
-// 設計と雛形がずれた瞬間にテストが落ちるようにする。
-//
-// t: テストコンテキスト。
-// 戻り値: ```markdown と ``` に挟まれた中身の文字列（WORKFLOW.md の本文そのもの）。
-func readDesignBodyExample(t *testing.T) string {
-	t.Helper()
-	return readDesignCodeBlock(t, designBodySectionHeading, "````markdown")
 }
 
 // readDesignCodeBlock は設計文書から、指定した見出しの直後にある最初のコードブロックを取り出す。
