@@ -8,7 +8,7 @@ import (
 )
 
 // worktreeCleanupHeading は、自分で作った worktree の片付けを教える節の見出しである。
-const worktreeCleanupHeading = "## 7-1. worktree と branch は切り替えない"
+const worktreeCleanupHeading = "## worktree と branch は切り替えない"
 
 // 目的: continuo が送る組み込みのプロンプト が、エージェントに worktree の片付けを教えることを固定する
 // （#147（continuo が起動するエージェントに、worktree の片付けを教える）。設計 5-3）。
@@ -44,7 +44,7 @@ func TestTemplate_組み込みのプロンプトは自分で作ったworktreeを
 		{"status --short", "commit していない変更を確かめさせないと、消したあとに取り戻せません"},
 		{"log --oneline HEAD --not --remotes", "push していない commit を、その worktree の HEAD だけで確かめさせないと、" +
 			"関係の無い branch に引っかかって消せなくなります"},
-		{"`--force` は付けないでください", "`--force` は commit していない変更を確認なしに消します"},
+		{"`--force` は付けません", "`--force` は commit していない変更を確認なしに消します"},
 		{"`git worktree prune` は片付けの手段ではありません", "`prune` を片付けだと思うと、実体が残ったまま終わります"},
 		// 消してよい範囲を書かないと、continuo が別の issue のために用意した worktree も候補になる。
 		// commit していない変更が無ければ `--force` 無しでも消えるので、確認も警告も出ない。

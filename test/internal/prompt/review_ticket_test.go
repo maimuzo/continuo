@@ -20,7 +20,7 @@ import (
 )
 
 // changeReviewHeading は、実装レビューと draft の外し方を書かせる節の見出しである。
-const changeReviewHeading = "## 3-6. pull request のレビューを受ける"
+const changeReviewHeading = "## pull request のレビューを受ける"
 
 // transitionHeader は、判断票の先頭に置かせる件数の遷移表の見出しの行である。
 const transitionHeader = "| 周 | CRITICAL | HIGH | MEDIUM | LOW |"
@@ -34,19 +34,19 @@ const transitionHeader = "| 周 | CRITICAL | HIGH | MEDIUM | LOW |"
 // 先に `isDraft` を確かめさせる。
 //
 // 与える情報: prompt.Builtin() の全文。
-// 成功条件: 3-6 の節が「必ず外して」と言い、`isDraft` の確かめと `gh pr ready` を持ち、
+// 成功条件: 「pull request のレビューを受ける」の節が「必ず外す」と言い、`isDraft` の確かめと `gh pr ready` を持ち、
 // 作った人を問わないと書いている。流れ図の段も「必ず外す」で、旧い限定の文がどこにも無い。
 func TestTemplate_実装レビューが収まったらdraftを必ず外させる(t *testing.T) {
 	body := prompt.Builtin()
 	section := sectionOf(t, body, changeReviewHeading)
 
 	for _, want := range []struct{ needle, why string }{
-		{"draft を、必ず外してから次へ進んでください", "人間は「必ず外せ」と指示しています"},
+		{"draft を、次へ進む前に必ず外します", "人間は「必ず外せ」と指示しています"},
 		{"誰が draft で作ったかは問いません", "作った人で限ると、人間や前の試行が作った draft が残ります"},
 		{"--json isDraft --jq .isDraft", "draft でない pull request に gh pr ready を打つと検査が回り直りません"},
 		{"gh pr ready <PR番号> --repo {{.issue.owner}}/{{.issue.repo}}", "外すコマンドが無いと、外し方が分かりません"},
-		{"「draft のまま人間へ渡す」とはっきり書いてあるとき", "外さない場合を限らないと、4-4 の「draft で作る」で外さなくなります"},
-		{"3-7 の報告の `### 詳細` に書いてください", "外せなかったことが人間に届きません"},
+		{"「draft のまま人間へ渡す」とはっきり書いてあるとき", "外さない場合を限らないと、「このプロジェクトの決まり」の「draft で作る」で外さなくなります"},
+		{"そのことを「runの終了を宣言する」の報告の `### 詳細` に書きます", "外せなかったことが人間に届きません"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", changeReviewHeading, want.needle, want.why)
@@ -76,7 +76,7 @@ func TestTemplate_実装レビューが収まったらdraftを必ず外させる
 // 人間が判断票で見るのは、貼ってあるかどうかと件数の移り変わりで、中身はほとんど読まない。
 // **見本から遷移表が落ちると、エージェントは周ごとの中身だけを貼り、スクロールが減らない。**
 //
-// 与える情報: prompt.Builtin() の 3-2 と 3-6 の節。
+// 与える情報: prompt.Builtin() の「計画を書き、レビューを受ける」と「pull request のレビューを受ける」の節。
 // 成功条件: どちらの節の判断票の見本も、題名 → 遷移表の見出し → `<details>` → `<summary>1周目</summary>`
 // の順に並ぶ。「<何周目か>周目」を書かせる旧い行がどこにも無い。
 func TestTemplate_判断票の見本は遷移表を先頭に置き中身を畳む(t *testing.T) {
@@ -107,15 +107,22 @@ func TestTemplate_判断票の見本は遷移表を先頭に置き中身を畳�
 // 目的: 1つの run で書くコメントを、特に理由のない限り1件にさせることを固定する（設計 5-3u）。
 //
 // **なぜ要るか。**人間は「特に理由のない限り1つのrunでは1つのコメントだけを書いて」と指示した。
-// 例外は、理由とともに 5-5 の表に置く。**「対応しない」と決めた理由と削除の記録は、別のコメントにさせない。**
+// 例外は、理由とともに「人間へ質問・報告するコメントの書き方」の表に置く。
+// **「対応しない」と決めた理由と削除の記録は、別のコメントにさせない。**
 //
 // 与える情報: prompt.Builtin() の全文。
-// 成功条件: 5-5 に1件の決まりがあり、3-2 と 5-6 が別のコメントへ書かせていない。
+// 成功条件: 「人間へ質問・報告するコメントの書き方」に1件の決まり（見出しと、例外を表の行だけに限る文）があり、
+// 「計画を書き、レビューを受ける」と「レビューの回し方」が別のコメントへ書かせていない。
 func TestTemplate_1つのrunでは1つのコメントだけを書かせる(t *testing.T) {
 	body := prompt.Builtin()
 	format := sectionUntilNextChapter(t, body, commentFormatHeading)
-	if !strings.Contains(format, "特に理由のない限り、1つの run では1つのコメントだけを書いてください") {
-		t.Errorf("%q に、1つの run では1つのコメントだけ、の決まりがありません", commentFormatHeading)
+	for _, want := range []string{
+		"### 1つの run で書くコメントは1件",
+		"別のコメントにしてよいのは、次の表のものだけです。",
+	} {
+		if !strings.Contains(format, want) {
+			t.Errorf("%q に、1つの run では1つのコメントだけ、の決まり（%q）がありません", commentFormatHeading, want)
+		}
 	}
 	for _, old := range []string{
 		"その理由を issue のコメントへ書いてから",
@@ -385,7 +392,7 @@ func TestTemplate_前の判断票を探せないときは1周目にしない(t *
 
 // 目的: 実装の判断票を、`PRREPO=` に書いたリポジトリで探し・書き換え・貼ることを固定する（設計 5-3u）。
 //
-// **なぜ要るか。**7-3 で別のリポジトリへ出した pull request でも、issue のリポジトリに固定されていると、
+// **なぜ要るか。**「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出した pull request でも、issue のリポジトリに固定されていると、
 // **同じ番号の無関係な pull request の判断票を探して書き換えうる。**
 // 計画の判断票（issue のコメント）は issue のリポジトリのままである。
 //

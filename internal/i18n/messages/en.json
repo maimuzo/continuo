@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "fe2d141dbad10c35fad595bb1d6b1bf8552ebe8e3ba0d9603a6987e570571809",
+  "_source_sha256": "a9c4761da7c486c2061ed52f3ab68cd5a74227ed1f31b7ecf3289a8a5e369627",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -190,7 +190,7 @@
   "cli.prompt.err_config_load": "Error: cannot read WORKFLOW.md: %v",
   "cli.prompt.err_fetch_failed": "Error: cannot read the kanban board: %v",
   "cli.prompt.err_issue_not_on_board": "Error: could not read %s from the kanban board (it is not on the board, its Status is unset, or it is archived). Run continuo doctor to check the settings and the board",
-  "cli.prompt.warn_no_margin_status_path": "warning: could not resolve the hook socket path, so section 5-8 of the built-in instructions (wrap up when the rate limit margin is cut) is not shown. The daemon still sends it (%v)",
+  "cli.prompt.warn_no_margin_status_path": "warning: could not resolve the hook socket path, so the section of the built-in instructions that wraps up when the rate limit margin is cut (「レートリミットのマージンを切ったら、切り上げる」) is not shown. The daemon still sends it (%v)",
   "cli.prompt.err_render_failed": "Error: cannot expand the variables: %v",
   "cli.prompt.err_show_required": "Error: continuo prompt requires --show (e.g. continuo prompt --show)",
   "cli.prompt.err_too_many_positional": "Error: continuo prompt accepts only one positional argument, the directory containing WORKFLOW.md (%[1]d given: %[2]v)",

@@ -66,9 +66,10 @@ func TestBuild_本文は組み込みの真ん中に挟まる(t *testing.T) {
 	frag := prompt.Build(needle+"\n固有の中身\n", "/tmp/WORKFLOW.md")
 	got := frag.Text()
 
-	head := strings.Index(got, "## 4-3. 関連する記録を読む")
+	// **見出しは行ごと探す。**番号を消したので、地の文の「関連する記録を読む」と見出しを、前後の改行で見分ける。
+	head := strings.Index(got, "\n## 関連する記録を読む\n")
 	mid := strings.Index(got, needle)
-	tail := strings.Index(got, "# 5. 共通ルール")
+	tail := strings.Index(got, "\n# 共通ルール\n")
 
 	if head < 0 || mid < 0 || tail < 0 {
 		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
@@ -204,9 +205,10 @@ func TestValidate_雛形の本文はそのまま送れる(t *testing.T) {
 func TestBuild_雛形の本文は組み込みの真ん中に挟まる(t *testing.T) {
 	got := prompt.Build(templateBody(t), "/tmp/WORKFLOW.md").Text()
 
-	head := strings.Index(got, "## 4-3. 関連する記録を読む")
+	// **見出しは行ごと探す。**番号を消したので、地の文の「関連する記録を読む」と見出しを、前後の改行で見分ける。
+	head := strings.Index(got, "\n## 関連する記録を読む\n")
 	mid := strings.Index(got, "### 始める前に読む文書")
-	tail := strings.Index(got, "# 5. 共通ルール")
+	tail := strings.Index(got, "\n# 共通ルール\n")
 
 	if head < 0 || mid < 0 || tail < 0 {
 		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
@@ -363,7 +365,7 @@ func firstLineOf(t *testing.T, text string) string {
 //
 // **落とさないものが2つある。**コードブロックで囲んだコメントと、
 // **深い見出しを従えている見出し**である。後者を落とすと、
-// `# 5. 共通ルール` のような親の見出しが、子を残したまま消える。
+// `# 共通ルール` のような親の見出しが、子を残したまま消える。
 //
 // 与える情報: 4通りの本文。
 // 成功条件: 空になった見出しだけが落ち、残り3つが残ること。
@@ -413,7 +415,7 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		"push_branch":               true,
 		"attempt":                   true,
 		"progress_interval_minutes": true,
-		// **組み込みの指示書の 5-8 が使う**（issue #262）。
+		// **組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」が使う**（issue #262）。
 		"margin_status_path": true,
 	}
 	got := prompt.SampleData()

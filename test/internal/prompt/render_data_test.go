@@ -121,7 +121,7 @@ func TestRenderData_組み込みの文面を実際に展開できる(t *testing.
 	}{
 		{"1回目", nil, config.RateLimitConfig{}, ""},
 		{"やり直し", func() *int { n := 2; return &n }(), config.RateLimitConfig{}, ""},
-		// **5-8 を出す形も展開できること**（issue #262）。`{{if .margin_status_path}}` の中も検査する。
+		// **「レートリミットのマージンを切ったら、切り上げる」を出す形も展開できること**（issue #262）。`{{if .margin_status_path}}` の中も検査する。
 		{"margin-status を書く機械", nil, config.RateLimitConfig{Source: "oauth_usage_api"}, "/tmp/continuo/hooks.sock"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -211,11 +211,12 @@ func indexOfTemplate(s string) int {
 // 目的: `margin_status_path` を、常駐が書くパスと同じ関数で決めていることを固定する（issue #262）。
 //
 // **書く機械では、hook を受ける socket と同じディレクトリの `margin-status` になる。**
-// **書かない機械（`rate_limit.source: none`、socket のパスが空）では空文字になり、5-8 の節ごと出ない。**
-// **パスの中の単引用符は `'\\”` に置き換える。**5-8 は単引用符で囲んだ `cat` で叩かせるためである。
+// **書かない機械（`rate_limit.source: none`、socket のパスが空）では空文字になり、
+// 「レートリミットのマージンを切ったら、切り上げる」の節ごと出ない。**
+// **パスの中の単引用符は `'\\”` に置き換える。**その節は単引用符で囲んだ `cat` で叩かせるためである。
 //
 // 与える情報: 3つの設定と socket のパス。
-// 成功条件: 値と、組み込みの文面に 5-8 が出るかどうかが期待どおりであること。
+// 成功条件: 値と、組み込みの文面に「レートリミットのマージンを切ったら、切り上げる」が出るかどうかが期待どおりであること。
 func TestRenderData_margin_status_pathを常駐と同じ関数で決める(t *testing.T) {
 	frag := prompt.Build("", "/dev/null/WORKFLOW.md")
 	for _, c := range []struct {
@@ -239,8 +240,8 @@ func TestRenderData_margin_status_pathを常駐と同じ関数で決める(t *te
 			if err != nil {
 				t.Fatalf("変数展開に失敗しました: %v", err)
 			}
-			if got := strings.Contains(out, "## 5-8. レートリミットのマージンを切ったら、切り上げる"); got != c.show {
-				t.Errorf("5-8 が出るか = %v（%v を期待）", got, c.show)
+			if got := strings.Contains(out, "\n## レートリミットのマージンを切ったら、切り上げる\n"); got != c.show {
+				t.Errorf("「レートリミットのマージンを切ったら、切り上げる」が出るか = %v（%v を期待）", got, c.show)
 			}
 		})
 	}

@@ -11,10 +11,10 @@ import (
 // progressCommentHeading は、途中の状況をコメントさせる節の見出しである。
 // **見出しに変数が入っている**（設計 5-3n）。`prompt.Builtin()` は変数を展開しないので、
 // 検査もテンプレートの記法のまま探す。
-const progressCommentHeading = "## 5-3. {{.progress_interval_minutes}}分以上黙らない"
+const progressCommentHeading = "## {{.progress_interval_minutes}}分以上黙らない"
 
-// finishedHeading は、turn の終わりにやることを教える節の見出しである。
-const finishedHeading = "## 3-7. 終わりを書く"
+// finishedHeading は、turn の終わりにやることを教える節の見出しである（「runの終了を宣言する」）。
+const finishedHeading = "## runの終了を宣言する"
 
 // 目的: 組み込みのプロンプトが、長い作業の途中でも状況をコメントさせることを固定する
 // （#153（待機中に continuo が定期的にコメントを書く仕組みが無く、18時間の時計が進まない）。設計 5-3h）。
@@ -27,7 +27,7 @@ const finishedHeading = "## 3-7. 終わりを書く"
 // 節が消えると、長い作業のあいだ時計が1秒も進まなくなる。
 //
 // 与える情報: prompt.Builtin() の全文。
-// 成功条件: 節があり、コメントの印・投稿するコマンド・push・18時間の理由の4つを教えていること。
+// 成功条件: 節があり、コメントの印・投稿するコマンド・push・担当の期限の理由の4つを教えていること。
 func TestTemplate_組み込みのプロンプトは途中でも状況を書かせる(t *testing.T) {
 	body := prompt.Builtin()
 
@@ -39,7 +39,7 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 
 	// 節の中身だけを見る。**本文の別の場所に同じ語があっても、この節が教えていることにはならない。**
 	// とくに `gh issue comment` と `git push -u origin HEAD` は
-	// 「## 3-7. 終わりを書く」にもあるので、全文への contains では素通りする。
+	// 「## runの終了を宣言する」にもあるので、全文への contains では素通りする。
 	section := sectionOf(t, body, progressCommentHeading)
 
 	for _, want := range []struct {
@@ -55,7 +55,9 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 		{"<!-- continuo:agent -->", "印が無いコメントは、continuo がエージェントの発言として見分けられません"},
 		{"{{.issue.url}}", "issue の URL を渡さないと、エージェントは別の issue へ書きかねません"},
 		{"git push -u origin HEAD", "push させないと、担当が外れた時点で手元の commit が他の機械から見えなくなります"},
-		{"18時間", "なぜ書くのかを書かないと、忙しいときに真っ先に落とされます"},
+		// **理由は「担当の期限」で書いてある。**期限の長さ（既定18時間）は
+		// `tracker.provider.handoff.idle_timeout_ms` で変わるので、文面は数を持たない。
+		{"担当の期限のあいだ現れないと、担当が外れて", "なぜ書くのかを書かないと、忙しいときに真っ先に落とされます"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", progressCommentHeading, want.needle, want.why)
@@ -138,8 +140,8 @@ func TestTemplate_組み込みのプロンプトは進捗報告を書き足さ�
 
 // 目的: 途中の状況を書かせる節が、「終わったらやること」より前に在ることを固定する（設計 5-3h）。
 //
-// **並び順は検査しない。**人間が確定させた文面では、手順（3.）のあとに共通ルール（5.）が来るので、
-// 「1時間以上黙らない」は「終わりを書く」より後ろに在る。**これは意図した並びである。**
+// **並び順は検査しない。**人間が確定させた文面では、「手順」の章のあとに「共通ルール」の章が来るので、
+// 「1時間以上黙らない」は「runの終了を宣言する」より後ろに在る。**これは意図した並びである。**
 // **検査するのは、どちらの節も消えないことだけである。**
 // 組み込みの前半・本文・後半を継ぎ合わせたあとに空の見出しを落とす処理（prompt.Build）を通しても、
 // **中身を持つこの2つが落ちてはならない。**
@@ -307,13 +309,17 @@ func fenceHasLine(lines []string, marker, want string) bool {
 //
 // **なぜ要るか。**シェルは二重引用符の中の backtick と `$( )` を展開する。
 // **エージェントが報告に書いた `auto` のような語や、引用した第三者の `$(…)` が、worktree の中で実行される。**
-// 3-2 と 5-5 は「`--body "…"` で渡さないでください」と書いており、見本がそれに反すると指示が食い違う。
+// 「計画を書き、レビューを受ける」と「人間へ質問・報告するコメントの書き方」は
+// 「`--body "…"` で渡すと、…二重引用符の中で実行されます」「`--body "…"` で渡さないでください」と書いており、
+// 見本がそれに反すると指示が食い違う。
 //
 // 与える情報: prompt.Builtin() の全文。
-// 成功条件: `--body "` を含む行が、それを禁じる文だけであり、`-f body="` を含む行が無いこと。
+// 成功条件: `--body "` を含む行が、それを禁じる文（渡さないでください）か、
+// 渡すと何が起きるかを言う警告の文（二重引用符の中で実行されます）だけであり、`-f body="` を含む行が無いこと。
 func TestTemplate_コメントとPRの本文を二重引用符で渡させない(t *testing.T) {
 	for i, line := range strings.Split(prompt.Builtin(), "\n") {
-		if strings.Contains(line, `--body "`) && !strings.Contains(line, "渡さないでください") {
+		if strings.Contains(line, `--body "`) && !strings.Contains(line, "渡さないでください") &&
+			!strings.Contains(line, "二重引用符の中で実行されます") {
 			t.Errorf("組み込みのプロンプトの %d 行目が、本文を二重引用符で渡させています: %q。"+
 				"ファイルへ書いてから `--body-file` で渡させてください", i+1, line)
 		}

@@ -18,7 +18,8 @@ const skillPath = "plugins/continuo-issue-comments/skills/marking-and-trusting-i
 // markerCommand は、コメントや本文を読むコマンドの1本である。
 //
 // builtin: continuo専用プロンプトでのコマンドの書き出し（テンプレートの変数のまま）。
-// skill: スキルでのコマンドの書き出し（置き換え語のまま）。
+// continuo専用プロンプトはコマンドを ```bash の囲みの中に行頭から書くので、字下げしない。
+// skill: スキルでのコマンドの書き出し（置き換え語のまま）。スキルは4つの空白で字下げした塊で書く。
 type markerCommand struct {
 	name    string
 	builtin string
@@ -30,27 +31,27 @@ type markerCommand struct {
 var markerCommands = []markerCommand{
 	{
 		name:    "issue のコメント",
-		builtin: "    gh issue view {{.issue.number}} --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
+		builtin: "gh issue view {{.issue.number}} --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
 		skill:   "    gh issue view <number> --repo <owner>/<repo> --json comments --jq '",
 	},
 	{
 		name:    "issue の本文",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}} --jq '",
+		builtin: "gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}} --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/issues/<number> --jq '",
 	},
 	{
 		name:    "pull request の会話のコメント",
-		builtin: "    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
+		builtin: "gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
 		skill:   "    gh pr view <number> --repo <owner>/<repo> --json comments --jq '",
 	},
 	{
 		name:    "pull request の行に紐づくレビューコメント",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '",
+		builtin: "gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate --jq '",
 	},
 	{
 		name:    "pull request のレビュー",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '",
+		builtin: "gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/pulls/<number>/reviews --paginate --jq '",
 	},
 }

@@ -88,11 +88,11 @@ func TestPromptURL_変数をその_issue_の値で展開する(t *testing.T) {
 // 目的: 何回目の試行として展開したかを、内訳へ必ず出すことを固定する（issue #183）。
 //
 // **なぜ要るか。**`--attempt` を省くと1回目として展開するので、
-// 組み込みの `## 7-5. これは {{.attempt}} 回目の試行です` は出ない。
+// 組み込みの `## これは {{.attempt}} 回目の試行です` は出ない。
 // **出さないと、利用者はそれを「文面から消えた」と読み違える。**
 //
 // 与える情報: `--url` だけを渡した場合と、`--attempt 3` を足した場合。
-// 成功条件: どちらも内訳に回数が出て、`--attempt 3` では 7-5 の節が本文に現れること。
+// 成功条件: どちらも内訳に回数が出て、`--attempt 3` では「これは N 回目の試行です」の節が本文に現れること。
 func TestPromptURL_何回目として展開したかを内訳に出す(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	setBody(t, dir, "")
@@ -107,7 +107,7 @@ func TestPromptURL_何回目として展開したかを内訳に出す(t *testin
 		t.Errorf("1回目として展開したことが内訳に出ていません: %q", stderr)
 	}
 	if strings.Contains(stdout, "回目の試行です") {
-		t.Error("1回目なのに 7-5 の節が出ています（{{if .attempt}} が偽になっていません）")
+		t.Error("1回目なのに「これは N 回目の試行です」の節が出ています（{{if .attempt}} が偽になっていません）")
 	}
 
 	code, stdout, stderr = runCLIWith(deps,
@@ -116,7 +116,7 @@ func TestPromptURL_何回目として展開したかを内訳に出す(t *testin
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
 	if !strings.Contains(stdout, "3 回目の試行です") {
-		t.Error("--attempt 3 なのに 7-5 の節が出ていません")
+		t.Error("--attempt 3 なのに「これは N 回目の試行です」の節が出ていません")
 	}
 }
 
@@ -126,11 +126,11 @@ func TestPromptURL_何回目として展開したかを内訳に出す(t *testin
 // `internal/orchestrator/turn.go` は `snap.RetryCount > 0` のときに `RetryCount + 1` を渡すので、
 // **入りうる最小値は 2 である。****1 が入ることは無い。**
 //
-// **1 をそのまま渡すと `{{if .attempt}}` が真になり、`## 7-5. これは 1 回目の試行です` が出る。**
+// **1 をそのまま渡すと `{{if .attempt}}` が真になり、`## これは 1 回目の試行です` が出る。**
 // **「本当に送られる文面」を名乗るコマンドが、送られない文面を見せてはならない。**
 //
 // 与える情報: `--attempt 1` と、`--attempt` を省いた場合。
-// 成功条件: どちらも 7-5 の節が出ず、同じ標準出力になること。
+// 成功条件: どちらも「これは N 回目の試行です」の節が出ず、同じ標準出力になること。
 func TestPromptURL_attempt1は試行回数を渡さない(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	setBody(t, dir, "")
@@ -142,7 +142,7 @@ func TestPromptURL_attempt1は試行回数を渡さない(t *testing.T) {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
 	if strings.Contains(withOne, "回目の試行です") {
-		t.Error("--attempt 1 で 7-5 の節が出ています。本番でその文面が送られることはありません")
+		t.Error("--attempt 1 で「これは N 回目の試行です」の節が出ています。本番でその文面が送られることはありません")
 	}
 
 	_, without, _ := runCLIWith(deps,
@@ -152,7 +152,7 @@ func TestPromptURL_attempt1は試行回数を渡さない(t *testing.T) {
 			"どちらも「1回目」なので、同じ文面になるはずです")
 	}
 
-	// **内訳では、7-5 の節が出ない理由を言い切る。**
+	// **内訳では、「これは N 回目の試行です」の節が出ない理由を言い切る。**
 	// 出ないことを「文面から消えた」と読み違えさせない。
 	if !strings.Contains(stderr, "1回目") {
 		t.Errorf("1回目として展開したことが内訳に出ていません: %q", stderr)
@@ -285,7 +285,7 @@ func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
 // **展開する前の断片を数えると、その行数は嘘になる。**
 //
 // **`{{if .attempt}}` が実際に落ちる。**`--attempt` を付けないと
-// `## 7-5. これは N 回目の試行です` の節が消えるので、**組み込みの後半の行数が変わる。**
+// `## これは N 回目の試行です` の節が消えるので、**組み込みの後半の行数が変わる。**
 // **直す前は6行ずれていた**（内訳は220行と出し、実際に出たのは214行だった）。
 //
 // 与える情報: `--attempt` を付けない `--url` の出力と、その内訳。
@@ -303,11 +303,13 @@ func TestPromptURL_内訳の行数が出した文面と一致する(t *testing.T
 	}
 
 	want := breakdownTailLines(t, stderr)
-	// **組み込みの後半は `# 5. 共通ルール` から始まる。**そこから最後までを数える。
-	at := strings.Index(stdout, "# 5. 共通ルール")
+	// **組み込みの後半は `# 共通ルール` から始まる。**そこから最後までを数える。
+	// 行頭の見出しとして探し、前の改行は数えない。
+	at := strings.Index(stdout, "\n# 共通ルール\n")
 	if at < 0 {
 		t.Fatalf("標準出力に組み込みの後半が見つかりません")
 	}
+	at++
 	got := len(strings.Split(strings.Trim(stdout[at:], "\n"), "\n"))
 	if got != want {
 		t.Errorf("内訳の行数が、出した文面と合っていません: 内訳=%d 行 / 実際=%d 行\n"+

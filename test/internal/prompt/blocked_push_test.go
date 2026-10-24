@@ -11,7 +11,9 @@ import (
 // 文中の Status 名（`review` / `blocked`）を含まない部分だけを使う。
 // Status 名まで含めて探すと、片方が消えたときにこの行そのものが見つからなくなり、
 // 「文が無い」と「文はあるが blocked が抜けた」の区別がつかなくなる。
-const pushDemandMarker = "を出す前に、必ず commit して push してください。"
+// **句点は含めない。**文面は「…push してください**（commit するものが無ければ要りません）。」で、
+// 強調の閉じと括弧の注記が句点の前に入る。
+const pushDemandMarker = "を出す前に、必ず commit して push してください"
 
 // pushCommand は組み込みのプロンプトがエージェントに叩かせる push のコマンドである。
 // この形で足りることは docs/evidence/push_u_origin_head.md で確かめてある。
