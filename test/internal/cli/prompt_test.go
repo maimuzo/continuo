@@ -72,9 +72,10 @@ func TestPrompt_showは本文を真ん中に入れて出す(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	head := strings.Index(stdout, "## 4-2. 紐づく pull request を読む")
+	// **見出しは行ごと探す。**番号を消したので、地の文の「紐づく pull request を読む」と見出しを、前後の改行で見分ける。
+	head := strings.Index(stdout, "\n## 紐づく pull request を読む\n")
 	mid := strings.Index(stdout, "## 固有の目印")
-	tail := strings.Index(stdout, "# 5. 共通ルール")
+	tail := strings.Index(stdout, "\n# 共通ルール\n")
 	if head < 0 || mid < 0 || tail < 0 || !(head < mid && mid < tail) {
 		t.Errorf("本文が真ん中に入っていません（head=%d mid=%d tail=%d）", head, mid, tail)
 	}
@@ -99,7 +100,7 @@ func TestPrompt_本文があっても組み込みを送る(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	for _, want := range []string{"書き足した本文です。", "# 5. 共通ルール"} {
+	for _, want := range []string{"書き足した本文です。", "\n# 共通ルール\n"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("標準出力に %q がありません", want)
 		}
@@ -198,9 +199,9 @@ func TestInit_置いたWORKFLOWmdはそのまま送れる(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("continuo prompt --show の終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	head := strings.Index(stdout, "## 4-2. 紐づく pull request を読む")
+	head := strings.Index(stdout, "\n## 紐づく pull request を読む\n")
 	mid := strings.Index(stdout, "### 何をする作業か")
-	tail := strings.Index(stdout, "# 5. 共通ルール")
+	tail := strings.Index(stdout, "\n# 共通ルール\n")
 	if head < 0 || mid < 0 || tail < 0 || !(head < mid && mid < tail) {
 		t.Errorf("雛形の本文が真ん中に入っていません（head=%d mid=%d tail=%d）", head, mid, tail)
 	}

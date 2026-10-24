@@ -612,11 +612,12 @@ func runPromptExpanded(
 		return 1
 	}
 
-	// **hook を受ける socket のパスを、常駐と同じ規則で求める**（issue #262）。組み込みの指示書の 5-8 が
+	// **hook を受ける socket のパスを、常駐と同じ規則で求める**（issue #262）。組み込みの指示書の
+	// 「レートリミットのマージンを切ったら、切り上げる」が
 	// 使う `margin_status_path` を、常駐が書く `margin-status` と同じパスにするためである。
 	// **`socketpath.ResolveHookSocketPath` はディレクトリを作らない**（常駐の側も `Prepare` の中で同じ関数を呼ぶ）。
-	// **求められなかったときは空を渡す。**5-8 は出ないので、そのことを標準エラーに1行出す。
-	// **使用率を読まない設定（`rate_limit.source: none`）では求めない。**常駐も 5-8 を出さないので、
+	// **求められなかったときは空を渡す。**その節は出ないので、そのことを標準エラーに1行出す。
+	// **使用率を読まない設定（`rate_limit.source: none`）では求めない。**常駐もその節を出さないので、
 	// 求めて失敗したときに「常駐は送る」と警告すると事実と違う。
 	hookSocketPath := ""
 	if cfg.RateLimit.Source != ratelimit.SourceNone {
@@ -646,10 +647,10 @@ func runPromptExpanded(
 	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
 	printPromptBreakdownItems(stderr, rendered, frag)
 	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
-	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
+	// **何回目として展開したかを必ず出す。**出さないと、`## これは N 回目の試行です` が
 	// 出ないことを「文面から消えた」と読み違える。
 	if attempt == nil {
-		// **1回目は試行回数を渡さない。**`## 7-5.` の節が出ないのはそのためである。
+		// **1回目は試行回数を渡さない。**`## これは N 回目の試行です` の節が出ないのはそのためである。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstAttempt))
 	} else {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, *attempt))

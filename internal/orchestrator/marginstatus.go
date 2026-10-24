@@ -165,7 +165,7 @@ func (o *Orchestrator) marginPeriods(usable *ratelimit.Snapshot) []marginstatus.
 
 // writeMarginStatus は、`margin-status` を1行で書き直す（issue #262。設計 3-27a）。
 //
-// **巡回のたびに呼ぶ。**Claude Code は組み込みの指示書の 5-8 に従って、作業の区切りでこれを `cat` で読み、
+// **巡回のたびに呼ぶ。**Claude Code は組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」に従って、作業の区切りでこれを `cat` で読み、
 // `MARGIN: cut` で `expires_at` が未来なら、自分で切り上げる。
 //
 // **一時ファイルへ書いてから差し替える**（`atomicfile.Write`）。Claude Code が書きかけの1行を読まないためである。

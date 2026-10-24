@@ -47,10 +47,10 @@ const closedRecordWriteTimeout = 10 * time.Second
 // relayMaxRunes は、最初のメッセージに付ける節の全体の長さの上限（rune 数）である（設計 3-85）。
 const relayMaxRunes = 30000
 
-// relayTrustedAssociations は、渡してよい投稿者の立場である（組み込みの指示書 4-1 の `trusted_comment` と同じ）。
+// relayTrustedAssociations は、渡してよい投稿者の立場である（組み込みの指示書の「issue を読む」の `trusted_comment` と同じ）。
 var relayTrustedAssociations = []string{"OWNER", "MEMBER", "COLLABORATOR"}
 
-// relayFixedAIMarkers は、AI が書いたとみなす本文の先頭の印である（組み込みの指示書 4-1 の jq の式と同じ）。
+// relayFixedAIMarkers は、AI が書いたとみなす本文の先頭の印である（組み込みの指示書の「issue を読む」の jq の式と同じ）。
 //
 // **設定の `tracker.comments.marker` と `self_marker` は、空でないときだけ足す**（`relayAIMarkers`）。
 var relayFixedAIMarkers = []string{
@@ -151,7 +151,7 @@ func relayAgentMarkers(cfg config.Config) []string {
 
 // startsWithMarker は、本文の1行目が印で始まるかを返す（行頭の照合。設計 3-85）。
 //
-// **飛ばすのは前の空白・タブ・改行（`[ \t\r\n]*`）だけである**（組み込みの指示書 4-1 の jq の式と同じ）。
+// **飛ばすのは前の空白・タブ・改行（`[ \t\r\n]*`）だけである**（組み込みの指示書の「issue を読む」の jq の式と同じ）。
 // 全角空白などは飛ばさない。jq と違う判定にすると、エージェントが自分で読んだ結果と食い違う。
 //
 // body: 本文。

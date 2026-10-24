@@ -10,7 +10,7 @@
 - `internal/prompt/builtin.md`（エージェントへ送る指示書の本体。**エージェントの段の根拠は、この文書の節番号で書く**）
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd` / `readSignals` / `applySignals` / `decideAfterTurn` / `finishRunClaimed`
 - `internal/scaffold/template.go`（`continuo init` が置く `WORKFLOW.md` の雛形。「始める前に読む文書」の節）
-- `docs/plans/continuo_design.md#5-3`（組み込みのプロンプトの全文）
+- `docs/plans/continuo_design.md#5-3`（組み込みのプロンプトの置き場所と組み立て方。全文は `internal/prompt/builtin.md` にある）
 - `docs/plans/continuo_design.md#5-3d`（`WORKFLOW.md` の本文に何を書くか）
 - `docs/plans/continuo_design.md#5-3i`（PR はエージェントが出す）
 - `docs/plans/continuo_design.md#5-3u`（計画のあとで人間の確認を受け、質問が出たらレビューを打ち切る）

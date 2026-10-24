@@ -512,7 +512,8 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 		}
 		if c.IsAgent {
 			// **途中で書かせるコメントは、成果の報告ではない。**
-			// 計画（設計 5-3 の 3-2）も進捗報告（同 5-3）も、本文の先頭は
+			// 計画（組み込みの指示書の「計画を書き、レビューを受ける」）も
+			// 進捗報告（同「{{.progress_interval_minutes}}分以上黙らない」）も、本文の先頭は
 			// `<!-- continuo:agent -->` なので、ここで除かないと `IsAgent` が真になる。
 			//
 			// **除かないと、turn が途中で終わった run で書かせ直しが飛ぶ。**

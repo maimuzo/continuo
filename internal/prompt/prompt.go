@@ -237,8 +237,8 @@ func backtickRun(trimmed string) int {
 // dropEmptySections は、中身が1行も無くなった見出しを落とす。
 //
 // **当てるのは利用者の本文だけである**（[docs/plans/continuo_design.md] の 5-3m）。
-// 組み込みの側へ当てると、`## 4-4. このプロジェクトの決まり` が落ちる。
-// **利用者の本文が `##` の見出しで始まっていると、4-4 は「中身が無い」と読めるからである。**
+// 組み込みの側へ当てると、`## このプロジェクトの決まり` が落ちる。
+// **利用者の本文が `##` の見出しで始まっていると、その節は「中身が無い」と読めるからである。**
 // この版より前の `continuo init` が置いた `WORKFLOW.md` は、本文の見出しが `##` である。
 // **つまり、いま持っている利用者は全員その形である。**
 //
@@ -697,10 +697,11 @@ func RenderData(
 		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
 		// **「3600000ミリ秒以上黙らないでください」では通じない。**
 		"progress_interval_minutes": progressIntervalMs / 60000,
-		// **`margin-status` のパス**（issue #262。設計 5-3 の 5-8）。組み込みの指示書の 5-8 が
+		// **`margin-status` のパス**（issue #262）。組み込みの指示書の
+		// 「レートリミットのマージンを切ったら、切り上げる」が
 		// `cat '{{.margin_status_path}}'` の形で使う。**中の単引用符は `'\''` に置き換えてある**
 		// （パスに単引用符を含む利用者でも、単引用符で囲んだ `cat` が壊れない）。
-		// **書かない機械（`rate_limit.source: none`）では空文字である。**5-8 は `{{if}}` で囲んであるので、節ごと出ない。
+		// **書かない機械（`rate_limit.source: none`）では空文字である。**その節は `{{if}}` で囲んであるので、節ごと出ない。
 		// **キーは空でも必ず入れる**（`missingkey=error`）。
 		"margin_status_path": marginstatus.ShellQuote(marginstatus.Path(rateLimit, hookSocketPath)),
 	}
@@ -734,7 +735,7 @@ func SampleData() map[string]any {
 		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
 		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
 		"progress_interval_minutes": 60,
-		// **`margin-status` のパス**（issue #262）。空にすると、組み込みの指示書の 5-8 の中身が検査されない。
+		// **`margin-status` のパス**（issue #262）。空にすると、組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」の中身が検査されない。
 		"margin_status_path": "/tmp/continuo/margin-status",
 	}
 }

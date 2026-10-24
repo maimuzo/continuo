@@ -11,7 +11,9 @@ import (
 // 文中の Status 名（`review` / `blocked`）を含まない部分だけを使う。
 // Status 名まで含めて探すと、片方が消えたときにこの行そのものが見つからなくなり、
 // 「文が無い」と「文はあるが blocked が抜けた」の区別がつかなくなる。
-const pushDemandMarker = "を出す前に、必ず commit して push してください。"
+// **句点は含めない。**文面は「…push してください**（commit するものが無ければ要りません）。」で、
+// 強調の閉じと括弧の注記が句点の前に入る。
+const pushDemandMarker = "を出す前に、必ず commit して push してください"
 
 // pushCommand は組み込みのプロンプトがエージェントに叩かせる push のコマンドである。
 // この形で足りることは docs/evidence/push_u_origin_head.md で確かめてある。
@@ -20,10 +22,7 @@ const pushCommand = "git push -u origin HEAD"
 // 目的: continuo が送る組み込みのプロンプト が、`blocked` を出す前にも push を求めることを固定する
 // （issue #64。設計 3-9 の「— その前提」と 5-3）。
 //
-// **設計文書との突き合わせでは、この条件を守れない。**
-// TestTemplate_組み込みのプロンプトが設計5_3の本文と一致する は設計 5-3 の markdown ブロックと
-// 組み込みのプロンプトを比べるものなので、**両方から `blocked` が同時に消えても通る。**
-// そこで、設計文書を一切読まず、組み込みのプロンプトだけを見て条件を確かめる。
+// **この条件は、組み込みのプロンプトだけを読んで確かめる。**
 //
 // **なぜ `blocked` が要るか。**`blocked` は人間へ渡す合図であり、そこから先この worktree で
 // 作業が続く保証が無い。`continuo abandon` や片付けで branch ごと消えると、

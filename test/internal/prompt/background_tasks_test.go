@@ -10,7 +10,8 @@ import (
 // backgroundDemandMarker は「バックグラウンドの処理を終わらせてから表明を書く」文を見分ける目印である。
 // 値の名前（`blocked` / `review`）を含まない部分だけを使う（片方が消えたときに、
 // 「文が無い」と「文はあるが値が抜けた」を区別するため）。
-const backgroundDemandMarker = "を書く前に、バックグラウンドで動かしたコマンドと subagent を全部終わらせてください。"
+// **句点は含めない。**文面は「…全部終わらせてください（待てないものは止めます）。」で、括弧の注記が句点の前に入る。
+const backgroundDemandMarker = "を書く前に、バックグラウンドで動かしたコマンドと subagent を全部終わらせてください"
 
 // 目的: continuo が送る組み込みのプロンプトが、`blocked` か `review` を書く前に、
 // バックグラウンドの処理を全部終わらせるよう求めることを固定する（issue #275）。
@@ -26,7 +27,7 @@ const backgroundDemandMarker = "を書く前に、バックグラウンドで動
 // 与える情報: prompt.Builtin() の全文。
 // 成功条件: その文が1つだけあり、`blocked` と `review` を名指しし、`working` を名指ししていない。
 // コマンドと subagent の両方を挙げ、表明のあとに新しく起動しないよう求めている。
-// **その文が 3-7 の中に在り、表明の3行の見本より後ろに在る。**
+// **その文が「runの終了を宣言する」の中に在り、表明の3行の見本より後ろに在る。**
 func TestTemplate_組み込みのプロンプトは表明の前にバックグラウンドの処理を終わらせる(t *testing.T) {
 	body := prompt.Builtin()
 
@@ -54,8 +55,8 @@ func TestTemplate_組み込みのプロンプトは表明の前にバックグ�
 	}
 
 	for _, want := range []string{
-		"continuo は、バックグラウンドの処理が1つでも残っているあいだ、turn が終わったとみなしません。",
-		"終わるのを待てないものは、止めてから書いてください。",
+		"continuo は処理が1つでも残っているあいだ turn が終わったとみなさず",
+		"（待てないものは止めます）",
 		"この1行を書いたあとに、新しくコマンドも subagent も起動しないでください。",
 	} {
 		if !strings.Contains(body, want) {
@@ -64,13 +65,13 @@ func TestTemplate_組み込みのプロンプトは表明の前にバックグ�
 	}
 
 	head := strings.Index(body, "CONTINUO-STATUS: working    まだ続きがある")
-	if section := strings.Index(body, "## 3-7. 終わりを書く"); section < 0 || head < section {
-		t.Fatalf("3-7 の表明の3行の見本を見つけられません（3-7=%d 見本=%d）", section, head)
+	if section := strings.Index(body, "## runの終了を宣言する"); section < 0 || head < section {
+		t.Fatalf("「runの終了を宣言する」の表明の3行の見本を見つけられません（節=%d 見本=%d）", section, head)
 	}
 	demand := strings.Index(body, backgroundDemandMarker)
-	next := strings.Index(body, "# 4. 処理に必要なコンテキスト")
+	next := strings.Index(body, "# 処理に必要なコンテキスト")
 	if head < 0 || next < 0 || demand < head || demand > next {
-		t.Errorf("その文が、3-7 の表明の3行の見本より後ろにありません（見本=%d 文=%d 4=%d）。"+
+		t.Errorf("その文が、「runの終了を宣言する」の表明の3行の見本より後ろにありません（見本=%d 文=%d 次の章=%d）。"+
 			"表明の書き方を決めている節に置かないと、表明を書くときに読まれません", head, demand, next)
 	}
 }

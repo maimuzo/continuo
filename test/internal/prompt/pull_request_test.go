@@ -8,21 +8,18 @@ import (
 )
 
 // pullRequestHeading は、PR を出させる節の見出しである。
-const pullRequestHeading = "## 3-5. pull request を出す"
+const pullRequestHeading = "## pull request を出す"
 
 // 目的: 組み込みのプロンプトが、`review` を出す前に PR を作らせることを固定する
 // （#184（エージェントが作業を終えても pull request を作らず、人間が代わりに作ることになっている）。
 // 設計 5-3i）。
 //
-// **設計文書との突き合わせでは、この条件を守れない。**
-// TestTemplate_組み込みのプロンプトが設計5_3と一致する は設計 5-3 の markdown ブロックと
-// 組み込みのプロンプトを比べるものなので、**両方からこの節が同時に消えても通る。**
-// そこで、設計文書を一切読まず、組み込みのプロンプトだけを見て条件を確かめる。
+// **この条件は、組み込みのプロンプトだけを読んで確かめる。**
 //
 // **なぜ要るか。**この仕組みで人間がするのは、issue で何をしてほしいかを伝えることと、
 // 出てきたものをレビューすることの2つだけである。
 // **エージェントが push で止まると、branch を自分で見つけて PR を作る仕事が人間に生える。**
-// **組み込みの `## 4-2. 紐づく pull request を読む` は、誰かが PR を作っていることを前提にしている。**
+// **組み込みの `## 紐づく pull request を読む` は、誰かが PR を作っていることを前提にしている。**
 // 作る指示が無いと、あの節は一度も役に立たない。
 //
 // 与える情報: prompt.Builtin() の全文。
@@ -38,7 +35,7 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 
 	// 節の中身だけを見る。**本文の別の場所に同じ語があっても、この節が教えていることにはならない。**
 	// とくに `git push -u origin HEAD` と `CONTINUO-STATUS: blocked` は
-	// 「## 3-7. 終わりを書く」にもあるので、全文への contains では素通りする。
+	// 「## runの終了を宣言する」にもあるので、全文への contains では素通りする。
 	section := sectionOf(t, body, pullRequestHeading)
 
 	for _, want := range []struct {
@@ -47,16 +44,16 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 	}{
 		{"gh pr create", "作るコマンドを書かないと、エージェントは作る手段を知らないまま終わります"},
 		{"Closes #{{.issue.number}}", "この1行が PR と issue を結びつけます。" +
-			"落とすと、次の turn が `## 4-2. 紐づく pull request を読む` で拾えず、" +
+			"落とすと、次の turn が `## 紐づく pull request を読む` で拾えず、" +
 			"レビューの指摘を読む先が消えます"},
 		// **既にある PR は、いま居る branch から引かせる。**
-		// `## 4-2. 紐づく pull request を読む` の一覧から選ばせてはならない（下の否定の検査）。
+		// `## 紐づく pull request を読む` の一覧から選ばせてはならない（下の否定の検査）。
 		{`--head "$(git branch --show-current)"`, "既にある PR を、いま居る branch から引かせないと、" +
 			"turn のたびに2本目・3本目ができます"},
-		{"新しく作らないでください", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
+		{"新しく作りません", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
 		// **`gh` が対話で止まることの説明は、いまも同じ節に在る。**
 		// 落ちていると書いていたのは誤りだった（敵対的レビューが実測で反証した）。
-		{"gh が「どこへ push するか」を対話で聞いてきて", "push していない branch で叩くと " +
+		{"gh が push 先を対話で訊いてきて止まります", "push していない branch で叩くと " +
 			"gh が対話で止まることを書かないと、エージェントはそこで固まります"},
 		// **2026-09-03、人間が送る文面を書き直した**（issue #188（エージェントへ送る指示書が長く、
 		// 順序も強調も揃っていないため、初見で読み取れない））。
@@ -64,15 +61,15 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 		// **人間の判断は「よって、これはまったく根拠がないだけでなく、害がある。変更するな」である。**
 		// **勝手に戻さないこと。**戻すなら、先に人間へ確かめる。
 		//
-		// **「作れなかったら blocked」も落ちていない。**7-4 へ移っただけである
-		// （この検査は 3-5 の節だけを見るので、ここでは確かめられない）。
+		// **「作れなかったら blocked」も落ちていない。**「この指示書が決めていないこと」へ移っただけである
+		// （この検査は「pull request を出す」の節だけを見るので、ここでは確かめられない）。
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", pullRequestHeading, want.needle, want.why)
 		}
 	}
 
-	// **`## 4-2. 紐づく pull request を読む` の一覧から行き先を選ばせてはならない。**
+	// **`## 紐づく pull request を読む` の一覧から行き先を選ばせてはならない。**
 	//
 	// **あの一覧は「この issue を閉じる PR」ではなく「この issue に言及があった PR」を返す。**
 	// 実測（2026-09-03、maimuzo/continuo）: issue #60 の timeline は PR #112 を返すが、
@@ -103,8 +100,9 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 // **`review` を出す前にやらせたい作業なので、間に合わない。**
 //
 // **この節は組み込みの「前半」にある。**本文は前半と後半のあいだに挟まるので（設計 5-3c）、
-// **3-5 は本文より前に読まれる。**「後半に置いてあるから本文に打ち消されない」は、この節には当たらない。
-// **本文からの打ち消しは、3-78b が開けた口（3-4 の例外を使ったときだけ 4-4 へ譲る）1つだけである。**
+// **「pull request を出す」は本文より前に読まれる。**「後半に置いてあるから本文に打ち消されない」は、この節には当たらない。
+// **本文からの打ち消しは、3-78b が開けた口（「commit して push する」の例外を使ったときだけ
+// 「このプロジェクトの決まり」へ譲る）1つだけである。**
 //
 // 与える情報: prompt.Builtin() の全文と、prompt.Build() が組み立てた全文。
 // 成功条件: どちらでも「終わったらやること」より前に在ること。
@@ -119,14 +117,14 @@ func TestTemplate_PRを出させる節は終わりを書く節より前にある
 		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text()},
 	} {
 		pr := strings.Index(tc.body, "\n"+pullRequestHeading+"\n")
-		finished := strings.Index(tc.body, "\n## 3-7. 終わりを書く\n")
+		finished := strings.Index(tc.body, "\n"+finishedHeading+"\n")
 		if pr < 0 || finished < 0 {
-			t.Fatalf("%s: 見出しが揃っていません（%q=%d / 3-7=%d）", tc.name, pullRequestHeading, pr, finished)
+			t.Fatalf("%s: 見出しが揃っていません（%q=%d / %q=%d）", tc.name, pullRequestHeading, pr, finishedHeading, finished)
 		}
 		if pr > finished {
-			t.Errorf("%s: %q が「## 3-7. 終わりを書く」より後ろにあります。"+
+			t.Errorf("%s: %q が %q より後ろにあります。"+
 				"表明の1行の書き方を読み終えたあとでは、pull request を作らせる指示が間に合いません",
-				tc.name, pullRequestHeading)
+				tc.name, pullRequestHeading, finishedHeading)
 		}
 	}
 }

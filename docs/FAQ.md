@@ -289,7 +289,7 @@ pull request のコメントに、レビュー結果を貼ってください
 **節が届いているかの確かめ方。**
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 5-6\. '
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?レビューの回し方$'
 ```
 
 **`1` なら入っています。**`0` なら v0.1.15 以前です。版を上げてください。
@@ -3979,7 +3979,7 @@ cd ~/continuo-work && continuo prompt --show | grep -n 'PR は作らないでく
 **2つ目。組み込みの側に節が無い。**版が古いままです。
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 3-5\. pull request を出す'
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?pull request を出す$'
 ```
 
 **`0` なら v0.1.13 以前です。**版を上げてください。
@@ -4211,15 +4211,16 @@ push できる状態なら push させます。**
 **節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 5-3\. '
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?\{\{\.progress_interval_minutes\}\}分以上黙らない$'
 ```
 
 **`1` なら入っています。**`0` なら v0.1.13 以前です。版を上げてください。
 **引いているのは v0.1.14 の名前なので、v0.1.13 でも `0` が返ります。**
 
-**見出しに変数が入っているので、`^## 5-3\. ` で引きます。**
+**見出しに変数が入っているので、変数をそのままの文字で引きます。**
 `continuo prompt --show --builtin` は変数を展開しないため、
-**`## 5-3. {{.progress_interval_minutes}}分以上黙らない` のまま出ます。**
+**`## 5-3. {{.progress_interval_minutes}}分以上黙らない` か `## {{.progress_interval_minutes}}分以上黙らない` のまま出ます。**
+**見出しの頭に `5-3.` のような番号が付く版と、付かない版があります。**`([0-9]+-[0-9]+\. )?` は、どちらでも当たるようにするためです。
 
 **エージェントが書いているかの確かめ方。**issue に `<!-- continuo:agent -->` で始まるコメントが1件あり、
 **その中に、`progress_interval_ms` で決めた間隔ごとの行が増えていれば効いています**（既定は1時間）。

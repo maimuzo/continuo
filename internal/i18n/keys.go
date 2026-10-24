@@ -2726,7 +2726,8 @@ const (
 	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がカンバンから組み立てられないときに出る。
 	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
 	// KeyCLIPromptWarnNoMarginStatusPath は、`continuo prompt --show --url` で hook を受ける socket のパスを
-	// 求められず、組み込みの指示書の 5-8（レートリミットのマージン）を出さないときに標準エラーへ出る（issue #262）。
+	// 求められず、組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」を出さないときに
+	// 標準エラーへ出る（issue #262）。
 	KeyCLIPromptWarnNoMarginStatusPath Key = "cli.prompt.warn_no_margin_status_path"
 	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
 	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
