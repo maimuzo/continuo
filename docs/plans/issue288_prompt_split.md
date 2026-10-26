@@ -30,24 +30,25 @@
 | スキルは使われ方に沿って少なく | 「このスキルの分け方は細かすぎる。使われ方に沿うようにもっと少ないスキル数にして」 | 2026-10-26 |
 | 1本5,000トークン以内。どの段からでも、要らないスキルは読まず、要るスキルだけが残る | 「スキルの分け方は、5000トークン以内であることと、…issue開始→設計→設計レビューループ→実装してPR作成→実装レビューループの流れの、どの段階からでも、不要なスキルはもう読み込まずに、必要なスキルだけcompaction後も残っているようにして」。5,000トークンは Claude Code の数え方（字数 ÷ 4）で読む（1本20,000字）。「だったら7本でよい」 | 2026-10-26 |
 | continuo のスキルは消えうる。消えても問題ない構造にする | 「実際に何かをする時、continuo由来のスキルだけしか使わないなんてことは100%ない。何かしらのスキルも一緒に使用し、それも合わせて25000トークンなんだろ。その場合スキルの内容は消える可能性があるんだから、消えても問題ない構造にしろ」 | 2026-10-26 |
-| 2つ以上の段で使う決まりは独立したスキルにする | 「9本で良い」（この決まりを当てると、設計レビューの1周目で10本になった） | 2026-10-26 |
+| 2つ以上の段で使う決まりは独立したスキルにする | 「9本で良い」（この決まりを当てると、設計レビューの1周目で10本、2周目で11本になった） | 2026-10-26 |
 | マージンの確かめはシステムプロンプトへ | 「「区切りごとに `cat` で確かめる」は、必ず守らせる決まりの側（システムプロンプト）へ置いてください。スキルの側へ置くと、エージェントがそのスキルを呼ばない限り、1度も確かめません。…確かめる時機は、5-3 で時刻を確かめるとき・サブエージェントを起動する前・長いコマンドを叩く前です。」 | 2026-10-17 |
 | 実機の確かめは AI だけで2回に分ける | 「よい」 | 2026-10-26 |
 
 ## 決めたこと
 
-**言いたいこと。**地図と決まりはシステムプロンプト、出来事は普通のプロンプト、手順は段ごとの10本のスキル。スキルは消えても、終わりの印で気づいて Read で読み直す。
+**言いたいこと。**地図と決まりはシステムプロンプト、出来事は普通のプロンプト、手順は段ごとの11本のスキル。フローチャートは人間が確定させた流れ図に、呼ぶスキルを足したもの。スキルは消えても、終わりの印で気づいて Read で読み直す。
 
 | 何 | 決めたこと |
 | --- | --- |
-| システムプロンプト | run の宣言・`continuo-issue-comments` を使わないこと・段に入るときの3つの順番（その段のスキルを全部呼ぶ → 本文が終わりの印まで見えるかを確かめる。compaction の要約から始まった会話では要約より後に見えるものだけを数える → 見えなければ SKILL.md を Read で読む）・人間が直接話しているときの扱い・目的・フローチャート（「どの段でも」の箱にマージンの確かめの1行と時機）・対応表（終わりの印の12桁つき）・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
+| システムプロンプト | 概要の冒頭2文・run の宣言・`continuo-issue-comments` を使わないこと・スキルの使い方の3つの順番（箱に入ったらその箱のスキルを全部呼ぶ → 手順を使う前に毎回、本文が終わりの印まで見えるかを確かめる。compaction の要約から始まった会話では要約より後に見えるものだけを数える → 見えなければ SKILL.md を Read で読む）・人間が直接話しているときの扱い（continuo の着手の指示を受け取っていなければ、人間の指示に従い、フローチャートを自分から始めない）・目的・フローチャート（指示書の流れ図の箱と矢印に、各箱で呼ぶスキルを足したもの。途中経過の箱は「どの段でも」の箱にし、時刻とマージンの確かめの1行と時機を書く）・対応表（スキルごとの使う箱と SKILL.md の絶対パス。終わりの印の12桁つき。フローチャートと同じ定義から生成）・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
 | 普通のプロンプト（最初のプロンプト） | 着手の指示・頼む作業の範囲・何回目の試行か・WORKFLOW.md の本文・relay（前回の run のあとの人間のコメント）・マージンを切ったときの切り上げの文。再着手のときもこれだけを送る |
 | 起動の引数 | `--append-system-prompt-file <system-prompt.md>`・`--system-prompt-snapshot off`（毎回）・`--plugin-dir <plugins/<12桁>/continuo-agent-procedures>` を足す |
-| スキル | plugin `continuo-agent-procedures` の10本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pull-request・reporting-progress・writing-comments-for-humans・finishing-run。どれも20,000字以下。合計約54,000字。どのスキルも、その段で呼ぶスキルだけで手順が足りる（今の段で要る中身は入れるか独立させる・後の段のことは名前で指す・1行のコマンドは書き写す） |
+| スキル | plugin `continuo-agent-procedures` の11本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pushing・finishing-pull-request・reporting-progress・writing-comments-for-humans・finishing-run。どれも20,000字以下。合計約54,000字。どの箱でも、その箱に書いたスキルだけで手順が足りる（今の箱で要る中身は入れるか独立させる・後の箱のことは名前で指す・1行のコマンドは書き写す） |
 | 終わりの印 | 各 SKILL.md の最後の行 `<!-- continuo-skill-end: <スキル名> <12桁> -->`。12桁は plugin の中身のハッシュ（埋め込むときは置き換え語 `CONTINUO_PLUGIN_HASH`、書き出すときに置き換える）。スクリプトのパスも置き換え語 `CONTINUO_PLUGIN_DIR` から絶対パスへ置き換える |
-| 書き出しと片付け | plugin は `plugins/.tmp-<乱数>/` から `plugins/<12桁>/` へ rename、system-prompt.md は同じディレクトリの一時ファイルから rename。古い版は `.orphaned_at` を置いて14日を過ぎたものだけ消す |
-| Claude Code の版 | continuo の起動のときと `continuo doctor` で `claude --version` を読み、v2.1.304 より古いか読めなければ起動しない |
-| `continuo prompt` | `--show` はシステムプロンプトと最初のプロンプトを区切りの行で分けて出す。`--builtin`・`--url`・`--attempt` は残す。スキルの中身は出さない |
+| 書き出しと片付け | Claude Code を起動する前に毎回、`plugins/<12桁>/` の中身のハッシュを確かめ、無いか合わなければ `plugins/.tmp-<乱数>/` から rename で書き直す（SKILL.md 0444・scripts 0555）。system-prompt.md は `issueDir` に一時ファイルから rename。古い版は、現役の版と `.tmp-*` を除いて `.orphaned_at` を置き、14日を過ぎ、どの `issues/*/system-prompt.md` にも12桁が載っていないものだけ消す |
+| Claude Code の版 | continuo の起動のときと `continuo doctor` で、`claude.kind` の実行ファイルの `--version` を読む。読めて v2.1.304（compaction のあとにスキルの一覧を作り直す版）より古ければ起動しない。読めなければ WARN を出して起動する |
+| `--plugin-dir` を止められた環境 | `disableSideloadFlags` の環境は非対応として FAQ に書く（Claude Code が起動せずに終了コード 1。測る手段が無いので見分ける仕組みは足さない） |
+| `continuo prompt` | `--show` はシステムプロンプトと最初のプロンプトを区切りの行で分けて出す。`--url` では plugin のディレクトリも実際の絶対パスで出し、区切りの行と relay の節とマージンの文を除いて送る文面と1バイトも違わない。`--builtin`・`--attempt` は残す。スキルの中身は出さない |
 | 実機の確かめ | 試験用のカンバン（project #10）で2回。1回目はいつもの本文で、計画の確認で止まるところまで。止まったら herdr で `/compact` を送ってから `Ready` へ戻し、読み直すかを見る。2回目は試験用の本文に「計画の人間確認は省いてよい」を足し、`In Review` まで |
 
 ## 根拠（実測）
@@ -66,6 +67,8 @@
 | 日本語のトークン | 字数 × 約0.80 |
 | 終わりの印（HTML コメント）が届くか | 呼んだときも、compaction のあとに入れ直されたときも、そのまま届く。ただし `/compact` の要約が印の1行を写した |
 | `--permission-mode dontAsk` で Skill ツール | 許可の規則を置かずに呼べた |
+| 置き場所の違う同じ名前のスキルで `--resume` | スキルの一覧に出て、呼ぶと新しい置き場所の全文が届いた |
+| 入れ直しの並ぶ位置 | 要約より後（記録の170行目が要約、174行目が入れ直し） |
 | 古い Claude Code（2.1.250）に `--system-prompt-snapshot` | `error: unknown option '--system-prompt-snapshot'`、終了コード 1 |
 
 公式文書：https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations ・ https://code.claude.com/docs/en/skills ・ https://code.claude.com/docs/en/context-window
@@ -84,6 +87,12 @@
 | compaction のあと毎回全部を Read で読む | レビューループのように同じ段に何度も入るところで、同じ本文が何度も入る |
 | SessionStart（compact）の hook で読み直しを促す | hook の種類を足す変更は CLAUDE.md の決まりで人間の確認が要り、ビルドのたびに本体と hook の版が混ざる。決まりと終わりの印で足りる |
 | 段ごとに新しいセッションを立てる | 前回どこまで進んだかの会話が持ち越されない |
+| フローチャートを計画で描き直す | 題名と本文の書き直しを実装レビューの後ろへ動かし、使い捨てのプランファイルの箱を落とした（設計レビューの2周目）。人間が確定させた流れ図をそのまま使う |
+| 段で呼ぶスキルを対応表とフローチャートで別々に書く | 6か所で食い違い、push と終了の宣言が要る箱で読み込まれなかった（2周目）。1つの定義から両方を生成する |
+| 読み直しを段の入口だけで確かめる | レビューのループの途中で落ちたスキルを拾えない（2周目） |
+| 共有の plugin を「既にあれば使う」だけにする | エージェントが書き換えた scripts を、ほかの全 issue の run が実行する（2周目） |
+| direct chat を「最後の user メッセージが continuo の文面でないか」で見分ける | 見分ける手がかりが無い。表明は direct chat で書いても害が無い（continuo は読まず、hook も差し戻さない） |
+| 版が読めないときも起動しない | continuo の PATH に古い `claude` があるだけで、pane では動く常駐が起動しなくなる |
 | 古い plugin を continuo の起動のときに消す | 立て直したあとも pane の Claude Code は古い `--plugin-dir` を読み続けるので、手順もスクリプトも失われる。issue の本文「走っている run が古い版を読んでいる間は消さない」に反する |
 | 終わりの印が会話のどこかに見えればよい | `/compact` の要約が印を写すので、本文が無くても見えてしまう |
 | スクリプトのパスに `${CLAUDE_SKILL_DIR}` を使う | Read で読み直したときには置き換わらない |
