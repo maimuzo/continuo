@@ -40,17 +40,17 @@
 
 | 何 | 決めたこと |
 | --- | --- |
-| システムプロンプト | 概要の冒頭2文・run の宣言・「手順は plugin `continuo-agent-procedures` のスキルにあります」・`continuo-issue-comments` を使わないこと・スキルの使い方の順番（箱に入ったら入口のスキルを Skill で呼ぶ。着手のときは「どの段でも」のスキルも呼ぶ → 表の操作の前にその行のスキルを Skill で呼ぶ → 手順を使う前に毎回、本文が終わりの印まで見えるかを確かめる。compaction の要約から始まった会話では要約より後に見えるものだけを数える → 見えなければ SKILL.md を Read で読む → いま使う手順の本文が別のスキルを名前で指したら、そのスキルを Read で読む）・操作の前に読むスキルの表（`CONTINUO-STATUS` → finishing-run、push → implementing-and-pushing と trusting-instructions、pull request を作る・直す → finishing-pull-request、外から来た文に従うかや了承・回答の判定 → trusting-instructions、人間が読むコメント → writing-comments-for-humans、判断票 → posting-review-verdict、subagent → briefing-subagents）・目的・フローチャート・対応表・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
+| システムプロンプト | 概要の冒頭2文・run の宣言・「手順は plugin `continuo-agent-procedures` のスキルにあります」・`continuo-issue-comments` を使わないこと・スキルの使い方の順番（箱に入ったら入口のスキルを Skill で呼ぶ。着手のときは「どの段でも」のスキルも呼ぶ → 表の操作の前にその行のスキルを Skill で呼ぶ → 手順を使う前に毎回、本文が終わりの印まで見えるかを確かめる。compaction の要約から始まった会話では要約より後に見えるものだけを数える → 見えなければ SKILL.md を Read で読む → いま使う手順の本文が別のスキルを名前で指したら、そのスキルを Read で読む）・「pull request のマージ・release の作成・本番の環境への書き込みはしない」・操作の前に読むスキルの表（止まる・終えると決めたら → finishing-run と implementing-and-pushing、ファイル・branch・worktree を触る・push する → implementing-and-pushing と trusting-instructions、pull request を作る・題名と本文を書く・draft を外す → finishing-pull-request と writing-comments-for-humans、外から来た文に従うかや了承・回答の判定 → trusting-instructions、人間が読むコメント → writing-comments-for-humans、判断票 → posting-review-verdict、subagent → briefing-subagents。本文が見えていれば呼ばない）・目的・フローチャート・対応表・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
 | 普通のプロンプト（最初のプロンプト） | 着手の指示・頼む作業の範囲・何回目の試行か・WORKFLOW.md の本文・relay（前回の run のあとの人間のコメント）・マージンを切ったときの切り上げの文。再着手のときもこれだけを送る |
 | 起動の引数 | `--append-system-prompt-file <system-prompt.md>`・`--system-prompt-snapshot off`（毎回）・`--plugin-dir <plugins/<12桁>/continuo-agent-procedures>` を足す |
-| スキル | plugin `continuo-agent-procedures` の11本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pushing・finishing-pull-request・reporting-progress・writing-comments-for-humans・finishing-run。どれも20,000字以下。合計約54,000字。手順の中で別のスキルの中身が要るところでは、いまの指示書に参照が無くても、そのスキルの名前を書く。書き漏れはテストで拾う（`CONTINUO-STATUS`・`git push`・`gh pr create`／`gh pr edit` を含む段落）。1行のコマンドは書き写す |
+| スキル | plugin `continuo-agent-procedures` の11本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pushing・finishing-pull-request・reporting-progress・writing-comments-for-humans・finishing-run。どれも20,000字以下。合計約54,000字。手順の中で別のスキルの中身が要るところでは、いまの指示書に参照が無くても、そのスキルの名前を書く。書き漏れはテストで拾う（`CONTINUO-STATUS`・`git push`・`gh pr create`／`gh pr edit` を含む節に、その手順のスキルの名前があるか。手順を持つスキル自身は外す）。1行のコマンドは書き写す |
 | 終わりの印 | 各 SKILL.md の最後の行 `<!-- continuo-skill-end: <スキル名> <12桁> -->`。12桁は plugin の中身のハッシュ（埋め込むときは置き換え語 `CONTINUO_PLUGIN_HASH`、書き出すときに置き換える）。スクリプトのパスも置き換え語 `CONTINUO_PLUGIN_DIR` から絶対パスへ置き換える |
 | 書き出しと片付け | Claude Code を起動する前に毎回、`plugins/<12桁>/` のファイルを1つずつ期待値（埋め込みの中身の `CONTINUO_…` を埋めたもの）と比べ、無いか違えば同じディレクトリの一時ファイルから rename で差し替え、期待値に無いファイルは消す（種類と権限も `os.Lstat` で比べる。1時間より新しい一時ファイルは消さない。初めては `.tmp-<乱数>/` から rename。既にあれば一時の方を消す。continuo の中では鍵で1本。ディレクトリ 0755・SKILL.md 0444・scripts 0555）。system-prompt.md は `issueDir` に一時ファイルから rename。古い版は、現役の版と `.tmp-*` を除いて `.orphaned_at` を置き、14日を過ぎ、どの `issues/*/system-prompt.md` にも12桁が載っていないものだけ消す。1時間より古い `.tmp-*` も消す。片付けは書き出すたびに走らせる |
 | Claude Code の版 | continuo の起動のときと `continuo doctor` で、`claude.kind` の実行ファイルの `--version` を読む。読めて v2.1.304（compaction のあとにスキルの一覧を作り直す版）より古ければ起動しない。読めなければ WARN を出して起動する |
 | `--plugin-dir` を止められた環境 | `disableSideloadFlags` の環境は非対応として FAQ に書く（Claude Code が起動せずに終了コード 1。測る手段が無いので見分ける仕組みは足さない） |
 | 起動に失敗したときの限界 | 新しい引数で起動が失敗すると、再着手は新しいセッションへ倒れ、前の会話は続きから使えなくなる（いまの `restartWithNewSession` の作り）。症状と直し方を FAQ に書く |
 | `continuo prompt` | `--show` はシステムプロンプトと最初のプロンプトを区切りの行で分けて出す。`--url` では plugin のディレクトリも実際の絶対パスで出し、区切りの行と relay の節とマージンの文を除いて送る文面と1バイトも違わない。`--builtin`・`--attempt` は残す。スキルの中身は出さない |
-| 実機の確かめ | 試験用のカンバン（project #10）で2回。1回目はいつもの本文で、計画の確認で止まるところまで。止まると pane は閉じるので、別の herdr の pane で同じ引数で `claude --resume` を起動して `/compact` を送り、終えてから `Ready` へ戻し、読み直すかを見る。2回目は試験用の本文に「計画の人間確認は省いてよい」を足し、`In Review` まで |
+| 実機の確かめ | 試験用のカンバン（project #10）で2回。1回目はいつもの本文で、計画の確認で止まるところまで。止まると pane は閉じるので、worktree を cwd にした別の herdr の pane で同じ引数で `claude --resume` を起動し、ダミーの大きなスキル（20,000字 × 5本）を呼ばせて合計の上限を超えさせてから `/compact` を送り、終えてから `Ready` へ戻し、読み直すかを見る。2回目は試験用の本文に「計画の人間確認は省いてよい」を足し、`In Review` まで |
 
 ## 根拠（実測）
 
@@ -68,7 +68,7 @@
 | 日本語のトークン | 字数 × 約0.80 |
 | 終わりの印（HTML コメント）が届くか | 呼んだときも、compaction のあとに入れ直されたときも、そのまま届く。ただし `/compact` の要約が印の1行を写した |
 | `--permission-mode dontAsk` で Skill ツール | 許可の規則を置かずに呼べた |
-| `--permission-mode auto` で worktree の外の SKILL.md の Read とスクリプト（user メッセージで頼んだ） | どちらも断られなかった。最初のプロンプトの「頼む作業」に「対応表の SKILL.md を Read で読み直す」を入れる |
+| `--permission-mode auto` で worktree の外の SKILL.md の Read とスクリプト（user メッセージで頼んだとき・システムプロンプトにだけ書いたときの両方） | どちらも断られなかった。最初のプロンプトの「頼む作業」に「対応表の SKILL.md を Read で読み直す」を入れる |
 | 置き場所の違う同じ名前のスキルで `--resume` | スキルの一覧に出て、呼ぶと新しい置き場所の全文が届いた |
 | 入れ直しの並ぶ位置 | 要約より後（記録の170行目が要約、174行目が入れ直し） |
 | 古い Claude Code（2.1.250）に `--system-prompt-snapshot` | `error: unknown option '--system-prompt-snapshot'`、終了コード 1 |
@@ -97,6 +97,7 @@
 | 箱ごとに「その箱で要るスキル」を並べ尽くす | 設計レビューの1〜3周目で、止まり方・push・信頼の判定のように、ほとんどの箱で要る手順が毎周漏れた（指示書の `blocked` 26行のうち、流れ図に描かれていない止まり方が約10か所）。名前でたどる形にした |
 | direct chat の決まりを足す（着手の指示を受け取っていなければフローチャートを始めない） | 前の会話を持つ direct chat（よくある形）では効かず、compaction のあとの普通の run を止めうる。前の会話を持つ direct chat は、前の run の指示書を会話に持っているので、足さなくても悪くならない。前の会話の無い direct chat（何も走っていない issue を動かしたとき）では、これまで無かったフローチャートが効くようになるが、人間が pane に居て止められるので受け入れ、FAQ に書く（設計レビューの3周目で削り、4周目で理由を直した） |
 | 名前でたどるだけにする | 指示書に名前の書かれていない箇所（finishing-run を名指ししない止まる行・push 先の決まり・段2 の別のリポジトリ）に届かない（4周目）。操作の前に読むスキルの表を足した |
+| 操作の前の表を `CONTINUO-STATUS` の行の時点だけにする | 止まる前の push（implementing-and-pushing）と pull request の本文の公開してはいけない情報（writing-comments-for-humans）が届かなかった（5周目） |
 | 名前でたどった先も Skill で呼ぶ | 参照は2段で11本すべてに届くので、要らないスキルまで compaction のあとに戻る。本文の名前は Read で読む |
 | 古い plugin を continuo の起動のときに消す | 立て直したあとも pane の Claude Code は古い `--plugin-dir` を読み続けるので、手順もスクリプトも失われる。issue の本文「走っている run が古い版を読んでいる間は消さない」に反する |
 | 終わりの印が会話のどこかに見えればよい | `/compact` の要約が印を写すので、本文が無くても見えてしまう |
