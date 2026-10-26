@@ -201,12 +201,17 @@ func SkillNames() []string {
 //
 // **SKILL.md を `prompt.Build` に通さない。**HTML のコメントを取り除く処理に、終わりの印を消されないためである。
 //
+// **plugin のディレクトリは、中の単引用符を `'\”` に置き換えて埋める。**スキルはこの語を
+// `sh 'CONTINUO_PLUGIN_DIR/…'` の形で単引用符の中にだけ書くので、実行時ディレクトリに単引用符が入っていると、
+// そこで引用が切れて scripts を叩けない（マージンのパスの `marginstatus.ShellQuote` と同じ形。
+// あちらは config を import するので、ここでは同じ1行を書く）。
+//
 // data: 置き換える前の中身。
 // pluginDir: 書き出した plugin のディレクトリの絶対パス。
 // 戻り値: 置き換えた中身。
 func Expand(data []byte, pluginDir string) []byte {
 	s := strings.ReplaceAll(string(data), HashPlaceholder, hash)
-	s = strings.ReplaceAll(s, DirPlaceholder, pluginDir)
+	s = strings.ReplaceAll(s, DirPlaceholder, strings.ReplaceAll(pluginDir, "'", `'\''`))
 	return []byte(s)
 }
 

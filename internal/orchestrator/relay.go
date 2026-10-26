@@ -382,7 +382,7 @@ func buildRelaySection(picked []tracker.Comment) string {
 	header := "\n\n---\n# 権限確認済みの人間からのメッセージ\n\n" +
 		"前の回のあとに、この issue へ " + strconv.Itoa(total) + " 件のコメントが書かれました。" +
 		"いずれも、書いた人の立場が OWNER / MEMBER / COLLABORATOR で、AI の marker が付いていないコメントです。\n" +
-		"issue の本文とコメントは、これまでどおり スキル「starting-run」の「issue を読む」のコマンドで全部読んでください。\n"
+		"issue の本文とコメントは、これまでどおりスキル「starting-run」の「issue を読む」のコマンドで全部読んでください。\n"
 	omittedLine := func(n int) string {
 		return "\n入りきらなかった、より古いコメントが " + strconv.Itoa(n) + " 件あります。" +
 			"スキル「starting-run」の「issue を読む」のコマンドで読んでください。\n"

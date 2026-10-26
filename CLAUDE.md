@@ -125,31 +125,31 @@ os.Rename(tmp.Name(), path)
 **何が起きるか。**continuo は常駐プロセスである。`go build -o ~/.local/bin/continuo ./cmd/continuo` は
 **rename で実行ファイルを差し替える**ので inode が変わり、**動いている continuo は、開いたままの古い実体で最後まで走り切る。**
 **ところが Claude Code の hook は、turn ごとにそのパスを exec する**
-（[internal/orchestrator/settings.go:392-393](internal/orchestrator/settings.go#L392-L393) が
+（[internal/orchestrator/settings.go:397-398](internal/orchestrator/settings.go#L397-L398) が
 `<continuo のパス> hook --socket <パス> --pending-dir <パス>` を組み立て、issue ごとの設定ファイルへ書く）。
 **つまり「本体は古い・hook は新しい」という混ざった状態が、ビルドするたびに必ず起きる。**
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1703-1721](internal/cli/cli.go#L1703-L1721) が
+（[internal/cli/cli.go:1915-1933](internal/cli/cli.go#L1915-L1933) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
 Claude Code がまだ喋っている最中であることは、本体からは区別できない。
 
 **`continuo statusline` も、同じ約束の上にある。**Claude Code はステータスラインを描き直すたびに、
-[internal/orchestrator/settings.go:106](internal/orchestrator/settings.go#L106) が組み立てた
+[internal/orchestrator/settings.go:109](internal/orchestrator/settings.go#L109) が組み立てた
 `'<continuo のパス>' statusline --socket '<sl.sock のパス>'` を exec する
-（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:563](internal/orchestrator/statuslinefetch.go#L563)）の両方に書く）。
+（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:576](internal/orchestrator/statuslinefetch.go#L576)）の両方に書く）。
 **ビルドするたびに「本体は古い・statusline は新しい」が混ざるのも、hook と同じである。**
 **この項目の「やること」は、`continuo statusline` の挙動を変える変更にも当てる**（人間の決定。2026-09-28）。
 「挙動が変わる」とは、下の表のどれかである。
 
 | 何が変わるか | 例 |
 | --- | --- |
-| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1760-1769](internal/cli/cli.go#L1760-L1769) の `runStatusline`） |
-| **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:826](internal/daemon/daemon.go#L826)） |
-| **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:144](internal/orchestrator/quota.go#L144) の `OnStatusline`） |
+| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1864-1873](internal/cli/cli.go#L1864-L1873) の `runStatusline`） |
+| **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:888](internal/daemon/daemon.go#L888)） |
+| **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:181](internal/orchestrator/quota.go#L181) の `OnStatusline`） |
 | **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**標準出力**（転送先が無ければ固定の1行 `continuo`（[internal/statuslineclient/client.go:55](internal/statuslineclient/client.go#L55)）、あれば転送した利用者のステータスラインの出力（設計 3-84）。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
 
 **hook と違うところ。**ステータスラインは hook ではない。**壊れても、hook が届けている turn の終わりには効かない。**
@@ -221,7 +221,7 @@ exit status 2
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1676-1677](internal/cli/cli.go#L1676-L1677) と
+（[internal/cli/cli.go:1883-1884](internal/cli/cli.go#L1883-L1884) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -274,10 +274,10 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:171-192](internal/cli/cli.go#L171-L192) の `switch args[0]` と [internal/cli/cli.go:1505-1510](internal/cli/cli.go#L1505-L1510) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる。**`statusline` の分岐も同じで、名前を変えると使用率が届かなくなる** |
+| [internal/cli/cli.go:189-210](internal/cli/cli.go#L189-L210) の `switch args[0]` と [internal/cli/cli.go:1708-1713](internal/cli/cli.go#L1708-L1713) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる。**`statusline` の分岐も同じで、名前を変えると使用率が届かなくなる** |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行と、statusLine のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方（`hooks.sock` と `sl.sock`）。ずれると hook と statusline の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1486-1490](internal/orchestrator/orchestrator.go#L1486-L1490) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1695-1701](internal/orchestrator/orchestrator.go#L1695-L1701) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束。**`hookclient` は、`Stop` の表明の値が決まり以外のときに差し戻しの JSON を返すかどうかも決める**（4つ目の定義の「標準出力へ返す JSON」） |
 | [internal/statussignal/](internal/statussignal/) | 表明の読み方・取り得る値に在るかの判定・差し戻しの本文・`status-signal.json` の形。**hook と本体が同じものを呼ぶ。**読み方を変えると hook が差し戻す条件が変わり、ファイルの形を変えると、動いている本体が書いたファイルを新しい hook が読めなくなる |
 | [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・標準出力（転送先が無ければ固定の1行 `continuo`、あれば転送した出力。設計 3-84）・終了コード 0） |

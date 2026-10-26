@@ -3,7 +3,11 @@
 # （「finishing-run」の「まとめて直したとき」の「段0. 表明と pull request の本文を、issue ごとに1行ずつ書く」の見本）。
 #
 # 使い方:
-#   sh add-closes-line.sh <issue のリポジトリ（owner/repo）> <PR番号> <その issue の番号>
+#   sh add-closes-line.sh <issue のリポジトリ（owner/repo）> <PR番号> <その issue の番号> [<pull request のリポジトリ（owner/repo）>]
+#
+# pull request を issue と別のリポジトリへ出したときだけ、4つ目に出した先のリポジトリを渡す。
+# そのときは出した先で本文を読み書きし、足す行を `Closes <issue のリポジトリ>#<番号>` にする
+# （「finishing-pull-request」の「別のリポジトリへ pull request を出すとき」）。
 #
 # 出力は次のどれか。
 #   もう入っています
@@ -16,19 +20,22 @@
 # mktemp で作ったファイルは消さない（見本と同じ）。
 
 usage() {
-  echo "使い方: sh add-closes-line.sh <issue のリポジトリ> <PR番号> <その issue の番号>" >&2
+  echo "使い方: sh add-closes-line.sh <issue のリポジトリ> <PR番号> <その issue の番号> [<pull request のリポジトリ>]" >&2
   exit 2
 }
 
-[ $# -eq 3 ] || usage
+[ $# -eq 3 ] || [ $# -eq 4 ] || usage
 REPO=$1
 PR=$2
 NUM=$3
-case "$REPO" in
-  '' | *'<'* | *'>'*) usage ;;
-  */*) ;;
-  *) usage ;;
-esac
+PRREPO=${4:-$1}
+for R in "$REPO" "$PRREPO"; do
+  case "$R" in
+    '' | *'<'* | *'>'*) usage ;;
+    */*) ;;
+    *) usage ;;
+  esac
+done
 case "$PR" in
   '' | *[!0-9]*) usage ;;
 esac
@@ -36,13 +43,20 @@ case "$NUM" in
   '' | *[!0-9]*) usage ;;
 esac
 
+if [ "$PRREPO" = "$REPO" ]; then
+  LINE="Closes #${NUM}"
+else
+  LINE="Closes ${REPO}#${NUM}"
+fi
+
 F=$(mktemp)
-if gh pr view "$PR" --repo "$REPO" --json body --jq .body > "$F" && [ -s "$F" ]; then
-  if grep -qx "Closes #${NUM}" "$F"; then
+if gh pr view "$PR" --repo "$PRREPO" --json body --jq .body > "$F" && [ -s "$F" ]; then
+  # 行末の CR を外して比べる（Windows の改行で書かれた本文でも、同じ行を重ねて足さない）。
+  if tr -d '\r' < "$F" | grep -qxF "$LINE"; then
     echo "もう入っています"
   else
-    printf '\nCloses #%s\n' "$NUM" >> "$F"
-    gh pr edit "$PR" --repo "$REPO" --body-file "$F"
+    printf '\n%s\n' "$LINE" >> "$F"
+    gh pr edit "$PR" --repo "$PRREPO" --body-file "$F"
   fi
 else
   echo "PR の本文を読めませんでした。書き換えていません"

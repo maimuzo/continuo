@@ -707,7 +707,14 @@ func (f Fragments) Render(data map[string]any) (string, error) {
 // 戻り値の3つ目: 変数展開した最初のプロンプトの断片。**並びは `FirstItems` と同じ。**
 // 戻り値の4つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 func (f Fragments) RenderShow(data map[string]any, plugin Plugin) (string, []Fragment, []Fragment, error) {
-	system, err := renderItems(f.system, data, plugin)
+	// **システムプロンプトは試行回数を空にして展開する。**常駐（orchestrator の writeSystemPrompt）が
+	// そう書くので、`--attempt` を渡されても同じにしないと、見せる文面と書く文面がずれる。
+	sysData := make(map[string]any, len(data))
+	for k, v := range data {
+		sysData[k] = v
+	}
+	sysData["attempt"] = nil
+	system, err := renderItems(f.system, sysData, plugin)
 	if err != nil {
 		return "", nil, nil, err
 	}

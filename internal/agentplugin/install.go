@@ -38,9 +38,6 @@ const (
 // 初めて作るときは一時の場所から rename するので、どちらが先に書いても中身は同じになる。
 var installMu sync.Mutex
 
-// tempFileName は、`os.CreateTemp` が `.<元の名前>.*` の形で付ける一時ファイルの名前に当たる。
-var tempFileName = regexp.MustCompile(`^\..+\.[0-9]+$`)
-
 // hashName は、版のディレクトリの名前（16進の小文字12桁）に当たる。
 var hashName = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
@@ -305,7 +302,7 @@ func syncDir(abs, rel, pdir string, wantFiles map[string]embedded, wantDirs map[
 			}
 			seen[childRel] = true
 		default:
-			if info.Mode().IsRegular() && tempFileName.MatchString(e.Name()) && now.Sub(info.ModTime()) < TempKeep {
+			if info.Mode().IsRegular() && atomicfile.IsTempName(e.Name()) && now.Sub(info.ModTime()) < TempKeep {
 				// **別の continuo が書きかけの一時ファイルである。**消さない。
 				continue
 			}
@@ -482,14 +479,19 @@ func systemPrompts(runtimeDir string) ([]string, error) {
 	return out, nil
 }
 
-// referenced は、どれかのシステムプロンプトがその版の12桁を載せているかを返す。
+// referenced は、どれかのシステムプロンプトがその版のディレクトリ（`plugins/<12桁>/`）を載せているかを返す。
+//
+// **12桁だけでは探さない。**システムプロンプトに別の16進の並びが入っていたときに、
+// 使っていない版を使っているとみなして消し損ねる。
 //
 // prompts: システムプロンプトの中身の並び。
 // h: 版の12桁。
 // 戻り値: 載っていれば真。
 func referenced(prompts []string, h string) bool {
+	sep := string(filepath.Separator)
+	needle := "plugins" + sep + h + sep
 	for _, p := range prompts {
-		if strings.Contains(p, h) {
+		if strings.Contains(p, needle) {
 			return true
 		}
 	}

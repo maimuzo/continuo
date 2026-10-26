@@ -31,8 +31,10 @@ func TestRun_本文に知らない変数があれば起動を止める(t *testin
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
 		t.Fatal("知らない変数があるのに起動できてしまった")
@@ -63,8 +65,10 @@ func TestRun_attemptの中の誤りでも起動を止める(t *testing.T) {
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
 		t.Fatal("{{if .attempt}} の中の誤りがあるのに起動できてしまった")
@@ -87,8 +91,10 @@ func TestRun_正しい本文ならプロンプトを理由に止まらない(t *
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	// **この先の段（herdr への接続など）で止まるのは構わない。**
 	// **プロンプトを理由に止まっていないこと**だけを確かめる。

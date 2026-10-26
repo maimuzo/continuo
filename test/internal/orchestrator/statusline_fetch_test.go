@@ -194,6 +194,8 @@ func TestStatuslineFetch_信頼済みのcloneでhaikuを起動しhelloを送っ�
 		"--disable-slash-commands",
 		"--session-id", uuid,
 	}
+	// **全部を一致で比べるので、issue の run の起動に足した `--append-system-prompt-file`・
+	// `--system-prompt-snapshot`・`--plugin-dir` がここへ漏れていないことも、この比べで確かめている**（issue #288）。
 	if got, _ := start["args"].([]any); !slices.Equal(got, wantArgs) {
 		t.Errorf("起動の引数が違う:\n got  %q\n want %q", got, wantArgs)
 	}

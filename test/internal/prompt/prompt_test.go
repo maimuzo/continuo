@@ -443,3 +443,41 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		}
 	}
 }
+
+// 目的: `continuo prompt --show --url --attempt` が見せるシステムプロンプトが、常駐の書くものと同じであることを固定する（issue #288）。
+//
+// **常駐は、試行回数を空にしてシステムプロンプトを書く**（orchestrator の writeSystemPrompt）。
+// `--attempt` の値でシステムプロンプトまで展開すると、`{{if .attempt}}` の枝が見せる文面にだけ現れる。
+//
+// 与える情報: `{{if .attempt}}` の枝を持つ本文と、attempt=2 の変数。
+// 成功条件: RenderShow のシステムプロンプトの断片を連結したものが、attempt を空にした RenderSystem と一致すること。
+func TestRenderShow_システムプロンプトは試行回数を空にして展開する(t *testing.T) {
+	frag := prompt.Build("{{if .attempt}}試行の目印{{end}}\n", "/tmp/WORKFLOW.md")
+	data := prompt.SampleData()
+	data["attempt"] = 2
+	_, system, _, err := frag.RenderShow(data, prompt.Plugin{})
+	if err != nil {
+		t.Fatalf("展開に失敗しました: %v", err)
+	}
+	var parts []string
+	for _, it := range system {
+		parts = append(parts, it.Text)
+	}
+	got := strings.Join(parts, "")
+
+	want := prompt.SampleData()
+	want["attempt"] = nil
+	wantText, err := frag.RenderSystem(want, prompt.Plugin{})
+	if err != nil {
+		t.Fatalf("展開に失敗しました: %v", err)
+	}
+	if strings.Contains(wantText, "試行の目印") {
+		t.Fatal("attempt を空にしたのに枝が出ています")
+	}
+	if strings.Contains(got, "試行の目印") {
+		t.Errorf("--attempt の値でシステムプロンプトまで展開しています（常駐の書く文面と違う）")
+	}
+	if data["attempt"] != 2 {
+		t.Errorf("渡した変数を書き換えています: attempt=%v", data["attempt"])
+	}
+}

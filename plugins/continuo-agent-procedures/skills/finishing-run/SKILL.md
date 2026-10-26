@@ -127,8 +127,8 @@ pull request の本文には、`Closes #45` の形で1行ずつ足します。�
 sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/add-closes-line.sh' '<issue のリポジトリ>' '<PR番号>' '<その issue の番号>'
 ```
 
-- 引数は、`<issue のリポジトリ>`（`owner/repo` の形）・pull request の番号・足す issue の番号の3つです。
-- スクリプトは、`gh pr view <PR番号> --repo <issue のリポジトリ> --json body --jq .body` で本文を読み、読めて中身があるときだけ、`Closes #<その issue の番号>` の行が無ければ末尾に足して `gh pr edit --body-file` で書き戻します。
+- 引数は、`<issue のリポジトリ>`（`owner/repo` の形）・pull request の番号・足す issue の番号の3つです。pull request を別のリポジトリへ出したときだけ、4つ目に出した先のリポジトリ（`owner/repo`）を足します（「finishing-pull-request」の「別のリポジトリへ pull request を出すとき」）。
+- スクリプトは、`gh pr view <PR番号> --repo <pull request のリポジトリ> --json body --jq .body` で本文を読み、読めて中身があるときだけ、`Closes #<その issue の番号>`（別のリポジトリへ出したときは `Closes <issue のリポジトリ>#<その issue の番号>`）の行が無ければ末尾に足して `gh pr edit --body-file` で書き戻します。
 - 引数が足りないか、番号が数字でないときは、何も書き込まずに、使い方を標準エラーへ出して終了コード 2 で終わります。
 
 | 出た文 | すること |

@@ -12303,7 +12303,7 @@ turn ループの先頭と同じ確認（`ctx`・`currentWorker`・`inDirectChat
 # 権限確認済みの人間からのメッセージ
 
 前の回のあとに、この issue へ次の 2 件のコメントが書かれました。どちらも、書いた人の立場が OWNER / MEMBER / COLLABORATOR で、AI の marker が付いていないコメントです。
-issue の本文とコメントは、これまでどおり スキル「starting-run」の「issue を読む」のコマンドで全部読んでください。
+issue の本文とコメントは、これまでどおりスキル「starting-run」の「issue を読む」のコマンドで全部読んでください。
 
 ## 1件目（https://github.com/octocat/hello-world/issues/12#issuecomment-1001）
 issue を1件作ってよい。

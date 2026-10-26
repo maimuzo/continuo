@@ -1126,8 +1126,8 @@ continuo は知らない Status になった issue を、
 **直し方は [FAQ.md](FAQ.md) の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にある。**
 
-**PR を作らせないようにはできない。**組み込みの指示書が本文に委ねるのは
-**draft のまま人間へ渡すかどうか・base にする branch・成果がこの worktree の外にあるときの出し方**の3つだけである。
+**PR を作らせないようにはできない。**continuo の手順（plugin のスキル）が本文に委ねるのは
+**draft のまま人間へ渡すかどうか・base にする branch・成果がこの worktree の外にあるときの出し方・この worktree の分岐元・どの subagent へレビューを頼むか**の5つだけである。
 **「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。

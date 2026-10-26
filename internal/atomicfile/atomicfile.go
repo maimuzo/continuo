@@ -21,9 +21,25 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
+
+// tempName は、Write が `os.CreateTemp(dir, "."+name+".*")` で作る一時ファイルの名前に当たる
+// （`*` は os.CreateTemp が10進の数字に置き換える）。
+var tempName = regexp.MustCompile(`^\..+\.[0-9]+$`)
+
+// IsTempName は、ファイルの名前が Write の作る一時ファイルの形かを返す。
+//
+// **書きかけの一時ファイルを、片付けで消さないために使う**（internal/agentplugin の Install）。
+// 名前の形を呼ぶ側で写すと、ここで形を変えたときに片方だけがずれる。
+//
+// name: ディレクトリを含まないファイルの名前。
+// 戻り値: 一時ファイルの形なら真。
+func IsTempName(name string) bool {
+	return tempName.MatchString(name)
+}
 
 // Write は data を path へ不可分に書き込む。
 //

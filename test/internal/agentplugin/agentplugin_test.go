@@ -257,7 +257,10 @@ func TestCleanup_古い版は14日を過ぎてどのシステムプロンプト�
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(issueDir, agentplugin.SystemPromptFileName),
-		[]byte("終わりの印の12桁: "+referenced+"\n"), 0o600); err != nil {
+		// **使っているとみなすのは、版のディレクトリ（`plugins/<12桁>/`）が載っているときだけである。**
+		// 12桁だけが載っている版（unreferenced）は、使っているとみなさない。
+		[]byte("| plugin のディレクトリ | "+filepath.Join(root, referenced, "continuo-agent-procedures")+" |\n"+
+			"別の16進の並び: "+unreferenced+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
