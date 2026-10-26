@@ -382,10 +382,10 @@ func buildRelaySection(picked []tracker.Comment) string {
 	header := "\n\n---\n# 権限確認済みの人間からのメッセージ\n\n" +
 		"前の回のあとに、この issue へ " + strconv.Itoa(total) + " 件のコメントが書かれました。" +
 		"いずれも、書いた人の立場が OWNER / MEMBER / COLLABORATOR で、AI の marker が付いていないコメントです。\n" +
-		"issue の本文とコメントは、これまでどおり 4-1 のコマンドで全部読んでください。\n"
+		"issue の本文とコメントは、これまでどおり 組み込みの指示書の「issue を読む」のコマンドで全部読んでください。\n"
 	omittedLine := func(n int) string {
 		return "\n入りきらなかった、より古いコメントが " + strconv.Itoa(n) + " 件あります。" +
-			"4-1 のコマンドで読んでください。\n"
+			"組み込みの指示書の「issue を読む」のコマンドで読んでください。\n"
 	}
 	entry := func(index int, c tracker.Comment) string {
 		return "\n## " + strconv.Itoa(index) + "件目（" + c.URL + "）\n" + sanitizeRelayBody(c.Body) + "\n"
