@@ -2,7 +2,7 @@
 
 ## 現在の状態（2026-10-26）
 
-**言いたいこと。**設計は人間との direct chat で固まった。計画は issue のコメントにある。次は人間の了承を受けてから、設計レビューに入る。
+**言いたいこと。**設計は人間との direct chat で固まり、人間の了承（2026-10-26「設計レビューループに進んで良い。問題なければPR完成まで止まらずに進めて」）を受けて設計レビューを回している。
 
 - 指示書（`internal/prompt/builtin.md`）は、人間が確定させた版が commit 68596d21 で入っている
 - 計画：https://github.com/maimuzo/continuo/issues/288 の、2026-10-26 の計画のコメント（2026-10-24 の計画を全部置き換える）
@@ -12,8 +12,8 @@
 
 | 順 | 誰が | 何をするか |
 | --- | --- | --- |
-| 1 | 人間 | issue の「設計レビューへ進めてよいか」の問いのあとに、了承のコメントを書いて Status を `Ready` へ戻す |
-| 2 | continuo のエージェント | 設計レビュー → 実装 → 実装レビュー（`internal/prompt/builtin.md` の「計画を書き、レビューを受ける」以降） |
+| 1 | continuo のエージェント | 設計レビューを収める（1周目の判断票：https://github.com/maimuzo/continuo/issues/288#issuecomment-6416552275 ） |
+| 2 | continuo のエージェント | 実装 → 実装レビュー（`internal/prompt/builtin.md` の「計画を書き、レビューを受ける」以降） |
 | 3 | continuo のエージェント | 実機の確かめを2回（下の「実機の確かめ」） |
 | 4 | 人間 | マージの指示 |
 
@@ -30,21 +30,25 @@
 | スキルは使われ方に沿って少なく | 「このスキルの分け方は細かすぎる。使われ方に沿うようにもっと少ないスキル数にして」 | 2026-10-26 |
 | 1本5,000トークン以内。どの段からでも、要らないスキルは読まず、要るスキルだけが残る | 「スキルの分け方は、5000トークン以内であることと、…issue開始→設計→設計レビューループ→実装してPR作成→実装レビューループの流れの、どの段階からでも、不要なスキルはもう読み込まずに、必要なスキルだけcompaction後も残っているようにして」。5,000トークンは Claude Code の数え方（字数 ÷ 4）で読む（1本20,000字）。「だったら7本でよい」 | 2026-10-26 |
 | continuo のスキルは消えうる。消えても問題ない構造にする | 「実際に何かをする時、continuo由来のスキルだけしか使わないなんてことは100%ない。何かしらのスキルも一緒に使用し、それも合わせて25000トークンなんだろ。その場合スキルの内容は消える可能性があるんだから、消えても問題ない構造にしろ」 | 2026-10-26 |
-| 2つ以上の段で使う決まりは独立したスキルにする | 「9本で良い」 | 2026-10-26 |
+| 2つ以上の段で使う決まりは独立したスキルにする | 「9本で良い」（この決まりを当てると、設計レビューの1周目で10本になった） | 2026-10-26 |
+| マージンの確かめはシステムプロンプトへ | 「「区切りごとに `cat` で確かめる」は、必ず守らせる決まりの側（システムプロンプト）へ置いてください。スキルの側へ置くと、エージェントがそのスキルを呼ばない限り、1度も確かめません。…確かめる時機は、5-3 で時刻を確かめるとき・サブエージェントを起動する前・長いコマンドを叩く前です。」 | 2026-10-17 |
 | 実機の確かめは AI だけで2回に分ける | 「よい」 | 2026-10-26 |
 
 ## 決めたこと
 
-**言いたいこと。**地図と決まりはシステムプロンプト、出来事は普通のプロンプト、手順は段ごとの9本のスキル。スキルは消えても、終わりの印で気づいて Read で読み直す。
+**言いたいこと。**地図と決まりはシステムプロンプト、出来事は普通のプロンプト、手順は段ごとの10本のスキル。スキルは消えても、終わりの印で気づいて Read で読み直す。
 
 | 何 | 決めたこと |
 | --- | --- |
-| システムプロンプト | run の宣言・`continuo-issue-comments` を使わないこと・段に入るときの3つの順番（スキルを呼ぶ → 終わりの印を確かめる → 見えなければ SKILL.md を Read で読む）・目的・フローチャート・対応表（終わりの印の12桁つき）・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
+| システムプロンプト | run の宣言・`continuo-issue-comments` を使わないこと・段に入るときの3つの順番（その段のスキルを全部呼ぶ → 本文が終わりの印まで見えるかを確かめる。compaction の要約から始まった会話では要約より後に見えるものだけを数える → 見えなければ SKILL.md を Read で読む）・人間が直接話しているときの扱い・目的・フローチャート（「どの段でも」の箱にマージンの確かめの1行と時機）・対応表（終わりの印の12桁つき）・この issue の値・WORKFLOW.md の本文。`--append-system-prompt-file` で渡す |
 | 普通のプロンプト（最初のプロンプト） | 着手の指示・頼む作業の範囲・何回目の試行か・WORKFLOW.md の本文・relay（前回の run のあとの人間のコメント）・マージンを切ったときの切り上げの文。再着手のときもこれだけを送る |
 | 起動の引数 | `--append-system-prompt-file <system-prompt.md>`・`--system-prompt-snapshot off`（毎回）・`--plugin-dir <plugins/<12桁>/continuo-agent-procedures>` を足す |
-| スキル | plugin `continuo-agent-procedures` の9本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pull-request・reporting-progress・finishing-run。どれも20,000字以下。合計約54,000字 |
-| 終わりの印 | 各 SKILL.md の最後の行 `<!-- continuo-skill-end: <スキル名> <12桁> -->`。12桁は plugin の中身のハッシュ（埋め込むときは置き換え語 `CONTINUO_PLUGIN_HASH`、書き出すときに置き換える） |
-| 実機の確かめ | 試験用のカンバン（project #10）で2回。1回目はいつもの本文で、計画の確認で止まるところまで。2回目は試験用の本文に「計画の人間確認は省いてよい」を足し、`In Review` まで |
+| スキル | plugin `continuo-agent-procedures` の10本：starting-run・trusting-instructions・writing-plan・running-review-loop・briefing-subagents・posting-review-verdict・implementing-and-pull-request・reporting-progress・writing-comments-for-humans・finishing-run。どれも20,000字以下。合計約54,000字。どのスキルも、その段で呼ぶスキルだけで手順が足りる（今の段で要る中身は入れるか独立させる・後の段のことは名前で指す・1行のコマンドは書き写す） |
+| 終わりの印 | 各 SKILL.md の最後の行 `<!-- continuo-skill-end: <スキル名> <12桁> -->`。12桁は plugin の中身のハッシュ（埋め込むときは置き換え語 `CONTINUO_PLUGIN_HASH`、書き出すときに置き換える）。スクリプトのパスも置き換え語 `CONTINUO_PLUGIN_DIR` から絶対パスへ置き換える |
+| 書き出しと片付け | plugin は `plugins/.tmp-<乱数>/` から `plugins/<12桁>/` へ rename、system-prompt.md は同じディレクトリの一時ファイルから rename。古い版は `.orphaned_at` を置いて14日を過ぎたものだけ消す |
+| Claude Code の版 | continuo の起動のときと `continuo doctor` で `claude --version` を読み、v2.1.304 より古いか読めなければ起動しない |
+| `continuo prompt` | `--show` はシステムプロンプトと最初のプロンプトを区切りの行で分けて出す。`--builtin`・`--url`・`--attempt` は残す。スキルの中身は出さない |
+| 実機の確かめ | 試験用のカンバン（project #10）で2回。1回目はいつもの本文で、計画の確認で止まるところまで。止まったら herdr で `/compact` を送ってから `Ready` へ戻し、読み直すかを見る。2回目は試験用の本文に「計画の人間確認は省いてよい」を足し、`In Review` まで |
 
 ## 根拠（実測）
 
@@ -60,6 +64,9 @@
 | キャッシュ（2 turn 目から先の作成） | `on` 191・47、`off` 150・47・47・47 トークン。`off` で最初に測った1件だけ 15,160（原因は特定できていない） |
 | compaction のあとのスキルの入れ直し | 1本20,000字・合計100,000字（字数 ÷ 4 で数えている）。超えた1本は先頭20,000字で切れ、「…use Read on the skill path if you need the full text」が付く。合計を超えると古いものからまるごと落ちる。同じ内容を呼び直すと本文は2回入らず、並びでは最新になる |
 | 日本語のトークン | 字数 × 約0.80 |
+| 終わりの印（HTML コメント）が届くか | 呼んだときも、compaction のあとに入れ直されたときも、そのまま届く。ただし `/compact` の要約が印の1行を写した |
+| `--permission-mode dontAsk` で Skill ツール | 許可の規則を置かずに呼べた |
+| 古い Claude Code（2.1.250）に `--system-prompt-snapshot` | `error: unknown option '--system-prompt-snapshot'`、終了コード 1 |
 
 公式文書：https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations ・ https://code.claude.com/docs/en/skills ・ https://code.claude.com/docs/en/context-window
 
@@ -77,6 +84,11 @@
 | compaction のあと毎回全部を Read で読む | レビューループのように同じ段に何度も入るところで、同じ本文が何度も入る |
 | SessionStart（compact）の hook で読み直しを促す | hook の種類を足す変更は CLAUDE.md の決まりで人間の確認が要り、ビルドのたびに本体と hook の版が混ざる。決まりと終わりの印で足りる |
 | 段ごとに新しいセッションを立てる | 前回どこまで進んだかの会話が持ち越されない |
+| 古い plugin を continuo の起動のときに消す | 立て直したあとも pane の Claude Code は古い `--plugin-dir` を読み続けるので、手順もスクリプトも失われる。issue の本文「走っている run が古い版を読んでいる間は消さない」に反する |
+| 終わりの印が会話のどこかに見えればよい | `/compact` の要約が印を写すので、本文が無くても見えてしまう |
+| スクリプトのパスに `${CLAUDE_SKILL_DIR}` を使う | Read で読み直したときには置き換わらない |
+| Claude Code の版を文書に書くだけにする | 古い版では着手が全部落ち、再着手は新しいセッションへ倒れて前の会話を捨てる |
+| `continuo prompt --skills` を足す | issue が求めておらず、出すパスは常駐を起動するまで実在しない（設計レビューの1周目で削った） |
 | 実機の試験で AI が了承を書く | AI の印の付いたコメントは命令として扱われず、印を外すと人間のふりになる（issue #245 の決定） |
 
 ## 直さないと決めたもの
