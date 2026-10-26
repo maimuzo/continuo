@@ -7,10 +7,12 @@
 
 ## 根拠資料
 
-- `internal/prompt/builtin.md`（エージェントへ送る指示書の本体。**エージェントの段の根拠は、この文書の節番号で書く**）
+- `internal/prompt/builtin.md`（システムプロンプトの雛形。概要・スキルの使い方・操作の前に読むスキルの表・フローチャート・対応表）と `internal/prompt/first_prompt.md`（最初のプロンプトの雛形）
+- `plugins/continuo-agent-procedures/skills/`（手順の11本のスキル。**エージェントの段の根拠は、スキルの名前と、その SKILL.md の節の名前で書く**。issue #288 より前の1枚の指示書の節番号との対応は、設計 5-3z の表にある）
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd` / `readSignals` / `applySignals` / `decideAfterTurn` / `finishRunClaimed`
 - `internal/scaffold/template.go`（`continuo init` が置く `WORKFLOW.md` の雛形。「始める前に読む文書」の節）
-- `docs/plans/continuo_design.md#5-3`（組み込みのプロンプトの置き場所と組み立て方。全文は `internal/prompt/builtin.md` にある）
+- `docs/plans/continuo_design.md#5-3`（組み込みのプロンプトの置き場所と組み立て方。雛形は `internal/prompt/builtin.md` と `internal/prompt/first_prompt.md`、手順は `plugins/continuo-agent-procedures/` にある）
+- `docs/plans/continuo_design.md#5-3z`（指示を、システムプロンプトと最初のプロンプトと plugin のスキルに分ける）
 - `docs/plans/continuo_design.md#5-3d`（`WORKFLOW.md` の本文に何を書くか）
 - `docs/plans/continuo_design.md#5-3i`（PR はエージェントが出す）
 - `docs/plans/continuo_design.md#5-3u`（計画のあとで人間の確認を受け、質問が出たらレビューを打ち切る）
@@ -18,7 +20,7 @@
 - `docs/plans/continuo_design.md#5-3w`（エージェント自身に担当を確かめさせ、最初の push で draft の pull request を作らせる）
 - `docs/plans/continuo_design.md#5-3y`（終わりの報告の前に指示を分けさせ、時刻は機械のタイムゾーンで書かせる）
 - `docs/plans/continuo_design.md#3-25`（Status を動かす仕組みを、プロンプト頼みにしない）
-- `docs/plans/continuo_design.md#3-27a`（レートリミットのマージンを切ったら、走っている run を切り上げる。`builtin.md` の 5-8）
+- `docs/plans/continuo_design.md#3-27a`（レートリミットのマージンを切ったら、走っている run を切り上げる。確かめの1行はシステムプロンプトのフローチャートの「どの段でも」の箱、手順はスキル reporting-progress の「レートリミットのマージンを切ったら、切り上げる」）
 - `docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md`
 - `docs/spec/usecases/particular_case/レビューを回す.rucm.md`
 - `docs/spec/usecases/particular_case/まとめて直したissueへ成果を書く.rucm.md`
@@ -38,7 +40,7 @@
 
 **1つの run を書いている。**run は、システムが文面を送ってから、エージェントが表明を書いて、システムが run を終えるまでである。
 
-**1回の run では、計画から設計レビューへ進めない**（`builtin.md` の 3-2）。
+**1回の run では、計画から設計レビューへ進めない**（スキル writing-plan の「段2. 人間の確認を受ける」。フローチャートの HC の箱）。
 エージェントは計画のコメントを書いたあと、報告のコメントで人間に訊いて、`blocked` を表明して止まる。
 人間が了承をコメントしてから Status を戻すと、次の run が始まる。
 **だから基本フローは、計画が了承されたあとの run を書いている。**
@@ -47,21 +49,21 @@
 **`ABORT` は「この run はここで終わる」を意味する。**失敗の意味ではない。
 人間が何を見て、何をすると続きが始まるかは、各フローの POSTCONDITION に書いてある。
 
-**前の run が設計レビューより先まで進んでいた場合は、エージェントはその続きから始める**（`builtin.md` の 1「どこまで進んでいたかを判断して、その続きから始めてください」）。
+**前の run が設計レビューより先まで進んでいた場合は、エージェントはその続きから始める**（スキル starting-run の「着手したとき」の「どこまで進んでいたかを判断し、その続きから始めます」）。
 **段15 が見るのは「次に行う段が設計レビューか」である。**前の run がどこまで進んだかではない。
-実装のレビューで質問して止まり、見直した計画が了承された run は、実装が既に在っても、段15 が真で設計レビュー（段16）から回し直す（1 の図と 5-6）。
+実装のレビューで質問して止まり、見直した計画が了承された run は、実装が既に在っても、段15 が真で設計レビュー（段16）から回し直す（システムプロンプトのフローチャートと running-review-loop）。
 段15 の偽の側に、続きの入口を3本置いた。`実装の続きから始める`（段18 へ）、`pullrequestを出すところから始める`（段19 へ）、`実装レビューの続きから始める`（段21 へ）である。
-人間の回答が次にすることを明示していた場合も、エージェントは指示された段から続ける（1 の図と 5-6）。指示された段がこの3つ以外のときは、経路として書いていない。
+人間の回答が次にすることを明示していた場合も、エージェントは指示された段から続ける（システムプロンプトのフローチャートと running-review-loop）。指示された段がこの3つ以外のときは、経路として書いていない。
 
 **5本の記述を取り込んでいる。**経路が掛け算で増えるので分けた（人間の決定）。
 
 | 取り込む場所 | 取り込む記述 | 中身 |
 | --- | --- | --- |
 | 基本フローの段1 | 指示書の文面を組み立てて送る | システムが文面を作って送る |
-| 基本フローの段16 と段21 | レビューを回す | `builtin.md` の 5-6。段16 は計画、段21 は pull request の差分 |
-| 基本フローの段19 | 成果をpushしてpullrequestを出す | `builtin.md` の 3-4 と 3-5 |
-| 代替フロー `まとめて直した` | まとめて直したissueへ成果を書く | `builtin.md` の 7-2 |
-| 代替フロー `進捗報告の間隔を超える` | 進捗報告を書く | `builtin.md` の 5-3 |
+| 基本フローの段16 と段21 | レビューを回す | スキル running-review-loop。段16 は計画、段21 は pull request の差分 |
+| 基本フローの段19 | 成果をpushしてpullrequestを出す | スキル implementing-and-pushing と finishing-pull-request |
+| 代替フロー `まとめて直した` | まとめて直したissueへ成果を書く | スキル finishing-run の「まとめて直したとき」 |
+| 代替フロー `進捗報告の間隔を超える` | 進捗報告を書く | スキル reporting-progress |
 
 **取り込んだ記述の中で run が終わる出口は、取り込んだ段の直後の検証の段で受けている。**段2 は `文面が届かない`、段17 と段22 は `レビューが止まる`、段20 は `pullrequestが出ていない`、代替フロー `進捗報告の間隔を超える` の段2 は `進捗報告を書く前に止まる` である。
 
@@ -380,12 +382,12 @@ sequenceDiagram
 
 ## 分岐元の名前の決め方
 
-`builtin.md` の 3-1 が決めている。上から順に見て、決まった時点で止める。基本フローの段4 が、この4段である。
+スキル starting-run の「分岐元を取り込み、読む」が決めている。上から順に見て、決まった時点で止める。基本フローの段4 が、この4段である。
 
 | 順 | どこを見るか | 決まらないのはどんなときか |
 | --- | --- | --- |
 | 1 | worktree の直下にある身元ファイル（既定 `.continuo.json`）の `base` の値 | キーが無い。値が空文字である |
-| 2 | `WORKFLOW.md` の本文（4-4）の指定 | 指定が書かれていない |
+| 2 | `WORKFLOW.md` の本文（システムプロンプトの「このプロジェクトの決まり」）の指定 | 指定が書かれていない |
 | 3 | issue にリンクされた branch（`{{.push_branch}}`） | branch がリンクされていない |
 | 4 | リポジトリの既定 branch | （ここで必ず決まる） |
 
@@ -395,9 +397,9 @@ sequenceDiagram
 
 ## 担当の確かめ方
 
-`builtin.md` の 3-1 が決めている。**基本フローの段3 は、いちばん最初に確かめる時点である。**同じ見本を、push の前（3-4）と、進捗報告を書く前（5-3）にも叩く。push の前は `成果をpushしてpullrequestを出す` に、進捗報告を書く前は `進捗報告を書く` に在る。
+スキル starting-run の「分岐元を取り込み、読む」の段1 が決めている。**基本フローの段3 は、いちばん最初に確かめる時点である。**同じ見本（`scripts/check-assignee.sh`）を、push の前（implementing-and-pushing の「commit して push する」）と、進捗報告を書く前（reporting-progress）にも叩く。push の前は `成果をpushしてpullrequestを出す` に、進捗報告を書く前は `進捗報告を書く` に在る。
 
-| 見本が出すもの | 段3 では | 作業を終える前の push（3-4）の前では | 途中の push（5-3）の前では |
+| 見本が出すもの | 段3 では | 作業を終える前の push（implementing-and-pushing）の前では | 途中の push（reporting-progress）の前では |
 | --- | --- | --- | --- |
 | 「担当は自分です。進めます」 | 進む | push する | 進捗報告を書いて push する |
 | 「担当者がいません。進めます」 | 進む | push する | 進捗報告を書いて push する |
@@ -408,13 +410,13 @@ sequenceDiagram
 
 ## 取り込みが衝突したとき
 
-`builtin.md` の 3-1 が決めている。衝突した箇所を全部読んでから、解くか止まるかを決める。別の branch を取り込むとき（7-1）も同じ扱いである。
+スキル starting-run の「分岐元を取り込み、読む」の段3 が決めている。衝突した箇所を全部読んでから、解くか止まるかを決める。別の branch を取り込むとき（implementing-and-pushing の「worktree と branch は切り替えない」）も同じ扱いである。
 
 | 場合 | 段6 はどう通るか |
 | --- | --- |
 | 衝突した箇所の全部で、両方の branch の変更をそのまま残せる（同じ場所へ互いに関係の無い行を足しただけ。一覧や `.gitignore` の末尾への追加など） | 真の側。解いて commit し、段7 へ進む |
 | 1箇所でも、次のどれかに当たる。両方が同じ行を別の内容へ変えていて、どちらを採るかで動きが変わる。片方が消し、もう片方が変えている。両方を残すと構文か意味が壊れる。変更の意図を差分と commit メッセージから読み取れない。生成されたファイル・ロックファイル・バイナリである | 偽の側。`衝突を解かずに止まる` |
-| 迷った | 偽の側。`衝突を解かずに止まる`（5-4） |
+| 迷った | 偽の側。`衝突を解かずに止まる`（finishing-run の「判断に迷ったら止める」） |
 | 解いたあとの `git commit` が落ちた | 偽の側。取り込む前へ戻して、`衝突を解かずに止まる` |
 
 **解ける衝突は、代替フローにしていない。**解いて commit すれば、取り込めたことになり、終わり方も、そのあと通る段も変わらない。代替フローにすると、段7 より後ろの全部の経路が2倍になる（分岐元が remote に無い場合と同じ扱いである）。
@@ -432,65 +434,67 @@ sequenceDiagram
 
 ## エージェントが書くコメントと、本文の先頭に置く印
 
-`<!-- continuo:ai -->` は使わない（`builtin.md` の 1）。
+`<!-- continuo:ai -->` は使わない（システムプロンプトの概要）。
 
-| コメント | 書く先 | 本文の先頭の印 | `builtin.md` の節 |
+| コメント | 書く先 | 本文の先頭の印 | スキルと節 |
 | --- | --- | --- | --- |
-| 計画 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- continuo:plan -->` | 3-2 |
-| 計画の判断票 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- design-review-result -->` | 3-2 |
-| 実装の判断票 | pull request | 1行目 `<!-- code-review-result -->`、2行目 `<!-- continuo:agent -->` | 3-6 |
-| 報告（成果・質問・止まった理由） | issue | `<!-- continuo:agent -->` の1行だけ | 3-7、5-5 |
-| 削除の記録 | issue | `<!-- continuo:agent -->` の1行だけ | 5-5、5-6 |
-| 進捗報告 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- continuo:progress -->` | 5-3 |
-| まとめて直した issue の成果報告 | まとめて直した issue | `<!-- continuo:group -->` | 7-2 |
+| 計画 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- continuo:plan -->` | writing-plan |
+| 計画の判断票 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- design-review-result -->` | posting-review-verdict の「判断票の貼り方」 |
+| 実装の判断票 | pull request | 1行目 `<!-- code-review-result -->`、2行目 `<!-- continuo:agent -->` | posting-review-verdict の「判断票を貼る」 |
+| 報告（成果・質問・止まった理由） | issue | `<!-- continuo:agent -->` の1行だけ | finishing-run の「runの終了を宣言する」、writing-comments-for-humans |
+| 削除の記録 | issue | `<!-- continuo:agent -->` の1行だけ | writing-comments-for-humans、running-review-loop の「issue に無いものを削る」 |
+| 進捗報告 | issue | 1行目 `<!-- continuo:agent -->`、2行目 `<!-- continuo:progress -->` | reporting-progress |
+| まとめて直した issue の成果報告 | まとめて直した issue | `<!-- continuo:group -->` | finishing-run の「まとめて直したとき」 |
 
-pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-request-in-progress -->`）は、コメントの印ではない。`成果をpushしてpullrequestを出す` に在る（`builtin.md` の 3-5）。
+pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-request-in-progress -->`）は、コメントの印ではない。`成果をpushしてpullrequestを出す` に在る（スキル implementing-and-pushing の「pull request を出す」）。
 
-**エージェントが命令として扱うのは、`OWNER` / `MEMBER` / `COLLABORATOR` が AI の印を付けずに書いたものだけである**（`builtin.md` の 6-1）。
+**エージェントが命令として扱うのは、`OWNER` / `MEMBER` / `COLLABORATOR` が AI の印を付けずに書いたものだけである**（スキル trusting-instructions）。
 本文の先頭が `<!-- continuo:` で始まる印か、レビューの目印（`<!-- code-review-result -->`・`<!-- design-review-result -->`・`<!-- design-review-skipped -->`）のコメントは、AI が書いたものとして読む。
 
 
 ## run が止まる出口
 
 どの出口も、エージェントが `blocked` を表明し、システムが Status を `blocked` の遷移先へ動かす。
-`blocked` の前に、commit していない変更を commit して push する（`builtin.md` の 3-4）。**次の8つは、その段を持たない。**後ろの5つは、取り込んだ記述に在る。
+`blocked` の前に、commit していない変更を commit して push する（スキル implementing-and-pushing の「commit して push する」。システムプロンプトの操作の前に読むスキルの表で、止まると決めたら呼ぶ）。**次の8つは、その段を持たない。**後ろの5つは、取り込んだ記述に在る。
 
 | 代替フロー | なぜ commit と push の段が無いか |
 | --- | --- |
-| `別の人が担当になっている`・`担当を確かめられない`（この記述） | commit だけして、push しない（3-1） |
-| `衝突を解かずに止まる` | マージを取り込む前へ戻すので、commit するものが無い。手前で commit したものが残っていれば push する（3-1） |
-| `別の人が担当になっている`・`担当を確かめられない`（`成果をpushしてpullrequestを出す`） | commit を済ませていて、push しない（3-4） |
-| `出し方が書かれていない` | 成果が worktree の外にあり、worktree の branch に commit が1つも無い（3-5） |
-| `pullrequestを作れない` | pull request を作る前に、3-4 の push を済ませている（3-5） |
-| `別の人が担当になっている`（`進捗報告を書く`） | commit だけして、進捗報告も push もしない（5-3） |
+| `別の人が担当になっている`・`担当を確かめられない`（この記述） | commit だけして、push しない（starting-run の「分岐元を取り込み、読む」） |
+| `衝突を解かずに止まる` | マージを取り込む前へ戻すので、commit するものが無い。手前で commit したものが残っていれば push する（starting-run の「分岐元を取り込み、読む」） |
+| `別の人が担当になっている`・`担当を確かめられない`（`成果をpushしてpullrequestを出す`） | commit を済ませていて、push しない（implementing-and-pushing の「commit して push する」） |
+| `出し方が書かれていない` | 成果が worktree の外にあり、worktree の branch に commit が1つも無い（implementing-and-pushing の「「commit して push する」の例外」） |
+| `pullrequestを作れない` | pull request を作る前に、「commit して push する」の push を済ませている（implementing-and-pushing の「pull request を出す」） |
+| `別の人が担当になっている`（`進捗報告を書く`） | commit だけして、進捗報告も push もしない（reporting-progress） |
 
-**「commit して push する」段は、どれも push の前に担当を確かめる**（3-4。確かめ方は上の「担当の確かめ方」）。別の人が担当になっていた場合と、担当を確かめられなかった場合は、push せずに、commit の在りか（branch と短い hash）を報告に書く。**どちらの場合も `blocked` を表明して終わるので、出口ごとの代替フローにしていない。**その場合は、POSTCONDITION の「commit は remote に載っている」は成り立たない。
+**「commit して push する」段は、どれも push の前に担当を確かめる**（implementing-and-pushing の「commit して push する」。確かめ方は上の「担当の確かめ方」）。別の人が担当になっていた場合と、担当を確かめられなかった場合は、push せずに、commit の在りか（branch と短い hash）を報告に書く。**どちらの場合も `blocked` を表明して終わるので、出口ごとの代替フローにしていない。**その場合は、POSTCONDITION の「commit は remote に載っている」は成り立たない。
 
-**報告のコメントを書く段は、どれも、書く前に issue と pull request を読み直して、受けた指示を分ける**（3-7。基本フローの段25 と同じ）。3-7 は「`blocked` で止まるときの報告でも同じです」と書いている。終わり方も通る段も変わらないので、出口ごとの段にしていない。
+**報告のコメントを書く段は、どれも、書く前に issue と pull request を読み直して、受けた指示を分ける**（finishing-run の「runの終了を宣言する」の段3。基本フローの段25 と同じ）。finishing-run は「`blocked` で止まるときの報告でも同じです」と書いている。終わり方も通る段も変わらないので、出口ごとの段にしていない。
 
-| 代替フロー | どの記述に在るか | `builtin.md` の節 | 利用者が読むもの |
+| 代替フロー | どの記述に在るか | スキル | 利用者が読むもの |
 | --- | --- | --- | --- |
-| `別の人が担当になっている` | この記述 | 3-1 | 報告のコメント |
-| `担当を確かめられない` | この記述 | 3-1 | 報告のコメント |
-| `衝突を解かずに止まる` | この記述 | 3-1 | 報告のコメント |
-| `読めない` | この記述 | 3-1 | 応答 |
-| `計画を書いて人間確認で止まる` | この記述 | 3-2 | 計画のコメントと、報告のコメント |
-| `対応しないと決める` | この記述 | 3-2 | 対応しない理由のコメント |
-| `了承も回答も無い` | この記述 | 1 | 報告のコメント |
-| `計画の直しを求められる` | この記述 | 3-2 | 新しい計画のコメントと、報告のコメント |
-| `回答が次を明示していない` | この記述 | 5-6 | 新しい計画のコメントと、報告のコメント |
-| `人間に訊くことが出る` | レビューを回す | 5-6 | 報告のコメント |
-| `連続10回で収まらない` | レビューを回す | 5-6 | 報告のコメント |
-| `判断票が数えられない立場` | レビューを回す | 3-2 | 応答 |
-| `進捗報告を書く前に止まる` | レビューを回す | 5-3 | 報告のコメント |
-| `別の人が担当になっている` | 成果をpushしてpullrequestを出す | 3-4 | 報告のコメント |
-| `担当を確かめられない` | 成果をpushしてpullrequestを出す | 3-4 | 報告のコメント |
-| `出し方が書かれていない` | 成果をpushしてpullrequestを出す | 3-5 | 報告のコメント |
-| `pullrequestを作れない` | 成果をpushしてpullrequestを出す | 7-4 | 報告のコメント |
-| `別の人が担当になっている` | 進捗報告を書く | 5-3 | 報告のコメント |
-| `判断に迷って止まる` | この記述 | 5-4 | 報告のコメント |
+| `別の人が担当になっている` | この記述 | starting-run | 報告のコメント |
+| `担当を確かめられない` | この記述 | starting-run | 報告のコメント |
+| `衝突を解かずに止まる` | この記述 | starting-run | 報告のコメント |
+| `読めない` | この記述 | starting-run | 応答 |
+| `計画を書いて人間確認で止まる` | この記述 | writing-plan | 計画のコメントと、報告のコメント |
+| `対応しないと決める` | この記述 | writing-plan | 対応しない理由のコメント |
+| `了承も回答も無い` | この記述 | starting-run の「着手したとき」 | 報告のコメント |
+| `計画の直しを求められる` | この記述 | writing-plan | 新しい計画のコメントと、報告のコメント |
+| `回答が次を明示していない` | この記述 | running-review-loop | 新しい計画のコメントと、報告のコメント |
+| `人間に訊くことが出る` | レビューを回す | running-review-loop | 報告のコメント |
+| `連続10回で収まらない` | レビューを回す | running-review-loop | 報告のコメント |
+| `判断票が数えられない立場` | レビューを回す | posting-review-verdict | 応答 |
+| `進捗報告を書く前に止まる` | レビューを回す | reporting-progress | 報告のコメント |
+| `別の人が担当になっている` | 成果をpushしてpullrequestを出す | implementing-and-pushing | 報告のコメント |
+| `担当を確かめられない` | 成果をpushしてpullrequestを出す | implementing-and-pushing | 報告のコメント |
+| `出し方が書かれていない` | 成果をpushしてpullrequestを出す | implementing-and-pushing | 報告のコメント |
+| `pullrequestを作れない` | 成果をpushしてpullrequestを出す | implementing-and-pushing の「この指示書が決めていないこと」 | 報告のコメント |
+| `別の人が担当になっている` | 進捗報告を書く | reporting-progress | 報告のコメント |
+| `判断に迷って止まる` | この記述 | finishing-run の「判断に迷ったら止める」 | 報告のコメント |
 
-**`マージンを切って切り上げる` はこの表に入れていない。**エージェントは `blocked` ではなく `working` を表明して終える（`builtin.md` の 5-8）。そのあと Status を `failure_state` へ戻すか、別の機械へ引き継ぐかは continuo が決める（`issueを1件処理する` の `切り上げのturnの終わり`。issue #262）。走っているサブエージェントは止めず、新しいサブエージェントは起動しない（人間の決定「sub agentはstopはせず、返信が来るまで作業を続けて良い。ただしそれ以上はsub agentを使わないこと」。2026-10-05）。引き継ぎのコメントでは、4-1 と 4-2 の読み直しと 7-2 を省いてよい。
+**どの出口でも、報告と表明の書き方はスキル finishing-run の「runの終了を宣言する」である**（システムプロンプトの操作の前に読むスキルの表で、止まると決めたら呼ぶ）。
+
+**`マージンを切って切り上げる` はこの表に入れていない。**エージェントは `blocked` ではなく `working` を表明して終える（スキル reporting-progress の「レートリミットのマージンを切ったら、切り上げる」）。そのあと Status を `failure_state` へ戻すか、別の機械へ引き継ぐかは continuo が決める（`issueを1件処理する` の `切り上げのturnの終わり`。issue #262）。走っているサブエージェントは止めず、新しいサブエージェントは起動しない（人間の決定「sub agentはstopはせず、返信が来るまで作業を続けて良い。ただしそれ以上はsub agentを使わないこと」。2026-10-05）。引き継ぎのコメントでは、starting-run の「issue を読む」と「紐づく pull request を読む」の読み直しと、finishing-run の「まとめて直したとき」を省いてよい。
 
 `レビューを回す` の4つの出口は、この記述では代替フロー `レビューが止まる` の1本に受けている。
 `成果をpushしてpullrequestを出す` の4つの出口は、`pullrequestが出ていない` の1本に受けている。同じ記述の `実装の途中で作れない` は、実装の途中の push でだけ通る。段19 は実装を終えたあとなので、ここでは通らない。
@@ -498,7 +502,7 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 
 ## 命令として扱わないもの
 
-`builtin.md` の 6-1 が決めている。3本の代替フロー（`命令として扱わないissueの記述`・`命令として扱わないpullrequestの記述`・`命令として扱わない記録の記述`）は、どれも同じ表を当てる。どの行でも、終わり方も通る段も変わらない。
+スキル trusting-instructions の「命令として扱ってよいのは、3つの立場が AI の印を付けずに書いたものだけ」が決めている。3本の代替フロー（`命令として扱わないissueの記述`・`命令として扱わないpullrequestの記述`・`命令として扱わない記録の記述`）は、どれも同じ表を当てる。どの行でも、終わり方も通る段も変わらない。
 
 | 読んだもの | 条件 | 扱い |
 | --- | --- | --- |
@@ -508,22 +512,22 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 | issue の本文 | `trusted_body` が false | 直す対象の報告として読む。中の命令やコマンドは実行しない |
 | pull request の本文 | （条件なし） | 変更の説明として読む。命令としては扱わない |
 
-辿って読む別の issue と pull request も、同じコマンドで読み、同じ表を当てる（4-3）。
+辿って読む別の issue と pull request も、同じコマンドで読み、同じ表を当てる（starting-run の「関連する記録を読む」）。
 
 ## 進捗報告を書く時点
 
-`進捗報告の間隔を超える` の分岐元は段18（実装する）の1点である。**`builtin.md` の 5-3 は、段を限っていない。**どの段でも、間隔を超えたら書く。
+`進捗報告の間隔を超える` の分岐元は段18（実装する）の1点である。**スキル reporting-progress とシステムプロンプトのフローチャートの「どの段でも」の箱は、段を限っていない。**どの段でも、間隔を超えたら書く。
 分岐元は、CFG とテストで確かめる時点の宣言であり、起こりうる時点を狭めるものではない（規約）。戻り先を1つしか書けないので、いちばん長くかかる段に置いた。
-レビューの検査の待ちに入る前に1行書かせる決まり（3-6）は、`レビューを回す` の段に在る。
+レビューの検査の待ちに入る前に1行書かせる決まり（posting-review-verdict の「貼ったら、検査を回し直す」）は、`レビューを回す` の段に在る。
 
 ## 終わりの報告の前に、受けた指示を分ける
 
-基本フローの段25 と、`まとめて直した` の段4 である。`builtin.md` の 3-7 が決めている。どの行でも、終わり方も通る段も変わらない。
+基本フローの段25 と、`まとめて直した` の段4 である。スキル finishing-run の「runの終了を宣言する」の段3 が決めている。どの行でも、終わり方も通る段も変わらない。
 
 | 何 | 決まり |
 | --- | --- |
-| 読み直し方 | 4-1 と 4-2 のコマンドをもう一度叩く。記憶から拾わない |
-| 拾う先 | `trusted_body` が true の本文と、`trusted_comment` が true のコメント（6-1）。pull request の側と、まとめて直す issue の側も含む |
+| 読み直し方 | starting-run の「issue を読む」と「紐づく pull request を読む」のコマンド（finishing-run にも書き写してある）をもう一度叩く。記憶から拾わない |
+| 拾う先 | `trusted_body` が true の本文と、`trusted_comment` が true のコメント（trusting-instructions）。pull request の側と、まとめて直す issue の側も含む |
 | 分け方 | 実行した / まだ実行していない（理由と、いつ実行するかを書く） / 後の指示で取り消された（どの指示で取り消されたかを書く） |
 | 報告に書くもの | 「実行した」以外を、報告の `### 詳細` へ1件ずつ書く。1件も無ければ「実行していない指示はありません」と1行書く |
 | 書かなくてよいもの | 取り消された指示のうち、前の報告に書いてあるもの |
@@ -531,7 +535,7 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 
 ## pull request を作る時点と、draft を外す時点
 
-`builtin.md` の 3-5 と 3-6 が決めている。
+スキル implementing-and-pushing の「pull request を出す」と、finishing-pull-request の「pull request を出す」（段3）と「収まったら draft を外す」が決めている。
 
 | 時点 | 何をするか | どの記述に在るか |
 | --- | --- | --- |
@@ -539,7 +543,7 @@ pull request の本文の1行目に置く途中の目印（`<!-- continuo:pull-r
 | 実装が終わったあとの push（段19） | pull request がまだ無ければ draft で作る。途中の目印が残っていれば、題名と本文を書き直して目印を外す | 成果をpushしてpullrequestを出す |
 | 実装のレビューが収まって終わったあと（段23） | 実装のレビューを回した pull request が draft なら、外す。誰が draft で作ったかは問わない | この記述 |
 
-段23 で draft を外さないのは、`WORKFLOW.md` の本文（4-4）に「draft のまま人間へ渡す」とはっきり書いてあるときである（7-4）。「draft で作る」とだけ書いてあるときは、外す。
+段23 で draft を外さないのは、`WORKFLOW.md` の本文（システムプロンプトの「このプロジェクトの決まり」）に「draft のまま人間へ渡す」とはっきり書いてあるときである（finishing-pull-request の「この指示書が決めていないこと」）。「draft で作る」とだけ書いてあるときは、外す。
 10周で収まらずに止まったときと、人間に訊くことが出て周を打ち切ったときは、`レビューが止まる` を通るので、段23 へ来ない。
 
 ## まとめて直した issue の Status を書かない場合

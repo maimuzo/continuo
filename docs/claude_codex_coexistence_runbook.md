@@ -73,7 +73,7 @@ Claude専用のtool・hook・Workflowは、Codexに同等機能があること�
 
 ## 5. プロジェクトのskillを選択してsymlinkする
 
-この節は、プロジェクトが `.claude/skills/` に固有のskillを持つ場合だけ行う。このリポジトリは `.claude/skills/` を持たず、規則は `.claude/rules/` の2本（`reporting.md`・`plan-file.md`）・`internal/prompt/builtin.md`・pluginのskillにあるため、`.agents/skills/` は置かない。pluginのskillは6節の導入で共有する。
+この節は、プロジェクトが `.claude/skills/` に固有のskillを持つ場合だけ行う。このリポジトリは `.claude/skills/` を持たず、規則は `.claude/rules/` の2本（`reporting.md`・`plan-file.md`）・plugin `continuo-agent-procedures` のskill（`plugins/continuo-agent-procedures/skills/`。continuoが起動したエージェントへ渡す手順）・マーケットプレイスのpluginのskillにあるため、`.agents/skills/` は置かない。pluginのskillは6節の導入で共有する。
 
 Claudeの全skillを平坦化せず、Codexで使うものだけをskillディレクトリ単位でリンクする。`SKILL.md` だけでなく、同じディレクトリの `scripts/`・`references/`・`assets/` も一緒に参照できる。
 
@@ -106,7 +106,7 @@ codex plugin marketplace list
 codex plugin list
 ```
 
-実際のplugin名はmarketplaceの一覧で確認して置き換える。このリポジトリの `CLAUDE.md` は、作業の規則の置き場として `maimuzo-dev-core`（`general-claude-md`・`issue-management`・`docs-standard`）と `maimuzo-chat-response`（`chat-response`）のskillを指す。Codexでこのリポジトリを扱う場合は、この2つを導入対象に含める。同じ表が指す `internal/prompt/builtin.md` はリポジトリ内の文書なので、pluginを介さず `CLAUDE.md` からの参照として読む。これらのskillは `user-invocable: false` を持つため、Codexで発見・本文読取できるかを9節の方法で確かめる（未確認）。
+実際のplugin名はmarketplaceの一覧で確認して置き換える。このリポジトリの `CLAUDE.md` は、作業の規則の置き場として `maimuzo-dev-core`（`general-claude-md`・`issue-management`・`docs-standard`）と `maimuzo-chat-response`（`chat-response`）のskillを指す。Codexでこのリポジトリを扱う場合は、この2つを導入対象に含める。これらのskillは `user-invocable: false` を持つため、Codexで発見・本文読取できるかを9節の方法で確かめる（未確認）。同じ表が指す plugin `continuo-agent-procedures` のskill（`writing-plan`・`running-review-loop`・`posting-review-verdict` など）はリポジトリ内の `plugins/continuo-agent-procedures/skills/<skill名>/SKILL.md` にあるので、マーケットプレイスから導入せず、`CLAUDE.md` からの参照として読む。
 
 ```sh
 codex plugin add maimuzo-dev-core@maimuzo-marketplace

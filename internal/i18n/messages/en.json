@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "1d860c458d2bbfd443a723e2b22fdfaa1bac68b30382cfa05b81098f4a276534",
+  "_source_sha256": "56cb0a9cf2964dc1360905f39edcec9b1436dfb8a30a92446daa7d5d8db05cf2",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -1042,7 +1042,7 @@
   "daemon.run.claude_too_old": "%[1]w: Claude Code (%[2]s) is version %[3]s, which is too old. continuo needs %[4]s or later (it starts Claude Code with --system-prompt-snapshot and --plugin-dir, and relies on the skill list being rebuilt after compaction). Update Claude Code and start again (for example: claude update)",
   "doctor.claude.too_old": "%[1]s is version %[2]s, which is too old (%[3]s or later is required)",
   "doctor.claude.remedy_update": "Update Claude Code to %s or later (for example: claude update). With the old version, continuo does not start.",
-  "doctor.claude.version_unknown": "Could not read the version (%[1]v). continuo still starts, but if the Claude Code in the pane is older than %[2]s, starting an issue fails to launch Claude Code",
+  "doctor.claude.version_unknown": "Could not read the version (%[1]v). continuo still starts, but if the Claude Code in the pane is older than %[2]s, it does not rebuild the skill list after compaction (and if it is older than 2.1.257, starting an issue fails to launch Claude Code)",
   "cli.prompt.breakdown_system_builtin": "  system prompt, built-in part  %d lines",
   "cli.prompt.breakdown_system_body": "  system prompt, WORKFLOW.md body  %[1]d lines  %[2]s",
   "cli.prompt.breakdown_first_builtin": "  first prompt, built-in part  %d lines",

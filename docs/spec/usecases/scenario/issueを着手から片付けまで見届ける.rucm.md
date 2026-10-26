@@ -31,7 +31,7 @@
 - `internal/orchestrator/directchat.go` の `returnFromDirectChatAsync` / `postDirectChatHold` / `writeRunningStateOnReturn` / `directChatReturnState`
 - `internal/orchestrator/prompt.go` の `buildHandoffComment`
 - `internal/workspace/cleanup.go` の `ShouldCleanup`
-- `internal/prompt/builtin.md` の 3-5（pull request はエージェントが出す）
+- `plugins/continuo-agent-procedures/skills/implementing-and-pushing/SKILL.md` の「pull request を出す」と `plugins/continuo-agent-procedures/skills/finishing-pull-request/SKILL.md`（pull request はエージェントが出す。issue #288 より前の1枚の指示書では 3-5）
 
 ## この記述の読み方
 

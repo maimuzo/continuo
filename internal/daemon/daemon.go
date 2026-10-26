@@ -484,7 +484,7 @@ func checkClaudeVersion(ctx context.Context, kind string, opts Options, logger *
 		return i18n.Errorf(i18n.KeyDaemonRunClaudeTooOld, ErrStartup, res.Path, res.Version, claudeversion.Minimum)
 	case claudeversion.StatusUnknown:
 		logger.Warn("Claude Code の版を読めませんでした（起動は続けます。pane の Claude Code が "+
-			claudeversion.Minimum+" より古いと、着手で Claude Code の起動に失敗します）",
+			claudeversion.Minimum+" より古いと、compaction のあとにスキルの一覧が作り直されません。2.1.257 より古ければ、着手で Claude Code の起動に失敗します）",
 			"claude.kind", kind, "path", res.Path, "error", res.Err)
 	default:
 		logger.Info("Claude Code の版を確かめました", "path", res.Path, "version", res.Version,

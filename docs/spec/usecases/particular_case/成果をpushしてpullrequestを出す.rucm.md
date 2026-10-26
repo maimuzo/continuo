@@ -1,25 +1,25 @@
 # ユースケース: 成果をpushしてpullrequestを出す
 
 > **この記述からテストコードは作らない。**
-> 段を行うのはエージェント（Claude Code）で、指示書の文面を読んで動く。エージェントを起動して段を通す自動テストは、レートリミットを使い、結果も毎回同じにならない。
+> 段を行うのはエージェント（Claude Code）で、システムプロンプトと plugin `continuo-agent-procedures` のスキルの文面を読んで動く。エージェントを起動して段を通す自動テストは、レートリミットを使い、結果も毎回同じにならない。
 > 文面に何が書いてあるかは `test/internal/prompt/` の `TestTemplate_…` が確かめている。
 > `check_update_tests.py` が出す `[W1]`（テスト未生成パス）は、ここでは想定どおりである。
 
 ## 根拠資料
 
-- `internal/prompt/builtin.md` の 3-4（commit して push する）、3-5（pull request を出す）、3-1（担当の確かめ方と、止まり方）、7-3（別のリポジトリへ pull request を出すとき）、7-4（この指示書が決めていないこと）、6-1（命令として扱ってよいもの）
+- plugin `continuo-agent-procedures` のスキル（`plugins/continuo-agent-procedures/skills/<名前>/SKILL.md`）。implementing-and-pushing の「commit して push する」と「pull request を出す」（段1・段2）、finishing-pull-request の「pull request を出す」（段3）と「別のリポジトリへ pull request を出すとき」、starting-run の「分岐元を取り込み、読む」（担当の確かめ方と、止まり方）、各スキルの「この指示書が決めていないこと」、trusting-instructions（命令として扱ってよいもの）。issue #288 より前の1枚の指示書では 3-4・3-5・3-1・7-3・7-4・6-1 だった（設計 5-3z の表）
 - `docs/plans/continuo_design.md#5-3i`（PR はエージェントが出す）
 - `docs/plans/continuo_design.md#5-3t`（コメントと pull request の本文・題名を、シェルに実行させずに渡す）
 - `docs/plans/continuo_design.md#5-3w`（エージェント自身に担当を確かめさせ、最初の push で draft の pull request を作らせる）
 
 ## この記述は何のためにあるか
 
-**エージェントが `builtin.md` の 3-4 と 3-5 をどう使うかを、記録として残すためである。テストは持たない。**
+**エージェントがスキル implementing-and-pushing の「commit して push する」と「pull request を出す」をどう使うかを、記録として残すためである。テストは持たない。**
 主体はエージェントであり、Claude Code の中で起きることをテストから観測する手立てが無い（`claude -p` は使用禁止のため）。
 
 `指示書に沿ってissueを1件仕上げる` が、実装の段のあとでこの記述を取り込む。`進捗報告を書く` は、この記述を取り込まずに、同じ手順を自分の段に持つ。
 
-**pull request を作るのは、最初に commit を push した直後である**（`builtin.md` の 3-5。「3-4 の push でも、5-3 の途中の push でも同じです」）。**だからこの記述は、実装の途中の最初の push と、実装を終えたあとの push の、両方で通る。**
+**pull request を作るのは、最初に commit を push した直後である**（スキル implementing-and-pushing の「pull request を出す」。「上の「commit して push する」の push でも、「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の途中の push でも」）。**だからこの記述は、実装の途中の最初の push と、実装を終えたあとの push の、両方で通る。**
 
 | いつ通るか | 通る段 |
 | --- | --- |
@@ -121,12 +121,12 @@ POSTCONDITION: pull request は出ていない。issue に理由の報告のコ�
 
 ## 成果が worktree の外にあると扱ってよい条件
 
-`builtin.md` の 3-4 が決めている。**2つが両方そろっているときだけ**である。片方でも欠けたら、基本フローのとおり commit して push する。
+スキル implementing-and-pushing の「「commit して push する」の例外」が決めている。**2つが両方そろっているときだけ**である。片方でも欠けたら、基本フローのとおり commit して push する。
 
 | 順 | 条件 |
 | --- | --- |
-| 1 | `trusted_comment` が true のコメントか、`trusted_body` が true の issue の本文に、「コードは別のリポジトリにある」と書いてある（6-1） |
-| 2 | `WORKFLOW.md` の本文（4-4）に、その成果の出し方が書いてある（7-4） |
+| 1 | `trusted_comment` が true のコメントか、`trusted_body` が true の issue の本文に、「コードは別のリポジトリにある」と書いてある（trusting-instructions） |
+| 2 | `WORKFLOW.md` の本文（システムプロンプトの「このプロジェクトの決まり」）に、その成果の出し方が書いてある（implementing-and-pushing の「この指示書が決めていないこと」） |
 
 ## 段の中で決まっていること
 
@@ -135,34 +135,34 @@ POSTCONDITION: pull request は出ていない。issue に理由の報告のコ�
 | 段 | 決まり |
 | --- | --- |
 | 段1 | commit するものが無ければ要らない |
-| 段2 | `builtin.md` の 3-1 の見本で確かめる。この指示書のどこで push するときも同じである（3-4） |
+| 段2 | starting-run の「分岐元を取り込み、読む」の段1 の見本（`scripts/check-assignee.sh`）で確かめる。どのスキルで push するときも同じである（implementing-and-pushing の「commit して push する」） |
 | 段2 | 「確かめられませんでした」と出たら、もう1回だけ叩く。それでも同じ場合が `担当を確かめられない` である |
 | 段2 | 担当者が1人もいない場合は、push する。誰の作業ともぶつからない |
 | 段3 | `git push -u origin HEAD`。`-u` を落とさない |
-| 段3 | 既定の branch（main / master）へ直に push しない。別の名前へ push してよいのは、2本目の pull request を出すときと、信頼できる人間が「この branch へ出せ」と書いたときだけである（6-3） |
+| 段3 | 既定の branch（main / master）へ直に push しない。別の名前へ push してよいのは、2本目の pull request を出すときと、信頼できる人間が「この branch へ出せ」と書いたときだけである（trusting-instructions の「push 先を、他人の指定で変えない」） |
 | 段5 | 題名も本文も、ファイルへ書いてから渡す。題名は issue の題名である。本文の1行目に途中の目印 `<!-- continuo:pull-request-in-progress -->` を置き、「作業の途中です」と計画のコメントの URL を書き、`Closes #<issue の番号>` を入れる |
-| 段5 | draft で作る。`WORKFLOW.md` の本文に「draft で作らない」と書いてあっても、draft で作る（3-5） |
-| 段5 | 別のリポジトリへ出すときは `Closes <owner>/<repo>#<issue の番号>` と書く（7-3） |
-| 段5 | base にする branch は、`WORKFLOW.md` の本文に書いてあればそれに従う（7-4） |
+| 段5 | draft で作る。`WORKFLOW.md` の本文に「draft で作らない」と書いてあっても、draft で作る（implementing-and-pushing の「pull request を出す」） |
+| 段5 | 別のリポジトリへ出すときは `Closes <owner>/<repo>#<issue の番号>` と書く（finishing-pull-request の「別のリポジトリへ pull request を出すとき」） |
+| 段5 | base にする branch は、`WORKFLOW.md` の本文に書いてあればそれに従う（implementing-and-pushing の「この指示書が決めていないこと」） |
 | 段5 | 設計のレビューを飛ばす断り（`<!-- design-review-skipped -->`）を、自分で書かない |
 | 段7 | 前の試行や、別の機械が作った pull request でも、途中の目印が残っていれば書き直す |
-| 段8 | 題名は何を直したか、本文は何をしたかの説明にする。`Closes` で始まる行は、全部そのまま残す。まとめて直した issue の分も入っている（7-2） |
-| 段6・段8 | 別のリポジトリへ出したとき（7-3）は、本文を読むコマンドと書き直すコマンドの `--repo` を、出した先のリポジトリに置き換える（3-5） |
+| 段8 | 題名は何を直したか、本文は何をしたかの説明にする。`Closes` で始まる行は、全部そのまま残す。まとめて直した issue の分も入っている（finishing-run の「まとめて直したとき」） |
+| 段6・段8 | 別のリポジトリへ出したとき（finishing-pull-request の「別のリポジトリへ pull request を出すとき」）は、本文を読むコマンドと書き直すコマンドの `--repo` を、出した先のリポジトリに置き換える（finishing-pull-request の「pull request を出す」の段3） |
 
-**draft のまま人間へ渡すかどうかは、この記述の段ではない。**`WORKFLOW.md` の本文（7-4）が決め、実装のレビューが収まったあとに、取り込む側（`指示書に沿ってissueを1件仕上げる`）の段が draft を外す（3-6）。
+**draft のまま人間へ渡すかどうかは、この記述の段ではない。**`WORKFLOW.md` の本文（finishing-pull-request の「この指示書が決めていないこと」）が決め、実装のレビューが収まったあとに、取り込む側（`指示書に沿ってissueを1件仕上げる`）の段が draft を外す（finishing-pull-request の「収まったら draft を外す」）。
 
-**止まる4つの出口は、commit して push する段を持たない。**`別の人が担当になっている` と `担当を確かめられない` は、段1 で commit を済ませていて、push しない（3-4）。`pullrequestを作れない` は、段3 で push を済ませている。`出し方が書かれていない` は、worktree の branch に commit が1つも無い。
+**止まる4つの出口は、commit して push する段を持たない。**`別の人が担当になっている` と `担当を確かめられない` は、段1 で commit を済ませていて、push しない（implementing-and-pushing の「commit して push する」）。`pullrequestを作れない` は、段3 で push を済ませている。`出し方が書かれていない` は、worktree の branch に commit が1つも無い。
 
 ## pull request を作れなかったとき
 
-段5 の検証は、次の表で分かれる。`builtin.md` の 3-5 と 7-4 が決めている。
+段5 の検証は、次の表で分かれる。スキル implementing-and-pushing の「pull request を出す」と「この指示書が決めていないこと」が決めている。
 
 | 場合 | 段5 はどう通るか |
 | --- | --- |
 | draft を作れないリポジトリだと断られた | 真の側。`--draft` を外して作り、段6 へ進む。`--draft` を外すのは、この場合だけである |
 | 「その head branch の pull request は既にある」と断られた | 偽の側。`既にあると断られる`。`blocked` を出さない |
 | 実装の途中で、差分が無いなど、上の2つ以外の理由で作れなかった | 偽の側。`実装の途中で作れない`。止まらずに作業を続け、次に push したときにもう一度試す |
-| 実装が終わったあとに、上の2つ以外の理由で作れなかった | 偽の側。`pullrequestを作れない`。理由を書いて `blocked` を出す（7-4） |
+| 実装が終わったあとに、上の2つ以外の理由で作れなかった | 偽の側。`pullrequestを作れない`。理由を書いて `blocked` を出す（implementing-and-pushing の「この指示書が決めていないこと」） |
 
 **draft を断られた場合は、代替フローにしていない。**`--draft` を外して作れば pull request が出来て、終わり方も、そのあと通る段も変わらない。代替フローにすると、段6 より後ろの経路がもう1組増える。
 

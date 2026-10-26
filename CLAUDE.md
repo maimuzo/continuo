@@ -357,13 +357,13 @@ git worktree remove "$ROLLBACK"
 ## 作業の進め方
 
 **ここから下（作業の進め方・PR を出すときの絶対条件・コードレビュー記録フロー）は、人間と直接やりとりしている AI に当てる。**
-**continuo が起動したエージェントは、ここから下と組み込みの指示書が食い違うときは、組み込みの指示書に従う。**
+**continuo が起動したエージェントは、ここから下と、continuo が渡す指示（組み込みのシステムプロンプトと、plugin `continuo-agent-procedures` のスキル）が食い違うときは、continuo が渡す指示に従う。**
 
 **規則は次の表の置き場にある。**`.claude/rules/` の2本のほかは、**自動では読まれない。ここから辿る。**
 
 | 何の規則か | どこにあるか | どう読むか |
 | --- | --- | --- |
-| **設計 → 設計レビュー → 実装 → 実装レビューの段取り、issue と PR のコメントの書き方、レビューの回し方、subagent への渡し方** | [internal/prompt/builtin.md](internal/prompt/builtin.md)（continuo の組み込みの指示書。「計画を書き、レビューを受ける」「pull request のレビューを受ける」「人間へ質問・報告するコメントの書き方」「レビューの回し方」「subagent へ渡すもの」の節） | **Read で開く** |
+| **設計 → 設計レビュー → 実装 → 実装レビューの段取り、issue と PR のコメントの書き方、レビューの回し方、subagent への渡し方** | plugin `continuo-agent-procedures` のスキル（continuo が起動したエージェントへ渡す手順）。[writing-plan](plugins/continuo-agent-procedures/skills/writing-plan/SKILL.md)（計画を書き、人間の確認を受ける）・[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md)（設計レビューと実装レビュー・レビューの回し方）・[posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md)（判断票の貼り方・貼ったら検査を回し直す）・[finishing-pull-request](plugins/continuo-agent-procedures/skills/finishing-pull-request/SKILL.md)（収まったら draft を外す）・[writing-comments-for-humans](plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md)（人間へ質問・報告するコメントの書き方）・[briefing-subagents](plugins/continuo-agent-procedures/skills/briefing-subagents/SKILL.md)（subagent へ渡すもの） | **SKILL.md を Read で開く** |
 | **worktree・並列・プラグイン・issue の作り方と着手** | `maimuzo-dev-core` の `general-claude-md` スキル | **セッション開始時と compaction のあとに Skill で読む** |
 | **カンバンの操作** | `maimuzo-dev-core` の `issue-management` スキル | カンバンに触る前に Skill で読む |
 | **プランファイルの書き方** | `maimuzo-dev-core` の `docs-standard` スキル | プランファイルを書く前に Skill で読む |
@@ -374,16 +374,17 @@ git worktree remove "$ROLLBACK"
 
 **プラグインの規則は開発者の環境向けである**（上の「不特定多数の環境と、maimuzo の環境を混同しない」）。**このリポジトリを clone した人には当てはまらない。**
 
-### 組み込みの指示書を、自分の作業にも当てる
+### continuo の手順のスキルを、自分の作業にも当てる
 
 **この節は、人間と直接やりとりしている AI にだけ当てる。**
-**continuo が起動したエージェント（continuo が continuo 自身の issue を回したとき）は、この節を読み飛ばし、組み込みの指示書どおりに動く。**下の読み替えの表を当ててはならない。`CONTINUO-STATUS:` も `<!-- continuo:agent -->` も、指示書どおりに書く。
+**continuo が起動したエージェント（continuo が continuo 自身の issue を回したとき）は、この節を読み飛ばし、continuo が渡すシステムプロンプトとスキルのとおりに動く。**下の読み替えの表を当ててはならない。`CONTINUO-STATUS:` も `<!-- continuo:agent -->` も、スキルのとおりに書く。
 
-**組み込みの指示書は、continuo が起動したエージェントへ渡す文書である。**
-**人間と直接やりとりしている AI も、計画と pull request のレビュー（「計画を書き、レビューを受ける」「pull request のレビューを受ける」）・issue と PR のコメントの書き方（「人間へ質問・報告するコメントの書き方」）・レビューの回し方（「レビューの回し方」）・subagent への渡し方（「subagent へ渡すもの」）は、そこに従う。**
+**plugin `continuo-agent-procedures` のスキル（[plugins/continuo-agent-procedures/skills/](plugins/continuo-agent-procedures/skills/)）は、continuo が起動したエージェントへ渡す手順である。**
+**人間と直接やりとりしている AI も、計画と pull request のレビュー（writing-plan・running-review-loop・posting-review-verdict・finishing-pull-request）・issue と PR のコメントの書き方（writing-comments-for-humans）・レビューの回し方（running-review-loop の「レビューの回し方」）・subagent への渡し方（briefing-subagents）は、そこに従う。**
+**スキルの本文の山括弧の語（`<issue のリポジトリ>` など）は作業している issue の値で、`CONTINUO_PLUGIN_DIR` はリポジトリの [plugins/continuo-agent-procedures/](plugins/continuo-agent-procedures/) で読む。**continuo はこれらを、システムプロンプトの「この issue の値」と書き出し先の絶対パスで埋めて渡している。
 読み替えは次のとおりである。
 
-| 指示書の書き方 | このリポジトリを直す AI は |
+| スキルの書き方 | このリポジトリを直す AI は |
 | --- | --- |
 | 応答の最後に `CONTINUO-STATUS:` を書く | **書かない。**カンバンの操作は `issue-management` スキルに従う |
 | 質問は issue のコメントへ書いて止まる | **人間へチャットで訊く。**訊き方は [.claude/rules/reporting.md](.claude/rules/reporting.md) |
@@ -401,21 +402,21 @@ git worktree remove "$ROLLBACK"
 | --- | --- |
 | 1 | この CLAUDE.md |
 | 2 | `.claude/rules/` に残した2本 |
-| 3 | 組み込みの指示書（「計画を書き、レビューを受ける」「pull request のレビューを受ける」「人間へ質問・報告するコメントの書き方」「レビューの回し方」「subagent へ渡すもの」の節） |
-| 4 | プラグインのスキル |
+| 3 | plugin `continuo-agent-procedures` のスキル（writing-plan・running-review-loop・posting-review-verdict・finishing-pull-request・writing-comments-for-humans・briefing-subagents） |
+| 4 | プラグインのスキル（上の「作業の進め方」の表の `maimuzo-dev-core` などのもの） |
 | 5 | メモリ（`~/.claude/projects/` の下。古い決まりが残っていることがある） |
 
 **とくに次の2つは、プラグインのスキルと食い違っている。**
-- **レビュワーへ渡すものは、組み込みの指示書の「レビューの回し方」と「subagent へ渡すもの」に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（直しを任せる worker にも読ませる）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
+- **レビュワーへ渡すものは、running-review-loop の「レビューの回し方」と briefing-subagents の「subagent へ渡すもの」に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（直しを任せる worker にも読ませる）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
 - **MEDIUM と LOW を、新しい issue へ切り出さない**（`general-claude-md` の「スコープ外として放置しない。bug-reporter で issue に登録する」より、下の「このリポジトリに固有の決まり」が勝つ）
 
-**レビューを回すときは、毎周「レビューの回し方」を開き直す。**とくに次の2つを落とさない。
+**レビューを回すときは、毎周 running-review-loop の「レビューの回し方」を開き直す。**とくに次の2つを落とさない。
 
 - **重さは、受けた側が「レビューの回し方」の4段の定義で付け直す。**レビュワーが付けた重さをそのまま数えない
 - **直す前に、直す箇所と影響範囲を全部並べてから、一気に直す**（「レビューの回し方」の「直す前に書くこと」）
 
 **開き直さなかったために、害の無い指摘を HIGH のまま数え、1本の pull request で31周回したことがある**（2026-09-22）。
-**組み込みの指示書は自動では読まれないので、読みに行かない限り効かない。**
+**このスキルは、人間と直接やりとりしている AI には自動では読まれないので、読みに行かない限り効かない。**
 
 ### このリポジトリに固有の決まり
 
@@ -426,7 +427,7 @@ git worktree remove "$ROLLBACK"
 - **このプロジェクトの開発のやりとりに書く時刻は、特別な理由が無い限り JST で書く。**issue と pull request のコメント・チャットの返答・計画ファイルが当たる。GitHub の API が返す時刻（`2026-09-25T05:14:21Z` のように末尾が `Z` のもの）と `date -u` の値は UTC なので、9時間足して `2026-09-25 14:14 (JST)` の形に直してから書く。**ただし continuo 本体が利用者へ出す時刻（ログ・continuo が issue へ書くコメント・ダッシュボード）は JST に固定しない。**continuo は世界中の人が使う
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
-- **レビュワーの割り当て。**組み込みの指示書の「レビューの回し方」の「誰に見せるか」の2つの役に、次を当てる
+- **レビュワーの割り当て。**running-review-loop の「レビューの回し方」の「誰に見せるか」の2つの役に、次を当てる
 
   | どのレビュー | 差分を読む役 | 関連処理まで見る役 |
   | --- | --- | --- |
@@ -472,9 +473,9 @@ git worktree remove "$ROLLBACK"
 2. **`/code-review` を通す**
 3. **レビュー結果と、指摘ごとの対応表を、その PR のコメントに貼る。**
    **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）。
-   **判断票の中身は [internal/prompt/builtin.md](internal/prompt/builtin.md) の「計画を書き、レビューを受ける」と「レビューの回し方」にある**
+   **判断票の中身は [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」と、[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」にある**
 4. **指摘に対応する。収まるまで 2〜4 を繰り返す。**「収まっている」の定義（CRITICAL と HIGH が0件）・収まったあと何周回すか・
-   連続10回で完全に止まることは、[internal/prompt/builtin.md](internal/prompt/builtin.md) の「レビューの回し方」の「何周回すか」にある。
+   連続10回で完全に止まることは、[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」の「何周回すか」にある。
    **重さは、受けた側が同じ「レビューの回し方」の4段で付け直してから数える**
 5. **`gh pr ready` で draft を外す**
 
@@ -487,7 +488,7 @@ git worktree remove "$ROLLBACK"
 
 | どこ | いつ止まるか |
 | --- | --- |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[internal/prompt/builtin.md](internal/prompt/builtin.md) の「計画を書き、レビューを受ける」） |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **2つとも数える条件は同じである。**
@@ -509,7 +510,7 @@ git worktree remove "$ROLLBACK"
 
 **既に draft を外してある PR では、これは効かない。**`ready_for_review` は
 **draft を ready にしたときにしか起きない**ので、`gh pr ready <番号>` を打っても何も回らない。
-**その場合は `gh run rerun` で回し直す**（どの run を選ぶかは [internal/prompt/builtin.md](internal/prompt/builtin.md) の「pull request のレビューを受ける」の「貼ったら、検査を回し直す」）。
+**その場合は `gh run rerun` で回し直す**（どの run を選ぶかは [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「pull request のレビューを受ける」の「貼ったら、検査を回し直す」）。
 
 **逃がし口は無い。**
 **かつては環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` で hook を通せたが、その hook ごと廃止した。**
@@ -580,7 +581,7 @@ git worktree remove "$ROLLBACK"
 
 ## コードレビュー記録フロー
 
-**言いたいこと。**回し方の正は [internal/prompt/builtin.md](internal/prompt/builtin.md) の「レビューの回し方」である。**ここに写さない。**
+**言いたいこと。**回し方の正は [running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」である。**ここに写さない。**
 ここに置くのは、このリポジトリに固有の3つ（貼る先と目印・対で書くこと・人間へ見せるもの）だけである。
 
 **`/code-review` / `code-reviewer` / `security-reviewer` のどれで受けたときも同じである。**
@@ -593,7 +594,7 @@ git worktree remove "$ROLLBACK"
 | **設計レビューの判断票** | **その pull request が閉じる issue のコメント** | `<!-- design-review-result -->`（continuo が起動したエージェントは、1行目を `<!-- continuo:agent -->`、2行目をこの目印にする） |
 | **設計レビューを飛ばしてよい変更**（文書だけ・1行の修正） | **その pull request のコメント** | `<!-- design-review-skipped -->`。**2行目に理由を書く** |
 
-**CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は組み込みの指示書の「計画を書き、レビューを受ける」、直す前の計画は「レビューの回し方」の「直す前に書くこと」にある。
+**CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」、直す前の計画は [running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」の「直す前に書くこと」にある。
 **判断票は、直す前に貼る。**貼らずに直したものは、レビューを実施していないものとして扱う。
 
 **判断票をプランファイルへ書かない。**指摘ごとの可否は修正の履歴そのもので、プランファイルは修正の履歴を持たない（`docs-standard` スキル）。
@@ -607,7 +608,7 @@ git worktree remove "$ROLLBACK"
 
 ### 人間へ見せるもの
 
-**連続10回で収まらずに止まったとき**（「レビューの回し方」の「何周回すか」）は、次を揃えて人間へ見せる。
+**連続10回で収まらずに止まったとき**（running-review-loop の「レビューの回し方」の「何周回すか」）は、次を揃えて人間へ見せる。
 
 | 何を | 中身 |
 | --- | --- |

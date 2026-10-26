@@ -1041,7 +1041,7 @@
   "daemon.run.claude_too_old": "%w: Claude Code（%s）の版 %s は古すぎます。continuo には %s 以上が要ります（Claude Code を --system-prompt-snapshot と --plugin-dir を付けて起動し、compaction のあとにスキルの一覧を作り直す版を前提にしています）。Claude Code を上げてから起動してください（例: claude update）",
   "doctor.claude.too_old": "%s の版 %s は古すぎます（%s 以上が要ります）",
   "doctor.claude.remedy_update": "Claude Code を %s 以上へ上げてください（例: claude update）。古いままだと、continuo は起動しません。",
-  "doctor.claude.version_unknown": "版を読めませんでした（%v）。continuo は起動しますが、pane の Claude Code が %s より古いと、着手で Claude Code の起動に失敗します",
+  "doctor.claude.version_unknown": "版を読めませんでした（%v）。continuo は起動しますが、pane の Claude Code が %s より古いと、compaction のあとにスキルの一覧が作り直されません（2.1.257 より古ければ、着手で Claude Code の起動に失敗します）",
   "cli.prompt.breakdown_system_builtin": "  システムプロンプトの組み込み  %d 行",
   "cli.prompt.breakdown_system_body": "  システムプロンプトの WORKFLOW.md の本文  %d 行  %s",
   "cli.prompt.breakdown_first_builtin": "  最初のプロンプトの組み込み  %d 行",
