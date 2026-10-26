@@ -47,10 +47,10 @@ const closedRecordWriteTimeout = 10 * time.Second
 // relayMaxRunes は、最初のメッセージに付ける節の全体の長さの上限（rune 数）である（設計 3-85）。
 const relayMaxRunes = 30000
 
-// relayTrustedAssociations は、渡してよい投稿者の立場である（組み込みの指示書の「issue を読む」の `trusted_comment` と同じ）。
+// relayTrustedAssociations は、渡してよい投稿者の立場である（スキル「starting-run」の「issue を読む」の `trusted_comment` と同じ）。
 var relayTrustedAssociations = []string{"OWNER", "MEMBER", "COLLABORATOR"}
 
-// relayFixedAIMarkers は、AI が書いたとみなす本文の先頭の印である（組み込みの指示書の「issue を読む」の jq の式と同じ）。
+// relayFixedAIMarkers は、AI が書いたとみなす本文の先頭の印である（スキル「starting-run」の「issue を読む」の jq の式と同じ）。
 //
 // **設定の `tracker.comments.marker` と `self_marker` は、空でないときだけ足す**（`relayAIMarkers`）。
 var relayFixedAIMarkers = []string{
@@ -151,7 +151,7 @@ func relayAgentMarkers(cfg config.Config) []string {
 
 // startsWithMarker は、本文の1行目が印で始まるかを返す（行頭の照合。設計 3-85）。
 //
-// **飛ばすのは前の空白・タブ・改行（`[ \t\r\n]*`）だけである**（組み込みの指示書の「issue を読む」の jq の式と同じ）。
+// **飛ばすのは前の空白・タブ・改行（`[ \t\r\n]*`）だけである**（スキル「starting-run」の「issue を読む」の jq の式と同じ）。
 // 全角空白などは飛ばさない。jq と違う判定にすると、エージェントが自分で読んだ結果と食い違う。
 //
 // body: 本文。
@@ -370,7 +370,7 @@ func sanitizeRelayBody(body string) string {
 //
 // **日本語の文言を `fmt.Sprintf` に入れない。**文字列の連結で書く
 // （test/internal/testdesign/no_japanese_messages_test.go が件数を固定している）。
-// **最初のメッセージは組み込みの指示書と同じく日本語だけである。**
+// **最初のメッセージはシステムプロンプトとスキルと同じく日本語だけである。**
 //
 // picked: 渡すコメント（**古い順**）。空なら空文字を返す。
 // 戻り値: 節の全文（先頭に区切りの空行と `---` を持つ）。
@@ -382,10 +382,10 @@ func buildRelaySection(picked []tracker.Comment) string {
 	header := "\n\n---\n# 権限確認済みの人間からのメッセージ\n\n" +
 		"前の回のあとに、この issue へ " + strconv.Itoa(total) + " 件のコメントが書かれました。" +
 		"いずれも、書いた人の立場が OWNER / MEMBER / COLLABORATOR で、AI の marker が付いていないコメントです。\n" +
-		"issue の本文とコメントは、これまでどおり 組み込みの指示書の「issue を読む」のコマンドで全部読んでください。\n"
+		"issue の本文とコメントは、これまでどおり スキル「starting-run」の「issue を読む」のコマンドで全部読んでください。\n"
 	omittedLine := func(n int) string {
 		return "\n入りきらなかった、より古いコメントが " + strconv.Itoa(n) + " 件あります。" +
-			"組み込みの指示書の「issue を読む」のコマンドで読んでください。\n"
+			"スキル「starting-run」の「issue を読む」のコマンドで読んでください。\n"
 	}
 	entry := func(index int, c tracker.Comment) string {
 		return "\n## " + strconv.Itoa(index) + "件目（" + c.URL + "）\n" + sanitizeRelayBody(c.Body) + "\n"

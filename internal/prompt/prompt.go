@@ -1,16 +1,23 @@
-// Package prompt は、continuo が Claude Code へ最初に送る指示書を組み立てる
-// （設計 5-3 / 5-3c。#40（WORKFLOW.md のプロンプトを、仕組みの部分とプロジェクト固有の部分に分ける））。
+// Package prompt は、continuo が Claude Code へ渡すシステムプロンプトと最初のプロンプトを組み立てる
+// （設計 5-3 / 5-3c。issue #288（指示書を、フローチャートだけのシステムプロンプトと plugin のスキルに分ける））。
 //
-// **送る文面は3つの断片からできている。**
+// **渡す文面は2つある。**
 //
-//	組み込みの前半   builtin.md の、目印の行より上。continuo の実行ファイルの中にある
+//	システムプロンプト  builtin.md（雛形）+ WORKFLOW.md の本文。`--append-system-prompt-file` で渡す。
+//	                    その issue のあいだ変わらない地図と決まり（フローチャート・対応表・この issue の値）だけを置く。
+//	                    compaction で要約されず、`--system-prompt-snapshot off` で起動のたびに新しい版へ差し替わる
+//	最初のプロンプト    first_prompt.md（雛形）+ WORKFLOW.md の本文。herdr の `agent.prompt` で送る。
+//	                    着手の指示・頼む作業の範囲・何回目の試行か。auto の判定役が読むのはこちらである
+//
+// **手順の本文はどちらにも無い。**plugins/continuo-agent-procedures/ のスキルにある（`internal/agentplugin` が書き出す）。
+//
+// **雛形はどちらも、目印の行で前半と後半に切り、本文をその位置に挟む。**
+//
+//	組み込みの前半   雛形の、目印の行より上。continuo の実行ファイルの中にある
 //	本文            WORKFLOW.md の閉じの --- より下。利用者が書く。空でもよい
-//	組み込みの後半   builtin.md の、目印の行より下
+//	組み込みの後半   雛形の、目印の行より下（いまはどちらも空である）
 //
-// **本文を真ん中に挟む。**仕組みの締めくくり（表明の1行の説明）が必ず最後に来るようにする。
-// 末尾に足す形にすると、利用者の文が仕組みの説明より後ろに来て、打ち消しやすくなる。
-//
-// **3つは別々に解釈して、別々に変数展開してから連結する。**1つのテンプレートへ
+// **断片は別々に解釈して、別々に変数展開してから連結する。**1つのテンプレートへ
 // 連結してから解釈しない。理由は2つある。
 //
 //   - **誤りがどのファイルの何行目かを名指しできる。**連結すると行番号が合算されて意味を失う
@@ -39,18 +46,27 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/marginstatus"
+	"github.com/maimuzo/continuo/plugins"
 )
 
-// Marker は builtin.md を前半と後半に切る目印の行である。
+// Marker は雛形を前半と後半に切る目印の行である。**2つの雛形で同じ行を使う。**
 //
 // **この行そのものは、送る文面には残らない。**
 //
 // **HTML のコメントにしてある。**markdown として読んだときに見えず、
-// builtin.md を1枚の指示書として人間が通して読める。
+// 雛形を1枚の文書として人間が通して読める。
 const Marker = "<!-- continuo:project-specific-prompt -->"
 
-// builtinName は組み込みのプロンプトのファイル名である。エラーの文言に出す。
-const builtinName = "builtin.md"
+// Separator は、`continuo prompt --show` がシステムプロンプトと最初のプロンプトのあいだに置く区切りの行である。
+//
+// **送る文面には入らない。**システムプロンプトはファイルで、最初のプロンプトは `agent.prompt` で、別々に渡す。
+const Separator = "======== ここから下は最初のプロンプト（上はシステムプロンプト） ========"
+
+// builtinName と firstName は雛形のファイル名である。エラーの文言に出す。
+const (
+	builtinName = "builtin.md"
+	firstName   = "first_prompt.md"
+)
 
 // workflowName は WORKFLOW.md のファイル名である。本文の誤りの文言に出す。
 const workflowName = "WORKFLOW.md"
@@ -58,12 +74,17 @@ const workflowName = "WORKFLOW.md"
 // 断片の名前である。テンプレートの名前としてそのまま使うので、
 // `text/template` のエラー（`template: <名前>:<行>: …`）にこの文字列が出る。
 const (
-	// NameBuiltinHead は組み込みの前半の名前である。**行番号は builtin.md の行番号と一致する。**
+	// NameBuiltinHead はシステムプロンプトの組み込みの前半の名前である。
+	// **行番号は、生成した表と図を差し込んだあとの builtin.md の行番号である。**
 	NameBuiltinHead = builtinName + "#head"
-	// NameBuiltinTail は組み込みの後半の名前である。
+	// NameBuiltinTail はシステムプロンプトの組み込みの後半の名前である。
 	// **行番号は目印の行の次を1行目として数えたものである**（builtin.md の行番号ではない）。
 	NameBuiltinTail = builtinName + "#tail"
-	// NameWorkflowBody は WORKFLOW.md の本文の名前である（設計 5-3c）。
+	// NameFirstHead は最初のプロンプトの組み込みの前半の名前である。**行番号は first_prompt.md の行番号と一致する。**
+	NameFirstHead = firstName + "#head"
+	// NameFirstTail は最初のプロンプトの組み込みの後半の名前である。
+	NameFirstTail = firstName + "#tail"
+	// NameWorkflowBody は WORKFLOW.md の本文の名前である（設計 5-3c）。**2つの文面に同じ本文が入る。**
 	//
 	// **行番号は front matter の閉じの `---` の次を1行目として数えたものである**
 	// （WORKFLOW.md の行番号ではない）。
@@ -71,13 +92,22 @@ const (
 )
 
 //go:embed builtin.md
-var builtinRaw string
+var builtinEmbedded string
 
-// builtinHead / builtinTail は builtin.md を目印の行で切った結果である。
+//go:embed first_prompt.md
+var firstRaw string
+
+// builtinRaw は builtin.md に、生成したフローチャートと表を差し込んだものである（flow.go）。
+var builtinRaw = fillGenerated(builtinEmbedded)
+
+// builtinHead / builtinTail / firstHead / firstTail は雛形を目印の行で切った結果である。
 //
 // **パッケージの初期化で1回だけ切る。**送るたびに切ると、切り方の誤りが
 // 着手のときまで表に出ない。
-var builtinHead, builtinTail = splitBuiltin(builtinRaw)
+var (
+	builtinHead, builtinTail = splitBuiltin(builtinRaw)
+	firstHead, firstTail     = splitBuiltin(firstRaw)
+)
 
 // stripComments は、送る文面から HTML のコメントを取り除く
 // （[docs/plans/continuo_design.md] の 5-3m）。
@@ -354,9 +384,9 @@ func squeezeBlank(s string) string {
 	return b.String()
 }
 
-// splitBuiltin は builtin.md を目印の行で前半と後半に切る。
+// splitBuiltin は雛形を目印の行で前半と後半に切る。
 //
-// raw: builtin.md の全文。
+// raw: 雛形の全文。
 // 戻り値: 目印の行より上と、目印の行より下。**目印の行そのものはどちらにも入らない。**
 // 目印が無ければ全文が前半になり、後半は空文字になる（その状態は
 // TestBuiltin_目印がちょうど1つある が落とす）。
@@ -370,32 +400,60 @@ func splitBuiltin(raw string) (string, string) {
 	return raw, ""
 }
 
-// BuiltinRaw は builtin.md の全文を、目印の行を含めたまま返す。
+// BuiltinRaw はシステムプロンプトの雛形の全文を、目印の行を含めたまま返す
+// （生成したフローチャートと表は差し込んである）。
 //
 // **テストと、目印の数を数える検査のためにある。**送る文面が要るなら Builtin を使う。
 //
 // 戻り値: builtin.md の全文。
 func BuiltinRaw() string { return builtinRaw }
 
-// BuiltinHead は組み込みの前半を返す。
+// FirstRaw は最初のプロンプトの雛形の全文を、目印の行を含めたまま返す（テストのため）。
+//
+// 戻り値: first_prompt.md の全文。
+func FirstRaw() string { return firstRaw }
+
+// BuiltinHead はシステムプロンプトの組み込みの前半を返す。
 //
 // 戻り値: builtin.md の、目印の行より上。
 func BuiltinHead() string { return builtinHead }
 
-// BuiltinTail は組み込みの後半を返す。
+// BuiltinTail はシステムプロンプトの組み込みの後半を返す。
 //
 // 戻り値: builtin.md の、目印の行より下。
 func BuiltinTail() string { return builtinTail }
 
-// Builtin は組み込みだけで組み立てた全文を返す（本文を挟まない形）。
+// BuiltinSystem はシステムプロンプトの組み込みだけを返す（本文を挟まない形。変数は展開しない）。
+//
+// 戻り値: 前半と後半を連結した全文。
+func BuiltinSystem() string {
+	return join([]string{stripComments(builtinHead), stripComments(builtinTail)})
+}
+
+// BuiltinFirst は最初のプロンプトの組み込みだけを返す（本文を挟まない形。変数は展開しない）。
+//
+// 戻り値: 前半と後半を連結した全文。
+func BuiltinFirst() string {
+	return join([]string{stripComments(firstHead), stripComments(firstTail)})
+}
+
+// Builtin は組み込みだけで組み立てた2つの文面を、区切りの行で分けて返す（本文を挟まない形）。
 //
 // **`continuo prompt --show --builtin` が出すのはこれである。**
 // **利用者が、自分が書いた本文と仕組みの側を見比べる相手**として読む（設計 5-3f）。
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
-// 戻り値: 前半と後半を連結した、変数展開していない全文。
+// 戻り値: システムプロンプト・区切りの行・最初のプロンプトの順に並べた、変数展開していない全文。
 func Builtin() string {
-	return join([]string{stripComments(builtinHead), stripComments(builtinTail)})
+	return showJoin(BuiltinSystem(), BuiltinFirst())
+}
+
+// showJoin は、`--show` が出す形（システムプロンプト・区切りの行・最初のプロンプト）に並べる。
+//
+// system / first: それぞれの全文（末尾の改行はどちらでもよい）。
+// 戻り値: 並べた全文。末尾に改行を1つ付ける。
+func showJoin(system, first string) string {
+	return join([]string{system, Separator, first})
 }
 
 // Fragment は、送る文面を組み立てる断片1つである。
@@ -410,12 +468,43 @@ type Fragment struct {
 	Path string
 }
 
-// Fragments は、送る文面を組み立てる断片の並びである。
+// Plugin は、システムプロンプトの置き換える語に埋める plugin の値である。
+//
+// **ゼロ値なら置き換えない。**`continuo prompt --show` は置き換える語のまま出す。
+type Plugin struct {
+	// Dir は書き出した plugin のディレクトリの絶対パスである（`CONTINUO_PLUGIN_DIR` に入る）。
+	Dir string
+	// Hash は plugin の中身のハッシュ12桁である（`CONTINUO_PLUGIN_HASH` に入る）。
+	Hash string
+}
+
+// apply は、組み込みの断片の置き換える語を埋める。
+//
+// **本文（WORKFLOW.md）には当てない。**利用者が書いた文字列を continuo が書き換えない。
+//
+// it: 変数展開したあとの断片。
+// 戻り値: 置き換えた断片。
+func (p Plugin) apply(it Fragment) Fragment {
+	if it.Name == NameWorkflowBody {
+		return it
+	}
+	if p.Dir != "" {
+		it.Text = strings.ReplaceAll(it.Text, plugins.DirPlaceholder, p.Dir)
+	}
+	if p.Hash != "" {
+		it.Text = strings.ReplaceAll(it.Text, plugins.HashPlaceholder, p.Hash)
+	}
+	return it
+}
+
+// Fragments は、送る2つの文面を組み立てる断片の並びである。
 //
 // **並んでいる順に連結する。**
 type Fragments struct {
-	// items は連結する順に並んだ断片である。**空文字の断片は入っていない。**
-	items []Fragment
+	// system はシステムプロンプトの断片である（連結する順）。**空文字の断片は入っていない。**
+	system []Fragment
+	// first は最初のプロンプトの断片である（連結する順）。**空文字の断片は入っていない。**
+	first []Fragment
 	// bodyPath は本文が来た WORKFLOW.md の絶対パスである。
 	//
 	// **本文が空でも埋める。**内訳の「本文はありません」に、どのファイルの話かを添えるためである。
@@ -426,10 +515,12 @@ type Fragments struct {
 	hasBody bool
 }
 
-// Build は、WORKFLOW.md の本文から送る文面の断片を決める（設計 5-3c）。
+// Build は、WORKFLOW.md の本文から2つの文面の断片を決める（設計 5-3c）。
 //
 // **並びは、組み込みの前半 + 本文 + 組み込みの後半で固定である。**
 // **本文が空白だけなら、組み込みの前半 + 組み込みの後半になる。**
+// **本文は2つの文面の両方に入る。**決まりとして compaction のあとも要り（システムプロンプト）、
+// auto の判定役にも読ませる（最初のプロンプト）。
 //
 // **本文を「全文の差し替え」として扱わない。**そう扱うと、continuo が仕組みの説明を直しても、
 // 本文を書いた利用者には二度と届かない（設計 5-3c）。
@@ -443,28 +534,38 @@ func Build(body, bodyPath string) Fragments {
 	// 断片は足されず、**内訳から本文の行が丸ごと消える。**
 	stripped := dropEmptySections(stripComments(body))
 	f := Fragments{bodyPath: bodyPath, hasBody: strings.TrimSpace(stripped) != ""}
-	f.add(NameBuiltinHead, stripComments(builtinHead), "")
-	f.add(NameWorkflowBody, stripped, bodyPath)
-	f.add(NameBuiltinTail, stripComments(builtinTail), "")
+	f.system = addFragment(f.system, NameBuiltinHead, stripComments(builtinHead), "")
+	f.system = addFragment(f.system, NameWorkflowBody, stripped, bodyPath)
+	f.system = addFragment(f.system, NameBuiltinTail, stripComments(builtinTail), "")
+	f.first = addFragment(f.first, NameFirstHead, stripComments(firstHead), "")
+	f.first = addFragment(f.first, NameWorkflowBody, stripped, bodyPath)
+	f.first = addFragment(f.first, NameFirstTail, stripComments(firstTail), "")
 	return f
 }
 
-// add は、中身のある断片だけを並びへ足す。
+// addFragment は、中身のある断片だけを並びへ足す。
 //
+// items: 足す先の並び。
 // name: 断片の名前。
 // text: 断片の中身。**空白だけなら足さない。**
 // path: その断片が来たファイルの絶対パス。
-func (f *Fragments) add(name, text, path string) {
+// 戻り値: 足したあとの並び。
+func addFragment(items []Fragment, name, text, path string) []Fragment {
 	if strings.TrimSpace(text) == "" {
-		return
+		return items
 	}
-	f.items = append(f.items, Fragment{Name: name, Text: text, Path: path})
+	return append(items, Fragment{Name: name, Text: text, Path: path})
 }
 
-// Items は連結する順に並んだ断片を返す。
+// Items はシステムプロンプトの断片を、連結する順に返す。
 //
 // 戻り値: 断片の並び。**呼び出し側は書き換えてはならない。**
-func (f Fragments) Items() []Fragment { return f.items }
+func (f Fragments) Items() []Fragment { return f.system }
+
+// FirstItems は最初のプロンプトの断片を、連結する順に返す。
+//
+// 戻り値: 断片の並び。**呼び出し側は書き換えてはならない。**
+func (f Fragments) FirstItems() []Fragment { return f.first }
 
 // HasBody は WORKFLOW.md の本文に中身があったかどうかを返す。
 //
@@ -482,6 +583,7 @@ func (f Fragments) BodyPath() string { return f.bodyPath }
 // 本文は front matter の外にあるので、`config.Config` の差分には1行も出てこない。
 // **知らせないと、本文だけを直した人が「読み直したから効いた」と読む。**
 //
+// **比べるのは、システムプロンプトの側の本文である**（issue #288）。2つの文面に同じ本文が入っている。
 // **比べるのは、取り除いたあとの本文である。**案内のコメントだけを直したときは
 // 送る文面が1バイトも変わらないので、「変わった」と言わない（`Build` と同じ手順を通す）。
 //
@@ -489,7 +591,7 @@ func (f Fragments) BodyPath() string { return f.bodyPath }
 // 戻り値: 送る文面に効く形で違っていれば真。
 func (f Fragments) BodyChanged(body string) bool {
 	stripped := dropEmptySections(stripComments(body))
-	for _, it := range f.items {
+	for _, it := range f.system {
 		if it.Name == NameWorkflowBody {
 			return it.Text != stripped
 		}
@@ -498,12 +600,28 @@ func (f Fragments) BodyChanged(body string) bool {
 	return strings.TrimSpace(stripped) != ""
 }
 
-// Text は、変数展開していない全文を返す（`continuo prompt --show` が出すもの）。
+// SystemText はシステムプロンプトの、変数展開していない全文を返す。
 //
 // 戻り値: 断片を連結した文字列。
-func (f Fragments) Text() string {
-	parts := make([]string, 0, len(f.items))
-	for _, it := range f.items {
+func (f Fragments) SystemText() string { return joinItems(f.system) }
+
+// FirstText は最初のプロンプトの、変数展開していない全文を返す。
+//
+// 戻り値: 断片を連結した文字列。
+func (f Fragments) FirstText() string { return joinItems(f.first) }
+
+// Text は、変数展開していない2つの文面を区切りの行で分けて返す（`continuo prompt --show` が出すもの）。
+//
+// 戻り値: システムプロンプト・区切りの行・最初のプロンプトの順に並べた文字列。
+func (f Fragments) Text() string { return showJoin(f.SystemText(), f.FirstText()) }
+
+// joinItems は断片の中身を連結する。
+//
+// items: 断片の並び。
+// 戻り値: 連結した文字列。
+func joinItems(items []Fragment) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
 		parts = append(parts, it.Text)
 	}
 	return join(parts)
@@ -515,10 +633,10 @@ func (f Fragments) Text() string {
 // 次の見出しが前の行にくっついて markdown として壊れる。逆に改行が3つあると、
 // 送る文面が断片の書き方で変わってしまう。**断片のあいだは必ず空行1つにする。**
 //
-// **落とすのは改行だけである。**行頭の空白は落とさない（組み込みのプロンプトは
-// コマンドの例を4桁の字下げで書いており、落とすとコードブロックとして読めなくなる）。
+// **落とすのは改行だけである。**行頭の空白は落とさない（コマンドの例を4桁の字下げで書いた本文を、
+// コードブロックとして読めるまま残す）。
 //
-// parts: 連結する文字列の並び。**空白だけのものは呼び出し側が落としてある。**
+// parts: 連結する文字列の並び。**空白だけのものは落とす。**
 // 戻り値: 空行1つで区切って連結し、末尾に改行を1つ付けた文字列。
 func join(parts []string) string {
 	trimmed := make([]string, 0, len(parts))
@@ -535,40 +653,72 @@ func join(parts []string) string {
 	return strings.Join(trimmed, "\n\n") + "\n"
 }
 
-// Render は断片ごとに変数展開してから連結する（設計 5-3c）。
+// RenderSystem は、システムプロンプトを断片ごとに変数展開してから連結する（issue #288）。
+//
+// **展開したあとに、組み込みの断片の置き換える語（plugin のディレクトリと12桁）を埋める。**
+// **`RenderData` に plugin のパスを足さない。**利用者の本文から使える変数を増やさないためである。
 //
 // data: テンプレートへ渡す変数。**`SampleData` が返す名前だけを持たせること**（設計 5-3）。
+// plugin: 埋める値。ゼロ値なら置き換える語のまま残す。
+// 戻り値の1つ目: 変数展開した全文。
+// 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderSystem(data map[string]any, plugin Plugin) (string, error) {
+	items, err := renderItems(f.system, data, plugin)
+	if err != nil {
+		return "", err
+	}
+	return joinItems(items), nil
+}
+
+// RenderFirst は、最初のプロンプトを断片ごとに変数展開してから連結する（設計 5-3c）。
+//
+// data: テンプレートへ渡す変数。
+// 戻り値の1つ目: 変数展開した全文。**relay の節とマージンの切り上げの文は入らない**（呼び出し側が後ろに付ける）。
+// 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderFirst(data map[string]any) (string, error) {
+	items, err := renderItems(f.first, data, Plugin{})
+	if err != nil {
+		return "", err
+	}
+	return joinItems(items), nil
+}
+
+// Render は、2つの文面を変数展開し、区切りの行で分けて返す（`continuo prompt --show` の形）。
+//
+// **plugin の置き換える語は埋めない。**埋めるなら RenderShow を使う。
+//
+// data: テンプレートへ渡す変数。
 // 戻り値の1つ目: 変数展開した全文。
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 // **どの断片の何行目かがエラーの文言に入る。**
 func (f Fragments) Render(data map[string]any) (string, error) {
-	text, _, err := f.RenderAll(data)
+	text, _, _, err := f.RenderShow(data, Plugin{})
 	return text, err
 }
 
-// RenderAll は、変数展開した全文と、その断片の並びを一度に返す（issue #183）。
+// RenderShow は、`continuo prompt --show --url` が出す全文と、内訳を数える断片を一度に返す（issue #183 / #288）。
 //
-// **`continuo prompt --show --url` は、全文を標準出力へ出し、断片の並びから内訳を数える。**
-// **`Render` と `RenderItems` を続けて呼ぶと、同じ解釈と実行を2回することになる。**
-// 人間が待つコマンドなので、1回で済ませる。
+// **全文は、区切りの行を除けば、常駐が送る2つの文面と1バイトも違わない**（relay の節とマージンの切り上げの文を除く）。
 //
 // data: テンプレートへ渡す変数。
-// 戻り値の1つ目: 変数展開して連結した全文。
-// 戻り値の2つ目: 変数展開した断片。**並びは `Items` と同じ。**
-// 戻り値の3つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
-func (f Fragments) RenderAll(data map[string]any) (string, []Fragment, error) {
-	rendered, err := f.RenderItems(data)
+// plugin: 埋める値。ゼロ値なら置き換える語のまま残す。
+// 戻り値の1つ目: 変数展開した全文（システムプロンプト・区切りの行・最初のプロンプト）。
+// 戻り値の2つ目: 変数展開したシステムプロンプトの断片。**並びは `Items` と同じ。**
+// 戻り値の3つ目: 変数展開した最初のプロンプトの断片。**並びは `FirstItems` と同じ。**
+// 戻り値の4つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderShow(data map[string]any, plugin Plugin) (string, []Fragment, []Fragment, error) {
+	system, err := renderItems(f.system, data, plugin)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
-	parts := make([]string, 0, len(rendered))
-	for _, it := range rendered {
-		parts = append(parts, it.Text)
+	first, err := renderItems(f.first, data, Plugin{})
+	if err != nil {
+		return "", nil, nil, err
 	}
-	return join(parts), rendered, nil
+	return showJoin(joinItems(system), joinItems(first)), system, first, nil
 }
 
-// RenderItems は、断片ごとに変数展開した結果を返す（issue #183）。
+// renderItems は、断片ごとに変数展開した結果を返す（issue #183）。
 //
 // **`continuo prompt --show --url` の内訳が、これを数える。**
 // **展開する前の断片を数えてはならない。**`{{if .attempt}}` のような枝は、
@@ -577,17 +727,19 @@ func (f Fragments) RenderAll(data map[string]any) (string, []Fragment, error) {
 //
 // **並びと名前は元の断片のままである。**中身だけが展開後になる。
 //
+// items: 展開する断片の並び。
 // data: テンプレートへ渡す変数。
-// 戻り値の1つ目: 変数展開した断片。**並びは `Items` と同じ。**
+// plugin: 組み込みの断片に埋める値。
+// 戻り値の1つ目: 変数展開した断片。
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
-func (f Fragments) RenderItems(data map[string]any) ([]Fragment, error) {
-	out := make([]Fragment, 0, len(f.items))
-	for _, it := range f.items {
+func renderItems(items []Fragment, data map[string]any, plugin Plugin) ([]Fragment, error) {
+	out := make([]Fragment, 0, len(items))
+	for _, it := range items {
 		text, err := renderOne(it, data)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, Fragment{Name: it.Name, Text: text, Path: it.Path})
+		out = append(out, plugin.apply(Fragment{Name: it.Name, Text: text, Path: it.Path}))
 	}
 	return out, nil
 }
@@ -609,7 +761,7 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 	return b.String(), nil
 }
 
-// Validate は、断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
+// Validate は、2つの文面の断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
 //
 // **作り物の issue で2回変数展開する。**1回目は `.attempt` を空、2回目は 2 にする。
 // **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためである。
@@ -632,7 +784,7 @@ func (f Fragments) Validate() error {
 // RenderData は、送る文面へ渡す変数を組み立てる（設計 5-3 / 5-3f）。
 //
 // **組み立てる場所はここだけである。**continuo が実際に送る経路
-// （`internal/orchestrator` の `renderFirstPrompt`）と、人間が事前に確かめる経路
+// （`internal/orchestrator` の `renderFirstPrompt` と `writeSystemPrompt`）と、人間が事前に確かめる経路
 // （`continuo prompt --show --url`）が、どちらもこの関数を呼ぶ。
 //
 // **別々に組み立ててはならない。**片方を直したときにもう片方がずれる。
@@ -697,11 +849,10 @@ func RenderData(
 		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
 		// **「3600000ミリ秒以上黙らないでください」では通じない。**
 		"progress_interval_minutes": progressIntervalMs / 60000,
-		// **`margin-status` のパス**（issue #262）。組み込みの指示書の
-		// 「レートリミットのマージンを切ったら、切り上げる」が
-		// `cat '{{.margin_status_path}}'` の形で使う。**中の単引用符は `'\''` に置き換えてある**
+		// **`margin-status` のパス**（issue #262）。システムプロンプトの「どの段でも」の箱と
+		// 「この issue の値」の表が使い、スキル「reporting-progress」が `cat '<マージンのファイル>'` の形で叩かせる。**中の単引用符は `'\''` に置き換えてある**
 		// （パスに単引用符を含む利用者でも、単引用符で囲んだ `cat` が壊れない）。
-		// **書かない機械（`rate_limit.source: none`）では空文字である。**その節は `{{if}}` で囲んであるので、節ごと出ない。
+		// **書かない機械（`rate_limit.source: none`）では空文字である。**マージンの1文は `{{if}}` で囲んであるので出ない。
 		// **キーは空でも必ず入れる**（`missingkey=error`）。
 		"margin_status_path": marginstatus.ShellQuote(marginstatus.Path(rateLimit, hookSocketPath)),
 	}
@@ -735,7 +886,7 @@ func SampleData() map[string]any {
 		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
 		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
 		"progress_interval_minutes": 60,
-		// **`margin-status` のパス**（issue #262）。空にすると、組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」の中身が検査されない。
+		// **`margin-status` のパス**（issue #262）。空にすると、システムプロンプトのマージンの1文が検査されない。
 		"margin_status_path": "/tmp/continuo/margin-status",
 	}
 }

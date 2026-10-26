@@ -1493,11 +1493,17 @@ func (o *Orchestrator) startRunFromWorktree(
 	if err != nil {
 		return err
 	}
+	// **起動の前に毎回、plugin とシステムプロンプトを用意する**（issue #288）。
+	// 着手・再着手・direct chat の用意のどれもここを通る。**用意できなければ起動しない。**
+	// `--append-system-prompt-file` に無いファイルを渡すと、Claude Code は起動に失敗する。
+	if err := o.prepareClaudeLaunch(issue); err != nil {
+		return err
+	}
 	startErr := o.launchClaude(ctx, rs, prepared.Path, herdr.AgentStartParams{
 		Name:   agentName,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
-		Args:   o.claudeStartArgs(settingsPath, sessionUUID, resumeUUID),
+		Args:   o.claudeStartArgs(issue.Identifier, settingsPath, sessionUUID, resumeUUID),
 	}, busySince)
 	if startErr != nil && !errors.Is(startErr, ErrStartupBusy) && resumeUUID != "" {
 		// **`ErrStartupBusy` はここへ入れてはならない**（設計 3-80）。
@@ -1525,7 +1531,8 @@ func (o *Orchestrator) startRunFromWorktree(
 			Name:   agentName,
 			Kind:   o.cfg.Claude.Kind,
 			PaneID: paneID,
-			Args:   o.claudeStartArgs(settingsPath, rs.sessionUUID(), ""),
+			// **plugin とシステムプロンプトは、上で用意したものをそのまま使う**（同じ起動の続きである）。
+			Args: o.claudeStartArgs(issue.Identifier, settingsPath, rs.sessionUUID(), ""),
 		}, o.now())
 	}
 	if errors.Is(startErr, ErrStartupBusy) {

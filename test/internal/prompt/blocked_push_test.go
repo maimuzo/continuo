@@ -3,8 +3,6 @@ package prompt_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // pushDemandMarker は「人間へ渡す前に push させる」文を見分ける目印である。
@@ -28,11 +26,11 @@ const pushCommand = "git push -u origin HEAD"
 // 作業が続く保証が無い。`continuo abandon` や片付けで branch ごと消えると、
 // push していない commit は取り戻せない。`review` と同じ理由がそのまま当てはまる。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: push を求める文が1つだけあり、その文が `review` と `blocked` の両方を名指しし、
 // 本文が push のコマンドをそのまま載せていること。
 func TestTemplate_組み込みのプロンプトはblockedを出す前にもpushを求める(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	var found []string
 	for _, line := range strings.Split(body, "\n") {

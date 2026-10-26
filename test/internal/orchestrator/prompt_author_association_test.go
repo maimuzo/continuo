@@ -34,7 +34,8 @@ func renderedPrompt(t *testing.T) string {
 	waitFor(t, 10*time.Second, "1回目の本文が送られる", func() bool {
 		return len(prompts()) > 0
 	})
-	return prompts()[0]
+	// **手順はスキルにある**（issue #288）。最初のプロンプト・システムプロンプト・スキルを、この issue の値で埋めて見る。
+	return agentView(t, fx, "octocat/hello-world#188", prompts()[0])
 }
 
 // TestPrompt_取得したコメントを平文へ潰す指示が本文に無い は、issue #60 を確かめる。
@@ -262,12 +263,17 @@ const jsonCommentsCommandCount = 2
 func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 	got := renderedPrompt(t)
 
-	found := 0
+	// **数えるのは、違うコマンドの本数である**（issue #288）。1行のコマンドは、使うスキルそれぞれに
+	// 書き写してある（「starting-run」の「issue を読む」と、それを指す他のスキル）。同じ行は1本と数える。
+	seen := map[string]bool{}
 	for i, line := range strings.Split(got, "\n") {
 		if !strings.Contains(line, "--jq") || !strings.Contains(line, ".author_association") {
 			continue
 		}
-		found++
+		if seen[strings.TrimSpace(line)] {
+			continue
+		}
+		seen[strings.TrimSpace(line)] = true
 		keys := jqOutputKeyPattern.FindAllStringSubmatch(line, -1)
 		if len(keys) == 0 {
 			t.Errorf("本文の %d 行目の --jq が、投稿者の立場に名前を付けずに出している。"+
@@ -284,8 +290,8 @@ func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 				i+1, m[1], line)
 		}
 	}
-	if found != jqCommandCount {
-		t.Errorf("投稿者の立場を gh api で取る行が %d 本しかない（%d 本あるはず: "+
+	if found := len(seen); found != jqCommandCount {
+		t.Errorf("投稿者の立場を gh api で取る行が %d 本ある（%d 本あるはず: "+
 			"issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー）", found, jqCommandCount)
 	}
 }
@@ -311,7 +317,8 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 
 	// 本文に並んだコマンドから、返ってくる名前を集める。
 	produced := map[string]string{}
-	jsonComments := 0
+	// **数えるのは、違うコマンドの本数である**（issue #288。同じコマンドを複数のスキルへ書き写してある）。
+	jsonCommentsSeen := map[string]bool{}
 	for _, cmd := range shellCommandsIn(lines) {
 		switch {
 		case strings.Contains(cmd, "--jq") && strings.Contains(cmd, ".author_association"):
@@ -325,11 +332,11 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 			// **絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
 			// コマンド（設計 5-3j）は、投稿者の立場を1文字も読まない。
 			produced["authorAssociation"] = cmd
-			jsonComments++
+			jsonCommentsSeen[strings.TrimSpace(cmd)] = true
 		}
 	}
-	if jsonComments != jsonCommentsCommandCount {
-		t.Errorf("コメントを全件そのまま読ませる --json comments が %d 本しかない（%d 本あるはず: "+
+	if jsonComments := len(jsonCommentsSeen); jsonComments != jsonCommentsCommandCount {
+		t.Errorf("コメントを全件そのまま読ませる --json comments が %d 本ある（%d 本あるはず: "+
 			"issue のコメント / PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
 	}
 	if len(produced) == 0 {

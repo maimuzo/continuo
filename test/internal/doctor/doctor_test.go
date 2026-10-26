@@ -6,13 +6,13 @@ package doctor_test
 import (
 	"context"
 	"errors"
-	"github.com/maimuzo/continuo/internal/config"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -694,5 +694,47 @@ func TestDoctor_身元を確かめられないworktreeがあれば落とす(t *t
 	}
 	if _, err := os.Stat(broken); err != nil {
 		t.Fatalf("doctor が壊れた worktree を消してしまった: %v", err)
+	}
+}
+
+// 目的: claude の版が下限より古ければ `claude` の行が `✗` になり、上げ方が出ることを確かめる（issue #288）。
+//
+// **古い版では、常駐は起動しない。**doctor が黙っていると、利用者は起動してから初めて知る。
+//
+// 与える情報: `--version` が `2.1.250 (Claude Code)` を返す claude。
+// 成功条件: `claude` が `✗` で、説明に読めた版と下限が出て、直し方が1件以上あること。
+func TestDoctor_claudeの版が古ければ落とす(t *testing.T) {
+	fx := newFixture(t)
+	fx.ClaudeVersion = "2.1.250 (Claude Code)\n"
+
+	report := doctor.Run(context.Background(), fx.Options())
+
+	res := assertSymbol(t, report, doctor.LabelClaude, doctor.SymbolMissing)
+	for _, want := range []string{"2.1.250", "2.1.304"} {
+		if !strings.Contains(res.Detail, want) {
+			t.Errorf("説明に %q がありません: %+v", want, res)
+		}
+	}
+	if len(res.Remedies) == 0 {
+		t.Errorf("版が古いのに直し方が出ていない: %+v", res)
+	}
+}
+
+// 目的: claude の版を読めなければ、`claude` の行は `✓` のまま注意を添えることを確かめる（issue #288）。
+//
+// **Claude Code を起動するのは herdr の pane の PATH である。**doctor の PATH で読めないだけで止めると、
+// pane では動く利用者を突き放す。常駐も、読めなければ警告だけで起動する。
+//
+// 与える情報: `--version` を叩けない claude。
+// 成功条件: `claude` が `✓` で、注意に下限の版が出ること。
+func TestDoctor_claudeの版を読めなければ注意だけ添える(t *testing.T) {
+	fx := newFixture(t)
+	fx.ClaudeVersionErr = errors.New("exit status 1")
+
+	report := doctor.Run(context.Background(), fx.Options())
+
+	res := assertSymbol(t, report, doctor.LabelClaude, doctor.SymbolOK)
+	if !strings.Contains(strings.Join(res.Notes, "\n"), "2.1.304") {
+		t.Errorf("版を読めなかったことの注意が出ていない: %+v", res)
 	}
 }

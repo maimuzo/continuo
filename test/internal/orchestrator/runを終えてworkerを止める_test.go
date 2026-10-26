@@ -578,6 +578,7 @@ func Test_runを終えてworkerを止める_P003_runが終わるときにコメ�
 
 	// **`--resume <UUID>` と `--settings` を毎回渡し直す**（復元されないため。設計 3-25）。
 	var resumeArgs string
+	var resumeArgList []any
 	for _, r := range fx.Herdr.Requests() {
 		if r.Method != herdr.MethodAgentStart {
 			continue
@@ -586,6 +587,7 @@ func Test_runを終えてworkerを止める_P003_runが終わるときにコメ�
 		joined := joinAny(args)
 		if strings.Contains(joined, "--resume") {
 			resumeArgs = joined
+			resumeArgList = args
 		}
 	}
 	if resumeArgs == "" {
@@ -599,4 +601,6 @@ func Test_runを終えてworkerを止める_P003_runが終わるときにコメ�
 	if strings.Contains(resumeArgs, "--session-id") {
 		t.Fatalf("復元なのに --session-id を渡している（既に使った UUID は再利用できない）: %q", resumeArgs)
 	}
+	// **書かせ直しの復元も、システムプロンプトと plugin を渡して起動する**（issue #288）。
+	assertLaunchArgs(t, fx, "octocat/hello-world#188", resumeArgList)
 }

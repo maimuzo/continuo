@@ -273,11 +273,27 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 				"（herdr が agent の一覧を返さない、など）。")
 		return false
 	}
+	// **起動の前に plugin とシステムプロンプトを用意する**（issue #288）。
+	// 書かせ直しの復元も、着手と同じ引数で起動するので、2つのファイルが要る。
+	if err := o.prepareClaudeLaunch(rs.issue()); err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return false
+		}
+		o.logger.Warn("復元のための plugin とシステムプロンプトを用意できません",
+			"identifier", snap.Identifier, "error", err)
+		if o.abortTerminalForHuman(ctx, rs, why) {
+			return true
+		}
+		o.failCommentRecovery(ctx, rs,
+			"Claude Code に渡す plugin とシステムプロンプトを用意できなかったので、セッションを復元できなかった。"+
+				"**エージェントには何も送っていない。**理由は continuo のログに出ている。")
+		return false
+	}
 	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
 		Name:   name,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
-		Args:   o.claudeStartArgs(identity.SettingsPath, "", resumeUUID),
+		Args:   o.claudeStartArgs(rs.issue().Identifier, identity.SettingsPath, "", resumeUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return false
@@ -512,7 +528,7 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 		}
 		if c.IsAgent {
 			// **途中で書かせるコメントは、成果の報告ではない。**
-			// 計画（組み込みの指示書の「計画を書き、レビューを受ける」）も
+			// 計画（スキル「writing-plan」の「計画を書き、レビューを受ける」）も
 			// 進捗報告（同「{{.progress_interval_minutes}}分以上黙らない」）も、本文の先頭は
 			// `<!-- continuo:agent -->` なので、ここで除かないと `IsAgent` が真になる。
 			//

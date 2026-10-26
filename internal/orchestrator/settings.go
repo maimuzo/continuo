@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -507,18 +508,40 @@ func (o *Orchestrator) writeStatusSignalFile(identifier string) {
 }
 
 // claudeStartArgs は agent.start の args に載せる Claude Code の起動フラグを組み立てる
-// （着手の段9。設計 3-16）。
+// （着手の段9。設計 3-16。issue #288）。
 //
 // **環境変数はここに載せない。**`agent.start` に env の引数は無いので、設定ファイルの
 // `env` へ書く（設計 3-12）。
 //
+// **システムプロンプトと plugin を毎回渡す**（issue #288）。
+//
+//	--append-system-prompt-file <issueDir>/system-prompt.md   フローチャート・対応表・この issue の値
+//	--system-prompt-snapshot off                             起動のたびに、その起動で渡した版を使わせる
+//	--plugin-dir <実行時ディレクトリ>/plugins/<12桁>/continuo-agent-procedures
+//
+// **`off` は毎回付ける。**既定の `on` は会話の最初の要求で組み立てたシステムプロンプトをセッションに記録し、
+// `--resume` のあとも compaction までその記録を使う。最初の1回だけ `off` にしても、次の `on` の起動で
+// 最初の記録へ戻る（2026-10-24〜26 に Claude Code 2.1.310 で実測）。
+//
+// **呼ぶ前に `prepareClaudeLaunch` で2つのファイルを用意しておくこと。**ここは引数を組み立てるだけである。
+// **パスは身元ファイルの値からは決めない。**continuo が持つ `issueDir` と実行時ディレクトリから決める。
+//
+// **hook のコマンド行（`writeSettingsFile`）は、ここでは組み立てない。**この関数が変えるのは
+// Claude Code の起動の引数だけで、hook と statusline が受け取る引数・宛先・本体との約束には触れない。
+//
+// identifier: issue の識別子（system-prompt.md の置き場所を決める）。
 // settingsPath: 設定ファイルの絶対パス。
 // sessionUUID: 採番したセッション UUID。空なら `--session-id` を付けない。
 // resumeUUID: 復帰するセッションの UUID。空なら `--resume` を付けない
 // （設計 3-25 の9段でだけ使う）。
 // 戻り値: 起動フラグの並び。
-func (o *Orchestrator) claudeStartArgs(settingsPath, sessionUUID, resumeUUID string) []string {
-	args := []string{"--settings", settingsPath}
+func (o *Orchestrator) claudeStartArgs(identifier, settingsPath, sessionUUID, resumeUUID string) []string {
+	args := []string{
+		"--settings", settingsPath,
+		"--append-system-prompt-file", o.systemPromptPath(identifier),
+		"--system-prompt-snapshot", "off",
+		"--plugin-dir", agentplugin.PluginDir(o.runtimeDir),
+	}
 	if resumeUUID != "" {
 		args = append(args, "--resume", resumeUUID)
 	} else if sessionUUID != "" {

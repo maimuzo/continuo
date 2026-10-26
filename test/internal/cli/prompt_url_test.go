@@ -7,12 +7,18 @@ package cli_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/daemon"
+	"github.com/maimuzo/continuo/internal/prompt"
+	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -278,19 +284,19 @@ func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
 	})
 }
 
-// 目的: 内訳の行数が、実際に標準出力へ出した行数と一致することを固定する（issue #183）。
+// 目的: 内訳の行数が、実際に標準出力へ出した行数と一致することを固定する（issue #183 / #288）。
 //
 // **なぜ要るか。**内訳の見出しは「送る文面の内訳」である。
 // **`--url` のとき、標準出力へ出るのは変数展開したあとの文面である。**
 // **展開する前の断片を数えると、その行数は嘘になる。**
 //
 // **`{{if .attempt}}` が実際に落ちる。**`--attempt` を付けないと
-// `## これは N 回目の試行です` の節が消えるので、**組み込みの後半の行数が変わる。**
+// `## これは N 回目の試行です` の節が消えるので、**最初のプロンプトの組み込みの行数が変わる。**
 // **直す前は6行ずれていた**（内訳は220行と出し、実際に出たのは214行だった）。
 //
-// 与える情報: `--attempt` を付けない `--url` の出力と、その内訳。
-// 成功条件: 内訳が出した「組み込みのプロンプト（後半）」の行数が、
-// 標準出力の後半の実際の行数と一致すること。
+// 与える情報: 本文を空にし、`--attempt` を付けない `--url` の出力と、その内訳。
+// 成功条件: 内訳が出したシステムプロンプトと最初のプロンプトの組み込みの行数が、
+// 標準出力の区切りの行の前と後ろの実際の行数と一致すること。
 func TestPromptURL_内訳の行数が出した文面と一致する(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	setBody(t, dir, "")
@@ -302,30 +308,43 @@ func TestPromptURL_内訳の行数が出した文面と一致する(t *testing.T
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
 
-	want := breakdownTailLines(t, stderr)
-	// **組み込みの後半は `# 共通ルール` から始まる。**そこから最後までを数える。
-	// 行頭の見出しとして探し、前の改行は数えない。
-	at := strings.Index(stdout, "\n# 共通ルール\n")
-	if at < 0 {
-		t.Fatalf("標準出力に組み込みの後半が見つかりません")
+	system, first, ok := strings.Cut(stdout, "\n"+prompt.Separator+"\n")
+	if !ok {
+		t.Fatalf("標準出力に区切りの行がありません")
 	}
-	at++
-	got := len(strings.Split(strings.Trim(stdout[at:], "\n"), "\n"))
-	if got != want {
-		t.Errorf("内訳の行数が、出した文面と合っていません: 内訳=%d 行 / 実際=%d 行\n"+
-			"見出しは「送る文面の内訳」なので、展開したあとを数えなければ嘘になります", want, got)
+	count := func(s string) int { return len(strings.Split(strings.Trim(s, "\n"), "\n")) }
+	for _, c := range []struct {
+		label string
+		words []string
+		got   int
+	}{
+		{"システムプロンプト", []string{"システムプロンプトの組み込み", "system prompt, built-in"}, count(system)},
+		{"最初のプロンプト", []string{"最初のプロンプトの組み込み", "first prompt, built-in"}, count(first)},
+	} {
+		want := breakdownLines(t, stderr, c.words)
+		if c.got != want {
+			t.Errorf("%s: 内訳の行数が、出した文面と合っていません: 内訳=%d 行 / 実際=%d 行\n"+
+				"見出しは「送る文面の内訳」なので、展開したあとを数えなければ嘘になります", c.label, want, c.got)
+		}
 	}
 }
 
-// breakdownTailLines は、内訳から「組み込みのプロンプト（後半）」の行数を取り出す。
+// breakdownLines は、内訳から、words のどれかを含む行の行数を取り出す。
 //
 // t: テストコンテキスト。
 // stderr: 内訳が出た標準エラーの中身。
+// words: 行を見分ける語（日本語と英語）。
 // 戻り値: 内訳が主張している行数。
-func breakdownTailLines(t *testing.T, stderr string) int {
+func breakdownLines(t *testing.T, stderr string, words []string) int {
 	t.Helper()
 	for _, line := range strings.Split(stderr, "\n") {
-		if !strings.Contains(line, "後半") && !strings.Contains(line, "second half") {
+		hit := false
+		for _, w := range words {
+			if strings.Contains(line, w) {
+				hit = true
+			}
+		}
+		if !hit {
 			continue
 		}
 		for _, f := range strings.Fields(line) {
@@ -334,7 +353,7 @@ func breakdownTailLines(t *testing.T, stderr string) int {
 			}
 		}
 	}
-	t.Fatalf("内訳に組み込みの後半の行がありません: %q", stderr)
+	t.Fatalf("内訳に %q の行がありません: %q", words, stderr)
 	return 0
 }
 
@@ -426,4 +445,85 @@ func TestPromptURL_URLの形は設定を読む前に断る(t *testing.T) {
 	if called != 0 {
 		t.Errorf("URL の形が違うのに GitHub を叩いています（%d 回）", called)
 	}
+}
+
+// 目的: `--url` が、plugin のディレクトリと12桁を、常駐が書き出すのと同じ実際の値で出すことを固定する（issue #288）。
+//
+// **`rate_limit.source` に関わらず出す**（設計レビューの6周目）。常駐は source に関わらず実行時ディレクトリを
+// 決めているので、使用率を読まない設定でも、plugin のディレクトリは実際の値で出せる。
+// **出さないと、「送る文面と1バイトも違わない」の約束が、使用率を読まない利用者でだけ崩れる。**
+//
+// 与える情報: 実行時ディレクトリを環境変数で決めた `--url`。使用率を読む設定と、読まない設定（`source: none`）。
+// 成功条件: どちらでも、標準出力に plugin のディレクトリの実際のパスと12桁が入り、置き換える語が残らないこと。
+// 使用率を読まない設定では、マージンの1文が出ないこと。
+func TestPromptURL_pluginのディレクトリを実際の値で出す(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		none   bool
+		margin bool
+	}{
+		{"使用率を読む設定", false, true},
+		{"使用率を読まない設定", true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			runtimeDir := shortTempDir(t)
+			t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+			dir := writeWorkflowFor(t)
+			if c.none {
+				p := filepath.Join(dir, "WORKFLOW.md")
+				raw, err := os.ReadFile(p)
+				if err != nil {
+					t.Fatal(err)
+				}
+				replaced := strings.Replace(string(raw), "  source: oauth_usage_api", "  source: none", 1)
+				if replaced == string(raw) {
+					t.Fatal("雛形の rate_limit.source を書き換えられません（検査が的を外しています）")
+				}
+				if err := os.WriteFile(p, []byte(replaced), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+			code, stdout, stderr := runCLIWith(deps, []string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+			if code != 0 {
+				t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+			}
+			sock, err := socketpath.ResolveHookSocketPath(nil, runtimeDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := agentplugin.PluginDir(filepath.Dir(sock))
+			if !strings.Contains(stdout, want+"/skills/starting-run/SKILL.md") {
+				t.Errorf("標準出力に plugin のディレクトリの実際のパス %q がありません", want)
+			}
+			if !strings.Contains(stdout, "終わりの印の12桁: "+agentplugin.Hash()) {
+				t.Errorf("標準出力に12桁 %s がありません", agentplugin.Hash())
+			}
+			for _, word := range []string{agentplugin.DirPlaceholder, agentplugin.HashPlaceholder} {
+				if strings.Contains(stdout, word) {
+					t.Errorf("標準出力に置き換える語 %s が残っています", word)
+				}
+			}
+			if got := strings.Contains(stdout, "cat '"); got != c.margin {
+				t.Errorf("マージンの1文が出るか = %v（%v のはず）", got, c.margin)
+			}
+		})
+	}
+}
+
+// shortTempDir は、socket のパスの長さの上限（macOS で 104 バイト）に収まる短い一時ディレクトリを作る。
+//
+// **t.TempDir は長い。**macOS では `/var/folders/…` の下になり、`hooks.sock` を足すと上限を超える。
+//
+// t: テストコンテキスト。
+// 戻り値: 作ったディレクトリ。テストの終わりに消す。
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "cpu")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

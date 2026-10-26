@@ -3,8 +3,6 @@ package prompt_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // worktreeCleanupHeading は、自分で作った worktree の片付けを教える節の見出しである。
@@ -19,11 +17,11 @@ const worktreeCleanupHeading = "## worktree と branch は切り替えない"
 // エージェントが自分で足したものは消されず、**登録だけが残る。**
 // `--force` で消させると、commit していない変更が確認なしに消える。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 片付けの節があり、その節が消し方・消す前の確認・`--force`・`prune` の4つと、
 // 消してよい範囲（自分が `git worktree add` に渡したパスだけ）を教えていること。
 func TestTemplate_組み込みのプロンプトは自分で作ったworktreeを片付けさせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+worktreeCleanupHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+

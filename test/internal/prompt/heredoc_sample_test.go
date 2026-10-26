@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // heredocStart は、ヒアドキュメントを始める行の末尾に当たる。
@@ -23,11 +22,11 @@ var heredocStart = regexp.MustCompile(`<<'([A-Z]+)'$`)
 // 後ろの `gh` まで本文に取り込まれ、何も投稿されないまま終了コード 0 で終わる
 // （2026-09-17 に bash と zsh で測った）。成果の報告が出ず、その run は `failure_state` へ落ちる。
 //
-// 与える情報: prompt.BuiltinRaw() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 行末が `<<'語'` の行が、全部コード囲みの中にあり、同じ囲みの中で後ろに、
 // その語だけの行（前後の空白も無い行）があること。
 func TestTemplate_ヒアドキュメントの見本は囲みの中で閉じる(t *testing.T) {
-	lines := strings.Split(prompt.BuiltinRaw(), "\n")
+	lines := strings.Split(instructionsText(t), "\n")
 	found := 0
 	inFence := false
 	for i, line := range lines {
@@ -68,10 +67,10 @@ func TestTemplate_ヒアドキュメントの見本は囲みの中で閉じる(t
 // 一重引用符にしても、`don't` のような題名で引用が切れる。**題名はファイルへ書き、`"$(cat "$T")"` で渡す。**
 // 展開された中身を、シェルがもう一度実行することは無い。
 //
-// 与える情報: prompt.BuiltinRaw() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: `--title` を含む行が、どれも `--title "$(cat ` の形であること。
 func TestTemplate_題名は二重引用符の中へ直に書かせない(t *testing.T) {
-	for i, line := range strings.Split(prompt.BuiltinRaw(), "\n") {
+	for i, line := range strings.Split(instructionsText(t), "\n") {
 		if strings.Contains(line, "--title ") && !strings.Contains(line, `--title "$(cat `) {
 			t.Errorf("組み込みの %d 行目が、題名を直に渡させています: %q", i+1, line)
 		}
@@ -91,10 +90,10 @@ var relativeBodyFile = regexp.MustCompile(`(^|\s)(>>?|--body-file)\s*[A-Za-z0-9_
 // 未追跡のまま残り、片付け（internal/workspace/cleanup.go）が「コミットされていない変更が残っている」として
 // worktree を消さず、issue に事実と違う理由を書く。`git add -A` をすれば commit に混ざる。
 //
-// 与える情報: prompt.BuiltinRaw() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: `> 名前.md` や `--body-file 名前.md` の形の行が無いこと。
 func TestTemplate_本文のファイルをworktreeの中に作らせない(t *testing.T) {
-	for i, line := range strings.Split(prompt.BuiltinRaw(), "\n") {
+	for i, line := range strings.Split(instructionsText(t), "\n") {
 		if relativeBodyFile.MatchString(line) {
 			t.Errorf("組み込みの %d 行目が、本文のファイルを作業場所に作らせています: %q。"+
 				"`F=$(mktemp)` で作ったファイルへ書かせてください", i+1, line)
@@ -109,14 +108,14 @@ func TestTemplate_本文のファイルをworktreeの中に作らせない(t *te
 // （`handoff.StartsAsPlan`）。**見本から計画の印が落ちると、計画を書いた時点で「成果を書いた」と数えられ、**
 // turn が途中で終わった run で書かせ直しが飛ぶ。
 //
-// 与える情報: prompt.BuiltinRaw() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: `<<'PLAN'` の次の2行が、エージェントの印と計画の印であること。
 func TestTemplate_計画の見本は2行目に計画の印を行頭から書かせる(t *testing.T) {
 	agentMarker := config.DefaultConfig().Tracker.Comments.Marker
 	if agentMarker == "" {
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
 	}
-	lines := strings.Split(prompt.BuiltinRaw(), "\n")
+	lines := strings.Split(instructionsText(t), "\n")
 	found := false
 	for i, line := range lines {
 		if !strings.HasSuffix(line, `<<'PLAN'`) {
@@ -141,10 +140,10 @@ func TestTemplate_計画の見本は2行目に計画の印を行頭から書か�
 // 「「計画を書き、レビューを受ける」と同じ理由です」でそこを指すので、そこに在れば届く。
 // 「まとめて直したとき」の「そこを変えた理由」「前に書いていない分」も自由に書く行なので、そこにも要る。
 //
-// 与える情報: prompt.Builtin() の「計画を書き、レビューを受ける」と「まとめて直したとき」の節。
+// 与える情報: instructionsText(t) の「計画を書き、レビューを受ける」と「まとめて直したとき」の節。
 // 成功条件: 両方の節に、終わりの語だけの行を作るなという注意があること。
 func TestTemplate_本文に終わりの語だけの行を作らせない(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 	for _, heading := range []string{
 		"## 計画を書き、レビューを受ける",
 		"## まとめて直したとき",

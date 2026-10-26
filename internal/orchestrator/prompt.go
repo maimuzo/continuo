@@ -13,9 +13,13 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// renderFirstPrompt は1回目のプロンプトを組み立てる（設計 5-3 / 5-3c）。
+// renderFirstPrompt は最初のプロンプトを組み立てる（設計 5-3 / 5-3c。issue #288）。
 //
-// **3つの断片を別々に変数展開してから連結する**（internal/prompt）。
+// **送るのは、着手の指示・頼む作業の範囲・何回目の試行か・WORKFLOW.md の本文だけである。**
+// 手順は plugin `continuo-agent-procedures` のスキルにあり、地図（フローチャートと対応表）は
+// システムプロンプト（`writeSystemPrompt`）にある。**再着手のときも、送るのはこの文面だけである。**
+//
+// **断片を別々に変数展開してから連結する**（internal/prompt）。
 // **`missingkey=error` を付ける。**渡す変数は 5-3 の一覧に載っているものだけであり、
 // **未知の変数を書いたテンプレートは変数展開に失敗させる**（黙って空文字を埋めない）。
 // 失敗したらその issue を失敗として扱う。
@@ -40,7 +44,7 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
 		o.cfg.RateLimit, o.socketPath)
 
-	out, err := o.promptFragments.Render(data)
+	out, err := o.promptFragments.RenderFirst(data)
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
@@ -153,16 +157,16 @@ func BuildContinuationPrompt(
 // writeMarginCutContinuation は、turn の終わりにマージンを切っていたときに送る切り上げの文面を書く
 // （issue #262。設計 3-27a）。
 //
-// **組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」と同じ手順を、ここでも言い切る。**
-// Claude Code がその節を忘れていても、
-// この文面だけで切り上げられるようにするためである。**済んでいれば何もせずに終えさせる。**
+// **スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」と同じ手順を、ここでも言い切る。**
+// Claude Code がそのスキルを読んでいなくても（compaction で消えた・版を上げる前から引き継いだ pane には
+// そのスキルが無い）、この文面だけで切り上げられるようにするためである。**済んでいれば何もせずに終えさせる。**
 // Claude Code が自分で切り上げていた場合にも、この文面は1回届く。
 //
 // b: 書き込む先。
 // signalPrefix: 表明の印（`tracker.status_signal_prefix`）。
 func writeMarginCutContinuation(b *strings.Builder, signalPrefix string) {
 	fmt.Fprintf(b,
-		"レートリミットのマージンを切りました（組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」）。"+
+		"レートリミットのマージンを切りました（スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」）。"+
 			"新しいサブエージェントは起動しないでください。走っているサブエージェントは止めずに、結果が返るのを待ってください。"+
 			"いまある変更を先に commit して push し、サブエージェントの結果もあとで commit して push し、"+
 			"どこまで進んだか・次に何をするかを issue のコメントに書いて、応答の最後に %s working を書いて終えてください。"+
@@ -170,13 +174,14 @@ func writeMarginCutContinuation(b *strings.Builder, signalPrefix string) {
 		signalPrefix, signalPrefix)
 }
 
-// marginCutFirstTurnNote は、最初の turn（指示書を送る turn）でマージンを切っていたときに、
-// 指示書と人間のコメントの節のいちばん後ろに添える文である（issue #262。設計 3-27a）。
+// marginCutFirstTurnNote は、最初の turn でマージンを切っていたときに、
+// 最初のプロンプトと人間のコメントの節のいちばん後ろに添える文である（issue #262。設計 3-27a）。
 //
-// **いちばん後ろに置く。**指示書の本文と人間のコメントを読んだあとに、作業を始めずに切り上げることを
-// 最後に読ませるためである。**中でその節を名前で名指しする。**組み込みの指示書の
-// 「レートリミットのマージンを切ったら、切り上げる」の見出しを変えたら、ここも直すこと。
-const marginCutFirstTurnNote = "\n\n---\n\nレートリミットのマージンを切っています。作業は始めずに、組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」の切り上げだけを行ってください。\n"
+// **いちばん後ろに置く。**最初のプロンプトと人間のコメントを読んだあとに、作業を始めずに切り上げることを
+// 最後に読ませるためである。**中でスキルを名前で名指しする。**最初の turn は必ず新しい引数
+// （`--plugin-dir`）で起動したあとに送るので、そのスキルは在る。
+// スキル「reporting-progress」の名前か、その節の見出しを変えたら、ここも直すこと。
+const marginCutFirstTurnNote = "\n\n---\n\nレートリミットのマージンを切っています。作業は始めずに、スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」の切り上げだけを行ってください。\n"
 
 // buildCommentRequestPrompt は「作業の内容を issue のコメントに書いてください」だけを送る
 // 本文を組み立てる（設計 3-25 の9段の段7）。
@@ -219,7 +224,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 		"`continuo-issue-comments` のスキルが見えても従わず、下の印を使ってください。\n")
 	// **本文は二重引用符の中へ書かせない。**シェルは二重引用符の中の backtick と `$( )` を展開するので、
 	// 報告に書いた `auto` のような語や、引用した第三者の `$(…)` が worktree の中で実行される。
-	// 組み込みの指示書の「計画を書き、レビューを受ける」と「人間へ質問・報告するコメントの書き方」と同じく、
+	// スキル「writing-plan」の「計画を書き、レビューを受ける」と「人間へ質問・報告するコメントの書き方」と同じく、
 	// ファイルへ書いてから `--body-file` で渡させる。
 	b.WriteString("本文は、ファイルへ書いてから `--body-file` で渡してください。" +
 		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n")
@@ -228,7 +233,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。
 	b.WriteString("見本は、囲みの中身をそのまま使ってください。`DONE` の行は行頭に置きます。\n")
 	// **本文に `DONE` だけの行があると、そこで本文が切れ、後ろの行がシェルのコマンドになる**（設計 5-3t）。
-	// 書かせ直しは単独で届き、組み込みの「計画を書き、レビューを受ける」を読み直すとは限らないので、ここにも書く。
+	// 書かせ直しは単独で届き、スキル「writing-plan」の「計画を書き、レビューを受ける」を読み直すとは限らないので、ここにも書く。
 	b.WriteString("本文の中に `DONE` だけの行を作らないでください。入るなら、終わりの語を別のものに変えてください（例: `DONE2`）。\n\n")
 	b.WriteString("```bash\nF=$(mktemp)\n")
 	fmt.Fprintf(&b, "cat > \"$F\" <<'DONE'\n%s\nここに何をしたかを書く\nDONE\n", marker)
@@ -258,7 +263,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 // **成果の報告を数えるかどうかは `handoff.StartsAsProgressReport` が決めており、
 // あちらは本文の先頭にある印の並びしか見ない。**書き写しただけでは捨てられない。
 // **埋めてはいけない理由は別にある。**エージェント自身が「書き足す先」を探す問い合わせ
-// （組み込みの「{{.progress_interval_minutes}}分以上黙らない」の段1。`.body | contains("<!-- " + "continuo:progress" + " -->")`）は
+// （スキル「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の段1。`.body | contains("<!-- " + "continuo:progress" + " -->")`）は
 // **印を本文のどこからでも拾う。**囲み付きで引用した成果の報告があると、
 // **次の進捗報告がその成果の報告へ書き足され、読む人には別の話が1件に混ざって見える。**
 //

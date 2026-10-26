@@ -3,8 +3,6 @@ package prompt_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // backgroundDemandMarker は「バックグラウンドの処理を終わらせてから表明を書く」文を見分ける目印である。
@@ -24,12 +22,12 @@ const backgroundDemandMarker = "を書く前に、バックグラウンドで動
 // **`working` には当てない。**`working` は「まだ続ける」の表明で、長いビルドを
 // バックグラウンドで回したまま応答を返す使い方を禁じることになる。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: その文が1つだけあり、`blocked` と `review` を名指しし、`working` を名指ししていない。
 // コマンドと subagent の両方を挙げ、表明のあとに新しく起動しないよう求めている。
 // **その文が「runの終了を宣言する」の中に在り、表明の3行の見本より後ろに在る。**
 func TestTemplate_組み込みのプロンプトは表明の前にバックグラウンドの処理を終わらせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	var found []string
 	for _, line := range strings.Split(body, "\n") {
@@ -69,7 +67,14 @@ func TestTemplate_組み込みのプロンプトは表明の前にバックグ�
 		t.Fatalf("「runの終了を宣言する」の表明の3行の見本を見つけられません（節=%d 見本=%d）", section, head)
 	}
 	demand := strings.Index(body, backgroundDemandMarker)
-	next := strings.Index(body, "# 処理に必要なコンテキスト")
+	// **次の節の頭までに在ること。**手順がスキルへ移り（issue #288）、「runの終了を宣言する」の次は
+	// 同じスキル「finishing-run」の「まとめて直したとき」である。
+	next := -1
+	if head >= 0 {
+		if i := strings.Index(body[head:], "\n## "); i >= 0 {
+			next = head + i
+		}
+	}
 	if head < 0 || next < 0 || demand < head || demand > next {
 		t.Errorf("その文が、「runの終了を宣言する」の表明の3行の見本より後ろにありません（見本=%d 文=%d 次の章=%d）。"+
 			"表明の書き方を決めている節に置かないと、表明を書くときに読まれません", head, demand, next)

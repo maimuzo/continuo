@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
@@ -746,6 +747,13 @@ func (m *Manager) removeSettingsFile(settingsPath string) {
 	if err := os.Remove(signalPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		m.logger.Warn("取り得る値のファイルを消せませんでした",
 			"path", signalPath, "error", err)
+	} // **システムプロンプトも一緒に消す**（issue #288）。同じディレクトリに在り、同じ検査のあとで消す。
+	// **消えると、古い plugin の版を守る理由が1つ減る**（`agentplugin.Cleanup` は、どの system-prompt.md にも
+	// 載っていない版だけを消す）。worktree が残っているあいだは消えないので、direct chat の pane の版も守られる。
+	promptPath := filepath.Join(filepath.Dir(settingsPath), agentplugin.SystemPromptFileName)
+	if err := os.Remove(promptPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.logger.Warn("システムプロンプトのファイルを消せませんでした",
+			"path", promptPath, "error", err)
 	}
 }
 

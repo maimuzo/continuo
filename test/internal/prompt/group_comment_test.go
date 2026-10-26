@@ -19,12 +19,6 @@ const groupHeading = "## まとめて直したとき"
 // **したがって、この印の正は組み込みのプロンプトだけであり、ここはその写しである。**
 const groupMarker = "<!-- continuo:group -->"
 
-// groupBodyStart は、グループの他の issue へ書く成果報告の本文を、ファイルへ書かせ始める行の末尾である。
-//
-// **本文は二重引用符の中へ書かせない。**シェルが本文の backtick と `$` を実行するためである。
-// この行の次の行（囲みの中の行頭）が、本文の1行目（印）になる。
-const groupBodyStart = `cat > "$F" <<'GROUP'`
-
 // 目的: 組み込みのプロンプトが、グループの他の issue にも「何をしたか」を書かせることを固定する
 // （#237（グループの代表を直しても、代表以外の issue には「Status を動かしました」の1行しか残らない）。
 // 設計 6-27）。
@@ -33,7 +27,7 @@ const groupBodyStart = `cat > "$F" <<'GROUP'`
 // **何が直ったのかを知っているのはエージェントだけで、continuo は代筆しない**（設計 3-25 / 3-29）。
 // **この節が落ちると、代表以外を報告した人は、自分の issue を開いても何も分からない状態へ戻る。**
 //
-// 与える情報: prompt.Builtin() と prompt.Build() の、まとめて直したときの節。
+// 与える情報: instructionsText(t) と prompt.Build() の、まとめて直したときの節。
 // 成功条件: どちらでも節があり、既にあるかを確かめる手順・書き足す手順・投稿する手順・
 // 代表へリンクを並べる手順が在ること。
 func TestTemplate_組み込みのプロンプトはグループの各issueへ成果を書かせる(t *testing.T) {
@@ -44,8 +38,8 @@ func TestTemplate_組み込みのプロンプトはグループの各issueへ成
 		name string
 		body string
 	}{
-		{"組み込みだけ", prompt.Builtin()},
-		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text()},
+		{"組み込みだけ", instructionsText(t)},
+		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text() + skillsText(t)},
 	} {
 		if !strings.Contains(tc.body, "\n"+groupHeading+"\n") {
 			t.Fatalf("%s: 組み込みのプロンプトに %q の節がありません。"+
@@ -54,10 +48,10 @@ func TestTemplate_組み込みのプロンプトはグループの各issueへ成
 		}
 
 		// 節の中身だけを見る。**本文の別の場所に同じ語があっても、この節が教えていることにはならない。**
-		// とくに `gh issue comment` と `--method PATCH` は「{{.progress_interval_minutes}}分以上黙らない」の
+		// とくに `gh issue comment` と `--method PATCH` は「<進捗の間隔（分）>分以上黙らない」の
 		// 進捗報告の節にもあるので、
 		// 全文への contains では素通りする。
-		section := sectionOf(t, tc.body, groupHeading)
+		section := sectionOf(t, tc.body, groupHeading) + groupScripts(t)
 
 		for _, want := range []struct {
 			needle string
@@ -102,11 +96,11 @@ func TestTemplate_組み込みのプロンプトはグループの各issueへ成
 // 無い pull request の URL が残る。**
 // **#237 の症状（その issue を開いても分からない）を、事実と違う記録という別の形で作り直すことになる。**
 //
-// 与える情報: prompt.Builtin() の、まとめて直したときの節。
+// 与える情報: instructionsText(t) の、まとめて直したときの節。
 // 成功条件: `blocked` のときの書式が別に用意されていて、
 // そこで `review` の見本を使わせないことを言っていること。
 func TestTemplate_blockedのissueには直したという記録を書かせない(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), groupHeading)
+	section := sectionOf(t, instructionsText(t), groupHeading) + groupScripts(t)
 
 	for _, want := range []struct {
 		needle string
@@ -167,39 +161,45 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 // **段1 と段2b の一致も見る。**片方だけ別の印へ書き換えると、
 // **エージェントは自分の成果報告を毎 turn 見つけられず、「issue 1件につき成果報告1件」が崩れる。**
 //
-// 与える情報: prompt.Builtin() の、まとめて直したときの節。
+// 与える情報: instructionsText(t) の、まとめて直したときの節。
 // 成功条件: 投稿させる本文の印と、探させる印が同じ `<!-- continuo:group -->` であり、
 // エージェントの印と進捗の印を付けさせていないこと。理由も書いてあること。
 func TestTemplate_グループの成果報告の印はエージェントの印と分かれている(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), groupHeading)
+	section := sectionOf(t, instructionsText(t), groupHeading) + groupScripts(t)
 
 	// **投稿させる本文は2つある**（`review` 用と `blocked` 用）。**両方の先頭がグループの印である。**
-	// **件数で見る。**`Contains` を1回叩くだけだと、**片方を第三の印へ書き換えても通る。**
+	// **本文の先頭の印は、スクリプトが書く**（issue #288。見本はスキル「finishing-run」の
+	// scripts/append-group-report.sh へ移った）。節には、スクリプトを `new` で叩く囲みが2つある。
 	// **本文はファイルへ書いてから `--body-file` で渡させる**（二重引用符の中の backtick と `$` をシェルが実行するため）。
-	// **本文の塊は `<<'GROUP'` で始まり、その次の行が行頭の印である**（見本は囲みの中に行頭から書く）。
-	// **数える投稿は `gh issue comment` の行だけである。**同じ節の PR の本文の見本（`gh pr edit`）も
-	// `--body-file "$F"` を持つので、全部を数えると本文の塊と数が合わない。
-	posts := strings.Count(section, groupBodyStart)
-	marked := strings.Count(section, groupBodyStart+"\n"+groupMarker)
-	if n := countLines(section, func(line string) bool {
-		return strings.HasPrefix(line, "gh issue comment ") && strings.HasSuffix(line, `--body-file "$F"`)
-	}); n != posts {
-		t.Errorf("%q の節で、本文の塊 %d 個に対して、それを投稿するコマンドが %d 個です。"+
-			"本文を書かせても投稿させないと、成果の報告が残りません", groupHeading, posts, n)
-	}
-	if strings.Contains(section, `--body "`) {
-		t.Errorf("%q の節が、本文を二重引用符で渡させています。"+
-			"本文の backtick と `$` をシェルが実行します", groupHeading)
-	}
+	posts := countLines(section, func(line string) bool {
+		return strings.Contains(line, "scripts/append-group-report.sh' new ") && strings.HasSuffix(line, `<<'GROUP'`)
+	})
 	if posts < 2 {
 		t.Fatalf("%q の節に、投稿する本文が %d 個しかありません。"+
 			"`review` と `blocked` で書式を分けているので2つ以上あるはずです（検査が的を外しています）",
 			groupHeading, posts)
 	}
-	if marked != posts {
-		t.Errorf("%q の節で、投稿する本文 %d 個のうち %d 個しか %q で始まっていません。"+
+	script := scriptText(t, "finishing-run", "append-group-report.sh")
+	// **印を書く行と、それを投稿する行を、スクリプトの中で見る。**
+	header := ""
+	for _, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "printf ") && strings.Contains(trimmed, "と一緒に見ました。") {
+			header = trimmed
+		}
+	}
+	if header == "" || !strings.Contains(header, "'"+groupMarker+"'") || !strings.HasSuffix(header, `> "$F"`) {
+		t.Errorf("グループの成果報告のスクリプトが、本文の先頭に %q を書いていません: %q。"+
 			"別の印を付けさせると、その issue を担当している別の Claude Code の書かせ直しが黙って走らなくなります",
-			groupHeading, posts, marked, groupMarker)
+			groupMarker, header)
+	}
+	if !hasTrimmedLine(script, `gh issue comment "$NUM" --repo "$REPO" --body-file "$F"`) {
+		t.Error("グループの成果報告のスクリプトが、本文をファイルから渡して投稿していません。" +
+			"本文を書かせても投稿させないと、成果の報告が残りません")
+	}
+	if strings.Contains(section, `--body "`) {
+		t.Errorf("%q の節が、本文を二重引用符で渡させています。"+
+			"本文の backtick と `$` をシェルが実行します", groupHeading)
 	}
 
 	// **探させる印も、同じものである。**段1 の jq と段2a の門の両方を見る。
@@ -221,14 +221,14 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	if agentMarker == "" {
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
 	}
-	if strings.Contains(section, groupBodyStart+"\n"+agentMarker) {
+	if strings.Contains(header, agentMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"その印は「いま担当している issue のエージェントが書いた」という意味で、"+
 			"continuo が書かせ直しの要否を決めるのに使っています", groupHeading, agentMarker)
 	}
 
 	// **進捗の印も付けさせてはならない。**付けると、次の進捗報告がこの成果報告へ書き足す。
-	if strings.Contains(section, groupBodyStart+"\n"+config.ProgressMarker) {
+	if strings.Contains(header, config.ProgressMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"付けると、次の進捗報告がこの成果報告に書き足します", groupHeading, config.ProgressMarker)
 	}
@@ -255,11 +255,11 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 // **`--method PATCH` が節の中に在るかを見るだけでは足りない。**
 // **門の外に置いても、その検査は通る**（実際に3周目の直しで一度そうなった）。
 //
-// 与える情報: prompt.Builtin() の、まとめて直したときの節。
+// 与える情報: instructionsText(t) の、まとめて直したときの節。
 // 成功条件: `--method PATCH` を含む行より前に印を見る `case` の枝があり、
 // その枝から `esac` までの間に `--method PATCH` が在ること。
 func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), groupHeading)
+	section := sectionOf(t, instructionsText(t), groupHeading) + groupScripts(t)
 
 	// **件数で見る。**`Index` は最初の1件しか見ないので、**門の外に2本目を足しても通る。**
 	if n := strings.Count(section, "--method PATCH"); n != 1 {
@@ -283,92 +283,59 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 			"門の外で書き換えると印ごと本文が消えます", groupHeading, `*"`+groupMarker+`"*)`)
 	}
 
-	// **`$ID` を作る塊は、どれも `$URL` を自分で置いている。**
-	// **道具は塊ごとに別のシェルで走るので、変数は持ち越されない。**
-	// `URL=` を落とすと `ID` が空になり、`gh api` が失敗して段2b が2件目を投稿する。
-	const setURL, deriveID = "URL=<段1が返した URL>", "ID=${URL##*#issuecomment-}"
-	// **門は2つある**（読む塊と、書き換える塊）。**どちらも印を確かめてから動く。**
-	// 読む塊の門を外すと、`gh api` が返したエラーの JSON を「前の本文」として見せるので、
-	// **エージェントは「前に何も書いていない」と読み、次の書き換えで全文を足す。**
-	if n := strings.Count(section, `*"`+groupMarker+`"*)`); n < 2 {
-		t.Errorf("%q の節に %q の枝が %d 個しかありません。2個以上にしてください"+
-			"（前の本文を読む塊と、書き換える塊の両方が、印を確かめてから動くこと）。"+
-			"**枝を増やす直しは止めない。**減らす直しだけを止める",
-			groupHeading, `*"`+groupMarker+`"*)`, n)
-	}
-
-	// **投稿する2つの本文の、印の次の1行が同じであること。**
-	// **分けると、`blocked` で書いた issue が `review` になったとき、
-	// 行を足すだけの段2a では先頭が嘘のまま残る。**
-	// **禁止文の存在だけを見る検査では、見本を戻されても落ちない。**
-	var heads []string
-	for at := 0; ; {
-		i := strings.Index(section[at:], groupBodyStart+"\n"+groupMarker)
-		if i < 0 {
-			break
-		}
-		i += at + len(groupBodyStart+"\n"+groupMarker)
-		nl := strings.Index(section[i:], "\n")
-		if nl < 0 {
-			break
-		}
-		rest := section[i+nl+1:]
-		end := strings.Index(rest, "\n")
-		if end < 0 {
-			end = len(rest)
-		}
-		heads = append(heads, strings.TrimSpace(rest[:end]))
-		at = i
-	}
-	if len(heads) != 2 {
-		t.Fatalf("%q の節から、投稿する本文の1行目を %d 個しか取り出せません。2個のはずです",
-			groupHeading, len(heads))
-	}
-	if heads[0] != heads[1] {
-		t.Errorf("%q の節で、投稿する2つの本文の1行目が違います（%q と %q）。"+
-			"分けると、逆の表明で行を足したときに先頭だけが嘘になります", groupHeading, heads[0], heads[1])
-	}
-	for _, notWant := range []string{"まとめて直しました", "直していません"} {
-		if strings.Contains(heads[0], notWant) {
-			t.Errorf("%q の節で、投稿する本文の1行目に %q が入っています（%q）。"+
-				"直したかどうかは下の行の中身で分かるので、1行目には書かせません",
-				groupHeading, notWant, heads[0])
-		}
-	}
-
-	// **前に書いた本文を表示させる塊があること。**設計 6-27 が「段2a では、前に書いた本文を
+	// **門は、読む経路と書き換える経路の両方を通す**（issue #288）。見本はスクリプト1本になり、
+	// `read` と `append` が同じ `case` の枝を通る。**読む経路の門を外すと、`gh api` が返したエラーの JSON を
+	// 「前の本文」として見せるので、エージェントは「前に何も書いていない」と読み、次の書き換えで全文を足す。**
+	//
+	// **前に書いた本文を表示させる行があること。**設計 6-27 が「段2a では、前に書いた本文を
 	// 必ず表示させる」と決めている。**変数へ入れるだけでは、エージェントは前の中身を見られない。**
 	// **書かせ直しはセッションの復元後に走るので、記憶が消えている場面こそが段2a の主戦場である。**
-	//
-	// **この塊を消しても、他の検査は全部通る**（`--method PATCH` は残る塊にあり、
-	// `URL=` と `ID=` は両方とも同時に1つ減るので件数の検査も通る）。**だから名指しで見る。**
-	//
-	// **行全体で比べる。**書き換えの塊にも `printf '%s\n' "$OLD"` を含む行があるので、
-	// 部分一致で探すと、表示の塊を消しても書き換えの行に当たって通る。
-	if countLines(section, func(line string) bool {
-		return strings.TrimSpace(line) == `printf '%s\n' "$OLD"`
-	}) == 0 {
+	// **その行も、印を確かめる枝の中に在ること。**
+	show := -1
+	at := 0
+	for _, line := range strings.SplitAfter(section, "\n") {
+		if strings.TrimSpace(line) == `printf '%s\n' "$OLD"` {
+			show = at
+			break
+		}
+		at += len(line)
+	}
+	if show < 0 {
 		t.Errorf("%q の節が、前に書いた本文を表示させていません。"+
 			"変数へ入れるだけでは、エージェントは前の中身を見られず、"+
 			"「前に書いていない分」を決められません", groupHeading)
+	} else if showGate := strings.LastIndex(section[:show], `*"`+groupMarker+`"*)`); showGate < 0 ||
+		strings.Contains(section[showGate:show], "esac") {
+		t.Errorf("%q の節で、前に書いた本文を表示させる行が、印を確かめる枝の外にあります", groupHeading)
 	}
 
-	// **件数がそろっているだけでは足りない。**`$ID` を作る行の直前が `$URL` を置く行であること。
-	// **離れた場所に2つ並べても、件数だけの検査は通る。**
-	for at := 0; ; {
-		i := strings.Index(section[at:], deriveID)
-		if i < 0 {
-			break
+	// **`$ID` は、渡された URL から作る。**URL を受け取らずに `$ID` を作ると、`gh api` が失敗して段2b が2件目を投稿する。
+	script := scriptText(t, "finishing-run", "append-group-report.sh")
+	for _, want := range []string{"URL=$3", "ID=${URL##*#issuecomment-}"} {
+		if !hasTrimmedLine(script, want) {
+			t.Errorf("グループの成果報告のスクリプトに %q の行がありません。"+
+				"渡された URL から ID を作らないと、`$ID` が空になります", want)
 		}
-		i += at
-		if before := strings.LastIndex(section[:i], setURL); before < 0 ||
-			strings.Contains(section[before:i], "```") ||
-			strings.Count(section[before:i], "\n") > 2 {
-			t.Errorf("%q の節で、%q の直前に %q がありません。"+
-				"同じ塊の中で置き直さないと、別のシェルで走ったときに `$ID` が空になります",
-				groupHeading, deriveID, setURL)
+	}
+
+	// **投稿する2つの本文（`review` と `blocked`）の、印の次の1行が同じであること。**
+	// **分けると、`blocked` で書いた issue が `review` になったとき、
+	// 行を足すだけの段2a では先頭が嘘のまま残る。**
+	// いまは1行目をスクリプトが書くので、2つの本文で同じになる。**その1行に、直したかどうかを書かせない。**
+	var head string
+	for _, line := range strings.Split(script, "\n") {
+		if strings.Contains(line, "と一緒に見ました。") && strings.HasPrefix(strings.TrimSpace(line), "printf ") {
+			head = line
 		}
-		at = i + len(deriveID)
+	}
+	if head == "" {
+		t.Fatalf("グループの成果報告のスクリプトから、投稿する本文の1行目を取り出せません")
+	}
+	for _, notWant := range []string{"まとめて直しました", "直していません"} {
+		if strings.Contains(head, notWant) {
+			t.Errorf("グループの成果報告の本文の1行目に %q が入っています（%q）。"+
+				"直したかどうかは下の行の中身で分かるので、1行目には書かせません", notWant, head)
+		}
 	}
 }
 
@@ -384,10 +351,10 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 // 変えられる名前である。**節がその名前を書くと、列名を変えたカンバンで指示だけが古いまま残る。**
 // エージェントが見るのは自分の表明の値（`review` / `blocked`）だけでよい。
 //
-// 与える情報: prompt.Builtin() の、まとめて直したときの節。
+// 与える情報: instructionsText(t) の、まとめて直したときの節。
 // 成功条件: 対象を絞る文があり、Status の既定の名前が1つも書かれていないこと。
 func TestTemplate_グループの成果報告は対象を絞りStatus名を書かない(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), groupHeading)
+	section := sectionOf(t, instructionsText(t), groupHeading) + groupScripts(t)
 
 	for _, want := range []struct {
 		needle string
@@ -408,7 +375,7 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 		{"または段2a が「段2b で新しく1件投稿します」と出したとき",
 			"段2a が落ちたときの行き先が無いと、その issue に何も残らないか、2件目が積まれます"},
 		// **別のリポジトリの issue を外す行も見る。**段2b は
-		// `--repo {{.issue.owner}}/{{.issue.repo}}` を直に書いているので、
+		// `--repo <issue のリポジトリ>` を直に書いているので、
 		// **外れると、同じ番号の別のリポジトリの issue へ書き込む。**
 		{"| **別のリポジトリの issue** | **書きません。**",
 			"段2b は代表と同じリポジトリを直に指すので、外すのをやめると、同じ番号の別の issue へ書き込みます"},
@@ -462,12 +429,12 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 // **この検査は「まとめて直したとき」の節ではなく「runの終了を宣言する」の節を見る。**
 // 「まとめて直したとき」だけを見る検査では、**「runの終了を宣言する」の案内が1行残らず消えても全部緑になる。**
 //
-// 与える情報: prompt.Builtin() の、「runの終了を宣言する」の節。
+// 与える情報: instructionsText(t) の、「runの終了を宣言する」の節。
 // 成功条件: 「まとめて直したとき」を先に通させる案内があり、それが投稿するコマンドより前に在ること。
 func TestTemplate_終わりを書く節はグループの成果報告を先に通させる(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), finishedHeading)
+	section := sectionOf(t, instructionsText(t), finishedHeading)
 
-	const guide = "段4の報告より先に「まとめて直したとき」を通します"
+	const guide = "段4の報告より先に下の「まとめて直したとき」を通します"
 	at := strings.Index(section, guide)
 	if at < 0 {
 		t.Fatalf("%q の節に %q がありません。"+
@@ -482,4 +449,17 @@ func TestTemplate_終わりを書く節はグループの成果報告を先に�
 			"上から読んだエージェントは、投稿し終えてから「その中に URL を並べろ」と言われます",
 			finishedHeading, guide)
 	}
+}
+
+// groupScripts は、「まとめて直したとき」の見本を移したスクリプト2本を連結して返す（issue #288）。
+//
+// **長いシェルの見本は、スキル「finishing-run」の scripts/ へ移った。**節の本文には叩き方だけが残る。
+// 見本の中身を確かめていた検査は、節とスクリプトの両方を読む。
+//
+// t: テストコンテキスト。
+// 戻り値: 改行で始まる、2本のスクリプトの全文。
+func groupScripts(t *testing.T) string {
+	t.Helper()
+	return "\n" + scriptText(t, "finishing-run", "add-closes-line.sh") +
+		"\n" + scriptText(t, "finishing-run", "append-group-report.sh")
 }

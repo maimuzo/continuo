@@ -145,3 +145,36 @@ func setWiringEnv(t *testing.T, root string) {
 	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
 }
+
+// 目的: Claude Code の版が下限より古ければ、起動の時点で止まることを確かめる（issue #288）。
+//
+// **古い版では着手が全部落ち、再着手は新しいセッションへ倒れて前の会話を捨てる。**
+// 着手の時点で1件ずつ落とすと、常駐プロセスは健康に見えたまま issue が全部落ちる。
+//
+// 与える情報: `--version` が `2.1.250 (Claude Code)` を返す claude。
+// 成功条件: 起動の段のエラー（daemon.ErrStartup）で止まり、文言が読めた版と下限を含むこと。
+func TestRun_ClaudeCodeが古ければ起動を止める(t *testing.T) {
+	root := wiringRoot(t)
+	path := writeWiringWorkflow(t, root, "", "")
+	setWiringEnv(t, root)
+
+	err := daemon.Run(context.Background(), daemon.Options{
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
+		ClaudeLookPath: func(string) (string, error) { return "/opt/bin/claude", nil },
+		ClaudeVersion: func(context.Context, string) (string, error) {
+			return "2.1.250 (Claude Code)\n", nil
+		},
+	})
+	if err == nil {
+		t.Fatal("古い Claude Code なのに起動できてしまった")
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	for _, want := range []string{"2.1.250", "2.1.304", "/opt/bin/claude"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("文言に %q がありません: %v", want, err)
+		}
+	}
+}

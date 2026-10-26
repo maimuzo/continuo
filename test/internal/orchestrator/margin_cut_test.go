@@ -409,8 +409,8 @@ func assigneeLoginsOfFixture(fx *fixture, id string) []string {
 //
 // 与える情報: この機械が担当者の `Ready` の issue。1週間の期間が 93% でリセットが3日先（待つ上限を超える）。
 // 5時間の期間は 20%（Claude Code は動ける）。
-// 成功条件: 1回目に送った文面が、「レートリミットのマージンを切ったら、切り上げる」の節を含み、
-// いちばん最後に切り上げの文を持つこと。
+// 成功条件: エージェントが読むもの（最初のプロンプト・システムプロンプト・スキル）が
+// 「レートリミットのマージンを切ったら、切り上げる」の節を含み、1回目に送った文面がいちばん最後に切り上げの文を持つこと。
 func TestMarginCut_最初のturnで切っていたら指示書の最後に切り上げを添える(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		RateLimit: newUsageReader(t, func() string {
@@ -433,10 +433,11 @@ func TestMarginCut_最初のturnで切っていたら指示書の最後に切り
 	waitFor(t, 10*time.Second, "1回目の turn が送られる", func() bool { return len(prompts()) > 0 })
 
 	got := prompts()[0]
-	if !strings.Contains(got, "\n## レートリミットのマージンを切ったら、切り上げる\n") {
-		t.Errorf("1回目の文面に「レートリミットのマージンを切ったら、切り上げる」の節がありません")
+	// **切り上げの手順はスキル「reporting-progress」にある**（issue #288）。エージェントが読むもの全体で見る。
+	if !strings.Contains(agentView(t, fx, "octocat/hello-world#190", got), "\n## レートリミットのマージンを切ったら、切り上げる\n") {
+		t.Errorf("エージェントが読むものに「レートリミットのマージンを切ったら、切り上げる」の節がありません")
 	}
-	if !strings.HasSuffix(strings.TrimSpace(got), "組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」の切り上げだけを行ってください。") {
+	if !strings.HasSuffix(strings.TrimSpace(got), "スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」の切り上げだけを行ってください。") {
 		t.Errorf("1回目の文面の最後に切り上げの文がありません: %q", got[max(0, len(got)-200):])
 	}
 }

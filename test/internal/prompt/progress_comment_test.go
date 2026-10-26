@@ -9,9 +9,9 @@ import (
 )
 
 // progressCommentHeading は、途中の状況をコメントさせる節の見出しである。
-// **見出しに変数が入っている**（設計 5-3n）。`prompt.Builtin()` は変数を展開しないので、
+// **見出しに変数が入っている**（設計 5-3n）。`instructionsText(t)` は変数を展開しないので、
 // 検査もテンプレートの記法のまま探す。
-const progressCommentHeading = "## {{.progress_interval_minutes}}分以上黙らない"
+const progressCommentHeading = "## <進捗の間隔（分）>分以上黙らない"
 
 // finishedHeading は、turn の終わりにやることを教える節の見出しである（「runの終了を宣言する」）。
 const finishedHeading = "## runの終了を宣言する"
@@ -26,10 +26,10 @@ const finishedHeading = "## runの終了を宣言する"
 // **判定する側は internal/handoff にあるが、書く側はこの節しか無い。**
 // 節が消えると、長い作業のあいだ時計が1秒も進まなくなる。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 節があり、コメントの印・投稿するコマンド・push・担当の期限の理由の4つを教えていること。
 func TestTemplate_組み込みのプロンプトは途中でも状況を書かせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+progressCommentHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
@@ -46,14 +46,14 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 		needle string
 		why    string
 	}{
-		{"{{.progress_interval_minutes}}分", "間隔を書かないと、エージェントは「長く」がどれくらいかを決められません"},
+		{"<進捗の間隔（分）>分", "間隔を書かないと、エージェントは「長く」がどれくらいかを決められません"},
 		// **時刻は、その機械のタイムゾーンで書かせる**（設計 3-77a。issue #258）。
 		// continuo 自身のコメントと同じ `2006-01-02 15:04 (MST)` の形になる。
 		{"date '+%Y-%m-%d %H:%M (%Z)'", "エージェントは時間の経過に自分では気づけません。" +
 			"時刻を引くコマンドを渡さないと、決めた間隔を測る手立てがありません"},
 		{"gh issue comment", "コメントの投稿のしかたを書かないと、書けと言われても手段が分かりません"},
 		{"<!-- continuo:agent -->", "印が無いコメントは、continuo がエージェントの発言として見分けられません"},
-		{"{{.issue.url}}", "issue の URL を渡さないと、エージェントは別の issue へ書きかねません"},
+		{"<issue の URL>", "issue の URL を渡さないと、エージェントは別の issue へ書きかねません"},
 		{"git push -u origin HEAD", "push させないと、担当が外れた時点で手元の commit が他の機械から見えなくなります"},
 		// **理由は「担当の期限」で書いてある。**期限の長さ（既定18時間）は
 		// `tracker.provider.handoff.idle_timeout_ms` で変わるので、文面は数を持たない。
@@ -81,10 +81,12 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 // **この分岐はプロンプトにしか無い。**continuo の側は1バイトも書かないので、
 // 節から手順が落ちると、そのまま元の「毎回新規投稿」へ戻る。
 //
-// 与える情報: prompt.Builtin() の、途中の状況を書かせる節。
+// 与える情報: instructionsText(t) の、途中の状況を書かせる節。
 // 成功条件: 書き足す先を引くコマンド・書き足すコマンド・新しく投稿する側の印の3つが在ること。
 func TestTemplate_組み込みのプロンプトは進捗報告を書き足させる(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), progressCommentHeading)
+	// **書き足す見本は、スキル「reporting-progress」の scripts/append-progress.sh へ移った**（issue #288）。
+	section := sectionOf(t, instructionsText(t), progressCommentHeading) + "\n" +
+		scriptText(t, "reporting-progress", "append-progress.sh")
 
 	for _, want := range []struct {
 		needle string
@@ -131,7 +133,7 @@ func TestTemplate_組み込みのプロンプトは進捗報告を書き足さ�
 
 	// **最後の成果報告に進捗の印を付けさせてはならない。**付けると、
 	// **次の進捗報告が成果報告に書き足して、読む人には別の話が1件に混ざって見える。**
-	finished := sectionOf(t, prompt.Builtin(), finishedHeading)
+	finished := sectionOf(t, instructionsText(t), finishedHeading)
 	if strings.Contains(finished, "<!-- continuo:progress -->") {
 		t.Errorf("%q の節が、最後の成果報告に進捗の印を付けさせています。"+
 			"付けると、次の進捗報告がその成果報告に書き足します", finishedHeading)
@@ -146,15 +148,15 @@ func TestTemplate_組み込みのプロンプトは進捗報告を書き足さ�
 // 組み込みの前半・本文・後半を継ぎ合わせたあとに空の見出しを落とす処理（prompt.Build）を通しても、
 // **中身を持つこの2つが落ちてはならない。**
 //
-// 与える情報: prompt.Builtin() の全文と、prompt.Build() が組み立てた全文。
+// 与える情報: instructionsText(t) の全文と、prompt.Build() が組み立てた全文。
 // 成功条件: どちらでも、2つの見出しが両方在ること。
 func TestTemplate_途中の状況を書かせる節と終わりの節は本文を挟んでも残る(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
 	}{
-		{"組み込みだけ", prompt.Builtin()},
-		{"本文を挟んだもの", prompt.Build("## 固有の目印\n\nこのプロジェクト固有の決まりです。\n", "/tmp/WORKFLOW.md").Text()},
+		{"組み込みだけ", instructionsText(t)},
+		{"本文を挟んだもの", prompt.Build("## 固有の目印\n\nこのプロジェクト固有の決まりです。\n", "/tmp/WORKFLOW.md").Text() + skillsText(t)},
 	} {
 		for _, heading := range []string{progressCommentHeading, finishedHeading} {
 			if !strings.Contains(tc.body, "\n"+heading+"\n") {
@@ -174,31 +176,61 @@ func TestTemplate_途中の状況を書かせる節と終わりの節は本文�
 // 戻り値: 見出しの次の行から、次の "## " で始まる行の手前までの中身。
 func sectionOf(t *testing.T, body, heading string) string {
 	t.Helper()
+	return sectionsMatching(t, body, heading, func(line string) bool {
+		// **`# ` でも止める**（issue #288）。手順はスキルへ移り、指示の全体（`instructionsText`）は
+		// スキルの境目に `# スキル <名前>` を置いている。止めないと、次のスキルの先頭が混ざる。
+		return strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "# ")
+	})
+}
+
+// sectionsMatching は、見出しの行が当たる節を全部取り出して連結する（issue #288）。
+//
+// **同じ見出しが2つ以上のスキルに在ることがある。**もとの指示書の1つの節が、中身ごとに2つのスキルへ
+// 分かれたためである（「pull request を出す」の段1・段2 と段3 など）。**全部を連結して返す。**
+// 1つ目だけを返すと、もう片方へ移った決まりへの検査が黙って素通りする。
+//
+// **囲みの中の見出しは数えない。**見本は囲みの中に行頭から書いてあり、見出しを持つ。
+//
+// t: テストコンテキスト。
+// body: 切り出す元の文面。
+// heading: 探す見出しの行そのもの。
+// stop: 節の終わりとみなす行なら真を返す関数。
+// 戻り値: 当たった節の中身（見出しの次の行から、終わりの行の手前まで）を改行で連結したもの。
+func sectionsMatching(t *testing.T, body, heading string, stop func(string) bool) string {
+	t.Helper()
 
 	lines := strings.Split(body, "\n")
-	start := -1
-	for i, line := range lines {
-		if line == heading {
-			start = i + 1
-			break
-		}
-	}
-	if start < 0 {
-		t.Fatalf("本文から %q の見出しを取り出せません", heading)
-	}
+	var parts []string
 	inFence := false
-	for i := start; i < len(lines); i++ {
-		// **囲みの中の `## ` では切らない。**見本は囲みの中に行頭から書いてあり、
-		// 本文の見出し（`## <節の題名>` など）を持つ。そこで切ると、後ろの文への検査が黙って素通りする。
+	for i := 0; i < len(lines); i++ {
 		if isFenceLine(lines[i]) {
 			inFence = !inFence
 			continue
 		}
-		if !inFence && strings.HasPrefix(lines[i], "## ") {
-			return strings.Join(lines[start:i], "\n")
+		if inFence || lines[i] != heading {
+			continue
 		}
+		start := i + 1
+		end := len(lines)
+		innerFence := false
+		for j := start; j < len(lines); j++ {
+			// **囲みの中の見出しでは切らない。**そこで切ると、後ろの文への検査が黙って素通りする。
+			if isFenceLine(lines[j]) {
+				innerFence = !innerFence
+				continue
+			}
+			if !innerFence && stop(lines[j]) {
+				end = j
+				break
+			}
+		}
+		parts = append(parts, strings.Join(lines[start:end], "\n"))
+		i = end - 1
 	}
-	return strings.Join(lines[start:], "\n")
+	if len(parts) == 0 {
+		t.Fatalf("本文から %q の見出しを取り出せません", heading)
+	}
+	return strings.Join(parts, "\n")
 }
 
 // isFenceLine は、その行がコード囲みの開きか閉じかを返す。
@@ -245,11 +277,12 @@ func countLines(s string, match func(string) bool) int {
 // **本文はファイルへ書いてから `--body-file` で渡させる。**二重引用符の中へ書かせると、
 // 本文の backtick と `$` をシェルが実行する。**見本の本文は `<<'PROGRESS'` で始まる塊である。**
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 本文の塊の1行目がエージェントの印、2行目が進捗報告の印で、どちらも行頭から始まり、
 // その本文を `--body-file` で投稿させていること。
 func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *testing.T) {
-	body := prompt.Builtin()
+	// **見本の本文は、スキル「reporting-progress」の scripts/append-progress.sh へ移った**（issue #288）。
+	body := instructionsText(t) + "\n" + scriptText(t, "reporting-progress", "append-progress.sh")
 	agentMarker := config.DefaultConfig().Tracker.Comments.Marker
 	if agentMarker == "" {
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
@@ -274,7 +307,7 @@ func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *test
 	}
 	// **投稿の行は、進捗報告の見本の囲みの中から探す。**全文から探すと、見本から投稿の行が消えても、
 	// 別の節の同じ行に当たって通る。
-	if !fenceHasLine(lines, `<<'PROGRESS'`, `gh issue comment {{.issue.url}} --body-file "$F"`) {
+	if !hasTrimmedLine(scriptText(t, "reporting-progress", "append-progress.sh"), `gh issue comment "$URL" --body-file "$F"`) {
 		t.Error("進捗報告の見本が、本文をファイルから渡していません。" +
 			"二重引用符の中へ書かせると、本文の backtick と `$` をシェルが実行します")
 	}
@@ -313,11 +346,11 @@ func fenceHasLine(lines []string, marker, want string) bool {
 // 「`--body "…"` で渡すと、…二重引用符の中で実行されます」「`--body "…"` で渡さないでください」と書いており、
 // 見本がそれに反すると指示が食い違う。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: `--body "` を含む行が、それを禁じる文（渡さないでください）か、
 // 渡すと何が起きるかを言う警告の文（二重引用符の中で実行されます）だけであり、`-f body="` を含む行が無いこと。
 func TestTemplate_コメントとPRの本文を二重引用符で渡させない(t *testing.T) {
-	for i, line := range strings.Split(prompt.Builtin(), "\n") {
+	for i, line := range strings.Split(instructionsText(t), "\n") {
 		if strings.Contains(line, `--body "`) && !strings.Contains(line, "渡さないでください") &&
 			!strings.Contains(line, "二重引用符の中で実行されます") {
 			t.Errorf("組み込みのプロンプトの %d 行目が、本文を二重引用符で渡させています: %q。"+

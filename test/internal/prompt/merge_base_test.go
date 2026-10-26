@@ -7,8 +7,6 @@ package prompt_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // mergeSectionHeading は、分岐元を取り込ませる段の見出しである。
@@ -29,11 +27,11 @@ const mergeSectionHeading = "## 分岐元を取り込み、読む"
 // **読む段（「分岐元を取り込み、読む」の段4）と計画の段（「計画を書き、レビューを受ける」）より前に置く。**
 // あとに置くと、その2段が古いコードの上で終わる。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 見出しがあり、それが計画の段（「計画を書き、レビューを受ける」）と実装の段（「実装する」）より前にあること。
 // **取り込む段が、同じ節の読む段より前にあること。**
 func TestTemplate_組み込みのプロンプトは読む前に分岐元を取り込ませる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	at := strings.Index(body, "\n"+mergeSectionHeading+"\n")
 	if at < 0 {
@@ -61,7 +59,7 @@ func TestTemplate_組み込みのプロンプトは読む前に分岐元を取�
 // 目的: 分岐元の名前の決め方が4段そろっていることを固定する（issue #214）。
 //
 // **`herdr.worktree.base`（worktree を切る分岐元。既定 null）を設定した利用者では、
-// 「このプロジェクトの決まり」と `{{.push_branch}}` と既定 branch の3段では当たらない。**
+// 「このプロジェクトの決まり」と `<リンクされた branch>` と既定 branch の3段では当たらない。**
 // その worktree は設定した branch から切られているのに、**3段では既定 branch を引いてくる。**
 // **衝突しなければ merge は成功するので、この issue と関係の無い差分が黙って入る。**
 //
@@ -69,10 +67,10 @@ func TestTemplate_組み込みのプロンプトは読む前に分岐元を取�
 // （既定 `.continuo.json`。`workspace.identity_file` で名前を変えられる）へ、
 // 実際に使った分岐元を `"base"` として書いている。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 4段の手掛かりが全部あること。
 func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	// **身元ファイルを1番に置くことが、この検査の主目的である。**
 	// **「このプロジェクトの決まり」は issue をまたいで同じ文言だが、身元ファイルは worktree ごとに continuo が書く。**
@@ -93,20 +91,20 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		t.Error("「このプロジェクトの決まり」の指定が身元ファイルより上にあります（issue #214）")
 	}
 
-	// **`{{.push_branch}}` を地の文へ裸で置かない。**
+	// **`<リンクされた branch>` を地の文へ裸で置かない。**
 	// **変数展開したあとに日本語として壊れる。**リンクがあれば
 	// 「work/issue-42 が空でなければ、その名前」、無ければ「 が空でなければ、その名前」になる。
-	if strings.Contains(body, "{{.push_branch}} が空でなければ") {
-		t.Error("`{{.push_branch}}` を地の文へ裸で置いています。" +
+	if strings.Contains(body, "<リンクされた branch> が空でなければ") {
+		t.Error("`<リンクされた branch>` を地の文へ裸で置いています。" +
 			"展開後に日本語として壊れます。`{{if .push_branch}}` で囲むこと")
 	}
-	// **`origin/{{.push_branch}}` と書かない。**
+	// **`origin/<リンクされた branch>` と書かない。**
 	// **変数展開したあとの本文に `origin/<リンクされた branch>` が現れると、
 	// エージェントが push 先だと読み違える**（`.push_branch` は生の名前で渡す約束である。設計 3-22d）。
 	// `test/internal/orchestrator/push_branch_prompt_test.go` の
 	// `TestPrompt_リンクされたbranchの名前をpush_branchで渡す` が、それを本文の全体で見張っている。
-	if strings.Contains(body, "origin/{{.push_branch}}") {
-		t.Error("分岐元の決め方が `origin/{{.push_branch}}` を組み立てています。" +
+	if strings.Contains(body, "origin/<リンクされた branch>") {
+		t.Error("分岐元の決め方が `origin/<リンクされた branch>` を組み立てています。" +
 			"変数展開後の本文に origin/<branch> が現れ、push 先と読み違えられます（設計 3-22d）")
 	}
 	// **付けるのではなく、付いていたら外す。**`git fetch origin <名前>` の `<名前>` は
@@ -124,7 +122,7 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 
 	// **`git fetch` へ辿れること。**取り込み方そのものは「worktree と branch は切り替えない」が持っており、
 	// **コマンドを二重に書かない**（片方だけ直すと指示が食い違う）。
-	if !strings.Contains(body, "取り込みのコマンドは「worktree と branch は切り替えない」の2つと同じです") {
+	if !strings.Contains(body, "取り込みのコマンドは「implementing-and-pushing」の「worktree と branch は切り替えない」の2つと同じです") {
 		t.Error("分岐元の取り込み方が「worktree と branch は切り替えない」を指していません（issue #214）")
 	}
 	if !strings.Contains(body, "git fetch origin <その branch>") {
@@ -175,13 +173,13 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		// 「commit するものが無い」と言い切ると、エージェントは push を飛ばす。
 		// **push していない commit が残ると `cleanup.require_pushed` が片付けを見送り、
 		// 成果は worktree の中だけに閉じ込められる。**
-		"**残っていたら push してください。**",
+		"**残っていたら push してください**",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("取り込めなかったときの扱いに %q がありません（issue #214）", want)
 		}
 	}
-	if !strings.Contains(body, "どのファイルのどこを、なぜ決められなかったかを報告に書いて、`CONTINUO-STATUS: blocked` を出します") {
+	if !strings.Contains(body, "どのファイルのどこを、なぜ決められなかったかを報告（「finishing-run」の「runの終了を宣言する」）に書いて、`CONTINUO-STATUS: blocked` を出します") {
 		t.Error("マージで落ちたときの行き先が書かれていません（issue #214）")
 	}
 }
@@ -196,12 +194,12 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 // **身元ファイルのキーの名前としては `"base"` を使わざるをえない。**
 // そのかわり、**それが「この指示書が決めていないこと」の「base にする branch」とは別だと明示する。**
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 言い分ける1行があり、「この指示書が決めていないこと」の「base にする branch」も残っていること。
 func TestTemplate_分岐元とPRのbaseを言い分けている(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
-	if !strings.Contains(body, "この `\"base\"` は、「この指示書が決めていないこと」の「base にする branch」（pull request を向ける先）とは別のものです") {
+	if !strings.Contains(body, "この `\"base\"` は、「implementing-and-pushing」の「base にする branch」（pull request を向ける先）とは別のものです") {
 		t.Error("身元ファイルの \"base\" と、「この指示書が決めていないこと」の「base にする branch」を言い分けていません（issue #214）")
 	}
 	if !strings.Contains(body, "base にする branch") {
@@ -218,15 +216,17 @@ func TestTemplate_分岐元とPRのbaseを言い分けている(t *testing.T) {
 // （「分岐元を取り込み、読む」が自分でそう書いている）。
 // 載せないと、エージェントは一覧の別項目を段2 の指定として拾いかねない。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 「この指示書が決めていないこと」の節の中に「この worktree の分岐元」があり、
 // それが「分岐元を取り込み、読む」の段2 を指していること。
 func TestTemplate_この指示書が決めていないことの一覧にworktreeの分岐元が載っている(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	// **囲みを見る sectionOf で切る。**見本は囲みの中に行頭から書いてあり、
 	// `## ` で始まる行を持つ。そこで切ると、後ろの文への検査が黙って素通りする。
-	section := sectionOf(t, body, "## この指示書が決めていないこと")
+	// **この節は、項目ごとにスキルへ分かれた**（issue #288）。worktree の分岐元はスキル「starting-run」にある。
+	section := sectionOf(t, body, "## この指示書が決めていないこと（この worktree の分岐元）") + "\n" +
+		sectionOf(t, body, "## この指示書が決めていないこと")
 
 	if !strings.Contains(section, "この worktree の分岐元（「分岐元を取り込み、読む」の段2）") {
 		t.Errorf("「この指示書が決めていないこと」の一覧に worktree の分岐元がありません。"+
@@ -244,15 +244,15 @@ func TestTemplate_この指示書が決めていないことの一覧にworktree
 //
 // **なぜ要るか。**continuo は、先頭が進捗報告の印で始まるコメントを、この run の成果の報告として
 // 数えない（`handoff.StartsAsProgressReport`）。
-// **一方「{{.progress_interval_minutes}}分以上黙らない」は「コメントは増やさないでください」と言う。**
+// **一方「<進捗の間隔（分）>分以上黙らない」は「コメントは増やさないでください」と言う。**
 // **素直に受け取って進捗報告のコメントへ書き足すと、書いてあるのに「書かれていない」と判定され、**
 // **Claude Code が起動し直されてレートリミットの枠を1回ぶん余計に使う。**
 // 書き直しを頼むときの文面には断りがあるが、**1回目に送る側にも要る。**守りは2つとも要る。
 //
-// 与える情報: prompt.Builtin() の「runの終了を宣言する」の節。
+// 与える情報: instructionsText(t) の「runの終了を宣言する」の節。
 // 成功条件: 「新しく1件」と、書き足すと数えられないことの両方が書いてあること。
 func TestTemplate_runの終了を宣言するは成果の報告を新しく1件投稿させる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	// **囲みを見る sectionUntilNextChapter で切る。**この節は章の最後なので `# ` で切る必要があるが、
 	// 成果の報告の見本は囲みの中に `# <何をしたかを一言で>` を行頭から持つ。
@@ -261,7 +261,7 @@ func TestTemplate_runの終了を宣言するは成果の報告を新しく1件�
 
 	if !strings.Contains(section, "新しく1件投稿してください") {
 		t.Errorf("「runの終了を宣言する」が「新しく1件投稿してください」と言っていません。"+
-			"「{{.progress_interval_minutes}}分以上黙らない」の「コメントは増やさないでください」を素直に受け取ると、"+
+			"「<進捗の間隔（分）>分以上黙らない」の「コメントは増やさないでください」を素直に受け取ると、"+
 			"進捗報告へ書き足して、書いたのに数えられません:\n%s", section)
 	}
 	if !strings.Contains(section, "成果の報告として数えません") {

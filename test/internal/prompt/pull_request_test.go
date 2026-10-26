@@ -22,11 +22,11 @@ const pullRequestHeading = "## pull request を出す"
 // **組み込みの `## 紐づく pull request を読む` は、誰かが PR を作っていることを前提にしている。**
 // 作る指示が無いと、あの節は一度も役に立たない。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 節があり、作るコマンド・issue との結びつけ・重複を作らないこと・
 // push が先であること・作れなかったときの行き先・本文からの打ち消しの6つを教えていること。
 func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+pullRequestHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
@@ -43,7 +43,7 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 		why    string
 	}{
 		{"gh pr create", "作るコマンドを書かないと、エージェントは作る手段を知らないまま終わります"},
-		{"Closes #{{.issue.number}}", "この1行が PR と issue を結びつけます。" +
+		{"Closes #<issue の番号>", "この1行が PR と issue を結びつけます。" +
 			"落とすと、次の turn が `## 紐づく pull request を読む` で拾えず、" +
 			"レビューの指摘を読む先が消えます"},
 		// **既にある PR は、いま居る branch から引かせる。**
@@ -104,17 +104,17 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 // **本文からの打ち消しは、3-78b が開けた口（「commit して push する」の例外を使ったときだけ
 // 「このプロジェクトの決まり」へ譲る）1つだけである。**
 //
-// 与える情報: prompt.Builtin() の全文と、prompt.Build() が組み立てた全文。
+// 与える情報: instructionsText(t) の全文と、prompt.Build() が組み立てた全文。
 // 成功条件: どちらでも「終わったらやること」より前に在ること。
 func TestTemplate_PRを出させる節は終わりを書く節より前にある(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
 	}{
-		{"組み込みだけ", prompt.Builtin()},
+		{"組み込みだけ", instructionsText(t)},
 		// **中身のある本文を渡す。**見出しだけだと、中身が無い節として落ちるので、
 		// 「本文を挟んだ」ことにならず、2つの場合分けが同じものを見ることになる。
-		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text()},
+		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text() + skillsText(t)},
 	} {
 		pr := strings.Index(tc.body, "\n"+pullRequestHeading+"\n")
 		finished := strings.Index(tc.body, "\n"+finishedHeading+"\n")

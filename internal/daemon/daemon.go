@@ -52,6 +52,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/claudeversion"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
@@ -176,6 +177,12 @@ type Options struct {
 	// TrackerTimeout は GitHub の GraphQL API への1リクエストの上限である。
 	// **0 なら DefaultTrackerTimeout を使う。**テストが短い期限を与えるための口である。
 	TrackerTimeout time.Duration
+	// ClaudeLookPath は `claude.kind` の実行ファイルを PATH から探す関数である（issue #288）。
+	// **nil なら exec.LookPath を使う。**テストが差し替えるための口である。
+	ClaudeLookPath claudeversion.LookPath
+	// ClaudeVersion は `<実行ファイル> --version` を叩く関数である（issue #288）。
+	// **nil なら本物を叩く。**テストが差し替えるための口である。
+	ClaudeVersion claudeversion.Runner
 }
 
 // Run は continuo の常駐ループを回す。ctx が終わるまで返らない。
@@ -232,6 +239,11 @@ func Run(ctx context.Context, opts Options) error {
 	// 段1b: 送るプロンプトを組み立て、変数の名前を確かめる（設計 5-3c / 5-3d）。
 	frag, err := buildPrompt(loaded, logger)
 	if err != nil {
+		return err
+	}
+
+	// 段1c: Claude Code の版を確かめる（issue #288）。**古ければ起動しない。**
+	if err := checkClaudeVersion(ctx, cfg.Claude.Kind, opts, logger); err != nil {
 		return err
 	}
 
@@ -444,6 +456,41 @@ func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, 
 	logger.Info("送るプロンプトを組み立てました（本文の行数は、取り除く前の値である）",
 		"workflow", loaded.Path, "body_lines_before_strip", lineCount(loaded.PromptTemplate))
 	return frag, nil
+}
+
+// checkClaudeVersion は、`claude.kind` の実行ファイルの版を確かめる（issue #288）。
+//
+// **読めて v2.1.304 より古ければ、起動を止める。**continuo は Claude Code を `--system-prompt-snapshot off` と
+// `--plugin-dir` を付けて起動し、compaction のあとにスキルの一覧を作り直す版を前提にしている。
+// 古い版では着手が全部落ち、再着手は新しいセッションへ倒れて前の会話を捨てる（`internal/claudeversion`）。
+//
+// **読めなければ、警告を出して起動する。**Claude Code を起動するのは herdr の pane の PATH であり、
+// continuo の PATH に無いか実行できないだけで、pane では動くことがある。そこで止めると、常駐が起動しなくなる。
+//
+// **hook と statusline には触れない。**`--version` を1回叩くだけである。
+//
+// ctx: 叩く期限の親。
+// kind: 設定の `claude.kind`。空なら `claude` とみなす。
+// opts: 差し替えの口（ClaudeLookPath / ClaudeVersion）。
+// logger: 警告の出力先。
+// 戻り値: 起動を止める理由。止めないなら nil。
+func checkClaudeVersion(ctx context.Context, kind string, opts Options, logger *slog.Logger) error {
+	if kind == "" {
+		kind = "claude"
+	}
+	res := claudeversion.Check(ctx, kind, opts.ClaudeLookPath, opts.ClaudeVersion)
+	switch res.Status {
+	case claudeversion.StatusTooOld:
+		return i18n.Errorf(i18n.KeyDaemonRunClaudeTooOld, ErrStartup, res.Path, res.Version, claudeversion.Minimum)
+	case claudeversion.StatusUnknown:
+		logger.Warn("Claude Code の版を読めませんでした（起動は続けます。pane の Claude Code が "+
+			claudeversion.Minimum+" より古いと、着手で Claude Code の起動に失敗します）",
+			"claude.kind", kind, "path", res.Path, "error", res.Err)
+	default:
+		logger.Info("Claude Code の版を確かめました", "path", res.Path, "version", res.Version,
+			"minimum", claudeversion.Minimum)
+	}
+	return nil
 }
 
 // lineCount は、前後の空行を除いた行数を数える。

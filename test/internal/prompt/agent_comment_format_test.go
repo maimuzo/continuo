@@ -26,10 +26,10 @@ const planReviewHeading = "## 計画を書き、レビューを受ける"
 // **必ず貼る先は計画のコメントである。**「実装しようとしている内容」を書くのは計画のほうだからである。
 // 判断票と成果の報告にも、「人間へ質問・報告するコメントの書き方」に従って図を多用する（設計 5-3r）。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 「計画を書き、レビューを受ける」の節が、計画へ図を書かせる指示・書式（mermaid）・図の種類の3つを教えていること。
 func TestTemplate_組み込みのプロンプトは計画の概要を図で書かせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+planReviewHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません", planReviewHeading)
@@ -80,15 +80,15 @@ func TestTemplate_組み込みのプロンプトは計画の概要を図で書�
 // 8つの1つ目が引用なので、警告が落ちると、エージェントは自然に引用を冒頭へ置く。
 // **そうなると continuo は「成果が書かれていない」と判断して、この run を人間へ渡す。**
 //
-// **途中経過の報告（「{{.progress_interval_minutes}}分以上黙らない」）と、
+// **途中経過の報告（「<進捗の間隔（分）>分以上黙らない」）と、
 // まとめて直したときの報告（「まとめて直したとき」）を対象に含めていないことも見る。**
 // 途中経過が書かせるのは1行だけで、まとめて直したときは先頭の1文と足す行の形が決まっている。
 // どちらも8つを置く場所が無い。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 節があり、8つの見出しと、印より前に書かせない警告を教えていること。
 func TestTemplate_組み込みのプロンプトはコメントの節の形を決めている(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+commentFormatHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
@@ -187,7 +187,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **計画（「計画を書き、レビューを受ける」）は当たる。**図を書かせるのも、前提を書かせるのも、同じ計画のコメントである。
 	// 落ちると、図だけが入って前提の無いコメントが届く。
 	//
-	// **途中経過の報告（「{{.progress_interval_minutes}}分以上黙らない」）と、
+	// **途中経過の報告（「<進捗の間隔（分）>分以上黙らない」）と、
 	// まとめて直したときの報告（「まとめて直したとき」）は当たらない。**
 	// 途中経過が書かせるのは `- <日時> いま <何をしているか>` の1行だけで、8つを置く場所が無い。
 	// まとめて直したときも先頭の1文と足す行の形が決まっており、8つを入れると積み上げ式のコメントが読めなくなる。
@@ -203,7 +203,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 		{target, "判断票", "判断票が落ちると、レビューの結果だけが理由なしで届きます"},
 		{target, "何をしたかの報告", "成果の報告が落ちると、" +
 			"何が直ったのかを読む人が組み立て直すことになります"},
-		{exempt, "途中経過の報告", "「{{.progress_interval_minutes}}分以上黙らない」を除いておかないと、" +
+		{exempt, "途中経過の報告", "「<進捗の間隔（分）>分以上黙らない」を除いておかないと、" +
 			"1行足すだけの決まりへ8つの見出しを押し込もうとします"},
 		{exempt, "まとめて直したときの報告", "「まとめて直したとき」を除いておかないと、" +
 			"先頭の1文と足す行の形が決まっているコメントと衝突します"},
@@ -247,30 +247,10 @@ func splitAtNextLine(t *testing.T, section, marker string) (string, string) {
 // 戻り値: 見出しの次の行から、次の `# ` か `## ` の直前までの中身。
 func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 	t.Helper()
-
-	lines := strings.Split(body, "\n")
-	start := -1
-	for i, line := range lines {
-		if line == heading {
-			start = i + 1
-			break
-		}
-	}
-	if start < 0 {
-		t.Fatalf("本文から %q の見出しを取り出せません", heading)
-	}
-	inFence := false
-	for i := start; i < len(lines); i++ {
-		// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
-		if isFenceLine(lines[i]) {
-			inFence = !inFence
-			continue
-		}
-		if !inFence && (strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ")) {
-			return strings.Join(lines[start:i], "\n")
-		}
-	}
-	return strings.Join(lines[start:], "\n")
+	// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
+	return sectionsMatching(t, body, heading, func(line string) bool {
+		return strings.HasPrefix(line, "# ") || strings.HasPrefix(line, "## ")
+	})
 }
 
 // 目的: コメントの形を決める節が、組み込みの「後半」に在ることを固定する（設計 5-3c）。
@@ -283,7 +263,7 @@ func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 // 成功条件: 「このプロジェクトの決まり」の見出しより後ろに在ること。
 func TestTemplate_コメントの形を決める節は本文より後ろにある(t *testing.T) {
 	// **中身のある本文を渡す。**見出しだけだと、中身が無い節として落ちる。
-	body := prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text()
+	body := prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text() + skillsText(t)
 
 	projectSpecific := strings.Index(body, "\n## このプロジェクトの決まり\n")
 	format := strings.Index(body, "\n"+commentFormatHeading+"\n")
@@ -302,12 +282,12 @@ func TestTemplate_コメントの形を決める節は本文より後ろにあ�
 // **「レビューの回し方」は、レビューを何周回すかを決める唯一の場所である。**
 // ここから1行消えても、消えたことに気づく仕組みが他に無い。
 //
-// 与える情報: prompt.BuiltinRaw() の「レビューの回し方」の節。
+// 与える情報: instructionsText(t) の「レビューの回し方」の節。
 // 成功条件: 決めた内容を指す語が、全部そろっていること。
 func Test組み込みのプロンプトがレビューの回し方を持つ(t *testing.T) {
 	const heading = "## レビューの回し方"
 
-	body := prompt.BuiltinRaw()
+	body := instructionsText(t)
 	if !strings.Contains(body, "\n"+heading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
 			"無いと、利用者は収束の判定を定義なしで行います", heading)
@@ -336,7 +316,7 @@ func Test組み込みのプロンプトがレビューの回し方を持つ(t *t
 		{"上限は連続10回です。", "止まる線が無いと、際限なく回ります"},
 		{"人間に訊くことが出たら、その場で打ち切る", "打ち切らずに回し続けると、" +
 			"人間の答え次第でそれまでのレビューと直しが無駄になります"},
-		{"設計（「計画を書き、レビューを受ける」の計画）だけを見直して", "回答のあとに実装まで直すと、" +
+		{"設計（「writing-plan」の計画）だけを見直して", "回答のあとに実装まで直すと、" +
 			"人間が了承していない設計の上で次のレビューが回ります"},
 		{"CONTINUO-STATUS: blocked", "表明を書かずに黙ると、" +
 			"continuo からは「まだ喋っている最中」と区別が付きません"},
@@ -353,10 +333,10 @@ func Test組み込みのプロンプトがレビューの回し方を持つ(t *t
 // ここから消えると、エージェントは計画を書いた直後に、人間が見ていないまま設計レビューへ進む。
 // **問いを計画のコメントの中で訊かせると、continuo はそれを成果として数えず、書かせ直しに入る。**
 //
-// 与える情報: prompt.BuiltinRaw() の「計画を書き、レビューを受ける」の節。
+// 与える情報: instructionsText(t) の「計画を書き、レビューを受ける」の節。
 // 成功条件: 人間確認の段と、訊く先・再開したときの扱いを指す語が、全部そろっていること。
 func Test組み込みのプロンプトが計画のあとの人間確認を持つ(t *testing.T) {
-	section := sectionUntilNextChapter(t, prompt.BuiltinRaw(), planReviewHeading)
+	section := sectionUntilNextChapter(t, instructionsText(t), planReviewHeading)
 	for _, want := range []struct {
 		needle string
 		why    string
@@ -367,7 +347,7 @@ func Test組み込みのプロンプトが計画のあとの人間確認を持�
 		{"計画のコメントの中で訊きません", "計画のコメントで訊くと、continuo は成果として数えず、" +
 			"セッションを立て直して書かせ直します"},
 		// **「はっきりした了承があるときだけ」は、表の2行で書いてある。**了承の行と、Status の変更だけの行である。
-		{"| 自分の問いより後に、人間のはっきりした了承 | 段3 へ進みます |", "明示の了承が無いと、" +
+		{"| 自分の問いより後に、人間のはっきりした了承 | 「running-review-loop」の「段3. 設計レビューを回す」へ進みます |", "明示の了承が無いと、" +
 			"人間が Status を間違えて Ready へ戻しただけで、設計レビューへ進みます"},
 		{"| Status の変更だけ | **了承とみなしません** |", "Status の変更を了承とみなすと、" +
 			"人間が Status を間違えて Ready へ戻しただけで、設計レビューへ進みます"},
@@ -395,15 +375,16 @@ const (
 // 見本を囲みの中に行頭から書くときは、節を切る補助（sectionOf）も囲みの中の `## ` で切らない形にすること。
 // 部分一致では `# レビューの判断票` が `## レビューの判断票` にも当たるので使わない。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 「計画を書き、レビューを受ける」の判断票の見本が、題名 → 節 → 引用 → 7つの見出し → 表 の順に並ぶ。
 // 「pull request のレビューを受ける」の見本の題名が `# ` で、「runの終了を宣言する」の見本が
 // 「人間へ質問・報告するコメントの書き方」へ案内している。どこにも `## レビューの判断票` の行が無い。
 func TestTemplate_判断票と成果の報告の見本は8つの見出しの形である(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	// 「計画を書き、レビューを受ける」の判断票: 題名から表の見出しまでが、この順に並ぶ。
-	plan := sectionOf(t, body, planReviewHeading)
+	// **計画の判断票の見本は、スキル「posting-review-verdict」の「判断票の貼り方」へ移った**（issue #288）。
+	plan := sectionOf(t, body, "## 判断票の貼り方")
 	steps := []struct {
 		name  string
 		match func(string) bool
@@ -437,13 +418,13 @@ func TestTemplate_判断票と成果の報告の見本は8つの見出しの形�
 	if !hasTrimmedLine(change, changeTicketHeading) {
 		t.Errorf("「pull request のレビューを受ける」の判断票の見本に、%q の行がありません", changeTicketHeading)
 	}
-	if !strings.Contains(change, "「人間へ質問・報告するコメントの書き方」の8つの見出し。表は ### 詳細 の中") {
+	if !strings.Contains(change, "「writing-comments-for-humans」の8つの見出し。表は ### 詳細 の中") {
 		t.Error("「pull request のレビューを受ける」の判断票の見本が、「計画を書き、レビューを受ける」と同じ8つの形へ案内していません")
 	}
 
 	// 「runの終了を宣言する」の成果の報告: 「人間へ質問・報告するコメントの書き方」へ案内し、印を写させない。
 	finished := sectionOf(t, body, finishedHeading)
-	if !hasTrimmedLine(finished, "ここに「人間へ質問・報告するコメントの書き方」の8つの見出しで、何をしたかを書く（印は上の1行だけ）") {
+	if !hasTrimmedLine(finished, "ここに「writing-comments-for-humans」の8つの見出しで、何をしたかを書く（印は上の1行だけ）") {
 		t.Error("「runの終了を宣言する」の成果の報告の見本が、「人間へ質問・報告するコメントの書き方」の8つの見出しへ案内していません。" +
 			"案内が無いと、前提も単語の説明も無い報告が届きます")
 	}
@@ -461,10 +442,10 @@ func TestTemplate_判断票と成果の報告の見本は8つの見出しの形�
 // **なぜ要るか。**continuo が起動したエージェントが、質問を表で並べて人間に訊いたことがある
 // （issue #259 のコメント 5681164864）。人間は「表で質問することを禁止する」と指示した（同 5708020098）。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 「人間へ質問・報告するコメントの書き方」の節に、1問1節・表で訊かない・選ばないと何が続くか・貼れるコマンド の4つがある。
 func TestTemplate_コメントの形は質問を1問1節で訊かせる(t *testing.T) {
-	section := sectionUntilNextChapter(t, prompt.Builtin(), commentFormatHeading)
+	section := sectionUntilNextChapter(t, instructionsText(t), commentFormatHeading)
 	for _, want := range []string{
 		"質問1つにつき1つの節",
 		"表で訊きません",
