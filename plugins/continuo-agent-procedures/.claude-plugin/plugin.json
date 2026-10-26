@@ -1,0 +1,5 @@
+{
+  "name": "continuo-agent-procedures",
+  "version": "0.0.0",
+  "description": "continuo が起動した Claude Code が段ごとに読む手順"
+}
