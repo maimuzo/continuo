@@ -92,7 +92,7 @@ cd ~/continuo-work && continuo doctor && continuo
 | --- | --- |
 | **v0.1.12 まで** | **本文だけ。**組み込みのプロンプトは1文字も送られません |
 | **v0.1.13 から** | **組み込みの前半 + 本文 + 組み込みの後半。**本文は真ん中へ挟まります |
-| **v0.2.2 から** | **システムプロンプト（組み込み + 本文）と、最初のプロンプト（組み込み + 本文）。**本文はどちらにも入ります。手順の本文は plugin `continuo-agent-procedures` のスキルで渡します |
+| **v0.3.0 から** | **システムプロンプト（組み込み + 本文）と、最初のプロンプト（組み込み + 本文）。**本文はどちらにも入ります。手順の本文は plugin `continuo-agent-procedures` のスキルで渡します |
 
 **v0.1.12 までの本文には、組み込みと同じ指示を書き写している人がいます。**
 表明の1行（`CONTINUO-STATUS:`）の書き方や、worktree を切り替えるなという指示です。
@@ -105,7 +105,7 @@ cd ~/continuo-work && continuo doctor && continuo
 cd ~/continuo-work && continuo prompt --show --builtin
 ```
 
-**v0.2.2 から、手順の本文はこのコマンドに出ません。**手順は plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。**本文と見比べるときは、そちらも読んでください。**
+**v0.3.0 から、手順の本文はこのコマンドに出ません。**手順は plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。**本文と見比べるときは、そちらも読んでください。**
 
 **送られるシステムプロンプトと最初のプロンプトは、次のコマンドで読めます。**（前の回のあとに人間が書いたコメントを付ける節は、送る直前に issue のコメントから組み立てるので、ここには出ません）
 
@@ -169,7 +169,7 @@ v0.1.13 からは、これらの指示は組み込みの指示書（continuo の
 
 #### 書いたテンプレートが、実際にどう展開されるかを先に見たい
 
-**`--url` に issue の URL を渡してください**（v0.1.15 から）。**その issue の値で展開した、システムプロンプトと最初のプロンプトが出ます**（v0.2.2 からは、plugin のディレクトリと終わりの印の12桁も実際の値で出ます）。人間のコメントを付ける節と、スキルの本文は出ません（人間のコメントの節は送る直前に組み立てます）。
+**`--url` に issue の URL を渡してください**（v0.1.15 から）。**その issue の値で展開した、システムプロンプトと最初のプロンプトが出ます**（v0.3.0 からは、plugin のディレクトリと終わりの印の12桁も実際の値で出ます）。人間のコメントを付ける節と、スキルの本文は出ません（人間のコメントの節は送る直前に組み立てます）。
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/hello-world/issues/42
@@ -230,7 +230,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 continuo prompt --show --builtin
 ```
 
-**手順の本文は、このコマンドに出ません**（v0.2.2 から）。plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
+**手順の本文は、このコマンドに出ません**（v0.3.0 から）。plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
 
 **書く決まりの例。**次の2つは、continuo が送る指示書も同じことを言っています。
 **`CLAUDE.md` に書いておくと、人間が自分で Claude Code を動かすときにも効きます。**
@@ -291,15 +291,15 @@ pull request のコメントに、レビュー結果を貼ってください
 | **実装レビューが収まったら、必ず draft を外す** | 誰が draft で作ったかを問わず、エージェントが `gh pr ready` で外します。**外さないのは、10周で収まらずに止まったとき・質問で打ち切ったとき・`WORKFLOW.md` の本文に「draft のまま人間へ渡す」とはっきり書いてあるときだけです** |
 | **`## 5-7. subagent へ渡すもの` の節が入った** | エージェントが subagent を立てるとき、**不可逆な操作**（pull request のマージ・削除・本番の環境への書き込み・release の作成）**を渡さなくなります** |
 
-**v0.2.2 から、この2つの節はスキルへ移りました。**`## 5-6. レビューの回し方` はスキル「running-review-loop」の「レビューの回し方」へ、`## 5-7. subagent へ渡すもの` はスキル「briefing-subagents」の「subagent へ渡すもの」へ移り、中身はそのままです。
+**v0.3.0 から、この2つの節はスキルへ移りました。**`## 5-6. レビューの回し方` はスキル「running-review-loop」の「レビューの回し方」へ、`## 5-7. subagent へ渡すもの` はスキル「briefing-subagents」の「subagent へ渡すもの」へ移り、中身はそのままです。
 
-**節が届いているかの確かめ方。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+**節が届いているかの確かめ方。****先に、手順をスキルへ分けた版（v0.3.0 から）かを見ます。**
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「running-review-loop」の「レビューの回し方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`1` 以上なら v0.3.0 以降で、入っています。**この指示はいまスキル「running-review-loop」の「レビューの回し方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.3.0 以降では、入っていても `0` が返ります）。
 **`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 ```bash
@@ -921,7 +921,7 @@ tracker:
 **まだ着手していない issue も `Direct Chat` へ動かせます。**pane が無ければ continuo が1つ用意し、
 **「話しかけられます」というコメントを issue へ1件書きます。**そこから話しかけてください。
 
-**v0.2.2 から、この pane の Claude Code にも、continuo のシステムプロンプト（continuo が起動した run だという宣言と、全体の流れのフローチャート）が入ります。**v0.2.1 までは、指示が1つも入っていませんでした。**最初の一言で手順（担当の確かめ・分岐元の取り込み・issue を読む…）を始めることがあるので、相談だけしたいときは、最初にそう書いてください。**
+**v0.3.0 から、この pane の Claude Code にも、continuo のシステムプロンプト（continuo が起動した run だという宣言と、全体の流れのフローチャート）が入ります。**v0.2.1 までは、指示が1つも入っていませんでした。**最初の一言で手順（担当の確かめ・分岐元の取り込み・issue を読む…）を始めることがあるので、相談だけしたいときは、最初にそう書いてください。**
 
 **pane を用意するのは「continuo がその issue をまだ抱えていないとき」だけです。**
 **「抱えている」には、やり直し待ちの issue も入ります。**
@@ -1379,7 +1379,7 @@ grep -F '入札の要る issue には着手しません' <ログの出力先>
 **「使い切った」ではありません。**判定は**余裕値**（`100 − 使用率 − マージン`）が0以下かどうかで、
 **マージンが既定の10なら使用率90%で当たります。**claude.ai の画面が100%になるのを待つ必要はありません。
 
-**v0.2.2 から、1週間のマージンが1以上なら、担当が外れる前に Claude Code が作業を切り上げます**（push と引き継ぎのコメントを済ませる。下の「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」）。**切り上げを終えた run は、`claude.turn_timeout_ms` の1時間を待たずに、早くて2回目の巡回で外れます。**
+**v0.3.0 から、1週間のマージンが1以上なら、担当が外れる前に Claude Code が作業を切り上げます**（push と引き継ぎのコメントを済ませる。下の「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」）。**切り上げを終えた run は、`claude.turn_timeout_ms` の1時間を待たずに、早くて2回目の巡回で外れます。**
 
 **既定の水準（info）でこう出ます。**
 
@@ -1436,7 +1436,7 @@ workspace_hooks.after_run を設定している機械では、この attempt で
 | --- | --- | --- |
 | `weekly_wait_limit` | `workspace_hooks.after_run` が走って成功した | 上の例のとおり（「workspace_hooks.after_run は実行済みです」） |
 | `weekly_wait_limit_no_push` | `after_run` を設定していない・走らせて失敗した、など。**`continuo init` の雛形のまま**（`after_run: null`）**なら、こちらが出ます** | 「workspace_hooks.after_run で push できたことを確かめられませんでした（理由はログに出ています）。この branch の remote には、続きが入っていないことがあります。worktree は残してあります」 |
-| `weekly_wait_limit_not_started` | **担当が自分の issue を `Ready` へ戻したときに、1週間の期間で待つ上限を超えていて、しかも使用率100%で Claude Code を起動できなかった**（v0.2.2 から）。Claude Code も `after_run` も走らせていません | 「…使用率100%で Claude Code を起動できないので、Claude Code も workspace_hooks.after_run も走らせずに担当を外しました。この branch の remote には、続きが入っていないことがあります。push していない変更は、この機械の worktree に残っています」 |
+| `weekly_wait_limit_not_started` | **担当が自分の issue を `Ready` へ戻したときに、1週間の期間で待つ上限を超えていて、しかも使用率100%で Claude Code を起動できなかった**（v0.3.0 から）。Claude Code も `after_run` も走らせていません | 「…使用率100%で Claude Code を起動できないので、Claude Code も workspace_hooks.after_run も走らせずに担当を外しました。この branch の remote には、続きが入っていないことがあります。push していない変更は、この機械の worktree に残っています」 |
 
 **他の機械に担当を外されたときは、この欄がありません**（本文も「この branch へ push しないでください」に変わります）。
 
@@ -1509,7 +1509,7 @@ workspace_hooks.after_run を設定している機械では、この attempt で
 | どうしたいか | どう書くか |
 | --- | --- |
 | **待たずに早く手放したい**（他の機械に任せたい） | 短くする。例: `weekly_wait_limit_minutes: 60`。**ただし、たいていの機械では変わりません**（下の断り） |
-| **待ち続けたい**（1台で動かしていて、他に拾う機械が無い） | **`weekly_wait_limit_minutes: 0`。**上限を設けません。**ただし1週間のマージンが1以上なら、マージンを切った run は担当を手放さずに `Blocked` へ戻ります**（v0.2.2 から） |
+| **待ち続けたい**（1台で動かしていて、他に拾う機械が無い） | **`weekly_wait_limit_minutes: 0`。**上限を設けません。**ただし1週間のマージンが1以上なら、マージンを切った run は担当を手放さずに `Blocked` へ戻ります**（v0.3.0 から） |
 | 既定のまま | 5時間。**1週間の枠が5時間以内に明けるなら待ちます** |
 
 **断り。**`weekly_wait_limit_minutes` を短くしても、**手放す時刻はたいてい変わりません。**
@@ -1530,7 +1530,7 @@ continuo は、その run から1時間 hook が1件も来ていないことを�
 
 #### レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った
 
-**正常です**（v0.2.2 から）。**マージン**（`tracker.provider.handoff.five_hour_margin_percent` と `weekly_margin_percent`。どちらも既定10）は、**あなたが自分で Claude Code を使うぶんとして残しておく割合**です。
+**正常です**（v0.3.0 から）。**マージン**（`tracker.provider.handoff.five_hour_margin_percent` と `weekly_margin_percent`。どちらも既定10）は、**あなたが自分で Claude Code を使うぶんとして残しておく割合**です。
 **マージンが1以上の期間で `100 − 使用率 − マージン` が0以下になると（既定なら使用率90%から）、continuo が起動した Claude Code はそれ以上作業しません。**着手の前でも、走っている最中でも同じです。
 
 **何が起きるか。**
@@ -1809,7 +1809,7 @@ server:
 
 | 表 | 何が並ぶか | これを見て分かること |
 | --- | --- | --- |
-| **レートリミット**（いちばん上） | 期間（5時間 / 1週間（全体） / 1週間（モデル別））/ 使用率 / マージン / リセットの時刻とそこまでの残り（「あと3時間5分」）。表の下に、最後に読めた時刻と、「入札に使うには古い値」「新しい issue の着手を止めています」の印 | **待てば直るのか、人間が手を入れるべきなのか。**「マージンを切った」の印が付いた期間があると、走っている run は作業を切り上げます。5時間か1週間（全体）の期間に「使い切っている」の印が付いていると、Claude Code はリセットまで動けません（1週間（モデル別）の期間は、使っていないモデルなら動けます）。**使用率を読めていないときは、そう書いた1行が出ます**（v0.2.2 から） |
+| **レートリミット**（いちばん上） | 期間（5時間 / 1週間（全体） / 1週間（モデル別））/ 使用率 / マージン / リセットの時刻とそこまでの残り（「あと3時間5分」）。表の下に、最後に読めた時刻と、「入札に使うには古い値」「新しい issue の着手を止めています」の印 | **待てば直るのか、人間が手を入れるべきなのか。**「マージンを切った」の印が付いた期間があると、走っている run は作業を切り上げます。5時間か1週間（全体）の期間に「使い切っている」の印が付いていると、Claude Code はリセットまで動けません（1週間（モデル別）の期間は、使っていないモデルなら動けます）。**使用率を読めていないときは、そう書いた1行が出ます**（v0.3.0 から） |
 | **着手できずに止まっているもの** | issue / 止めた理由 / いつから / 直し方 | **担当者が付いている issue など、continuo が「触らない」と決めたもの。**issue へ案内を書けなかったときは、その印も付きます |
 | **実行中の run** | issue / Status / turn 数 / 最後に hook を受けた時刻 / トークン合計 | **いま走っているもの。**枠待ち・切り上げ済み・行き先待ち・やり直し中・再 dispatch 待ちの印がここに付きます |
 | **トークンの集計** | issue ごとの API 応答の件数 / 入力 / キャッシュ作成 / キャッシュ読み出し / 出力 | **どの issue が重いか。**いちばん下の行が、いま走っている run の合計です |
@@ -1908,14 +1908,14 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
 
-### v0.2.1 から v0.2.2 へ上げるとき
+### v0.2.1 から v0.3.0 へ上げるとき
 
-#### v0.2.2 で、何もしないと動かなくなるものは？
+#### v0.3.0 で、何もしないと動かなくなるものは？
 
 **2つあります。**
 
 **1つ目。Claude Code が 2.1.304 より古い人です。continuo が起動しません。**
-v0.2.2 から、continuo は Claude Code を `--append-system-prompt-file`・`--system-prompt-snapshot off`・`--plugin-dir` を付けて起動します（指示書をシステムプロンプトと plugin のスキルに分けたためです）。
+v0.3.0 から、continuo は Claude Code を `--append-system-prompt-file`・`--system-prompt-snapshot off`・`--plugin-dir` を付けて起動します（指示書をシステムプロンプトと plugin のスキルに分けたためです）。
 2.1.304 は、compaction のあとにスキルの一覧を作り直す版です。**continuo は起動のときと `continuo doctor` で版を確かめ、古ければ起動しません。**
 直し方と、pane の Claude Code だけが古いときに起きることは、下の「上げたら、Claude Code が古いと言われて起動しない」と「上げたあと、pane で Claude Code が起動しない」にあります。
 
@@ -1929,8 +1929,8 @@ continuo の知らない Status へ書き換わると、最初の push の約10�
 **v0.2.1 までも同じカンバンでは止まっていましたが、止まるのは実装が終わったあとでした。**
 直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。`continuo doctor` が `! 自動化 … tracker.automated_state_rewrite が空です` と出すカンバンが、これに当たります。
 
-**それ以外の人は、`WORKFLOW.md` に足すものも、消すものもありません**（`tracker.automated_state_rewrite` に1行でも書いている人は、下の「v0.2.2 で、いままでの操作が効かなくなるものは？」を、`status_signal_map` を自分で書いている人は、「エージェントの表明（`CONTINUO-STATUS:`）まわりで、上げたあとに変わることは？」も読んでください）。
-**エージェントの動きは、次の7つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。**CI の検査ファイル（`continuo-ci.yaml`）を使っていて、レビュー結果を貼っても検査が緑にならない人は、検査ファイルを置き直してください**（トラブルシューティングの「レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う」）。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
+**それ以外の人は、`WORKFLOW.md` に足すものも、消すものもありません**（`tracker.automated_state_rewrite` に1行でも書いている人は、下の「v0.3.0 で、いままでの操作が効かなくなるものは？」を、`status_signal_map` を自分で書いている人は、「エージェントの表明（`CONTINUO-STATUS:`）まわりで、上げたあとに変わることは？」も読んでください）。
+**エージェントの動きは、次の7つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。**CI の検査ファイル（`continuo-ci.yaml`）を使っていて、レビュー結果を貼っても検査が緑にならない人は、検査ファイルを置き直してください**（トラブルシューティングの「レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う」）。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.3.0 へ」にあります。
 
 | 何が変わるか | 気をつけること |
 | --- | --- |
@@ -1942,13 +1942,13 @@ continuo の知らない Status へ書き換わると、最初の push の約10�
 | **エージェントが、push の前に issue の担当を確かめます** | `gh` とカンバンのトークンが別のアカウントだと、毎回止まります（下） |
 | **レビューのたびに、subagent が issue と pull request のコメントを全部読みます** | レートリミットの減りが増えます |
 
-#### v0.2.2 で、既定の動きが変わるものは？
+#### v0.3.0 で、既定の動きが変わるものは？
 
 **レートリミットのマージン（既定10）を切ると、走っている run も切り上げて `Blocked` へ戻ります。**`WORKFLOW.md` を書き換えなくても変わります。
 **v0.2.1 までは、マージンで止めていたのは入札だけで、走っている run は使用率100%まで使っていました。**
 担当が自分の issue を `Ready` へ戻したときも、マージンを切っていれば着手せずに `Blocked` へ戻ります。
 **元に戻す設定はありません。**走っている run に100%まで使わせたいときは、その期間のマージンを `0` にしてください（入札も100%まで行います）。
-何が起きるかと戻し方は「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」に、変わった点の一覧は [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
+何が起きるかと戻し方は「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」に、変わった点の一覧は [upgrading.md](upgrading.md) の「v0.2.1 から v0.3.0 へ」にあります。
 
 #### 上げたら、Claude Code が古いと言われて起動しない
 
@@ -1979,14 +1979,14 @@ claude update && claude --version && continuo doctor
 
 #### 上げたら、`continuo prompt --show` に手順が出なくなった。版の確かめ方の grep が `0` を返す
 
-**正常です**（v0.2.2 から）。手順の本文はシステムプロンプトから plugin `continuo-agent-procedures` のスキルへ移り、`--show` が出すのはシステムプロンプトと最初のプロンプトだけになりました。
-**この文書と [upgrading.md](upgrading.md) の古い版の節にある「`continuo prompt --show` を grep して `1` なら入っている」は、v0.2.2 からは `0` を返します。**先に次の1行で版を見てください。
+**正常です**（v0.3.0 から）。手順の本文はシステムプロンプトから plugin `continuo-agent-procedures` のスキルへ移り、`--show` が出すのはシステムプロンプトと最初のプロンプトだけになりました。
+**この文書と [upgrading.md](upgrading.md) の古い版の節にある「`continuo prompt --show` を grep して `1` なら入っている」は、v0.3.0 からは `0` を返します。**先に次の1行で版を見てください。
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降です。**手順の本文は、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
+**`1` 以上なら v0.3.0 以降です。**手順の本文は、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
 continuo は Claude Code を起動するたびに、それを実行時ディレクトリの `plugins/<12桁>/continuo-agent-procedures/` へ書き出して渡します。
 
 #### 上げたあとの最初の再着手で、前の版の指示書が会話に残っている
@@ -2032,7 +2032,7 @@ continuo が担当者に入れるのはトークンの持ち主で、エージ�
 
 #### pull request が、実装の途中なのに作られている
 
-**v0.2.2 から、エージェントは最初に commit を push したときに、pull request を draft で作ります。**
+**v0.3.0 から、エージェントは最初に commit を push したときに、pull request を draft で作ります。**
 実装の途中で止まっても、次に引き継ぐ機械が pull request を辿れるようにするためです。
 
 | 気になること | どうなっているか |
@@ -2056,7 +2056,7 @@ continuo が担当者に入れるのはトークンの持ち主で、エージ�
 
 **別の時間帯で書かせる設定はありません。**機械のタイムゾーンを変えると、両方が一緒に変わります。
 
-#### v0.2.2 で、いままでの操作が効かなくなるものは？
+#### v0.3.0 で、いままでの操作が効かなくなるものは？
 
 **原因。**`tracker.automated_state_rewrite` の対応表が、**誰が Status を動かしたかを見なくなりました。**
 着手中の issue が、対応表の左に書いた Status へ動いたら、人間が動かしたときも右の Status へ戻します。
@@ -2069,7 +2069,7 @@ continuo が担当者に入れるのはトークンの持ち主で、エージ�
 | **対応表の左に書いた Status を、`cleanup.on_states` にも書いている人** | 戻されているあいだは片付きません | 片付けさせたいなら、対応表からその行を消す |
 
 **起動は止まりません。**`WORKFLOW.md` に足すものもありません。
-**確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」に、
+**確かめ方と理由は [upgrading.md](upgrading.md) の「v0.2.1 から v0.3.0 へ」に、
 限りは「目的別使用例」の「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 
 #### エージェントの表明（`CONTINUO-STATUS:`）まわりで、上げたあとに変わることは？
@@ -2081,7 +2081,7 @@ continuo が担当者に入れるのはトークンの持ち主で、エージ�
 | **エージェントが `CONTINUO-STATUS:` に決まり以外の値を書くと、書いた値と取り得る値の一覧が返る**（`continuo hook` が turn を1回差し戻すか、次の turn の指示で返す） | **continuo を立て直す。**上げる前に着手した run は、立て直して引き継いだときから hook が効きます |
 | **エージェントが `blocked` か `review` を書く前に、バックグラウンドのコマンドと subagent を終わらせる** | なし。次に着手する run から効きます |
 
-**詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」と、下の「エージェントが `CONTINUO-STATUS:` に決まり以外の値を書いたら」にあります。**
+**詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.3.0 へ」と、下の「エージェントが `CONTINUO-STATUS:` に決まり以外の値を書いたら」にあります。**
 
 ### v0.2.0 から v0.2.1 へ上げるとき
 
@@ -2241,7 +2241,7 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 
 #### 「Claude Code（…）の版 … は古すぎます」で起動しない
 
-**原因。**v0.2.2 から、continuo は Claude Code 2.1.304 以上を要ります。起動のときに `claude.kind` の実行ファイルの版を読み、古ければ止まります。
+**原因。**v0.3.0 から、continuo は Claude Code 2.1.304 以上を要ります。起動のときに `claude.kind` の実行ファイルの版を読み、古ければ止まります。
 
 **直し方。**Claude Code を上げてください。pane の Claude Code が古いときに起きることも含め、「版を上げるとき」の「上げたら、Claude Code が古いと言われて起動しない」にあります。
 
@@ -2684,7 +2684,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 | --- | --- |
 | `WORKFLOW.md#body` | **あなたが書いた本文**（front matter の閉じの `---` より下）。**行番号は、その `---` の次の行を1行目として数えたものです** |
 | `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのシステムプロンプト。**ここが出たら continuo 側の不具合です |
-| `first_prompt.md#head` / `first_prompt.md#tail` | **continuo の組み込みの最初のプロンプト**（v0.2.2 から）。ここが出たら continuo 側の不具合です |
+| `first_prompt.md#head` / `first_prompt.md#tail` | **continuo の組み込みの最初のプロンプト**（v0.3.0 から）。ここが出たら continuo 側の不具合です |
 
 **送るシステムプロンプトと最初のプロンプトは、次のコマンドで読めます。**（人間のコメントを付ける節と、スキルの本文は出ません）
 
@@ -2707,7 +2707,7 @@ cd ~/continuo-work && continuo prompt --show
 | `{{.attempt}}` | 試行回数。**1回目は空**なので `{{if .attempt}}` で囲ってください |
 | `{{.push_branch}}` | issue にリンクされた branch の名前。**リンクが1本でないときは空** |
 | `{{.progress_interval_minutes}}` | 進捗報告を書かせる間隔（分）。`tracker.provider.handoff.progress_interval_ms` から決まる |
-| `{{.margin_status_path}}` | continuo が巡回のたびに書く `margin-status`（レートリミットのマージンを切ったかの1行）のパス。**中の単引用符は `'\''` に置き換えてあるので、単引用符で囲んで使ってください**（`cat '{{.margin_status_path}}'`）。**`rate_limit.source: none` の機械では空**なので `{{if .margin_status_path}}` で囲ってください（v0.2.2 から） |
+| `{{.margin_status_path}}` | continuo が巡回のたびに書く `margin-status`（レートリミットのマージンを切ったかの1行）のパス。**中の単引用符は `'\''` に置き換えてあるので、単引用符で囲んで使ってください**（`cat '{{.margin_status_path}}'`）。**`rate_limit.source: none` の機械では空**なので `{{if .margin_status_path}}` で囲ってください（v0.3.0 から） |
 
 **`{{index .issue "title"}}` の形は使えません。**`{{.issue.title}}` と書いてください。
 **この形を許すと、綴りを間違えた名前が誤りにならずに素通りします。**
@@ -2942,9 +2942,9 @@ grep -E '入札の要る issue には着手しません|空きスロットが尽
 | いちばん使っている枠の使用率 | 担当者のいない issue を取るか | 担当が自分の issue を取るか |
 | --- | --- | --- |
 | 〜89% | 取る | 取る |
-| **90%〜** | **取らない**（`入札の要る issue には着手しません` の1行が出ます。**文面は理由ごとに3通り**） | **取らない**（v0.2.2 から。Claude Code を起動せずに `Blocked` へ戻すか、1週間の期間で待つ上限を超えるなら担当を外します。マージンを0にした期間では、使用率100%のときだけ） |
+| **90%〜** | **取らない**（`入札の要る issue には着手しません` の1行が出ます。**文面は理由ごとに3通り**） | **取らない**（v0.3.0 から。Claude Code を起動せずに `Blocked` へ戻すか、1週間の期間で待つ上限を超えるなら担当を外します。マージンを0にした期間では、使用率100%のときだけ） |
 
-**走っている run も、90%で作業を切り上げます**（v0.2.2 から。「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」）。
+**走っている run も、90%で作業を切り上げます**（v0.3.0 から。「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」）。
 **走っている run の打ち切りは、この線では止まりません。**
 **止まるのは使用率100のときだけです**（そこで初めて Claude Code が応答できなくなります）。
 **90%で打ち切りを止めると、本当に固まった run が長く残ります。**
@@ -3768,7 +3768,7 @@ jq -r .base <worktree のパス>/.continuo.json
 | --- | --- |
 | **取ってくるところ**（その名前が remote に無い） | **取り込むものが無いだけです。**そのまま作業を続けます |
 | **マージを始める前**（commit していない変更がある） | **先に commit してから取り込み直します。**前の試行が残した作業なので、捨てません |
-| **マージの途中**（衝突した） | **衝突した箇所の全部で、両方の変更をそのまま残せるなら、解いて取り込みます**（v0.2.2 から。v0.2.1 までは、どんな衝突でも戻して止まっていました）。**1箇所でも判断が要るなら、`git merge --abort` で取り込む前へ戻してから止まります**（Status が `Blocked` になります） |
+| **マージの途中**（衝突した） | **衝突した箇所の全部で、両方の変更をそのまま残せるなら、解いて取り込みます**（v0.3.0 から。v0.2.1 までは、どんな衝突でも戻して止まっていました）。**1箇所でも判断が要るなら、`git merge --abort` で取り込む前へ戻してから止まります**（Status が `Blocked` になります） |
 
 **解いてよいのは、両方の branch が同じ場所へ互いに関係の無い行を足しただけの衝突です**（一覧や `.gitignore` の末尾への追加など）。
 **同じ行を別の内容へ変えている・片方が消して片方が変えている・両方残すと構文か意味が壊れる・生成されたファイルやロックファイル、のどれかに当たれば、解かずに止まります。**迷ったときも止まります。
@@ -3825,13 +3825,13 @@ jq -r .base <worktree のパス>/.continuo.json
 **人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊きません。**
 **判断票は、指摘をまとめた表を、その節の `### 詳細` の中に置きます。**
 
-**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.3.0 から）かを見ます。**
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`1` 以上なら v0.3.0 以降で、入っています。**この指示はいまスキル「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.3.0 以降では、入っていても `0` が返ります）。
 **`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 **v0.1.15 と v0.2.0 で見出しが違うので、2本数えます。**
@@ -3863,13 +3863,13 @@ issue から `$(…)` を含む文を引いた場合も同じです。
 **v0.2.0 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
 計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
 
-**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.3.0 から）かを見ます。**
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル（「writing-plan」「finishing-run」「implementing-and-pushing」「finishing-pull-request」など）にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`1` 以上なら v0.3.0 以降で、入っています。**この指示はいまスキル（「writing-plan」「finishing-run」「implementing-and-pushing」「finishing-pull-request」など）にあり、`--show` には出ません。**下の行は叩かないでください**（v0.3.0 以降では、入っていても `0` が返ります）。
 **`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 ```bash
@@ -3980,7 +3980,7 @@ continuo は 2 秒で締め切っていたので、次の3つが起きます。
 | 何が差し戻すか | いつ |
 | --- | --- |
 | **あなたが入れた `Stop` hook** | continuo が渡す設定は**追加**であって置き換えではないので、`~/.claude/settings.json` と worktree の `.claude/settings.json` に書いた `Stop` hook も一緒に走ります |
-| **continuo 自身の hook**（v0.2.2 から） | エージェントが `CONTINUO-STATUS:` に決まり以外の値（`done` など）を書いたときに、1つの turn で1回だけ。書いた値と取り得る値の一覧を返して、書き直させます（下の「エージェントが `CONTINUO-STATUS:` に決まり以外の値を書いたら」） |
+| **continuo 自身の hook**（v0.3.0 から） | エージェントが `CONTINUO-STATUS:` に決まり以外の値（`done` など）を書いたときに、1つの turn で1回だけ。書いた値と取り得る値の一覧を返して、書き直させます（下の「エージェントが `CONTINUO-STATUS:` に決まり以外の値を書いたら」） |
 
 **直っているかの確かめ方。**continuo のログに次の行が出ていれば、待ち直しています。
 
@@ -3994,12 +3994,12 @@ continuo は 2 秒で締め切っていたので、次の3つが起きます。
 `tracker.status_signal_map` に無い値を書きます。**v0.2.1 までは、continuo はその値を無視して「続けてください」を送っていました。**
 終えたつもりのエージェントが、続ける作業の無いまま手を動かし、`agent.max_dispatch_turns`（既定 20）を使い切って `Blocked` へ落ちます。
 
-**v0.2.2 からは、書いた値と取り得る値の一覧をエージェントへ返します。**経路は2つです。**設定は要りません。**
+**v0.3.0 からは、書いた値と取り得る値の一覧をエージェントへ返します。**経路は2つです。**設定は要りません。**
 
 | 経路 | いつ効くか | 何が起きるか |
 | --- | --- | --- |
 | **hook が差し戻す** | 表明が応答のいちばん最後のテキストに在るとき | Claude Code が turn を終えず、同じ turn の中でエージェントが書き直します。**1つの turn で1回だけです** |
-| **次の turn の指示で返す** | hook が調べなかったとき（表明のあとに道具を呼んだ・continuo を v0.2.2 へ上げる前に着手した run など） | continuo が次に送る指示が、「続けてください」の代わりに、書いた値と一覧になります |
+| **次の turn の指示で返す** | hook が調べなかったとき（表明のあとに道具を呼んだ・continuo を v0.3.0 へ上げる前に着手した run など） | continuo が次に送る指示が、「続けてください」の代わりに、書いた値と一覧になります |
 
 **表明が1行も無かったときの指示にも、同じ一覧が載ります。**箇条書きや強調の中に書いた行（`- CONTINUO-STATUS: done`）と、
 印を打ち間違えた行は、continuo からは「行が無い」と見えます。**continuo が読むのは、行頭に在る行だけです。**
@@ -4064,7 +4064,7 @@ level=WARN msg="gh の持ち主を取れません（コメントの印だけで�
 #### エージェントが push で終わり、PR が作られない
 
 **まず知っておくこと。**v0.1.14 から、エージェントは `CONTINUO-STATUS: review` を出す前に
-**自分で PR を作ります**（v0.2.1 までは組み込みのプロンプトの `## 3-5. pull request を出す`、v0.2.2 からはスキル「implementing-and-pushing」の「pull request を出す」）。
+**自分で PR を作ります**（v0.2.1 までは組み込みのプロンプトの `## 3-5. pull request を出す`、v0.3.0 からはスキル「implementing-and-pushing」の「pull request を出す」）。
 **組み込みに、それを打ち消す口はありません。**
 
 **原因は2つあります。順に確かめてください。**
@@ -4081,13 +4081,13 @@ cd ~/continuo-work && continuo prompt --show | grep -n 'PR は作らないでく
 **組み込みは打ち消しを受け付けないので、どちらに従うかはエージェント次第になります。**
 **確実に作らせたいなら、その行を消してください。**
 
-**2つ目。組み込みの側に節が無い。**版が古いままです。**先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+**2つ目。組み込みの側に節が無い。**版が古いままです。**先に、手順をスキルへ分けた版（v0.3.0 から）かを見ます。**
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「implementing-and-pushing」の「pull request を出す」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`1` 以上なら v0.3.0 以降で、入っています。**この指示はいまスキル「implementing-and-pushing」の「pull request を出す」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.3.0 以降では、入っていても `0` が返ります）。
 **`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 ```bash
@@ -4145,7 +4145,7 @@ gh pr view <番号> --json closingIssuesReferences --jq '[.closingIssuesReferenc
 あなたのトークンから見える立場と違うことがあります（organization が持つリポジトリで、あなたには `MEMBER`、検査には `CONTRIBUTOR` と見えた報告があります。原因は確定していません）。
 
 **検査ファイルが v0.2.1 までの雛形なら、置き直してください。**古い雛形は、立場が `OWNER` / `MEMBER` / `COLLABORATOR` の投稿者しか数えません。
-**v0.2.2 の雛形は、立場が外れていても、リポジトリへ push できる投稿者なら数えます。**
+**v0.3.0 の雛形は、立場が外れていても、リポジトリへ push できる投稿者なら数えます。**
 落ちたときの案内に、数えなかった投稿者と、検査から見えた立場も出ます。
 
 ```bash
@@ -4212,7 +4212,7 @@ gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body > "$F" \
 herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```
 
-**表明のしかたは、plugin `continuo-agent-procedures` のスキル「finishing-run」の「runの終了を宣言する」にあります**（v0.2.2 から）。`continuo prompt --show` には出ません（フローチャートと操作の前の表に `CONTINUO-STATUS` の語が出るだけです）。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。**v0.2.1 以前は組み込みのプロンプトにあり、次の行で確かめられます。**
+**表明のしかたは、plugin `continuo-agent-procedures` のスキル「finishing-run」の「runの終了を宣言する」にあります**（v0.3.0 から）。`continuo prompt --show` には出ません（フローチャートと操作の前の表に `CONTINUO-STATUS` の語が出るだけです）。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。**v0.2.1 以前は組み込みのプロンプトにあり、次の行で確かめられます。**
 
 ```bash
 cd ~/continuo-work && continuo prompt --show | grep -n "CONTINUO-STATUS"
@@ -4325,13 +4325,13 @@ push できる状態なら push させます。**
 （「トラブルシューティング」の「インストールした直後、continuo が起動しないとき」にある
 『版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった』）。
 
-**節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。**先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+**節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。**先に、手順をスキルへ分けた版（v0.3.0 から）かを見ます。**
 
 ```bash
 continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
 ```
 
-**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`1` 以上なら v0.3.0 以降で、入っています。**この指示はいまスキル「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.3.0 以降では、入っていても `0` が返ります）。
 **`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 ```bash
@@ -4929,7 +4929,7 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 **代表の側には、書いた先の URL が並びます。**どちらもエージェントが書いたもので、continuo は代筆しません。
 
 **`WORKFLOW.md` に足す設定はありません。**指示書は continuo の実行ファイルの中にあるので、
-版を上げれば届きます。**この手順はスキル「finishing-run」の「まとめて直したとき」にあり**（v0.2.2 から）、`continuo prompt --show` には出ません。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。
+版を上げれば届きます。**この手順はスキル「finishing-run」の「まとめて直したとき」にあり**（v0.3.0 から）、`continuo prompt --show` には出ません。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。
 
 **まとめて直すこと自体をやめたいときは、`WORKFLOW.md` の本文から
 `### まとめて直してよい範囲` の節を消してください。**まとめて直す指示が届かなくなります。
