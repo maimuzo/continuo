@@ -67,7 +67,8 @@ jobs:
   # **この job の名前も変えないこと。**理由は下の `code-review-result` と同じである。
   #
   # **貼る先が issue なのは、設計が issue に書かれるからである**
-  # （[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 3-2「計画を書き、レビューを受ける」）。
+  # （[writing-plan](../../plugins/continuo-agent-procedures/skills/writing-plan/SKILL.md) の「計画を書き、レビューを受ける」と、
+  # [posting-review-verdict](../../plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」）。
   # **PR ができる前に設計を書き終えているので、PR のコメントには置けない。**
   design-review-result:
     runs-on: ubuntu-latest
@@ -102,7 +103,8 @@ jobs:
           # **エージェントから守れるわけではない。**エージェントは owner の資格情報で
           # `gh` を叩くので、その投稿は `author_association == "OWNER"` になり、
           # **本文でもコメントでも同じように書ける。**
-          # **止めているのは組み込みの指示書の文だけである**（internal/prompt/builtin.md の 3-5)。
+          # **止めているのは continuo が渡す指示の文だけである**（plugins/continuo-agent-procedures/skills/finishing-pull-request/SKILL.md の
+          # 「設計のレビューを飛ばす断りを、自分で書かない」と、internal/prompt/builtin.md のシステムプロンプトの「しません」の1文)。
           # **つまりこの逃がし口は自己申告であり、機械では守られていない。**
           #
           # **理由は目印の次の行に書かせる。**目印の中へ書かせると、
@@ -148,7 +150,7 @@ jobs:
 
           # **このリポジトリの issue だけを残す。**別のリポジトリの issue は、この job の
           # 権限では読めない（private なら 404、public でも投稿者の立場が変わる）。
-          # **組み込みの 7-3 は `Closes owner/repo#N` を認めているので、実際に起こりうる。**
+          # **finishing-pull-request のスキルの「別のリポジトリへ pull request を出すとき」は `Closes owner/repo#N` を認めているので、実際に起こりうる。**
           jq -r --arg repo "${REPO}" '
             [ .closingIssuesReferences[]
               | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
@@ -217,7 +219,7 @@ jobs:
             echo ""
             echo "**通し方。**"
             echo ""
-            echo "1. 設計をサブエージェントにレビューさせる（\`internal/prompt/builtin.md\` の 3-2「計画を書き、レビューを受ける」）"
+            echo "1. 設計をサブエージェントにレビューさせる（\`plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md\` の「計画を書き、レビューを受ける」）"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
             echo "3. それを **issue のコメント**として貼る"
             echo "   **continuo が起動したエージェントは、1行目を \`<!-- continuo:agent -->\`、2行目を \`<!-- design-review-result -->\` にする。それ以外は1行目を \`<!-- design-review-result -->\` にする**"

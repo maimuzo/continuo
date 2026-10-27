@@ -139,10 +139,14 @@ Usage of continuo setup:
 
 ```text
 Usage of continuo prompt:
+  -attempt int
+    	何回目の試行として展開するか（省略すると1回目）。--url と一緒に使う
   -builtin
     	WORKFLOW.md を読まず、組み込みのプロンプトだけを出す
   -show
-    	送るプロンプトの全文を標準出力へ出す
+    	送るシステムプロンプトと最初のプロンプトを、区切りの行で分けて標準出力へ出す
+  -url string
+    	この issue の値で変数を展開して出す（issue の URL）
 ```
 
 `trust --help` の出力。
@@ -368,27 +372,37 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 ```
 
 **`WORKFLOW.md` の本文が、エージェントへ送る指示書のうち人間が書く部分である。**
-残りは continuo の実行ファイルの中にある。**送られる全文はこう読む。**
+残りは continuo の実行ファイルの中にある。**送られるシステムプロンプトと最初のプロンプトはこう読む。**
 （前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、送る直前に issue のコメントから組み立てるので、ここには出ない）
 
 ```bash
 cd ~/continuo-try && /tmp/continuo prompt --show
 ```
 
-**内訳は標準エラーへ出る。**実際に叩いた出力（`>` で捨てているのは標準出力の側である）。
+**標準出力には、システムプロンプト・区切りの行・最初のプロンプトの順に出る。**区切りの行は次の1行である（送る文面には入らない）。
+
+```text
+======== ここから下は最初のプロンプト（上はシステムプロンプト） ========
+```
+
+**内訳は標準エラーへ出る。**実際に叩いた出力（`>` で捨てているのは標準出力の側である。パスは `~/` に直した）。
 
 ```text
 送る文面の内訳:
-  組み込みのプロンプト（前半）  360 行
-  WORKFLOW.md の本文  21 行  ~/continuo-try/WORKFLOW.md
-  組み込みのプロンプト（後半）  438 行
+  システムプロンプトの組み込み  113 行
+  システムプロンプトの WORKFLOW.md の本文  21 行  ~/continuo-try/WORKFLOW.md
+  最初のプロンプトの組み込み  11 行
+  最初のプロンプトの WORKFLOW.md の本文  21 行  ~/continuo-try/WORKFLOW.md
+  plugin のディレクトリと12桁は、置き換える語（CONTINUO_PLUGIN_DIR・CONTINUO_PLUGIN_HASH）のまま出しました（--url を付けると実際の値になります）。手順の本文はスキルにあり、ここには出しません（リポジトリの plugins/continuo-agent-procedures/ にあります）
 ```
 
-**行数は版によって変わる。**上は `continuo init` が置いたままの `WORKFLOW.md` で実測した値である。
-**本文へ書き足せば真ん中が増え、組み込みへ節が増えれば前半か後半が増える。**
+**行数は版によって変わる。**上は `continuo init` が置いたままの `WORKFLOW.md` で実測した値である（2026-10-27）。
+**本文へ書き足せば、2つの「WORKFLOW.md の本文」の行が同じだけ増える。**本文はシステムプロンプトの最後と、最初のプロンプトの最後の両方に入る。
 **`language` の値では変わらない。**組み込みの指示書は、いまのところ日本語だけである。
 
-**本文が真ん中に挟まる。**組み込みの締めくくり（表明の1行の説明）が必ず最後に来る。
+**手順の本文は、ここには出ない。**手順は plugin `continuo-agent-procedures` の11本のスキルにあり、
+リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読める。
+continuo は Claude Code を起動するたびに、それを実行時ディレクトリへ書き出して `--plugin-dir` で渡す。
 **組み込みの側だけを読みたいときは `--builtin` を付ける。**
 
 ```bash
@@ -1112,8 +1126,8 @@ continuo は知らない Status になった issue を、
 **直し方は [FAQ.md](FAQ.md) の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にある。**
 
-**PR を作らせないようにはできない。**組み込みの指示書が本文に委ねるのは
-**draft のまま人間へ渡すかどうか・base にする branch・成果がこの worktree の外にあるときの出し方**の3つだけである。
+**PR を作らせないようにはできない。**continuo の手順（plugin のスキル）が本文に委ねるのは
+**draft のまま人間へ渡すかどうか・base にする branch・成果がこの worktree の外にあるときの出し方・この worktree の分岐元・どの subagent へレビューを頼むか**の5つだけである。
 **「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。

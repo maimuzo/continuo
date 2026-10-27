@@ -50,7 +50,7 @@ continuo --help
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
-| `continuo prompt --show [ディレクトリ]` | Claude Code へ送る指示の全文を出す。`--builtin` で組み込みの部分だけ、`--url <issue の URL>` でその issue の値で展開する |
+| `continuo prompt --show [ディレクトリ]` | Claude Code へ送るシステムプロンプトと最初のプロンプトを出す（手順の本文を持つスキルは出さない）。`--builtin` で組み込みの部分だけ、`--url <issue の URL>` でその issue の値で展開する |
 | `continuo version` | 実行ファイルの版を出す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
@@ -92,19 +92,22 @@ cd ~/continuo-work && continuo doctor && continuo
 | --- | --- |
 | **v0.1.12 まで** | **本文だけ。**組み込みのプロンプトは1文字も送られません |
 | **v0.1.13 から** | **組み込みの前半 + 本文 + 組み込みの後半。**本文は真ん中へ挟まります |
+| **v0.2.2 から** | **システムプロンプト（組み込み + 本文）と、最初のプロンプト（組み込み + 本文）。**本文はどちらにも入ります。手順の本文は plugin `continuo-agent-procedures` のスキルで渡します |
 
 **v0.1.12 までの本文には、組み込みと同じ指示を書き写している人がいます。**
 表明の1行（`CONTINUO-STATUS:`）の書き方や、worktree を切り替えるなという指示です。
 **そのまま v0.1.13 へ上げると、同じ指示が2回届きます。**
 
 **直し方。**組み込みに同じことが書いてある部分を、本文から消してください。
-**組み込みの全文は、次のコマンドで読めます。**
+**組み込みのシステムプロンプトと最初のプロンプトは、次のコマンドで読めます。**
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --builtin
 ```
 
-**送られる文面の全文は、次のコマンドで読めます。**（前の回のあとに人間が書いたコメントを付ける節は、送る直前に issue のコメントから組み立てるので、ここには出ません）
+**v0.2.2 から、手順の本文はこのコマンドに出ません。**手順は plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。**本文と見比べるときは、そちらも読んでください。**
+
+**送られるシステムプロンプトと最初のプロンプトは、次のコマンドで読めます。**（前の回のあとに人間が書いたコメントを付ける節は、送る直前に issue のコメントから組み立てるので、ここには出ません）
 
 ```bash
 cd ~/continuo-work && continuo prompt --show
@@ -166,7 +169,7 @@ v0.1.13 からは、これらの指示は組み込みの指示書（continuo の
 
 #### 書いたテンプレートが、実際にどう展開されるかを先に見たい
 
-**`--url` に issue の URL を渡してください**（v0.1.15 から）。**その issue の値で展開した全文が出ます。**人間のコメントを付ける節は出ません（送る直前に組み立てます）。
+**`--url` に issue の URL を渡してください**（v0.1.15 から）。**その issue の値で展開した、システムプロンプトと最初のプロンプトが出ます**（v0.2.2 からは、plugin のディレクトリと終わりの印の12桁も実際の値で出ます）。人間のコメントを付ける節と、スキルの本文は出ません（人間のコメントの節は送る直前に組み立てます）。
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/hello-world/issues/42
@@ -176,7 +179,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 **番号だけでは、どのリポジトリの issue か決まりません。**
 
 **やり直しのときの文面も見られます。**`--attempt <回数>` を足すと、その回数として展開します。
-**`2` 以上を渡してください。**省いても `1` を渡しても、1回目として展開します（continuo は1回目に試行回数を渡さないので、`## 7-5. これは 1 回目の試行です` は1度も送られません）。
+**`2` 以上を渡してください。**省いても `1` を渡しても、1回目として展開します（continuo は1回目に試行回数を渡さないので、`## これは 1 回目の試行です`（v0.2.1 までは `## 7-5. これは 1 回目の試行です`）は1度も送られません）。
 **何回目として展開したかは、内訳（標準エラー）に必ず出ます。**
 
 ```bash
@@ -215,7 +218,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 | どこへ書くか | 何を書くか | なぜそこか |
 | --- | --- | --- |
 | **`CLAUDE.md`** | **進め方の決まり。**設計のレビューを実装の前に置く、レビュー結果を貼ってからマージ可能にする、など | **continuo を使わないときにも効かせたい決まりです。**人間が自分で Claude Code を動かすときにも読まれます |
-| **`WORKFLOW.md` の本文** | **continuo が起動したエージェントにだけ効く決まり。**テストの走らせ方、pull request の作り方、まとめて直してよい範囲 | 本文は、continuo が送る指示書の真ん中へ挟まります。**`continuo prompt --show` で全文が読めます**（人間のコメントを付ける節は除く） |
+| **`WORKFLOW.md` の本文** | **continuo が起動したエージェントにだけ効く決まり。**テストの走らせ方、pull request の作り方、まとめて直してよい範囲 | 本文は、continuo が送るシステムプロンプトの最後と、最初のプロンプトの最後に入ります。**`continuo prompt --show` で読めます**（人間のコメントを付ける節と、スキルの本文は出ません） |
 | **`.github/workflows/`** | **その決まりを機械で止める検査**（`continuo-ci.yaml` を移したもの） | 文書に書くだけでは守られません |
 
 **`CLAUDE.md` に continuo の仕組みを書き写さないでください。**
@@ -223,9 +226,11 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 書き写すと、continuo が説明を直しても、あなたの `CLAUDE.md` には二度と届きません。
 
 ```bash
-# エージェントへ送られる仕組みの説明は、これで全部読めます
+# エージェントへ送られるシステムプロンプトと最初のプロンプトの、組み込みの部分
 continuo prompt --show --builtin
 ```
+
+**手順の本文は、このコマンドに出ません**（v0.2.2 から）。plugin `continuo-agent-procedures` のスキルにあり、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
 
 **書く決まりの例。**次の2つは、continuo が送る指示書も同じことを言っています。
 **`CLAUDE.md` に書いておくと、人間が自分で Claude Code を動かすときにも効きます。**
@@ -286,10 +291,19 @@ pull request のコメントに、レビュー結果を貼ってください
 | **実装レビューが収まったら、必ず draft を外す** | 誰が draft で作ったかを問わず、エージェントが `gh pr ready` で外します。**外さないのは、10周で収まらずに止まったとき・質問で打ち切ったとき・`WORKFLOW.md` の本文に「draft のまま人間へ渡す」とはっきり書いてあるときだけです** |
 | **`## 5-7. subagent へ渡すもの` の節が入った** | エージェントが subagent を立てるとき、**不可逆な操作**（pull request のマージ・削除・本番の環境への書き込み・release の作成）**を渡さなくなります** |
 
-**節が届いているかの確かめ方。**
+**v0.2.2 から、この2つの節はスキルへ移りました。**`## 5-6. レビューの回し方` はスキル「running-review-loop」の「レビューの回し方」へ、`## 5-7. subagent へ渡すもの` はスキル「briefing-subagents」の「subagent へ渡すもの」へ移り、中身はそのままです。
+
+**節が届いているかの確かめ方。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 5-6\. '
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「running-review-loop」の「レビューの回し方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`0` なら v0.2.1 以前です。次の行で確かめます。**
+
+```bash
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?レビューの回し方$'
 ```
 
 **`1` なら入っています。**`0` なら v0.1.15 以前です。版を上げてください。
@@ -907,6 +921,8 @@ tracker:
 **まだ着手していない issue も `Direct Chat` へ動かせます。**pane が無ければ continuo が1つ用意し、
 **「話しかけられます」というコメントを issue へ1件書きます。**そこから話しかけてください。
 
+**v0.2.2 から、この pane の Claude Code にも、continuo のシステムプロンプト（continuo が起動した run だという宣言と、全体の流れのフローチャート）が入ります。**v0.2.1 までは、指示が1つも入っていませんでした。**最初の一言で手順（担当の確かめ・分岐元の取り込み・issue を読む…）を始めることがあるので、相談だけしたいときは、最初にそう書いてください。**
+
 **pane を用意するのは「continuo がその issue をまだ抱えていないとき」だけです。**
 **「抱えている」には、やり直し待ちの issue も入ります。**
 **着手に失敗して待っている issue は、pane が無くても抱えたままです。**
@@ -1522,8 +1538,8 @@ continuo は、その run から1時間 hook が1件も来ていないことを�
 | 順 | 誰が | 何をするか |
 | --- | --- | --- |
 | 1 | continuo | 巡回のたびに、判定の結果を1行のファイル（実行時ディレクトリの `margin-status`）に書く |
-| 2 | Claude Code | 作業の区切りでそのファイルを読み（組み込みの指示書の 5-8）、`MARGIN: cut` なら新しいサブエージェントを起動せず、いまある変更を push し、どこまで進んだかを issue のコメントに書いて turn を終える。**走っているサブエージェントは止めない** |
-| 3 | continuo | turn の終わりに「続けてください」の代わりに「レートリミットのマージンを切りました（組み込みの指示書の 5-8）。…」を1回送る。Claude Code が気づかずに turn を終えていたときも、これで切り上げる（済んでいれば何もせずに終える） |
+| 2 | Claude Code | 作業の区切りでそのファイルを読み（システムプロンプトのフローチャートの「どの段でも」の箱と、スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」）、`MARGIN: cut` なら新しいサブエージェントを起動せず、いまある変更を push し、どこまで進んだかを issue のコメントに書いて turn を終える。**走っているサブエージェントは止めない** |
+| 3 | continuo | turn の終わりに「続けてください」の代わりに「レートリミットのマージンを切りました（スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」）。…」を1回送る。Claude Code が気づかずに turn を終えていたときも、これで切り上げる（済んでいれば何もせずに終える） |
 | 4 | continuo | 下の表のとおりに行き先を決める |
 
 | どの期間がマージンを切ったか | 行き先 |
@@ -1552,8 +1568,8 @@ continuo は、その run から1時間 hook が1件も来ていないことを�
 | --- | --- |
 | **5時間の期間か、全体の1週間の期間が使用率100%** | Claude Code が応答できないので、**今までどおりリセットを待って続けます** |
 | **continuo が使用率を読めていない**（最後に読めてから30分を過ぎた・立て直してからまだ読めていない） | 止めません。`margin-status` も `MARGIN: unknown` になります |
-| **`rate_limit.source: none`** | 使用率を読まないので、この仕組みは働きません（組み込みの指示書にも 5-8 が出ません） |
-| **人間が pane で直接続けている（direct chat）** | continuo は何も送りません。**ただし Claude Code は指示書の 5-8 を覚えているので、自分で切り上げることがあります。**続けさせたいときは「マージンは気にせず続けて」と書いてください |
+| **`rate_limit.source: none`** | 使用率を読まないので、この仕組みは働きません（システムプロンプトのフローチャートにマージンの確かめの1文が出ず、「この issue の値」の `<マージンのファイル>` が「無い」になります） |
+| **人間が pane で直接続けている（direct chat）** | continuo は何も送りません。**ただし Claude Code はシステムプロンプトとスキル「reporting-progress」のマージンの手順を持っているので、自分で切り上げることがあります。**続けさせたいときは「マージンは気にせず続けて」と書いてください |
 
 **ダッシュボードでも見られます。**レートリミットの区画に「マージンを切った」の印が付き、切り上げを終えて担当を外すのを待っている run には「切り上げ済み・行き先待ち」の印が付きます（「画面には何が出ますか」）。
 
@@ -1896,17 +1912,29 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 #### v0.2.2 で、何もしないと動かなくなるものは？
 
-**1つだけあります。カンバンの自動化（`Pull request linked to issue`）を有効にしていて、`tracker.automated_state_rewrite` が空の人です。**
+**2つあります。**
+
+**1つ目。Claude Code が 2.1.304 より古い人です。continuo が起動しません。**
+v0.2.2 から、continuo は Claude Code を `--append-system-prompt-file`・`--system-prompt-snapshot off`・`--plugin-dir` を付けて起動します（指示書をシステムプロンプトと plugin のスキルに分けたためです）。
+2.1.304 は、compaction のあとにスキルの一覧を作り直す版です。**continuo は起動のときと `continuo doctor` で版を確かめ、古ければ起動しません。**
+直し方と、pane の Claude Code だけが古いときに起きることは、下の「上げたら、Claude Code が古いと言われて起動しない」と「上げたあと、pane で Claude Code が起動しない」にあります。
+
+```bash
+claude --version && continuo doctor
+```
+
+**2つ目。カンバンの自動化（`Pull request linked to issue`）を有効にしていて、`tracker.automated_state_rewrite` が空の人です。**
 pull request が実装の途中で作られるようになったので、自動化が Status を書き換える時機も実装の途中へ動きます。
 continuo の知らない Status へ書き換わると、最初の push の約10分後（`tracker.unknown_state_grace_ms`）に、実装の途中で止まります。
 **v0.2.1 までも同じカンバンでは止まっていましたが、止まるのは実装が終わったあとでした。**
 直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。`continuo doctor` が `! 自動化 … tracker.automated_state_rewrite が空です` と出すカンバンが、これに当たります。
 
 **それ以外の人は、`WORKFLOW.md` に足すものも、消すものもありません**（`tracker.automated_state_rewrite` に1行でも書いている人は、下の「v0.2.2 で、いままでの操作が効かなくなるものは？」を、`status_signal_map` を自分で書いている人は、「エージェントの表明（`CONTINUO-STATUS:`）まわりで、上げたあとに変わることは？」も読んでください）。
-**エージェントの動きは、次の6つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。**CI の検査ファイル（`continuo-ci.yaml`）を使っていて、レビュー結果を貼っても検査が緑にならない人は、検査ファイルを置き直してください**（トラブルシューティングの「レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う」）。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
+**エージェントの動きは、次の7つが変わります。**対応表（`tracker.automated_state_rewrite`）の変更と、表明（`CONTINUO-STATUS:`）まわりの2つは、下の項にあります。**CI の検査ファイル（`continuo-ci.yaml`）を使っていて、レビュー結果を貼っても検査が緑にならない人は、検査ファイルを置き直してください**（トラブルシューティングの「レビュー結果を貼ったのに、CI の検査が「貼られていません」と言う」）。詳しくは [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
 
 | 何が変わるか | 気をつけること |
 | --- | --- |
+| **指示が、システムプロンプトと plugin `continuo-agent-procedures` のスキルに分かれます** | `continuo prompt --show` に手順の本文が出なくなります。何も走っていない issue を `Direct Chat` へ動かすと、その Claude Code にもシステムプロンプトが入ります（「途中から人間が直接チャットで進めたいとき（direct chat）」の「使い方」） |
 | **分岐元の取り込みで衝突しても、両方の変更を残せるなら、解いて進みます** | 解いた内容は報告と merge commit に残ります |
 | **エージェントが書く時刻が、機械のタイムゾーンになります**（`2026-10-05 02:23 (JST)` の形） | continuo 自身のコメントと同じ形です |
 | **終わりの報告の前に、エージェントが受けた指示を読み直して分けます** | まだ実行していない指示が、理由と一緒に報告へ並びます |
@@ -1921,6 +1949,56 @@ continuo の知らない Status へ書き換わると、最初の push の約10�
 担当が自分の issue を `Ready` へ戻したときも、マージンを切っていれば着手せずに `Blocked` へ戻ります。
 **元に戻す設定はありません。**走っている run に100%まで使わせたいときは、その期間のマージンを `0` にしてください（入札も100%まで行います）。
 何が起きるかと戻し方は「レートリミットのマージンを切ったら、走っている run が止まって `Blocked` へ戻った」に、変わった点の一覧は [upgrading.md](upgrading.md) の「v0.2.1 から v0.2.2 へ」にあります。
+
+#### 上げたら、Claude Code が古いと言われて起動しない
+
+**原因。**continuo を起動したシェルの PATH にある Claude Code（`claude.kind` の実行ファイル）が 2.1.304 より古いです。
+continuo は起動のときに `--version` を読み、古ければ「Claude Code（…）の版 … は古すぎます」と出して止まります。`continuo doctor` の `claude` の行も `✗` になります。
+
+**直し方。**Claude Code を上げてから、もう一度起動してください。
+
+```bash
+claude update && claude --version && continuo doctor
+```
+
+**版を読めなかったときは止まりません。**`WARN` を出して起動し、`continuo doctor` の `claude` の行に「版を読めませんでした」の注記が付きます。そのときは、pane で動く Claude Code が 2.1.304 以上かを自分で確かめてください（次の項）。
+
+#### 上げたあと、pane で Claude Code が起動しない
+
+**原因は2つです。**pane に出る文で見分けます。
+
+| pane に出る文 | 原因 | 直し方 |
+| --- | --- | --- |
+| `error: unknown option '--system-prompt-snapshot'` | **pane のシェルの PATH にある Claude Code が 2.1.257 より古い。**continuo が確かめるのは continuo を起動したシェルの PATH の Claude Code なので、pane のほうが古いことがあります | pane のシェルで `claude --version` を確かめ、2.1.304 以上へ上げる（`claude update`） |
+| `--plugin-dir` が組織の managed settings で無効だという文 | **組織の managed settings に `disableSideloadFlags` が置かれている。**Claude Code は起動せずに終了コード 1 で終わります | **この環境は非対応です。**管理者にこの設定を外してもらってください。continuo はこの設定を見分けません |
+
+**起動に失敗した issue は、前の会話の続きから再開できなくなります。**再着手で起動に失敗すると、continuo はいままでどおり新しいセッションで起動し直し、そのセッションを記録し直すためです。
+**先に Claude Code を上げてから continuo を立て直すと、起動の失敗そのものを避けられます。**
+
+**pane の Claude Code が 2.1.257〜2.1.303 のときは、起動のエラーは出ません。**ただし compaction のあとにスキルの一覧が作り直されません（Claude Code の公式文書）。この範囲の版で continuo を動かしたときに何が起きるかは測っていません。2.1.304 以上へ上げてください。
+
+#### 上げたら、`continuo prompt --show` に手順が出なくなった。版の確かめ方の grep が `0` を返す
+
+**正常です**（v0.2.2 から）。手順の本文はシステムプロンプトから plugin `continuo-agent-procedures` のスキルへ移り、`--show` が出すのはシステムプロンプトと最初のプロンプトだけになりました。
+**この文書と [upgrading.md](upgrading.md) の古い版の節にある「`continuo prompt --show` を grep して `1` なら入っている」は、v0.2.2 からは `0` を返します。**先に次の1行で版を見てください。
+
+```bash
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降です。**手順の本文は、リポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) で読めます。
+continuo は Claude Code を起動するたびに、それを実行時ディレクトリの `plugins/<12桁>/continuo-agent-procedures/` へ書き出して渡します。
+
+#### 上げたあとの最初の再着手で、前の版の指示書が会話に残っている
+
+**正常です。**走っていた run を続きから再開すると、会話には前の版の指示書（手順の全文）が残ったままです。
+continuo は最初のプロンプトで「会話に前の版の指示書が残っていても、システムプロンプトとスキルに従ってください」と伝えます。システムプロンプトは `--system-prompt-snapshot off` で毎回新しい版へ差し替わります。
+**前の版の指示書が会話から消えるわけではないので、その run の会話は v0.2.1 までと同じだけ大きいままです。**
+
+#### 実行時ディレクトリの `plugins/` に、古い版のディレクトリが残っている
+
+**正常です。**書き出す plugin は版ごとに別のディレクトリ（`plugins/<12桁>/`。12桁は中身のハッシュ）で、前の版で起動した pane の Claude Code は前の版のディレクトリを読み続けます。
+continuo は古い版に `.orphaned_at` を置き、**そこから14日を過ぎ、しかもどの issue の `system-prompt.md` にもその12桁が載っていない版だけを消します。**手で消さないでください。走っている run の手順とスクリプトが消えます。
 
 #### エージェントが「別の人が担当になっている」と報告して止まる
 
@@ -2160,6 +2238,16 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 片付ける Status へ動かして起動しなくなる件も、そちらにあります。**
 
 ### インストールした直後、continuo が起動しないとき
+
+#### 「Claude Code（…）の版 … は古すぎます」で起動しない
+
+**原因。**v0.2.2 から、continuo は Claude Code 2.1.304 以上を要ります。起動のときに `claude.kind` の実行ファイルの版を読み、古ければ止まります。
+
+**直し方。**Claude Code を上げてください。pane の Claude Code が古いときに起きることも含め、「版を上げるとき」の「上げたら、Claude Code が古いと言われて起動しない」にあります。
+
+```bash
+claude update && claude --version && continuo doctor
+```
 
 #### 版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった
 
@@ -2595,9 +2683,10 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 | 内訳に出る名前 | 何のことか |
 | --- | --- |
 | `WORKFLOW.md#body` | **あなたが書いた本文**（front matter の閉じの `---` より下）。**行番号は、その `---` の次の行を1行目として数えたものです** |
-| `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのプロンプト。**ここが出たら continuo 側の不具合です |
+| `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのシステムプロンプト。**ここが出たら continuo 側の不具合です |
+| `first_prompt.md#head` / `first_prompt.md#tail` | **continuo の組み込みの最初のプロンプト**（v0.2.2 から）。ここが出たら continuo 側の不具合です |
 
-**送る文面の全文は、次のコマンドで読めます。**（人間のコメントを付ける節は除く）
+**送るシステムプロンプトと最初のプロンプトは、次のコマンドで読めます。**（人間のコメントを付ける節と、スキルの本文は出ません）
 
 ```bash
 cd ~/continuo-work && continuo prompt --show
@@ -3736,7 +3825,16 @@ jq -r .base <worktree のパス>/.continuo.json
 **人間に決めてほしいことは、質問1つにつき1つの節で訊き、表で訊きません。**
 **判断票は、指摘をまとめた表を、その節の `### 詳細` の中に置きます。**
 
-**入っているかは、送る文面で確かめられます。**v0.1.15 と v0.2.0 で見出しが違うので、2本数えます。
+**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+
+```bash
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`0` なら v0.2.1 以前です。次の行で確かめます。**
+
+**v0.1.15 と v0.2.0 で見出しが違うので、2本数えます。**
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 既存の構造がどうなっているか'
@@ -3765,7 +3863,14 @@ issue から `$(…)` を含む文を引いた場合も同じです。
 **v0.2.0 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
 計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
 
-**入っているかは、送る文面で確かめられます。**
+**入っているかは、送る文面で確かめられます。****先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
+
+```bash
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル（「writing-plan」「finishing-run」「implementing-and-pushing」「finishing-pull-request」など）にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`0` なら v0.2.1 以前です。次の行で確かめます。**
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-file "$F"'
@@ -3959,7 +4064,7 @@ level=WARN msg="gh の持ち主を取れません（コメントの印だけで�
 #### エージェントが push で終わり、PR が作られない
 
 **まず知っておくこと。**v0.1.14 から、エージェントは `CONTINUO-STATUS: review` を出す前に
-**自分で PR を作ります**（組み込みのプロンプトの `## 3-5. pull request を出す`）。
+**自分で PR を作ります**（v0.2.1 までは組み込みのプロンプトの `## 3-5. pull request を出す`、v0.2.2 からはスキル「implementing-and-pushing」の「pull request を出す」）。
 **組み込みに、それを打ち消す口はありません。**
 
 **原因は2つあります。順に確かめてください。**
@@ -3976,10 +4081,17 @@ cd ~/continuo-work && continuo prompt --show | grep -n 'PR は作らないでく
 **組み込みは打ち消しを受け付けないので、どちらに従うかはエージェント次第になります。**
 **確実に作らせたいなら、その行を消してください。**
 
-**2つ目。組み込みの側に節が無い。**版が古いままです。
+**2つ目。組み込みの側に節が無い。**版が古いままです。**先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 3-5\. pull request を出す'
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「implementing-and-pushing」の「pull request を出す」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`0` なら v0.2.1 以前です。次の行で確かめます。**
+
+```bash
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?pull request を出す$'
 ```
 
 **`0` なら v0.1.13 以前です。**版を上げてください。
@@ -4098,10 +4210,15 @@ gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body > "$F" \
 
 ```bash
 herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
+```
+
+**表明のしかたは、plugin `continuo-agent-procedures` のスキル「finishing-run」の「runの終了を宣言する」にあります**（v0.2.2 から）。`continuo prompt --show` には出ません（フローチャートと操作の前の表に `CONTINUO-STATUS` の語が出るだけです）。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。**v0.2.1 以前は組み込みのプロンプトにあり、次の行で確かめられます。**
+
+```bash
 cd ~/continuo-work && continuo prompt --show | grep -n "CONTINUO-STATUS"
 ```
 
-**表明のしかたは組み込みのプロンプトにあります。**`WORKFLOW.md` を grep すると
+**表明のしかたは組み込みの側にあります。**`WORKFLOW.md` を grep すると
 front matter の `status_signal_prefix`（continuo が読む側の設定）が引っかかりますが、
 **それはエージェントへの指示ではありません。**送られる文面のほうを見てください。
 
@@ -4208,18 +4325,26 @@ push できる状態なら push させます。**
 （「トラブルシューティング」の「インストールした直後、continuo が起動しないとき」にある
 『版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった』）。
 
-**節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。
+**節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。**先に、手順をスキルへ分けた版（v0.2.2 から）かを見ます。**
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 5-3\. '
+continuo prompt --show --builtin | grep -cF 'continuo-agent-procedures'
+```
+
+**`1` 以上なら v0.2.2 以降で、入っています。**この指示はいまスキル「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」にあり、`--show` には出ません。**下の行は叩かないでください**（v0.2.2 以降では、入っていても `0` が返ります）。
+**`0` なら v0.2.1 以前です。次の行で確かめます。**
+
+```bash
+continuo prompt --show --builtin | grep -cE '^## ([0-9]+-[0-9]+\. )?\{\{\.progress_interval_minutes\}\}分以上黙らない$'
 ```
 
 **`1` なら入っています。**`0` なら v0.1.13 以前です。版を上げてください。
 **引いているのは v0.1.14 の名前なので、v0.1.13 でも `0` が返ります。**
 
-**見出しに変数が入っているので、`^## 5-3\. ` で引きます。**
+**見出しに変数が入っているので、変数をそのままの文字で引きます。**
 `continuo prompt --show --builtin` は変数を展開しないため、
-**`## 5-3. {{.progress_interval_minutes}}分以上黙らない` のまま出ます。**
+**`## 5-3. {{.progress_interval_minutes}}分以上黙らない` か `## {{.progress_interval_minutes}}分以上黙らない` のまま出ます。**
+**見出しの頭に `5-3.` のような番号が付く版と、付かない版があります。**`([0-9]+-[0-9]+\. )?` は、どちらでも当たるようにするためです。
 
 **エージェントが書いているかの確かめ方。**issue に `<!-- continuo:agent -->` で始まるコメントが1件あり、
 **その中に、`progress_interval_ms` で決めた間隔ごとの行が増えていれば効いています**（既定は1時間）。
@@ -4804,16 +4929,12 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 **代表の側には、書いた先の URL が並びます。**どちらもエージェントが書いたもので、continuo は代筆しません。
 
 **`WORKFLOW.md` に足す設定はありません。**指示書は continuo の実行ファイルの中にあるので、
-版を上げれば届きます。送られる全文は `continuo prompt --show` で読めます（人間のコメントを付ける節は除く）。
-
-```bash
-cd ~/continuo-work && continuo prompt --show
-```
+版を上げれば届きます。**この手順はスキル「finishing-run」の「まとめて直したとき」にあり**（v0.2.2 から）、`continuo prompt --show` には出ません。中身はリポジトリの [plugins/continuo-agent-procedures/skills/](../plugins/continuo-agent-procedures/skills/) の `finishing-run/SKILL.md` で読めます。
 
 **まとめて直すこと自体をやめたいときは、`WORKFLOW.md` の本文から
 `### まとめて直してよい範囲` の節を消してください。**まとめて直す指示が届かなくなります。
 
-**ただし、確実に止まるとは言えません。**組み込みの 7-2 の手順は `WORKFLOW.md` と無関係に届き、
+**ただし、確実に止まるとは言えません。**スキル「finishing-run」の「まとめて直したとき」の手順（v0.2.1 までは組み込みの 7-2）は `WORKFLOW.md` と無関係に届き、
 **グループの計画は代表の issue のコメント側にも書かれています**（`gh issue view --json comments` で読ませています）。
 **節を消したときにエージェントが実際にどう振る舞うかは、測っていません。**
 **このコメントだけを止めるつまみはありません。**

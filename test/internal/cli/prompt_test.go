@@ -55,16 +55,17 @@ func TestPrompt_showは送る文面だけを標準出力へ出す(t *testing.T) 
 	}
 }
 
-// 目的: WORKFLOW.md の本文が、送る文面の真ん中に入って出ることを確かめる（設計 5-3c / 5-3f）。
+// 目的: `--show` が、システムプロンプトと最初のプロンプトを区切りの行で分けて出し、
+// WORKFLOW.md の本文をどちらにも「このプロジェクトの決まり」の下に入れることを確かめる
+// （設計 5-3c / 5-3f。issue #288）。
 //
-// **これが、本文の意味を変えた変更の要である。**本文は「組み込みを全部差し替えるもの」
-// ではなく「組み込みの真ん中へ挟む固有の指示」である。
+// **本文は「組み込みを全部差し替えるもの」ではなく「組み込みへ足す固有の指示」である。**
 // **全文の差し替えとして扱っていたら、組み込みの見出しが1つも出てこない。**
 //
 // 与える情報: `## 固有の目印` だけを本文に書いた WORKFLOW.md。
-// 成功条件: 標準出力の中で、本文が組み込みの前半と後半のあいだに並ぶこと。
-// 内訳に WORKFLOW.md の絶対パスが出ること。
-func TestPrompt_showは本文を真ん中に入れて出す(t *testing.T) {
+// 成功条件: 区切りの行がちょうど1つあり、その前後のどちらでも、組み込みの「このプロジェクトの決まり」の見出しの
+// あとに本文が並ぶこと。内訳に WORKFLOW.md の絶対パスが出ること。
+func TestPrompt_showは2つの文面を区切って本文を両方に入れる(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	setBody(t, dir, "## 固有の目印\n\nこのリポジトリでだけ効く決まりです。\n")
 
@@ -72,11 +73,19 @@ func TestPrompt_showは本文を真ん中に入れて出す(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	head := strings.Index(stdout, "## 4-2. 紐づく pull request を読む")
-	mid := strings.Index(stdout, "## 固有の目印")
-	tail := strings.Index(stdout, "# 5. 共通ルール")
-	if head < 0 || mid < 0 || tail < 0 || !(head < mid && mid < tail) {
-		t.Errorf("本文が真ん中に入っていません（head=%d mid=%d tail=%d）", head, mid, tail)
+	system, first, ok := strings.Cut(stdout, "\n"+prompt.Separator+"\n")
+	if !ok || strings.Contains(first, prompt.Separator) {
+		t.Fatalf("区切りの行がちょうど1つありません:\n%s", stdout)
+	}
+	for _, c := range []struct{ label, text, heading string }{
+		{"システムプロンプト", system, "\n# このプロジェクトの決まり\n"},
+		{"最初のプロンプト", first, "\n## このプロジェクトの決まり\n"},
+	} {
+		head := strings.Index(c.text, c.heading)
+		mid := strings.Index(c.text, "## 固有の目印")
+		if head < 0 || mid < 0 || head > mid {
+			t.Errorf("%s: 本文が「このプロジェクトの決まり」の下に入っていません（head=%d mid=%d）", c.label, head, mid)
+		}
 	}
 	if want := filepath.Join(dir, "WORKFLOW.md"); !strings.Contains(stderr, want) {
 		t.Errorf("内訳に %s が出ていません: %q", want, stderr)
@@ -99,7 +108,8 @@ func TestPrompt_本文があっても組み込みを送る(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	for _, want := range []string{"書き足した本文です。", "# 5. 共通ルール"} {
+	// **組み込みの側は、システムプロンプトのフローチャートで見る**（issue #288）。
+	for _, want := range []string{"書き足した本文です。", "\n# フローチャート\n"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("標準出力に %q がありません", want)
 		}
@@ -187,7 +197,7 @@ func TestPrompt_WORKFLOWmdを読めなければ何も出さない(t *testing.T) 
 //
 // 与える情報: `continuo init` を叩いたディレクトリ。
 // 成功条件: `continuo prompt --show` の終了コードが 0 で、
-// 標準出力に組み込みの前半・本文の見出し・組み込みの後半が、この順に並ぶこと。
+// 本文の見出しがシステムプロンプトの「このプロジェクトの決まり」の下と、最初のプロンプトの両方に出ること。
 func TestInit_置いたWORKFLOWmdはそのまま送れる(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, stderr := runInitOffline(dir); code != 0 {
@@ -198,11 +208,12 @@ func TestInit_置いたWORKFLOWmdはそのまま送れる(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("continuo prompt --show の終了コードが %d です（stderr: %s）", code, stderr)
 	}
-	head := strings.Index(stdout, "## 4-2. 紐づく pull request を読む")
-	mid := strings.Index(stdout, "### 何をする作業か")
-	tail := strings.Index(stdout, "# 5. 共通ルール")
-	if head < 0 || mid < 0 || tail < 0 || !(head < mid && mid < tail) {
-		t.Errorf("雛形の本文が真ん中に入っていません（head=%d mid=%d tail=%d）", head, mid, tail)
+	// **本文は、システムプロンプトと最初のプロンプトの両方の「このプロジェクトの決まり」の下に入る**（issue #288）。
+	head := strings.Index(stdout, "\n# このプロジェクトの決まり\n")
+	sep := strings.Index(stdout, "\n"+prompt.Separator+"\n")
+	if head < 0 || sep < 0 || strings.Count(stdout, "### 何をする作業か") != 2 ||
+		!(head < strings.Index(stdout, "### 何をする作業か") && strings.Index(stdout, "### 何をする作業か") < sep) {
+		t.Errorf("雛形の本文が、2つの文面の「このプロジェクトの決まり」の下に入っていません（head=%d sep=%d）", head, sep)
 	}
 }
 

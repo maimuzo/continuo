@@ -23,7 +23,8 @@
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd`、`applySignals`、`decideAfterTurn`、`finishRunClaimed`、`failRun`、`abandonRunClaimed`、`stopWorker`
 - `internal/orchestrator/comment.go` の `ensureAgentComment`
 - `internal/orchestrator/relay.go` の `settleClosedRecord`、`recordWorkerClosed`、`relayEnabled`（Claude Code を閉じた記録を書く条件）
-- `internal/prompt/builtin.md` の 3-7 と 5-5（エージェントが成果の報告を issue に書く）
+- `plugins/continuo-agent-procedures/skills/finishing-run/SKILL.md` の「runの終了を宣言する」と `plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md`（エージェントが成果の報告を issue に書く）
+- `internal/prompt/builtin.md`（システムプロンプトの雛形）と `internal/prompt/first_prompt.md`（最初のプロンプトの雛形）
 - 引いた記述: `docs/spec/usecases/particular_case/runを終えてworkerを止める.rucm.md`、`docs/spec/usecases/particular_case/worktreeとbranchを片付ける.rucm.md`
 - `internal/orchestrator/reconcile.go` の `reconcileWorktrees`（巡回の片付け。失うものが残っていて見送ったときは、issue へ1回だけコメントする）
 - `internal/scaffold/template.go`（`tracker.status_signal_map` と `cleanup.on_states` の既定）
@@ -50,8 +51,8 @@ BASIC FLOW:
 8. システムは判定の hook を持たない設定ファイルを worktree の外に作る。
 9. システムは worktree の中に身元ファイルを置く。
 10. システムは身元ファイルの名前を worktree の除外の一覧に加える。
-11. システムはエージェントを worktree で起動する。
-12. システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。
+11. システムはエージェントに、システムプロンプトと手順の plugin を渡して worktree で起動する。
+12. システムはエージェントに最初のプロンプトと WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。
 13. エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。
 14. エージェントは worktree の外にコードのリポジトリの clone を用意する。
 15. エージェントは clone の中でコードを直す。
@@ -171,7 +172,7 @@ POSTCONDITION: 本家のリポジトリに PR は無い。fork の origin に pu
 | コメントが在る。または、復元して書かせて在るようになった | 基本フローのステップ28 の検証を通り、利用者が Done へ動かす段へ進む |
 | 復元の準備が失敗して復元をやめた。復元しても書かれなかった。または復帰に失敗した（どれも `failure_state` を書く） | `成果の報告を確かめられない` で終わる |
 
-**エージェントは、終わる前に成果の報告を issue にコメントする**（`internal/prompt/builtin.md` の 3-7 と 5-5。基本フローのステップ21）。
+**エージェントは、終わる前に成果の報告を issue にコメントする**（スキル finishing-run の「runの終了を宣言する」と writing-comments-for-humans。基本フローのステップ21）。
 blocked で終えるときの理由も、同じコメントに書く（`本家のPRを出せない` のステップ1）。
 リトライが残っているあいだの打ち切り（`作業ディレクトリがworktreeの外`）は、この確かめを通らずに pane を閉じる。
 
@@ -226,8 +227,8 @@ flowchart TD
     BS8["8 システムは判定の hook を持たない設定ファイルを worktree の外に作る"]
     BS9["9 システムは worktree の中に身元ファイルを置く"]
     BS10["10 システムは身元ファイルの名前を worktree の除外の一覧に加える"]
-    BS11["11 システムはエージェントを worktree で起動する"]
-    BS12["12 システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る"]
+    BS11["11 システムはエージェントに、システムプロンプトと手順の plugin を渡して worktree で起動する"]
+    BS12["12 システムはエージェントに最初のプロンプトと WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る"]
     BS13["13 エージェントは issue の本文とコメントからコードのリポジトリの名前を読む"]
     BS14["14 エージェントは worktree の外にコードのリポジトリの clone を用意する"]
     BS15["15 エージェントは clone の中でコードを直す"]

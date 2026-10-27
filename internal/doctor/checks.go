@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/maimuzo/continuo/internal/socketpath"
 	"net"
 	"os"
 	"os/exec"
@@ -15,12 +14,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/claudeversion"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/fsprobe"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -1220,21 +1221,24 @@ func resolveHomeDir(configured string) (string, error) {
 	return os.UserHomeDir()
 }
 
-// checkClaude は `claude.kind` に対応する実行ファイルが PATH にあるかを調べる（設計 3-32）。
+// checkClaude は `claude.kind` に対応する実行ファイルが PATH にあり、版が足りているかを調べる（設計 3-32。issue #288）。
 //
 // **この検査が無かったために、実運用で issue が1件無駄に止まった**（2026-08-21）。
 // claude が PATH に無くても herdr は pane を作れてしまうので、着手は段9 まで進み、
 // 段10 で `agent_status: unknown` になって初めて分かる。**そこまで行くと worktree も
 // pane も作ったあとであり、人間には「Claude Code が起動しませんでした」としか見えない。**
 //
-// **調べるのは PATH にあるかどうかだけである。**バージョンは見ない（continuo は
-// どの版でも動く前提で作ってあり、下限を実測していない）。
+// **版も見る**（issue #288）。continuo は Claude Code を `--system-prompt-snapshot off` と `--plugin-dir` を
+// 付けて起動するので、v2.1.304 より古いと着手が全部落ちる（`internal/claudeversion`）。
+// **読めて古ければ `✗`、読めなければ `✓` のまま注意を添える。**常駐も、読めなければ警告だけで起動する。
+// Claude Code を起動するのは herdr の pane の PATH であり、ここで見た PATH と違いうるためである。
 //
-// opts: `LookPath` を使う（テストは差し替えること）。
+// ctx: `--version` を叩く期限。
+// opts: `LookPath` と `ClaudeVersion` を使う（テストは差し替えること）。
 // cfg: 読み込んだ設定（`claude.kind` を使う）。
-// configSymbol: 設定ファイルの検査の結果。読めていなければ判定しない。
+// configSymbol: 設定ファイルの検査の結果。読めていなければ既定値で探す。
 // 戻り値: 検査の結果。
-func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
+func checkClaude(ctx context.Context, opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 	// **`claude.kind` は herdr に渡す agent の種別であり、実行ファイル名でもある**
 	// （herdr の `--kind` の説明が「Supported agent kind and canonical executable」）。
 	//
@@ -1263,6 +1267,20 @@ func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 			Notes:    notes,
 			Remedies: []string{i18n.T(i18n.KeyDoctorClaudeRemedyInstall, kind)},
 		}
+	}
+	res := claudeversion.Check(ctx, kind,
+		func(string) (string, error) { return path, nil }, claudeversion.Runner(opts.ClaudeVersion))
+	switch res.Status {
+	case claudeversion.StatusTooOld:
+		return Result{
+			Label:    LabelClaude,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorClaudeTooOld, path, res.Version, claudeversion.Minimum),
+			Notes:    notes,
+			Remedies: []string{i18n.T(i18n.KeyDoctorClaudeRemedyUpdate, claudeversion.Minimum)},
+		}
+	case claudeversion.StatusUnknown:
+		notes = append(notes, i18n.T(i18n.KeyDoctorClaudeVersionUnknown, res.Err, claudeversion.Minimum))
 	}
 	return Result{
 		Label:  LabelClaude,

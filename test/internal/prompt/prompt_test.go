@@ -50,32 +50,46 @@ func TestBuiltin_目印は送る文面に残らない(t *testing.T) {
 	}
 }
 
-// 目的: WORKFLOW.md の本文が、組み込みの前半と後半のあいだに入ることを固定する（設計 5-3c）。
+// 目的: WORKFLOW.md の本文が、2つの文面のどちらでも「このプロジェクトの決まり」の見出しの下に入ることを
+// 固定する（設計 5-3c。issue #288）。
 //
-// **末尾に足す形にすると、表明の1行の説明より後ろに利用者の文が来る。**
-// **最後に読む文が仕組みの側であるようにする**のが、この並びの唯一の目的である。
+// **本文は2つの文面の両方に入る。**決まりとして compaction のあとも要り（システムプロンプト）、
+// auto の判定役にも読ませる（最初のプロンプト）。**どちらでも、見出しの下に入らなければ、
+// 利用者の決まりが何の話か分からなくなる。**
 //
 // **本文を「全文の差し替え」として扱っていたら、この検査は落ちる。**
 // 組み込みの見出しが1つも出てこないためである。
 //
 // 与える情報: 本文に `## 固有の目印` だけを置いたもの。
-// 成功条件: 組み込みの前半の最後の見出し・本文・組み込みの後半の最初の見出しが、この順に並ぶこと。
-func TestBuild_本文は組み込みの真ん中に挟まる(t *testing.T) {
+// 成功条件: どちらの文面でも、組み込みの「このプロジェクトの決まり」の見出し・本文の順に並び、
+// 本文より後ろに組み込みの見出しが無いこと（後半はどちらも空である）。
+func TestBuild_本文はこのプロジェクトの決まりの下に入る(t *testing.T) {
 	const needle = "## 固有の目印"
 	// **見出しだけの本文は落とされる**（prompt.Build の中の dropEmptySections）。中身を持たせる。
 	frag := prompt.Build(needle+"\n固有の中身\n", "/tmp/WORKFLOW.md")
-	got := frag.Text()
+	assertBodyUnderRules(t, "システムプロンプト", frag.SystemText(), "\n# このプロジェクトの決まり\n", needle)
+	assertBodyUnderRules(t, "最初のプロンプト", frag.FirstText(), "\n## このプロジェクトの決まり\n", needle)
+}
 
-	head := strings.Index(got, "## 4-3. 関連する記録を読む")
+// assertBodyUnderRules は、本文が見出しの下にあり、その後ろに組み込みが続かないことを確かめる。
+//
+// t: テストコンテキスト。
+// label: どちらの文面か（失敗の文言に出す）。
+// got: 組み立てた文面。
+// heading: 組み込みの「このプロジェクトの決まり」の見出しの行（前後の改行を含む）。
+// needle: 本文に置いた目印。
+func assertBodyUnderRules(t *testing.T, label, got, heading, needle string) {
+	t.Helper()
+	head := strings.Index(got, heading)
 	mid := strings.Index(got, needle)
-	tail := strings.Index(got, "# 5. 共通ルール")
-
-	if head < 0 || mid < 0 || tail < 0 {
-		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
+	if head < 0 || mid < 0 {
+		t.Fatalf("%s: 組み立てた文面に見出しが揃っていません: head=%d mid=%d", label, head, mid)
 	}
-	if !(head < mid && mid < tail) {
-		t.Errorf("本文が真ん中に入っていません（head=%d mid=%d tail=%d）。"+
-			"末尾に足すと、表明の1行の説明より後ろに利用者の文が来ます", head, mid, tail)
+	if head >= mid {
+		t.Errorf("%s: 本文が「このプロジェクトの決まり」の下に入っていません（head=%d mid=%d）", label, head, mid)
+	}
+	if strings.Count(got, heading) != 1 {
+		t.Errorf("%s: 「このプロジェクトの決まり」の見出しが %d 個あります（1個のはず）", label, strings.Count(got, heading))
 	}
 }
 
@@ -85,23 +99,51 @@ func TestBuild_本文は組み込みの真ん中に挟まる(t *testing.T) {
 // markdown として壊れ、エージェントは見出しを見失う。
 //
 // 与える情報: 改行で終わっていない本文。
-// 成功条件: 本文の最後の行と、組み込みの後半の最初の見出しのあいだに、空行がちょうど1つあること。
+// 成功条件: 組み込みの前半の最後の行と本文の最初の行のあいだに空行がちょうど1つあり、
+// 文面が改行1つで終わること（2つの文面の両方）。
 func TestBuild_断片のあいだは空行1つになる(t *testing.T) {
 	// **末尾に改行を付けない。**これが起きうる書き方である。
 	frag := prompt.Build("## 固有の目印\n最後の行", "/tmp/WORKFLOW.md")
-	got := frag.Text()
-
-	// **見出しを書き写さない。**書き写すと、組み込みの後半の先頭に節が増えるたびに
-	// この検査が落ちる。**見張りたいのは見出しの名前ではなく、あいだの空行の数である。**
-	want := "最後の行\n\n" + firstLineOf(t, prompt.BuiltinTail())
-	if !strings.Contains(got, want) {
-		i := strings.Index(got, "最後の行")
-		end := i + 60
-		if end > len(got) {
-			end = len(got)
+	for _, c := range []struct {
+		label, got, head string
+	}{
+		{"システムプロンプト", frag.SystemText(), prompt.BuiltinHead()},
+		{"最初のプロンプト", frag.FirstText(), firstHeadOf(t)},
+	} {
+		// **見出しを書き写さない。**見張りたいのは見出しの名前ではなく、あいだの空行の数である。
+		want := lastLineOf(t, c.head) + "\n\n## 固有の目印\n最後の行\n"
+		if !strings.HasSuffix(c.got, want) {
+			t.Errorf("%s: 断片のあいだが空行1つになっていません。\n  末尾: %q", c.label, tailOf(c.got))
 		}
-		t.Errorf("断片のあいだが空行1つになっていません。\n  そのあたり: %q", got[i:end])
 	}
+}
+
+// firstHeadOf は、最初のプロンプトの雛形の、目印の行より上を返す。
+//
+// t: テストコンテキスト。
+// 戻り値: 目印の行より上。
+func firstHeadOf(t *testing.T) string {
+	t.Helper()
+	head, _, ok := strings.Cut(prompt.FirstRaw(), prompt.Marker)
+	if !ok {
+		t.Fatal("最初のプロンプトの雛形に目印がありません")
+	}
+	return head
+}
+
+// lastLineOf は、断片の最後の1行（空行を除く）を返す。
+//
+// t: テストコンテキスト。
+// text: 取り出す元の断片。
+// 戻り値: 最後の1行。**空の断片を渡したら、その場で落とす。**
+func lastLineOf(t *testing.T, text string) string {
+	t.Helper()
+	trimmed := strings.Trim(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if trimmed == "" {
+		t.Fatal("組み込みの前半が空です")
+	}
+	lines := strings.Split(trimmed, "\n")
+	return lines[len(lines)-1]
 }
 
 // 目的: 本文が `{{if}}` を開いたまま終えても、組み込みの後半を飲み込まないことを固定する
@@ -194,26 +236,15 @@ func TestValidate_雛形の本文はそのまま送れる(t *testing.T) {
 	}
 }
 
-// 目的: 雛形の本文が、組み込みの真ん中に挟まって送られることを固定する（設計 5-3c / 5-3d）。
-//
-// **`continuo init` の直後に送られる文面が、組み込み + 本文 + 組み込みであることを見る。**
-// 本文を全文の差し替えとして扱っていたら、組み込みの見出しが1つも出てこない。
+// 目的: 雛形の本文が、2つの文面の「このプロジェクトの決まり」の下に入って送られることを固定する
+// （設計 5-3c / 5-3d。issue #288）。
 //
 // 与える情報: scaffold.Template() の本文。
-// 成功条件: 組み込みの前半・本文の見出し・組み込みの後半が、この順に並ぶこと。
-func TestBuild_雛形の本文は組み込みの真ん中に挟まる(t *testing.T) {
-	got := prompt.Build(templateBody(t), "/tmp/WORKFLOW.md").Text()
-
-	head := strings.Index(got, "## 4-3. 関連する記録を読む")
-	mid := strings.Index(got, "### 始める前に読む文書")
-	tail := strings.Index(got, "# 5. 共通ルール")
-
-	if head < 0 || mid < 0 || tail < 0 {
-		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
-	}
-	if !(head < mid && mid < tail) {
-		t.Errorf("雛形の本文が真ん中に入っていません（head=%d mid=%d tail=%d）", head, mid, tail)
-	}
+// 成功条件: どちらの文面でも、組み込みの見出し・本文の見出しの順に並ぶこと。
+func TestBuild_雛形の本文はこのプロジェクトの決まりの下に入る(t *testing.T) {
+	frag := prompt.Build(templateBody(t), "/tmp/WORKFLOW.md")
+	assertBodyUnderRules(t, "システムプロンプト", frag.SystemText(), "\n# このプロジェクトの決まり\n", "### 始める前に読む文書")
+	assertBodyUnderRules(t, "最初のプロンプト", frag.FirstText(), "\n## このプロジェクトの決まり\n", "### 始める前に読む文書")
 }
 
 // templateBody は WORKFLOW.md の雛形から、front matter より後ろを取り出す。
@@ -333,25 +364,6 @@ func TestSampleData_9つの変数がそろっている(t *testing.T) {
 	}
 }
 
-// firstLineOf は、断片の前後の改行を落としたうえで最初の1行を返す。
-//
-// **`prompt.Build` は断片の前後の改行を落としてから連結する**（`join`）ので、
-// 連結後に本文の次へ来るのはこの1行である。
-//
-// t: テストコンテキスト。
-// text: 取り出す元の断片。
-// 戻り値: 最初の1行。**空の断片を渡したら、その場で落とす。**
-func firstLineOf(t *testing.T, text string) string {
-	t.Helper()
-
-	trimmed := strings.Trim(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	if trimmed == "" {
-		t.Fatal("組み込みの後半が空です（目印の行が最後にあります）")
-	}
-	line, _, _ := strings.Cut(trimmed, "\n")
-	return line
-}
-
 // 目的: 中身が案内のコメントだけになった見出しが、送る文面から落ちることを固定する
 // （#188（エージェントへ送る指示書が長く、順序も強調も揃っていないため、初見で読み取れない）。設計 5-3m）。
 //
@@ -363,7 +375,7 @@ func firstLineOf(t *testing.T, text string) string {
 //
 // **落とさないものが2つある。**コードブロックで囲んだコメントと、
 // **深い見出しを従えている見出し**である。後者を落とすと、
-// `# 5. 共通ルール` のような親の見出しが、子を残したまま消える。
+// `# 共通ルール` のような親の見出しが、子を残したまま消える。
 //
 // 与える情報: 4通りの本文。
 // 成功条件: 空になった見出しだけが落ち、残り3つが残ること。
@@ -413,7 +425,7 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		"push_branch":               true,
 		"attempt":                   true,
 		"progress_interval_minutes": true,
-		// **組み込みの指示書の 5-8 が使う**（issue #262）。
+		// **組み込みの指示書の「レートリミットのマージンを切ったら、切り上げる」が使う**（issue #262）。
 		"margin_status_path": true,
 	}
 	got := prompt.SampleData()
@@ -429,5 +441,43 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 			t.Errorf("SampleData に %q があります。"+
 				"検査する側にあって渡す側に無いと、検査は通るのに本番で起動しません", name)
 		}
+	}
+}
+
+// 目的: `continuo prompt --show --url --attempt` が見せるシステムプロンプトが、常駐の書くものと同じであることを固定する（issue #288）。
+//
+// **常駐は、試行回数を空にしてシステムプロンプトを書く**（orchestrator の writeSystemPrompt）。
+// `--attempt` の値でシステムプロンプトまで展開すると、`{{if .attempt}}` の枝が見せる文面にだけ現れる。
+//
+// 与える情報: `{{if .attempt}}` の枝を持つ本文と、attempt=2 の変数。
+// 成功条件: RenderShow のシステムプロンプトの断片を連結したものが、attempt を空にした RenderSystem と一致すること。
+func TestRenderShow_システムプロンプトは試行回数を空にして展開する(t *testing.T) {
+	frag := prompt.Build("{{if .attempt}}試行の目印{{end}}\n", "/tmp/WORKFLOW.md")
+	data := prompt.SampleData()
+	data["attempt"] = 2
+	_, system, _, err := frag.RenderShow(data, prompt.Plugin{})
+	if err != nil {
+		t.Fatalf("展開に失敗しました: %v", err)
+	}
+	var parts []string
+	for _, it := range system {
+		parts = append(parts, it.Text)
+	}
+	got := strings.Join(parts, "")
+
+	want := prompt.SampleData()
+	want["attempt"] = nil
+	wantText, err := frag.RenderSystem(want, prompt.Plugin{})
+	if err != nil {
+		t.Fatalf("展開に失敗しました: %v", err)
+	}
+	if strings.Contains(wantText, "試行の目印") {
+		t.Fatal("attempt を空にしたのに枝が出ています")
+	}
+	if strings.Contains(got, "試行の目印") {
+		t.Errorf("--attempt の値でシステムプロンプトまで展開しています（常駐の書く文面と違う）")
+	}
+	if data["attempt"] != 2 {
+		t.Errorf("渡した変数を書き換えています: attempt=%v", data["attempt"])
 	}
 }

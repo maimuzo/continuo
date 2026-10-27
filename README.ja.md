@@ -101,7 +101,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 | --- | --- |
 | OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
 | [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.9.1 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない。`WORKFLOW.md` の `herdr.protocol` は `22`） |
-| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.283 で動作を確認。枠の使用率は usage API から読み、それが誤りのあいだは Claude Code のステータスラインから受け取る（**ステータスラインが返すのは Pro / Max だけ**）。**API キーでは `rate_limit.source: none` にする** |
+| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。****2.1.304 以上が要る**（continuo は起動のときと `continuo doctor` で版を確かめ、古ければ起動しない）。2.1.310 で動作を確認。枠の使用率は usage API から読み、それが誤りのあいだは Claude Code のステータスラインから受け取る（**ステータスラインが返すのは Pro / Max だけ**）。**API キーでは `rate_limit.source: none` にする** |
 | [`gh`](https://cli.github.com/) | `gh auth login -s project` でログイン済みであること（GitHub Enterprise なら `--hostname <ホスト名>` を足す）。2.97.0 で動作を確認 |
 | [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と、clone の場所の解決に使う |
 | [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |
@@ -240,7 +240,7 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 **2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
 
-**指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**本文は、その中の `## 4-4. このプロジェクトの決まり` の下へ差し込まれます。**送られる全文は `continuo prompt --show` で読めます。**（前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、issue のコメントから送る直前に組み立てるので、ここには出ません）
+**指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**指示書は2つに分かれています。システムプロンプト（全体の流れのフローチャートと、どこでどのスキルを使うかの表）と、手順の本文を持つ plugin `continuo-agent-procedures` のスキルです（リポジトリの [plugins/continuo-agent-procedures/skills/](plugins/continuo-agent-procedures/skills/) にあり、continuo が Claude Code を起動するたびに実行時ディレクトリへ書き出します）。本文は、システムプロンプトの最後の `# このプロジェクトの決まり` の下へ差し込まれ、同じ本文が最初のプロンプトにも入ります。**送られるシステムプロンプトと最初のプロンプトは `continuo prompt --show` で読めます。スキルの本文は出ません。**（前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、issue のコメントから送る直前に組み立てるので、ここには出ません）
 
 **先頭の front matter が設定です。**よく触るのは次の4つ。
 
@@ -262,7 +262,7 @@ claude:
 **プロジェクトの流儀を、front matter より下の本文に書いてください。**テストの走らせ方・レビューの手順・書く言語などの雛形が、はじめから入っています。要らない節は消してかまいません。**全部消しても continuo は動きます。**
 
 ```bash
-continuo prompt --show            # 送られる全文（組み込み + あなたが書いたぶん。人間のコメントを付ける節は除く）
+continuo prompt --show            # 送られるシステムプロンプトと最初のプロンプト（組み込み + あなたが書いたぶん。人間のコメントを付ける節とスキルの本文は出ない）
 continuo prompt --show --builtin  # 組み込みのぶんだけ
 ```
 

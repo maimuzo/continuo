@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/maimuzo/continuo/internal/config"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/scaffold"
@@ -631,6 +631,11 @@ type fixture struct {
 	// **newFixture は「入っている」状態で初期化する。**無い状態を試す test は、
 	// これを空文字にしてから doctor.Run を呼ぶこと。
 	ClaudePath string
+	// ClaudeVersion は `claude --version` が出すことにする文字列である（issue #288）。
+	// **空なら、本番で足りる版（2.1.310）を出す。**本物の claude は叩かない。
+	ClaudeVersion string
+	// ClaudeVersionErr は `claude --version` を叩けなかったことにする誤りである。nil なら叩ける。
+	ClaudeVersionErr error
 }
 
 // newFixture はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意する。
@@ -932,6 +937,17 @@ func (fx *fixture) Options() doctor.Options {
 				return "", exec.ErrNotFound
 			}
 			return fx.ClaudePath, nil
+		},
+		// **本物の claude を叩かない**（issue #288）。叩くと、検査の結果が
+		// 「テストを走らせたマシンの claude の版」で変わる。
+		ClaudeVersion: func(context.Context, string) (string, error) {
+			if fx.ClaudeVersionErr != nil {
+				return "", fx.ClaudeVersionErr
+			}
+			if fx.ClaudeVersion == "" {
+				return "2.1.310 (Claude Code)\n", nil
+			}
+			return fx.ClaudeVersion, nil
 		},
 	}
 	if fx.GhqPaths != nil {

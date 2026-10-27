@@ -9,21 +9,30 @@
 package prompt_test
 
 import (
+	"time"
+
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // changeReviewHeading は、実装レビューと draft の外し方を書かせる節の見出しである。
-const changeReviewHeading = "## 3-6. pull request のレビューを受ける"
+const changeReviewHeading = "## pull request のレビューを受ける"
 
 // transitionHeader は、判断票の先頭に置かせる件数の遷移表の見出しの行である。
 const transitionHeader = "| 周 | CRITICAL | HIGH | MEDIUM | LOW |"
+
+// verdictHeading と draftHeading は、スキルへ移ったときに独立した節になった見出しである（issue #288）。
+const (
+	// verdictHeading は、計画の判断票の見本と段0・段5 を持つ節である（スキル「posting-review-verdict」）。
+	verdictHeading = "## 判断票の貼り方"
+	// draftHeading は、実装レビューが収まったあとに draft を外す節である（スキル「finishing-pull-request」）。
+	draftHeading = "## 収まったら draft を外す"
+)
 
 // 目的: 実装レビューが収まったら、誰が作った draft でも必ず外させることを固定する（設計 5-3u）。
 //
@@ -33,20 +42,21 @@ const transitionHeader = "| 周 | CRITICAL | HIGH | MEDIUM | LOW |"
 // **draft でない pull request に `gh pr ready` を打つと `ready_for_review` が起きない**ので、
 // 先に `isDraft` を確かめさせる。
 //
-// 与える情報: prompt.Builtin() の全文。
-// 成功条件: 3-6 の節が「必ず外して」と言い、`isDraft` の確かめと `gh pr ready` を持ち、
+// 与える情報: instructionsText(t) の全文。
+// 成功条件: 「pull request のレビューを受ける」の節が「必ず外す」と言い、`isDraft` の確かめと `gh pr ready` を持ち、
 // 作った人を問わないと書いている。流れ図の段も「必ず外す」で、旧い限定の文がどこにも無い。
 func TestTemplate_実装レビューが収まったらdraftを必ず外させる(t *testing.T) {
-	body := prompt.Builtin()
-	section := sectionOf(t, body, changeReviewHeading)
+	body := instructionsText(t)
+	// **draft を外す段は、スキル「finishing-pull-request」の「収まったら draft を外す」へ移った**（issue #288）。
+	section := sectionOf(t, body, changeReviewHeading) + "\n" + sectionOf(t, body, draftHeading)
 
 	for _, want := range []struct{ needle, why string }{
-		{"draft を、必ず外してから次へ進んでください", "人間は「必ず外せ」と指示しています"},
+		{"draft を、次へ進む前に必ず外します", "人間は「必ず外せ」と指示しています"},
 		{"誰が draft で作ったかは問いません", "作った人で限ると、人間や前の試行が作った draft が残ります"},
 		{"--json isDraft --jq .isDraft", "draft でない pull request に gh pr ready を打つと検査が回り直りません"},
-		{"gh pr ready <PR番号> --repo {{.issue.owner}}/{{.issue.repo}}", "外すコマンドが無いと、外し方が分かりません"},
-		{"「draft のまま人間へ渡す」とはっきり書いてあるとき", "外さない場合を限らないと、4-4 の「draft で作る」で外さなくなります"},
-		{"3-7 の報告の `### 詳細` に書いてください", "外せなかったことが人間に届きません"},
+		{"gh pr ready <PR番号> --repo <issue のリポジトリ>", "外すコマンドが無いと、外し方が分かりません"},
+		{"「draft のまま人間へ渡す」とはっきり書いてあるとき", "外さない場合を限らないと、「このプロジェクトの決まり」の「draft で作る」で外さなくなります"},
+		{"そのことを「finishing-run」の「runの終了を宣言する」の報告の `### 詳細` に書きます", "外せなかったことが人間に届きません"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", changeReviewHeading, want.needle, want.why)
@@ -76,13 +86,14 @@ func TestTemplate_実装レビューが収まったらdraftを必ず外させる
 // 人間が判断票で見るのは、貼ってあるかどうかと件数の移り変わりで、中身はほとんど読まない。
 // **見本から遷移表が落ちると、エージェントは周ごとの中身だけを貼り、スクロールが減らない。**
 //
-// 与える情報: prompt.Builtin() の 3-2 と 3-6 の節。
+// 与える情報: instructionsText(t) の「計画を書き、レビューを受ける」と「pull request のレビューを受ける」の節。
 // 成功条件: どちらの節の判断票の見本も、題名 → 遷移表の見出し → `<details>` → `<summary>1周目</summary>`
 // の順に並ぶ。「<何周目か>周目」を書かせる旧い行がどこにも無い。
 func TestTemplate_判断票の見本は遷移表を先頭に置き中身を畳む(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
+	// **計画の判断票の見本は、スキル「posting-review-verdict」の「判断票の貼り方」へ移った**（issue #288）。
 	for _, tc := range []struct{ heading, title string }{
-		{planReviewHeading, planTicketHeading},
+		{verdictHeading, planTicketHeading},
 		{changeReviewHeading, changeTicketHeading},
 	} {
 		section := sectionOf(t, body, tc.heading)
@@ -107,15 +118,22 @@ func TestTemplate_判断票の見本は遷移表を先頭に置き中身を畳�
 // 目的: 1つの run で書くコメントを、特に理由のない限り1件にさせることを固定する（設計 5-3u）。
 //
 // **なぜ要るか。**人間は「特に理由のない限り1つのrunでは1つのコメントだけを書いて」と指示した。
-// 例外は、理由とともに 5-5 の表に置く。**「対応しない」と決めた理由と削除の記録は、別のコメントにさせない。**
+// 例外は、理由とともに「人間へ質問・報告するコメントの書き方」の表に置く。
+// **「対応しない」と決めた理由と削除の記録は、別のコメントにさせない。**
 //
-// 与える情報: prompt.Builtin() の全文。
-// 成功条件: 5-5 に1件の決まりがあり、3-2 と 5-6 が別のコメントへ書かせていない。
+// 与える情報: instructionsText(t) の全文。
+// 成功条件: 「人間へ質問・報告するコメントの書き方」に1件の決まり（見出しと、例外を表の行だけに限る文）があり、
+// 「計画を書き、レビューを受ける」と「レビューの回し方」が別のコメントへ書かせていない。
 func TestTemplate_1つのrunでは1つのコメントだけを書かせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 	format := sectionUntilNextChapter(t, body, commentFormatHeading)
-	if !strings.Contains(format, "特に理由のない限り、1つの run では1つのコメントだけを書いてください") {
-		t.Errorf("%q に、1つの run では1つのコメントだけ、の決まりがありません", commentFormatHeading)
+	for _, want := range []string{
+		"### 1つの run で書くコメントは1件",
+		"別のコメントにしてよいのは、次の表のものだけです。",
+	} {
+		if !strings.Contains(format, want) {
+			t.Errorf("%q に、1つの run では1つのコメントだけ、の決まり（%q）がありません", commentFormatHeading, want)
+		}
 	}
 	for _, old := range []string{
 		"その理由を issue のコメントへ書いてから",
@@ -136,7 +154,7 @@ func TestTemplate_1つのrunでは1つのコメントだけを書かせる(t *te
 func fencedBashBlock(t *testing.T, mark string) string {
 	t.Helper()
 
-	lines := strings.Split(prompt.BuiltinRaw(), "\n")
+	lines := strings.Split(instructionsText(t), "\n")
 	for i := 0; i < len(lines); i++ {
 		if lines[i] != "```bash" {
 			continue
@@ -243,10 +261,13 @@ func runSampleWithArgs(t *testing.T, r sampleRun) (out, patched, posted, ghArgs 
 }
 
 // asChangeReview は、見本の `KIND=` と `PR=` と `PRREPO=` を、実装の判断票の値へ置き換える。
+//
+// **見本はスクリプトを `名前=値` の引数で叩く形である**（issue #288。見本の本体は
+// スキル「posting-review-verdict」の scripts/ へ移った）。
 func asChangeReview(script, pr, prRepo string) string {
-	script = regexp.MustCompile(`(?m)^KIND=計画$`).ReplaceAllLiteralString(script, "KIND=実装")
-	script = regexp.MustCompile(`(?m)^PR=$`).ReplaceAllLiteralString(script, "PR="+pr)
-	return regexp.MustCompile(`(?m)^PRREPO=.*$`).ReplaceAllLiteralString(script, "PRREPO="+prRepo)
+	script = strings.Replace(script, "KIND=計画 ", "KIND=実装 ", 1)
+	script = regexp.MustCompile(`PR= `).ReplaceAllLiteralString(script, "PR="+pr+" ")
+	return regexp.MustCompile(`PRREPO='[^']*'`).ReplaceAllLiteralString(script, "PRREPO='"+prRepo+"'")
 }
 
 // shellsForSample は、見本を試すシェルを返す。bash が無ければ検査を飛ばし、zsh は在れば足す。
@@ -262,18 +283,39 @@ func shellsForSample(t *testing.T) []string {
 	return shells
 }
 
-// fillTemplate は、見本の中のテンプレートの変数を試し用の値へ置き換える。
-var fillTemplate = strings.NewReplacer(
-	"{{.issue.owner}}/{{.issue.repo}}", "octocat/hello-world",
-	"{{.issue.url}}", "https://github.com/octocat/hello-world/issues/1",
-)
+// fillTemplate は、見本の中の置き換える語と山括弧の語を試し用の値へ置き換える。
+//
+// **plugin を一時ディレクトリへ書き出し、`CONTINUO_PLUGIN_DIR` をそのパスにする**（issue #288）。
+// 見本はスクリプトを絶対パスで叩くので、書き出したスクリプトがそのまま走る。
+//
+// t: テストコンテキスト。
+// s: 見本。
+// 戻り値: 置き換えた見本。
+func fillTemplate(t *testing.T, s string) string {
+	t.Helper()
+	dir, err := agentplugin.Install(t.TempDir(), time.Now())
+	if err != nil {
+		t.Fatalf("plugin を書き出せません: %v", err)
+	}
+	return strings.NewReplacer(
+		"CONTINUO_PLUGIN_DIR", dir,
+		"<issue のリポジトリ>", "octocat/hello-world",
+		"<issue の URL>", "https://github.com/octocat/hello-world/issues/1",
+	).Replace(s)
+}
+
+// findSample は、段0 の見本（前の判断票を探すスクリプトを叩く囲み）を、試し用の値で埋めて返す。
+func findSample(t *testing.T) string {
+	t.Helper()
+	return fillTemplate(t, fencedBashBlock(t, "scripts/find-verdict.sh'"))
+}
 
 // postSample は、段5 の見本の `ID=` と `NO=` と NOTE の中身を埋めて返す。
 func postSample(t *testing.T, id, no, note string) string {
 	t.Helper()
-	s := fillTemplate.Replace(fencedBashBlock(t, "<<'COUNTS'"))
-	s = regexp.MustCompile(`(?m)^ID=<.*$`).ReplaceAllLiteralString(s, "ID="+id)
-	s = regexp.MustCompile(`(?m)^NO=<.*$`).ReplaceAllLiteralString(s, "NO="+no)
+	s := fillTemplate(t, fencedBashBlock(t, "<<'COUNTS'"))
+	s = regexp.MustCompile(`(?m)^(\s*)ID=<[^>]*>`).ReplaceAllString(s, "${1}ID="+id)
+	s = regexp.MustCompile(`(?m)^(\s*)NO=<[^>]*>`).ReplaceAllString(s, "${1}NO="+no)
 	if note != "" {
 		s = strings.Replace(s, "<<'NOTE'\nNOTE\n", "<<'NOTE'\n"+note+"\nNOTE\n", 1)
 	}
@@ -360,7 +402,7 @@ func TestTemplate_判断票の見本は遷移表に今回の周を1行足す(t *
 // 成功条件: 計画でも実装でも「判断票を探せませんでした」と出て、「今回は1周目です」と出ない。
 // `PR=` が空のときは gh を呼ばずに「PR= が空です」と出る。
 func TestTemplate_前の判断票を探せないときは1周目にしない(t *testing.T) {
-	find := fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api"))
+	find := findSample(t)
 	for _, sh := range shellsForSample(t) {
 		t.Run(sh, func(t *testing.T) {
 			for _, tc := range []struct{ name, script, want string }{
@@ -385,7 +427,7 @@ func TestTemplate_前の判断票を探せないときは1周目にしない(t *
 
 // 目的: 実装の判断票を、`PRREPO=` に書いたリポジトリで探し・書き換え・貼ることを固定する（設計 5-3u）。
 //
-// **なぜ要るか。**7-3 で別のリポジトリへ出した pull request でも、issue のリポジトリに固定されていると、
+// **なぜ要るか。**「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出した pull request でも、issue のリポジトリに固定されていると、
 // **同じ番号の無関係な pull request の判断票を探して書き換えうる。**
 // 計画の判断票（issue のコメント）は issue のリポジトリのままである。
 //
@@ -395,7 +437,7 @@ func TestTemplate_前の判断票を探せないときは1周目にしない(t *
 // どれも issue のリポジトリ（octocat/hello-world）へは届かない。計画の段5 は issue のリポジトリを PATCH する。
 func TestTemplate_実装の判断票はPRREPOのリポジトリで扱う(t *testing.T) {
 	const other = "octocat/spoon-knife"
-	find := asChangeReview(fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api")), "7", other)
+	find := asChangeReview(findSample(t), "7", other)
 	ticket := "<!-- code-review-result -->\n<!-- continuo:agent -->\n" + changeTicketHeading + "\n\n" +
 		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n\n" +
 		"<details>\n<summary>1周目</summary>\n\nx\n\n</details>\n"
@@ -446,7 +488,7 @@ func TestTemplate_実装の判断票はPRREPOのリポジトリで扱う(t *test
 // 与える情報: 段0 の見本と、2周目まで入った前の判断票。
 // 成功条件: 「今回は 3 周目です」と出る。前の判断票が無いときは「今回は1周目です」と出る。
 func TestTemplate_前の判断票を探す見本は今回の周の番号を出す(t *testing.T) {
-	find := fillTemplate.Replace(fencedBashBlock(t, "LAST=$(gh api"))
+	find := findSample(t)
 	ticket := "<!-- continuo:agent -->\n<!-- design-review-result -->\n" + planTicketHeading + "\n\n" +
 		transitionHeader + "\n| --- | --- | --- | --- | --- |\n| 1周目 | 0 | 1 | 0 | 0 |\n| 2周目 | 0 | 0 | 0 | 0 |\n\n" +
 		"<details>\n<summary>1周目</summary>\n\n| 9周目 | 中の表は数えない |\n\n</details>\n"

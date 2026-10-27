@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/abandon"
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/doctor"
@@ -399,13 +400,18 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 	}
 }
 
-// runPrompt は `continuo prompt` サブコマンドである（設計 5-3c / 5-3d）。
+// runPrompt は `continuo prompt` サブコマンドである（設計 5-3c / 5-3d。issue #288）。
+//
+// **出すのは、システムプロンプトと最初のプロンプトの2つである。**区切りの行（`prompt.Separator`）で分けて出す。
+// **手順の本文（plugin `continuo-agent-procedures` のスキル）は出さない。**リポジトリの
+// `plugins/continuo-agent-procedures/` にある。
 //
 // **3つの形がある。**
 //
-//	continuo prompt --show [ディレクトリ]             送る文面の全文（relay の節を除く）。**変数は展開しない**
+//	continuo prompt --show [ディレクトリ]             送る2つの文面（relay の節を除く）。**変数は展開しない**
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
-//	continuo prompt --show --url <issue の URL>       送る文面の全文（relay の節を除く）。**変数をその issue の値で展開する**
+//	continuo prompt --show --url <issue の URL>       送る2つの文面（relay の節を除く）。**変数をその issue の値で展開し、
+//	                                                  plugin のディレクトリと12桁も実際の値で出す**
 //
 // **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。
@@ -422,7 +428,7 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 // `--builtin` を名乗ることになる。**
 //
 // **標準出力には、送る文面だけを出す。**内訳は標準エラーへ出すので、
-// `continuo prompt --show --builtin > builtin.md` が送る文面と1バイトも違わないファイルになる。
+// `continuo prompt --show --builtin > builtin.md` が、区切りの行を除いて送る文面と1バイトも違わないファイルになる。
 //
 // d: 外部へ繋ぐ処理。**`--url` を付けたときだけ GitHub を叩く。**
 // args: `continuo prompt` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
@@ -488,10 +494,12 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	if *builtinFlag {
 		// **WORKFLOW.md を1バイトも読まない。**組み込みは実行ファイルの中にあるので、
 		// 設定が壊れている利用者でも読める。**自分が書いた本文と見比べる相手になる。**
-		text := prompt.Builtin()
-		fmt.Fprint(stdout, text)
+		fmt.Fprint(stdout, prompt.Builtin())
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinOnly, countLines(text)))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownSystemBuiltin, countLines(prompt.BuiltinSystem())))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstBuiltin, countLines(prompt.BuiltinFirst())))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinOnly))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownPluginPlaceholder))
 		return 0
 	}
 
@@ -538,6 +546,7 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	if !urlGiven {
 		fmt.Fprint(stdout, frag.Text())
 		printPromptBreakdown(stderr, frag)
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownPluginPlaceholder))
 		return 0
 	}
 
@@ -612,26 +621,40 @@ func runPromptExpanded(
 		return 1
 	}
 
-	// **hook を受ける socket のパスを、常駐と同じ規則で求める**（issue #262）。組み込みの指示書の 5-8 が
-	// 使う `margin_status_path` を、常駐が書く `margin-status` と同じパスにするためである。
+	// **hook を受ける socket のパスを、常駐と同じ規則で求める**（issue #262 / #288）。
+	// 実行時ディレクトリは socket のディレクトリであり、そこから2つを決める。
+	//
+	//	margin_status_path  … 常駐が書く `margin-status` と同じパス（`rate_limit.source: none` なら空）
+	//	plugin のディレクトリ … 常駐が書き出す `<実行時ディレクトリ>/plugins/<12桁>/continuo-agent-procedures`
+	//
+	// **`rate_limit.source` に関わらず求める。**常駐は source に関わらず実行時ディレクトリを決めているので、
+	// plugin のディレクトリは source が none でも実際の値で出せる（設計レビューの6周目）。
 	// **`socketpath.ResolveHookSocketPath` はディレクトリを作らない**（常駐の側も `Prepare` の中で同じ関数を呼ぶ）。
-	// **求められなかったときは空を渡す。**5-8 は出ないので、そのことを標準エラーに1行出す。
-	// **使用率を読まない設定（`rate_limit.source: none`）では求めない。**常駐も 5-8 を出さないので、
-	// 求めて失敗したときに「常駐は送る」と警告すると事実と違う。
+	// **求められなかったときは、置き換える語のまま出し、そのことを標準エラーに断る。**
+	// 「送る文面と1バイトも違わない」の約束の例外になるためである。
 	hookSocketPath := ""
-	if cfg.RateLimit.Source != ratelimit.SourceNone {
-		resolved, sockErr := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(daemon.EnvRuntimeDir))
-		if sockErr != nil {
+	resolved, sockErr := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(daemon.EnvRuntimeDir))
+	if sockErr != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptWarnNoPluginDir, sockErr))
+		// **使用率を読まない設定（`rate_limit.source: none`）では、マージンの1文はもともと出ない。**
+		// そのときに「常駐は送る」と警告すると事実と違う。
+		if cfg.RateLimit.Source != ratelimit.SourceNone {
 			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptWarnNoMarginStatusPath, sockErr))
-		} else {
-			hookSocketPath = resolved
+		}
+	} else {
+		hookSocketPath = resolved
+	}
+	plugin := prompt.Plugin{}
+	if hookSocketPath != "" {
+		plugin = prompt.Plugin{
+			Dir:  agentplugin.PluginDir(filepath.Dir(hookSocketPath)),
+			Hash: agentplugin.Hash(),
 		}
 	}
 	data := prompt.RenderData(issue, attempt, cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
 		cfg.RateLimit, hookSocketPath)
-	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
-	// 同じ解釈と実行を2回することになる。
-	text, rendered, err := frag.RenderAll(data)
+	// **全文と断片を一度に受け取る。**別々に呼ぶと、同じ解釈と実行を2回することになる。
+	text, system, first, err := frag.RenderShow(data, plugin)
 	if err != nil {
 		// **`continuo prompt` の3つの形のうち、変数展開が走るのは `--url` だけである。**
 		// 本文の `{{if}}` の閉じ忘れや一覧に無い変数は、ここで落ちる。
@@ -644,12 +667,12 @@ func runPromptExpanded(
 	fmt.Fprint(stdout, text)
 	// **数えるのは、展開したあとの断片である**（issue #183）。
 	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
-	printPromptBreakdownItems(stderr, rendered, frag)
+	printPromptBreakdownItems(stderr, system, first, frag)
 	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
-	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
+	// **何回目として展開したかを必ず出す。**出さないと、`## これは N 回目の試行です` が
 	// 出ないことを「文面から消えた」と読み違える。
 	if attempt == nil {
-		// **1回目は試行回数を渡さない。**`## 7-5.` の節が出ないのはそのためである。
+		// **1回目は試行回数を渡さない。**`## これは N 回目の試行です` の節が出ないのはそのためである。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstAttempt))
 	} else {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, *attempt))
@@ -660,55 +683,73 @@ func runPromptExpanded(
 // printPromptBreakdown は、どの断片がどこから来たかを標準エラーへ出す。
 //
 // **標準出力へ出さない。**`continuo prompt --show > out.md` が、送る文面と
-// 1バイトも違わないファイルになるようにする。
+// 1バイトも違わないファイルになるようにする（区切りの行を除く）。
 //
 // w: 出力先（標準エラー）。
 // frag: 組み立てた断片。
 func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
-	printPromptBreakdownItems(w, frag.Items(), frag)
+	printPromptBreakdownItems(w, frag.Items(), frag.FirstItems(), frag)
 }
 
-// printPromptBreakdownItems は、渡された断片の並びから内訳を組み立てる。
+// printPromptBreakdownItems は、渡された断片の並びから内訳を組み立てる（issue #288）。
+//
+// **2つの文面のそれぞれを、組み込みと本文で数える。**
 //
 // **`--url` のときは、変数展開したあとの断片を渡す**（issue #183）。
 // **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
 // 見出しは「送る文面の内訳」なので、**送った文面を数えなければならない。**
 //
-// **本文の有無も `items` から決める。**`frag.HasBody()` は展開する前の姿である。
+// **本文の有無も断片から決める。**`frag.HasBody()` は展開する前の姿である。
 // **本文が丸ごと `{{if .attempt}}` の中にある構成で1回目として展開すると、
 // 本文は0行なのに「本文はありません」が出ないことになる。**
-// 同じ内訳の中で、行数だけ展開後・有無だけ展開前、では辻褄が合わない。
 //
 // **展開して空になった本文は、行数の行も出さない。**出すと
 // 「本文 0 行」と「本文はありません」が同じ内訳に並び、**読む人がどちらが本当か決められない。**
 //
 // w: 出力先（標準エラー）。
-// items: 数える断片の並び。
+// system: 数えるシステムプロンプトの断片。
+// first: 数える最初のプロンプトの断片。
 // frag: **本文のパスを引くためだけに使う。**行数も有無もここから取らない。
-func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt.Fragments) {
+func printPromptBreakdownItems(w io.Writer, system, first []prompt.Fragment, frag prompt.Fragments) {
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
 	hasBody := false
-	for _, it := range items {
-		if it.Name == prompt.NameWorkflowBody && strings.TrimSpace(it.Text) != "" {
-			hasBody = true
+	for _, items := range [][]prompt.Fragment{system, first} {
+		for _, it := range items {
+			if it.Name == prompt.NameWorkflowBody && strings.TrimSpace(it.Text) != "" {
+				hasBody = true
+			}
 		}
 	}
-	for _, it := range items {
-		switch it.Name {
-		case prompt.NameBuiltinHead:
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinHead, countLines(it.Text)))
-		case prompt.NameBuiltinTail:
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
-		case prompt.NameWorkflowBody:
-			// **展開して空になったら、行数の行を出さない。**下の「本文はありません」と
-			// **同じ内訳の中で食い違う**（「本文 0 行」と「本文はありません」が並ぶ）。
-			// **`hasBody` と同じ条件で判定する。**片方だけ変えると、また食い違う。
-			if strings.TrimSpace(it.Text) == "" {
-				continue
-			}
+	for _, part := range []struct {
+		items   []prompt.Fragment
+		builtin i18n.Key
+		body    i18n.Key
+	}{
+		{system, i18n.KeyCLIPromptBreakdownSystemBuiltin, i18n.KeyCLIPromptBreakdownSystemBody},
+		{first, i18n.KeyCLIPromptBreakdownFirstBuiltin, i18n.KeyCLIPromptBreakdownFirstBody},
+	} {
+		builtinLines := 0
+		bodyLines := 0
+		bodyPath := ""
+		for _, it := range part.items {
 			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
-			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
+			// 組み込みの断片が WORKFLOW.md の名前で数えられる。
+			switch it.Name {
+			case prompt.NameBuiltinHead, prompt.NameBuiltinTail, prompt.NameFirstHead, prompt.NameFirstTail:
+				builtinLines += countLines(it.Text)
+			case prompt.NameWorkflowBody:
+				// **展開して空になったら、行数の行を出さない。**下の「本文はありません」と
+				// **同じ内訳の中で食い違う**（「本文 0 行」と「本文はありません」が並ぶ）。
+				if strings.TrimSpace(it.Text) == "" {
+					continue
+				}
+				bodyLines += countLines(it.Text)
+				bodyPath = it.Path
+			}
+		}
+		fmt.Fprintln(w, i18n.T(part.builtin, builtinLines))
+		if bodyPath != "" {
+			fmt.Fprintln(w, i18n.T(part.body, bodyLines, bodyPath))
 		}
 	}
 	if !hasBody {

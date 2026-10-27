@@ -1,7 +1,7 @@
 // Package marginstatus は、continuo 本体が書く `margin-status`（レートリミットのマージンを切ったかを
 // 1行で書いたファイル）の置き場所と中身の形を決める（issue #262。設計 3-27a）。
 //
-// **置き場所を決める関数を1つだけ持つ。**書く側（`internal/orchestrator` の巡回）と、組み込みの指示書へ
+// **置き場所を決める関数を1つだけ持つ。**書く側（`internal/orchestrator` の巡回）と、システムプロンプトへ
 // パスを入れる側（`internal/prompt` の `RenderData`）が、どちらもこれを呼ぶ。**2か所で別々に組み立てると、
 // 指示書が指すパスと、本体が書くパスがずれる。**`internal/prompt` は `internal/orchestrator` を
 // import できないので、下の package に置く。
@@ -43,7 +43,7 @@ func Path(rateLimit config.RateLimitConfig, hookSocketPath string) string {
 
 // ShellQuote は、パスを単引用符で囲んだシェルの1語にするときの中身を返す（囲みの引用符は含めない）。
 //
-// **組み込みの指示書の 5-8 は `cat '<パス>'` の形で叩かせる。**パスに単引用符が入っていると、
+// **スキル「reporting-progress」の「レートリミットのマージンを切ったら、切り上げる」は `cat '<パス>'` の形で叩かせる。**パスに単引用符が入っていると、
 // そこで引用が切れて `cat` が壊れる。**中の単引用符を `'\”`（引用を閉じ、引用符を1つ置き、開き直す）
 // に置き換える。**
 //
@@ -86,7 +86,7 @@ const (
 // **2つ以上の期間が切っているときは、期間ごとに `kind=…` から `resets_at=…` までを並べる。**
 // **`expires_at` は最後に1つだけ置き、UNIX 時刻の秒で書く。**Claude Code は `expires_at=` を `date +%s` の出力と
 // 数として比べ、過ぎていれば信じない（continuo が止まって書き直されなくなった古い1行で、切り上げ続けないため）。
-// **`date -u` と比べさせてはならない**（issue #258）。組み込みの指示書は `date -u` を使わせない決まりで、
+// **`date -u` と比べさせてはならない**（issue #258）。システムプロンプトと手順のスキルは `date -u` を使わせない決まりで、
 // UTC の時刻を見たエージェントは、それを issue のコメントへ写す。
 // **`resets_at` は機械のタイムゾーンで書く**（continuo 自身のコメントと同じ。issue #258）。
 //

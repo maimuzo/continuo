@@ -1,18 +1,18 @@
 # ユースケース: まとめて直したissueへ成果を書く
 
 > **この記述からテストコードは作らない。**
-> 段を行うのはエージェント（Claude Code）で、指示書の文面を読んで動く。エージェントを起動して段を通す自動テストは、レートリミットを使い、結果も毎回同じにならない。
+> 段を行うのはエージェント（Claude Code）で、システムプロンプトと plugin `continuo-agent-procedures` のスキルの文面を読んで動く。エージェントを起動して段を通す自動テストは、レートリミットを使い、結果も毎回同じにならない。
 > 文面に何が書いてあるかは `test/internal/prompt/` の `TestTemplate_…` が確かめている。
 > `check_update_tests.py` が出す `[W1]`（テスト未生成パス）は、ここでは想定どおりである。
 
 ## 根拠資料
 
-- `internal/prompt/builtin.md` の 7-2（まとめて直したとき）、3-7（終わりを書く）、5-5（公開の場へ書いてはいけない3つ）
+- `plugins/continuo-agent-procedures/skills/finishing-run/SKILL.md` の「まとめて直したとき」と「runの終了を宣言する」、`plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md` の「公開の場へ書かないもの」（issue #288 より前の1枚の指示書では 7-2・3-7・5-5。設計 5-3z の表）
 - `docs/plans/continuo_design.md#3-26`（issue のグループは、代表の issue のコメントで受け取る）
 
 ## この記述は何のためにあるか
 
-**エージェントが `builtin.md` の 7-2 をどう使うかを、記録として残すためである。テストは持たない。**
+**エージェントがスキル finishing-run の「まとめて直したとき」をどう使うかを、記録として残すためである。テストは持たない。**
 主体はエージェントであり、Claude Code の中で起きることをテストから観測する手立てが無い（`claude -p` は使用禁止のため）。
 
 `指示書に沿ってissueを1件仕上げる` の代替フロー `まとめて直した` が、この記述を取り込む。
@@ -23,7 +23,7 @@
 | issue | 書くか |
 | --- | --- |
 | 担当の issue 以外で、`review` か `blocked` を表明する、同じリポジトリの issue | 書く |
-| 担当の issue | ここでは書かない（3-7 で1件書く） |
+| 担当の issue | ここでは書かない（finishing-run の「runの終了を宣言する」で1件書く） |
 | 別のリポジトリの issue | 書かない |
 | `working` を表明する issue | 書かない |
 

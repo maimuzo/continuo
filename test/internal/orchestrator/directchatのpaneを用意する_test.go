@@ -48,6 +48,14 @@ func Test_directchatのpaneを用意する_P001_Statusごとの上限に達し�
 	waitFor(t, 15*time.Second, "Status ごとの上限に関わらず direct chat の pane を用意する", func() bool {
 		return commentsContaining(fx.Tracker, node, readyCommentMarker) == 1
 	})
+	// **direct chat の用意の起動にも、システムプロンプトと plugin を渡す**（issue #288）。
+	var last []any
+	for _, r := range fx.Herdr.Requests() {
+		if r.Method == herdr.MethodAgentStart {
+			last, _ = r.Params["args"].([]any)
+		}
+	}
+	assertLaunchArgs(t, fx, "octocat/hello-world#344", last)
 }
 
 // {"RUCM-PATH": "P002"}

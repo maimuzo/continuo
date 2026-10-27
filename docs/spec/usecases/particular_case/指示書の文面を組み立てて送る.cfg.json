@@ -3,7 +3,7 @@
   "usecase_name": "指示書の文面を組み立てて送る",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書の文面を組み立てて送る.rucm.md",
-    "rucm_block_sha256": "a2785a7c22f74f3555927ef26b59dc93afa79aa285f66b7884b85f41c54a3cb6"
+    "rucm_block_sha256": "7e896cb775b485f6ada4f38ae032c6163c4e747219cdfac38689d88e9fc74720"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -210,7 +210,7 @@
       "type": "action",
       "flow": "マージンを切っている最初のturn",
       "step": 1,
-      "statement": "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。"
+      "statement": "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。"
     },
     {
       "id": "マージンを切っている最初のturn-2",
@@ -482,7 +482,7 @@
         "システムは選んだコメントを文面の末尾に節として付ける。",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
@@ -521,7 +521,7 @@
         "システムは選んだコメントを文面の末尾に節として付ける。",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
@@ -639,7 +639,7 @@
         "RESUME STEP 8",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
@@ -681,7 +681,7 @@
         "RESUME STEP 8",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
@@ -787,7 +787,7 @@
         "RESUME STEP 8",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",
@@ -825,7 +825,7 @@
         "RESUME STEP 8",
         "システムは VALIDATES THAT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない。",
         "CONDITION: NOT 使える値でマージンを切った期間が無いか、使える値で Claude Code が動けないか、この機械が margin-status を書かない",
-        "システムは文面のいちばん後ろに、作業を始めずに組み込みの指示書の 5-8 の切り上げだけを行う指示の文を添える。",
+        "システムは文面のいちばん後ろに、作業を始めずにスキル reporting-progress の切り上げだけを行う指示の文を添える。",
         "RESUME STEP 9",
         "システムは run の turn 数を1つ増やす。",
         "システムは VALIDATES THAT herdr がエージェントへの文面の送信を受け付ける。",

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/agentplugin"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
@@ -353,6 +354,44 @@ func TestCleanup_取り得る値のファイルも一緒に消す(t *testing.T) 
 	}
 	if _, statErr := os.Stat(signalPath); !os.IsNotExist(statErr) {
 		t.Errorf("取り得る値のファイルが残っている: %v", statErr)
+	}
+}
+
+// 目的: 片付けで、設定ファイルと同じディレクトリに在るシステムプロンプトも消すことを確認する（issue #288）。
+//
+// **残すと、古い plugin の版が「どこかの system-prompt.md に載っている」とみなされ、いつまでも消えない。**
+// 外側を指した settings_path の隣は消さないこと（取り得る値のファイルと同じ守り）も見る。
+//
+// 与える情報: 設定ファイルの隣に `system-prompt.md` を置いた、片付けてよい worktree と、置き場所の外側を指した worktree。
+// 成功条件: 内側の `system-prompt.md` は消え、外側のものは残ること。
+func TestCleanup_システムプロンプトも一緒に消す(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	promptPath := filepath.Join(filepath.Dir(cf.SettingsPath), agentplugin.SystemPromptFileName)
+	if err := os.WriteFile(promptPath, []byte("x\n"), 0o600); err != nil {
+		t.Fatalf("システムプロンプトを書けない: %v", err)
+	}
+	if _, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf)); err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if _, statErr := os.Stat(promptPath); !os.IsNotExist(statErr) {
+		t.Errorf("システムプロンプトが残っている: %v", statErr)
+	}
+
+	other := newCleanupFixture(t, nil)
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "settings.json")
+	outsidePrompt := filepath.Join(outsideDir, agentplugin.SystemPromptFileName)
+	for _, p := range []string{outside, outsidePrompt} {
+		if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("外側のファイルを書けない: %v", err)
+		}
+	}
+	tamperIdentity(t, other, func(identity *workspace.Identity) { identity.SettingsPath = outside })
+	if _, err := other.Manager.Cleanup(context.Background(), cleanupRequest(other)); err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if _, statErr := os.Stat(outsidePrompt); statErr != nil {
+		t.Fatalf("置き場所の外側のシステムプロンプトが消されている: %v", statErr)
 	}
 }
 

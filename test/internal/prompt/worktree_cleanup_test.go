@@ -3,30 +3,25 @@ package prompt_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // worktreeCleanupHeading は、自分で作った worktree の片付けを教える節の見出しである。
-const worktreeCleanupHeading = "## 7-1. worktree と branch は切り替えない"
+const worktreeCleanupHeading = "## worktree と branch は切り替えない"
 
 // 目的: continuo が送る組み込みのプロンプト が、エージェントに worktree の片付けを教えることを固定する
 // （#147（continuo が起動するエージェントに、worktree の片付けを教える）。設計 5-3）。
 //
-// **設計文書との突き合わせでは、この条件を守れない。**
-// TestTemplate_組み込みのプロンプトが設計5_3の本文と一致する は設計 5-3 の markdown ブロックと
-// 組み込みのプロンプトを比べるものなので、**両方からこの節が同時に消えても通る。**
-// そこで、設計文書を一切読まず、組み込みのプロンプトだけを見て条件を確かめる。
+// **この条件は、組み込みのプロンプトだけを読んで確かめる。**
 //
 // **なぜ要るか。**continuo が片付けるのは continuo が用意した worktree だけである。
 // エージェントが自分で足したものは消されず、**登録だけが残る。**
 // `--force` で消させると、commit していない変更が確認なしに消える。
 //
-// 与える情報: prompt.Builtin() の全文。
+// 与える情報: instructionsText(t) の全文。
 // 成功条件: 片付けの節があり、その節が消し方・消す前の確認・`--force`・`prune` の4つと、
 // 消してよい範囲（自分が `git worktree add` に渡したパスだけ）を教えていること。
 func TestTemplate_組み込みのプロンプトは自分で作ったworktreeを片付けさせる(t *testing.T) {
-	body := prompt.Builtin()
+	body := instructionsText(t)
 
 	if !strings.Contains(body, "\n"+worktreeCleanupHeading+"\n") {
 		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
@@ -47,7 +42,7 @@ func TestTemplate_組み込みのプロンプトは自分で作ったworktreeを
 		{"status --short", "commit していない変更を確かめさせないと、消したあとに取り戻せません"},
 		{"log --oneline HEAD --not --remotes", "push していない commit を、その worktree の HEAD だけで確かめさせないと、" +
 			"関係の無い branch に引っかかって消せなくなります"},
-		{"`--force` は付けないでください", "`--force` は commit していない変更を確認なしに消します"},
+		{"`--force` は付けません", "`--force` は commit していない変更を確認なしに消します"},
 		{"`git worktree prune` は片付けの手段ではありません", "`prune` を片付けだと思うと、実体が残ったまま終わります"},
 		// 消してよい範囲を書かないと、continuo が別の issue のために用意した worktree も候補になる。
 		// commit していない変更が無ければ `--force` 無しでも消えるので、確認も警告も出ない。

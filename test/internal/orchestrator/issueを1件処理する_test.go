@@ -973,6 +973,16 @@ func Test_issueを1件処理する_P033_復帰に失敗したら新しいセッ�
 	if fresh == "sess-188" {
 		t.Fatalf("死んだセッションの UUID を --session-id に使い回している: %q", fresh)
 	}
+	// **立て直しの起動にも、システムプロンプトと plugin を渡す**（issue #288）。
+	// 渡し忘れると、始め直した Claude Code はフローチャートもスキルも持たない。
+	var startArgs [][]any
+	for _, r := range fx.Herdr.Requests() {
+		if r.Method == herdr.MethodAgentStart {
+			args, _ := r.Params["args"].([]any)
+			startArgs = append(startArgs, args)
+		}
+	}
+	assertLaunchArgs(t, fx, issue.Identifier, startArgs[freshAt])
 	if got := identitySessionUUID(t, fx, 188); got != fresh {
 		t.Fatalf("身元ファイルの session_uuid を書き直していない（次の再着手もまた復帰を試みる）: got %q, want %q",
 			got, fresh)

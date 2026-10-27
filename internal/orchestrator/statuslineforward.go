@@ -128,7 +128,7 @@ func (o *Orchestrator) issueSettingsEnv(statusLine *statusLineSetting, worktree 
 	}
 	// **エージェントの `gh` の宛先を、接続先ホストにする**（設計 3-86）。
 	//
-	// 組み込みの指示書と WORKFLOW.md の本文は、`gh issue view --repo <owner>/<repo>` や
+	// 手順のスキルと WORKFLOW.md の本文は、`gh issue view --repo <owner>/<repo>` や
 	// `gh api repos/…` のように、ホストを書かずに `gh` を叩かせる。**`GH_HOST` を置けば、
 	// それらが全部このホストへ向く**（`--repo <owner>/<repo>` も従う。gh 2.100.0 で実測）。
 	// **github.com のときも書く。**書かないと、宛先が機械ごとの gh の既定で決まる。

@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // skillPath は、人間が自分で起動した Claude Code へ配るスキルの置き場所である
@@ -18,7 +16,8 @@ const skillPath = "plugins/continuo-issue-comments/skills/marking-and-trusting-i
 // markerCommand は、コメントや本文を読むコマンドの1本である。
 //
 // builtin: continuo専用プロンプトでのコマンドの書き出し（テンプレートの変数のまま）。
-// skill: スキルでのコマンドの書き出し（置き換え語のまま）。
+// continuo専用プロンプトはコマンドを ```bash の囲みの中に行頭から書くので、字下げしない。
+// skill: スキルでのコマンドの書き出し（置き換え語のまま）。スキルは4つの空白で字下げした塊で書く。
 type markerCommand struct {
 	name    string
 	builtin string
@@ -30,38 +29,42 @@ type markerCommand struct {
 var markerCommands = []markerCommand{
 	{
 		name:    "issue のコメント",
-		builtin: "    gh issue view {{.issue.number}} --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
+		builtin: "gh issue view <issue の番号> --repo <issue のリポジトリ> --json comments --jq '",
 		skill:   "    gh issue view <number> --repo <owner>/<repo> --json comments --jq '",
 	},
 	{
 		name:    "issue の本文",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}} --jq '",
+		builtin: "gh api repos/<issue のリポジトリ>/issues/<issue の番号> --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/issues/<number> --jq '",
 	},
 	{
 		name:    "pull request の会話のコメント",
-		builtin: "    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments --jq '",
+		builtin: "gh pr view <PR番号> --repo <issue のリポジトリ> --json comments --jq '",
 		skill:   "    gh pr view <number> --repo <owner>/<repo> --json comments --jq '",
 	},
 	{
 		name:    "pull request の行に紐づくレビューコメント",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '",
+		builtin: "gh api repos/<issue のリポジトリ>/pulls/<PR番号>/comments --paginate --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/pulls/<number>/comments --paginate --jq '",
 	},
 	{
 		name:    "pull request のレビュー",
-		builtin: "    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '",
+		builtin: "gh api repos/<issue のリポジトリ>/pulls/<PR番号>/reviews --paginate --jq '",
 		skill:   "    gh api repos/<owner>/<repo>/pulls/<number>/reviews --paginate --jq '",
 	},
 }
 
-// jqAfter は、本文の中で prefix で始まる行を1本だけ探し、`--jq '` の後ろから行末の `'` の手前までを返す。
+// jqAfter は、本文の中で prefix で始まる行を探し、`--jq '` の後ろから行末の `'` の手前までを返す。
+//
+// **同じ行が2本以上あってもよい。ただし1文字も違わないこと**（issue #288）。
+// 1行のコマンドは、使うスキルそれぞれに書き写してある（「issue を読む」の2本など）。
+// **写した行のどれか1つだけを直すと、スキルによって同じコメントの `trusted_comment` が食い違う。**
 //
 // t: テスト。
 // label: 失敗したときに出す、どの文書かの名前。
 // body: 探す文書の全文。
 // prefix: 行の書き出し（`--jq '` まで含む）。
-// 戻り値: `--jq` に渡す式。見つからない・2本以上ある・行末が `'` でないときはテストを失敗させる。
+// 戻り値: `--jq` に渡す式。見つからない・写した行が食い違う・行末が `'` でないときはテストを失敗させる。
 func jqAfter(t *testing.T, label, body, prefix string) string {
 	t.Helper()
 
@@ -71,8 +74,13 @@ func jqAfter(t *testing.T, label, body, prefix string) string {
 			found = append(found, line)
 		}
 	}
-	if len(found) != 1 {
-		t.Fatalf("%s に %q で始まる行が %d 本ある（1本のはず）", label, prefix, len(found))
+	if len(found) == 0 {
+		t.Fatalf("%s に %q で始まる行が1本もない", label, prefix)
+	}
+	for _, other := range found[1:] {
+		if other != found[0] {
+			t.Fatalf("%s の %q で始まる行が、写した先で食い違う:\n  %s\n  %s", label, prefix, found[0], other)
+		}
 	}
 	rest := strings.TrimPrefix(found[0], prefix)
 	if !strings.HasSuffix(rest, "'") {
@@ -98,10 +106,10 @@ func readSkill(t *testing.T) string {
 // 片方だけ直すと、continuo が起動した Claude Code と人間が起動した Claude Code で、
 // 同じコメントの `trusted_comment` が食い違う。**AI の書き込みが、片方でだけ命令として読まれる。**
 //
-// 与える情報: prompt.BuiltinRaw() と SKILL.md の全文。
+// 与える情報: instructionsText(t) と SKILL.md の全文。
 // 成功条件: 5本それぞれで、`--jq` の式が1文字も違わないこと。
 func TestTemplate_スキルとcontinuo専用プロンプトが同じ式で読む(t *testing.T) {
-	builtin := prompt.BuiltinRaw()
+	builtin := instructionsText(t)
 	skill := readSkill(t)
 
 	for _, c := range markerCommands {
@@ -137,7 +145,7 @@ var markerTestPattern = regexp.MustCompile(`test\("((?:[^"\\]|\\.)*)"\)`)
 // 与える情報: continuo専用プロンプトの、本文を読む1本を除く4本の式から取り出した正規表現。
 // 成功条件: 取り出した正規表現が全部同じで、目印・印・印の無い本文・空の本文を表どおりに判定すること。
 func TestTemplate_AIの書き込みと判定する正規表現が表どおりに当たる(t *testing.T) {
-	builtin := prompt.BuiltinRaw()
+	builtin := instructionsText(t)
 
 	var patterns []string
 	for _, c := range markerCommands {

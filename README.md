@@ -95,7 +95,7 @@ How many issues run at once is a setting (two by default).
 | --- | --- |
 | OS | macOS or Linux. **No native Windows** — use WSL2 |
 | [herdr](https://github.com/herdrdev/herdr) | The daemon that owns the panes and worktrees. continuo drives Claude Code through it. **Verified against 0.9.1** (it refuses to start on a socket protocol mismatch; set `herdr.protocol: 22` in `WORKFLOW.md`) |
-| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. Verified against 2.1.283. continuo reads your plan's usage window from the usage API and, while that API returns errors, from Claude Code's status line (**only Pro and Max report it there**). **With an API key, set `rate_limit.source: none`** |
+| [Claude Code](https://claude.com/claude-code) | Used on a **subscription plan**. **Needs 2.1.304 or later** — continuo checks the version when it starts and in `continuo doctor`, and refuses to start if it is older. Verified against 2.1.310. continuo reads your plan's usage window from the usage API and, while that API returns errors, from Claude Code's status line (**only Pro and Max report it there**). **With an API key, set `rate_limit.source: none`** |
 | [`gh`](https://cli.github.com/) | Signed in with `gh auth login -s project` (for GitHub Enterprise, add `--hostname <host>`). Verified against 2.97.0 |
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |
@@ -232,7 +232,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 **The second file, `continuo-ci.yaml`, is not config** — continuo never reads it. It is a sample GitHub Actions workflow that fails pull requests whose review results were never posted. Review it, then move it to `.github/workflows/`. continuo works fine if you don't.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent. (The section that attaches comments people wrote since the last run is built from the issue comments right before sending, so it does not appear there.)
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. It comes in two parts: a system prompt (a flowchart of the whole job and a table of which skill to use where), and the procedures themselves, shipped as the skills of the plugin `continuo-agent-procedures` (in this repository under [`plugins/continuo-agent-procedures/skills/`](plugins/continuo-agent-procedures/skills/); continuo writes them out to its runtime directory every time it starts Claude Code). The body is appended to the end of the system prompt under `# このプロジェクトの決まり`, and the same body goes into the first prompt as well (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the system prompt and the first prompt that get sent; it does not print the skills. (The section that attaches comments people wrote since the last run is built from the issue comments right before sending, so it does not appear there.)
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 
@@ -254,7 +254,7 @@ claude:
 **Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (`continuo init` fills it in from the language it was using on screen — change or delete it), and so on. Delete any you do not need. **continuo still runs with an empty body.**
 
 ```bash
-continuo prompt --show            # the whole text that gets sent (built-in + your body, minus the section that attaches people's comments)
+continuo prompt --show            # the system prompt and the first prompt that get sent (built-in + your body, minus the section that attaches people's comments; the skills are not printed)
 continuo prompt --show --builtin  # the built-in part only
 ```
 

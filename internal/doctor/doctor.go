@@ -107,6 +107,12 @@ type Options struct {
 	// **テストは必ずこれを渡すこと。**本物を呼ぶと、検査結果が
 	// 「テストを走らせたマシンに claude が入っているか」で変わってしまう。
 	LookPath func(file string) (string, error)
+	// ClaudeVersion は `<claude の実行ファイル> --version` を叩いて標準出力を返す関数である（issue #288）。
+	// **nil なら本物を叩く。**
+	//
+	// **テストは必ずこれを渡すこと。**本物を叩くと、検査結果が
+	// 「テストを走らせたマシンの claude の版」で変わってしまう。
+	ClaudeVersion func(ctx context.Context, path string) (string, error)
 	// Timeout は検査全体の上限である。**0 なら DefaultTimeout を使う。**
 	Timeout time.Duration
 	// CheckTimeout は外部に触る検査1つあたりの上限である。
@@ -206,7 +212,10 @@ func Run(ctx context.Context, opts Options) Report {
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
-	report.add(checkClaude(opts, cfg, configResult.Symbol))
+	// **版も見る**（issue #288）。`--version` を叩くので、検査1つあたりの上限を掛ける。
+	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkClaude(ctx, opts, cfg, configResult.Symbol)
+	}))
 	// 段2b: agent teams。**外部へ接続しない。**`claude.env` と、doctor を叩いたシェルの
 	// 環境変数だけを見る。**有効なままだと issue が failure_state へ落ちる**のに、
 	// いまは文書に書いてあるだけで、読まなかった人は落ちてから気づく（issue #137）。

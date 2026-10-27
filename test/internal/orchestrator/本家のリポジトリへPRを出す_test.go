@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3b8b3d91ba9a0bc961b8879a104738001daa0d41a26446d9fb59be3dd2f70933", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへPRを出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "a686b8920ea449da81d956d8c22b4cec3bb7dc28fe03cbff450d1cbc8f0c3548", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへPRを出す.cfg.json"}
 //
 // **ユースケース記述「本家のリポジトリへPRを出す」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

@@ -135,6 +135,8 @@ func TestRun_sl_sockのパスが長すぎるとstatuslineなら起動を止めno
 			t.Setenv("CONTINUO_TEST_TOKEN", "dummy-token-for-the-fake-server")
 
 			err := daemon.Run(context.Background(), daemon.Options{
+				ClaudeLookPath:      fakeClaudeLookPath,
+				ClaudeVersion:       fakeClaudeVersion,
 				ConfigPath:          path,
 				Logger:              slog.New(slog.DiscardHandler),
 				StartupCheckTimeout: 200 * time.Millisecond,

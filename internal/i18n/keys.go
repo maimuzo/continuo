@@ -2695,12 +2695,6 @@ const (
 	KeyCLIPromptErrConfigLoad Key = "cli.prompt.err_config_load"
 	// KeyCLIPromptBreakdownHeading は内訳の見出しである。
 	KeyCLIPromptBreakdownHeading Key = "cli.prompt.breakdown_heading"
-	// KeyCLIPromptBreakdownBuiltinHead は組み込みの前半の1行である。
-	KeyCLIPromptBreakdownBuiltinHead Key = "cli.prompt.breakdown_builtin_head"
-	// KeyCLIPromptBreakdownBuiltinTail は組み込みの後半の1行である。
-	KeyCLIPromptBreakdownBuiltinTail Key = "cli.prompt.breakdown_builtin_tail"
-	// KeyCLIPromptBreakdownWorkflowBody は WORKFLOW.md の本文の1行である。
-	KeyCLIPromptBreakdownWorkflowBody Key = "cli.prompt.breakdown_workflow_body"
 	// KeyCLIPromptBreakdownBodyMissing は WORKFLOW.md の本文が空のときの1行である。
 	KeyCLIPromptBreakdownBodyMissing Key = "cli.prompt.breakdown_body_missing"
 	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
@@ -2726,7 +2720,7 @@ const (
 	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がカンバンから組み立てられないときに出る。
 	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
 	// KeyCLIPromptWarnNoMarginStatusPath は、`continuo prompt --show --url` で hook を受ける socket のパスを
-	// 求められず、組み込みの指示書の 5-8（レートリミットのマージン）を出さないときに標準エラーへ出る（issue #262）。
+	// 求められず、システムプロンプトのマージンの確かめの1文を出さないときに標準エラーへ出る（issue #262 / #288）。
 	KeyCLIPromptWarnNoMarginStatusPath Key = "cli.prompt.warn_no_margin_status_path"
 	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
 	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
@@ -2734,6 +2728,60 @@ const (
 	KeyCLIPromptBreakdownExpanded Key = "cli.prompt.breakdown_expanded"
 	// KeyCLIPromptBreakdownAttempt は--url のときに何回目として展開したかを出す1行である。
 	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
+)
+
+// issue #288（指示書をシステムプロンプトと plugin のスキルに分ける）で足したキーである。
+const (
+	// KeyAgentPluginNotAbs はplugin の書き出し先が絶対パスではないときの誤りである（issue #288）。
+	KeyAgentPluginNotAbs Key = "agentplugin.not_abs"
+	// KeyAgentPluginMkdirFailed はplugin のディレクトリを作れないときの誤りである。
+	KeyAgentPluginMkdirFailed Key = "agentplugin.mkdir_failed"
+	// KeyAgentPluginChmodFailed はplugin のディレクトリの権限を決められないときの誤りである。
+	KeyAgentPluginChmodFailed Key = "agentplugin.chmod_failed"
+	// KeyAgentPluginStatFailed はplugin のファイルを確かめられないときの誤りである。
+	KeyAgentPluginStatFailed Key = "agentplugin.stat_failed"
+	// KeyAgentPluginRemoveFailed はplugin の中の、期待値と違うものを消せないときの誤りである。
+	KeyAgentPluginRemoveFailed Key = "agentplugin.remove_failed"
+	// KeyAgentPluginWriteFailed はplugin のファイルを書けないときの誤りである。
+	KeyAgentPluginWriteFailed Key = "agentplugin.write_failed"
+	// KeyAgentPluginReadDirFailed はplugin のディレクトリを読めないときの誤りである。
+	KeyAgentPluginReadDirFailed Key = "agentplugin.read_dir_failed"
+	// KeyAgentPluginRenameFailed は初めての版を一時の場所から置けないときの誤りである。
+	KeyAgentPluginRenameFailed Key = "agentplugin.rename_failed"
+	// KeyAgentPluginOrphanFailed は古い plugin の版を片付けられないときの誤りである。
+	KeyAgentPluginOrphanFailed Key = "agentplugin.orphan_failed"
+	// KeyAgentPluginSystemPromptReadFailed は古い版が使われているかを、システムプロンプトから確かめられないときの誤りである。
+	KeyAgentPluginSystemPromptReadFailed Key = "agentplugin.system_prompt_read_failed"
+	// KeyOrchestratorPrepareLaunchRuntimeDirUnknown は実行時ディレクトリが決まっていないので plugin とシステムプロンプトを書けないときの誤りである（issue #288）。
+	KeyOrchestratorPrepareLaunchRuntimeDirUnknown Key = "orchestrator.prepare_launch.runtime_dir_unknown"
+	// KeyOrchestratorPrepareLaunchPluginFailed はClaude Code に渡す plugin を書き出せないときの誤りである。
+	KeyOrchestratorPrepareLaunchPluginFailed Key = "orchestrator.prepare_launch.plugin_failed"
+	// KeyOrchestratorPrepareLaunchSystemPromptRenderFailed はシステムプロンプトを組み立てられないときの誤りである。
+	KeyOrchestratorPrepareLaunchSystemPromptRenderFailed Key = "orchestrator.prepare_launch.system_prompt_render_failed"
+	// KeyOrchestratorPrepareLaunchSystemPromptWriteFailed はシステムプロンプトを書けないときの誤りである。
+	KeyOrchestratorPrepareLaunchSystemPromptWriteFailed Key = "orchestrator.prepare_launch.system_prompt_write_failed"
+	// KeyDaemonRunClaudeTooOld はClaude Code の版が下限より古いので起動を止めるときの誤りである（issue #288）。
+	KeyDaemonRunClaudeTooOld Key = "daemon.run.claude_too_old"
+	// KeyDoctorClaudeTooOld はclaude の版が下限より古いときの説明である（issue #288）。
+	KeyDoctorClaudeTooOld Key = "doctor.claude.too_old"
+	// KeyDoctorClaudeRemedyUpdate はclaude の版が古いときの直し方である。
+	KeyDoctorClaudeRemedyUpdate Key = "doctor.claude.remedy_update"
+	// KeyDoctorClaudeVersionUnknown はclaude の版を読めなかったときの注意である。
+	KeyDoctorClaudeVersionUnknown Key = "doctor.claude.version_unknown"
+	// KeyCLIPromptBreakdownSystemBuiltin は内訳の、システムプロンプトの組み込みの1行である（issue #288）。
+	KeyCLIPromptBreakdownSystemBuiltin Key = "cli.prompt.breakdown_system_builtin"
+	// KeyCLIPromptBreakdownSystemBody は内訳の、システムプロンプトに入る WORKFLOW.md の本文の1行である。
+	KeyCLIPromptBreakdownSystemBody Key = "cli.prompt.breakdown_system_body"
+	// KeyCLIPromptBreakdownFirstBuiltin は内訳の、最初のプロンプトの組み込みの1行である。
+	KeyCLIPromptBreakdownFirstBuiltin Key = "cli.prompt.breakdown_first_builtin"
+	// KeyCLIPromptBreakdownFirstBody は内訳の、最初のプロンプトに入る WORKFLOW.md の本文の1行である。
+	KeyCLIPromptBreakdownFirstBody Key = "cli.prompt.breakdown_first_body"
+	// KeyCLIPromptBreakdownPluginPlaceholder は内訳の、plugin の置き換える語をそのまま出したことの1行である。
+	KeyCLIPromptBreakdownPluginPlaceholder Key = "cli.prompt.breakdown_plugin_placeholder"
+	// KeyCLIPromptWarnNoPluginDir は`continuo prompt --show --url` で実行時ディレクトリを求められず、plugin の置き換える語をそのまま出すときに標準エラーへ出る（issue #288）。
+	KeyCLIPromptWarnNoPluginDir Key = "cli.prompt.warn_no_plugin_dir"
+	// KeyClaudeVersionNoVersion は`--version` の出力から版を読めなかったときの誤りである（issue #288）。
+	KeyClaudeVersionNoVersion Key = "claudeversion.no_version"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -3749,10 +3797,7 @@ var allKeys = []Key{
 	KeyCLIPromptErrTooManyPositional,
 	KeyCLIPromptErrConfigLoad,
 	KeyCLIPromptBreakdownHeading,
-	KeyCLIPromptBreakdownBuiltinHead,
-	KeyCLIPromptBreakdownBuiltinTail,
 	KeyCLIPromptBreakdownBodyMissing,
-	KeyCLIPromptBreakdownWorkflowBody,
 	KeyCLIPromptBreakdownBuiltinOnly,
 	KeyCLIPromptFlagURL,
 	KeyCLIPromptFlagAttempt,
@@ -3768,6 +3813,31 @@ var allKeys = []Key{
 	KeyCLIPromptErrRenderFailed,
 	KeyCLIPromptBreakdownExpanded,
 	KeyCLIPromptBreakdownAttempt,
+	KeyAgentPluginNotAbs,
+	KeyAgentPluginMkdirFailed,
+	KeyAgentPluginChmodFailed,
+	KeyAgentPluginStatFailed,
+	KeyAgentPluginRemoveFailed,
+	KeyAgentPluginWriteFailed,
+	KeyAgentPluginReadDirFailed,
+	KeyAgentPluginRenameFailed,
+	KeyAgentPluginOrphanFailed,
+	KeyAgentPluginSystemPromptReadFailed,
+	KeyOrchestratorPrepareLaunchRuntimeDirUnknown,
+	KeyOrchestratorPrepareLaunchPluginFailed,
+	KeyOrchestratorPrepareLaunchSystemPromptRenderFailed,
+	KeyOrchestratorPrepareLaunchSystemPromptWriteFailed,
+	KeyDaemonRunClaudeTooOld,
+	KeyDoctorClaudeTooOld,
+	KeyDoctorClaudeRemedyUpdate,
+	KeyDoctorClaudeVersionUnknown,
+	KeyCLIPromptBreakdownSystemBuiltin,
+	KeyCLIPromptBreakdownSystemBody,
+	KeyCLIPromptBreakdownFirstBuiltin,
+	KeyCLIPromptBreakdownFirstBody,
+	KeyCLIPromptBreakdownPluginPlaceholder,
+	KeyCLIPromptWarnNoPluginDir,
+	KeyClaudeVersionNoVersion,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

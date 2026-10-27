@@ -7,7 +7,7 @@ package scaffold
 // そのため、書けなくても continuo init は成功で終える（設計 5-3o）。
 //
 // **目印の文字列と job の名前を、設定から変えられる形にしてはならない。**
-// 目印は internal/prompt/builtin.md がエージェントに書かせる文字列と対でしか意味を持たず、
+// 目印は plugin continuo-agent-procedures のスキル（plugins/continuo-agent-procedures/）がエージェントに書かせる文字列と対でしか意味を持たず、
 // 組み込みは実行ファイルの中にあって利用者が変えられない。片方だけ変えられる口を開けると、
 // 「CI が探す目印」と「エージェントが書く目印」が食い違う状態を、誰にも気づけない形で作れる。
 //
@@ -42,8 +42,8 @@ const ciTemplate = `# レビュー結果が貼られていない pull request �
 # **文書に書くだけでは守られません。**continuo の開発で実際に起きました
 # （2026-08-29、12本をレビューせずにマージし、あとから回し直すことになりました）。
 #
-# **目印の文字列を変えないでください。**continuo がエージェントへ送る指示書と対になっています。
-# 送られる文面は continuo prompt --show で読めます。
+# **目印の文字列を変えないでください。**continuo がエージェントに読ませる手順（スキル）と対になっています。
+# 手順の本文は continuo のリポジトリの plugins/continuo-agent-procedures/ にあります（continuo prompt --show が出すのは、システムプロンプトと最初のプロンプトだけです）。
 # **片方だけ変えると、CI が探す目印とエージェントが書く目印が食い違い、誰にも気づけません。**
 #
 # **job の名前も変えないでください。**branch protection の必須の検査は、この名前で登録します。
@@ -465,7 +465,7 @@ jobs:
             echo ""
             echo "**continuo が起動したエージェントは、この断りを自分で貼りません。**"
             echo "設計のレビューが要らないと人間が判断したときに、人間が貼るものです。"
-            echo "continuo がエージェントへ送る指示書が、そう決めています（continuo prompt --show で読めます）。"
+            echo "continuo がエージェントに読ませる手順（スキル finishing-pull-request）が、そう決めています（continuo のリポジトリの plugins/continuo-agent-procedures/ にあります）。"
             echo ""
             echo "**数える条件。**"
             echo ""

@@ -60,7 +60,8 @@ func TestPrompt_雛形の本文はPRのコメントとレビューを読ませ�
 		return len(prompts()) > 0
 	})
 
-	got := prompts()[0]
+	// **手順はスキルにある**（issue #288）。最初のプロンプト・システムプロンプト・スキルを、この issue の値で埋めて見る。
+	got := agentView(t, fx, "octocat/hello-world#188", prompts()[0])
 
 	// **その issue に紐づく PR を全部出す。**閉じる指定のある PR と、
 	// issue を参照しているだけの PR の両方を拾う。

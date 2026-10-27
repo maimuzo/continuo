@@ -382,7 +382,7 @@ type Orchestrator struct {
 	quotaPath string
 	// marginStatusPath は margin-status の絶対パスである（issue #262。設計 3-27a）。空なら書かない。
 	//
-	// **`internal/marginstatus` の `Path` で決める。**組み込みの指示書へパスを入れる `RenderData` も
+	// **`internal/marginstatus` の `Path` で決める。**システムプロンプトへパスを入れる `RenderData` も
 	// 同じ関数を呼ぶので、指示書が指すパスと、本体が書くパスはずれない。
 	// **空の機械（`rate_limit.source: none`）では、切り上げの判定も行わない**（もともと使用率が無い）。
 	marginStatusPath string

@@ -302,6 +302,8 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 			t.Fatalf("起動フラグに %q が無い: %v", want, args)
 		}
 	}
+	// **システムプロンプトと plugin も渡す**（issue #288）。
+	assertLaunchArgs(t, fx, "octocat/hello-world#188", args)
 }
 
 // indexOf は並びの中で target が最初に現れる位置を返す（無ければ -1）。

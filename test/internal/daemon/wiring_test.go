@@ -188,8 +188,10 @@ func TestRun_ロックファイルを開けないときは二重起動と報告�
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
 		t.Fatal("ロックファイルを開けないのに起動できてしまった")
@@ -224,8 +226,10 @@ func TestRun_接続先の差し替えがループバック以外のhttpなら起
 	t.Setenv(daemon.EnvGraphQLEndpoint, "http://example.com/graphql")
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
 		t.Fatal("ループバック以外の http へ繋ぐ設定なのに起動できてしまった")
@@ -270,8 +274,10 @@ func TestRun_ghがPATHに無ければ起動時検査の文言で落ちる(t *tes
 	t.Setenv("PATH", emptyBin)
 
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
 		t.Fatal("gh が無いのに起動できてしまった")
@@ -320,8 +326,10 @@ func runForStartupLog(t *testing.T, extra string) string {
 
 	var logged strings.Builder
 	err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	// **落ちること自体は前提である。**段2b まで進めば、段1 のログは出揃っている。
 	if err == nil {
@@ -445,6 +453,8 @@ func TestRun_ghauthtokenが返らなければ起動を止める(t *testing.T) {
 
 	start := time.Now()
 	err := daemon.Run(context.Background(), daemon.Options{
+		ClaudeLookPath:      fakeClaudeLookPath,
+		ClaudeVersion:       fakeClaudeVersion,
 		ConfigPath:          path,
 		Logger:              slog.New(slog.DiscardHandler),
 		StartupCheckTimeout: 500 * time.Millisecond,
@@ -579,6 +589,8 @@ func TestRun_起動時検査が期限内に終わらなければ起動を止め�
 
 	start := time.Now()
 	err := daemon.Run(context.Background(), daemon.Options{
+		ClaudeLookPath:      fakeClaudeLookPath,
+		ClaudeVersion:       fakeClaudeVersion,
 		ConfigPath:          path,
 		Logger:              slog.New(slog.DiscardHandler),
 		StartupCheckTimeout: 200 * time.Millisecond,
@@ -750,9 +762,11 @@ func TestRun_idを付けるとロックが名前ごとに分かれる(t *testing
 	}
 
 	err = daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
-		Instance:   &inst,
+		ClaudeLookPath: fakeClaudeLookPath,
+		ClaudeVersion:  fakeClaudeVersion,
+		ConfigPath:     path,
+		Logger:         slog.New(slog.DiscardHandler),
+		Instance:       &inst,
 	})
 
 	if err == nil {
@@ -774,4 +788,22 @@ func TestRun_idを付けるとロックが名前ごとに分かれる(t *testing
 	if _, statErr := os.Stat(defaultLock); statErr == nil {
 		t.Fatalf("--id を付けたのに既定のロック %q を作っている", defaultLock)
 	}
+}
+
+// fakeClaudeLookPath は、`claude.kind` の実行ファイルが PATH に在るとみなす（issue #288）。
+//
+// **常駐を起こすテストは、本物の `claude --version` を叩かない。**叩くと、Claude Code が
+// 下限（2.1.304）より古いか入っていない手元で、版と関係の無いテストまで落ちる。
+//
+// name: 探す名前。
+// 戻り値: 作り物の絶対パス。
+func fakeClaudeLookPath(name string) (string, error) { return "/opt/bin/" + name, nil }
+
+// fakeClaudeVersion は、下限ちょうどの版を返す（issue #288）。
+//
+// ctx: 使わない。
+// path: 使わない。
+// 戻り値: `claude --version` の出力の形の文字列。
+func fakeClaudeVersion(context.Context, string) (string, error) {
+	return "2.1.304 (Claude Code)\n", nil
 }

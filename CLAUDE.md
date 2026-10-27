@@ -125,31 +125,31 @@ os.Rename(tmp.Name(), path)
 **何が起きるか。**continuo は常駐プロセスである。`go build -o ~/.local/bin/continuo ./cmd/continuo` は
 **rename で実行ファイルを差し替える**ので inode が変わり、**動いている continuo は、開いたままの古い実体で最後まで走り切る。**
 **ところが Claude Code の hook は、turn ごとにそのパスを exec する**
-（[internal/orchestrator/settings.go:392-393](internal/orchestrator/settings.go#L392-L393) が
+（[internal/orchestrator/settings.go:397-398](internal/orchestrator/settings.go#L397-L398) が
 `<continuo のパス> hook --socket <パス> --pending-dir <パス>` を組み立て、issue ごとの設定ファイルへ書く）。
 **つまり「本体は古い・hook は新しい」という混ざった状態が、ビルドするたびに必ず起きる。**
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1703-1721](internal/cli/cli.go#L1703-L1721) が
+（[internal/cli/cli.go:1915-1933](internal/cli/cli.go#L1915-L1933) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
 Claude Code がまだ喋っている最中であることは、本体からは区別できない。
 
 **`continuo statusline` も、同じ約束の上にある。**Claude Code はステータスラインを描き直すたびに、
-[internal/orchestrator/settings.go:106](internal/orchestrator/settings.go#L106) が組み立てた
+[internal/orchestrator/settings.go:109](internal/orchestrator/settings.go#L109) が組み立てた
 `'<continuo のパス>' statusline --socket '<sl.sock のパス>'` を exec する
-（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:563](internal/orchestrator/statuslinefetch.go#L563)）の両方に書く）。
+（issue ごとの設定ファイルと、statusline取得用の設定ファイル（[internal/orchestrator/statuslinefetch.go:576](internal/orchestrator/statuslinefetch.go#L576)）の両方に書く）。
 **ビルドするたびに「本体は古い・statusline は新しい」が混ざるのも、hook と同じである。**
 **この項目の「やること」は、`continuo statusline` の挙動を変える変更にも当てる**（人間の決定。2026-09-28）。
 「挙動が変わる」とは、下の表のどれかである。
 
 | 何が変わるか | 例 |
 | --- | --- |
-| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1760-1769](internal/cli/cli.go#L1760-L1769) の `runStatusline`） |
-| **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:826](internal/daemon/daemon.go#L826)） |
-| **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:144](internal/orchestrator/quota.go#L144) の `OnStatusline`） |
+| **statusline が受け取る引数** | `--socket` の名前・値の形（[internal/cli/cli.go:1864-1873](internal/cli/cli.go#L1864-L1873) の `runStatusline`） |
+| **statusline の宛先** | `sl.sock` のパスの決め方（`socketpath.ResolveStatusline` と、それを呼ぶ [internal/daemon/daemon.go:888](internal/daemon/daemon.go#L888)） |
+| **statusline と本体の約束** | 送る1行の欄（`internal/statuslineclient/` と `internal/statuslineserver/`）と、受け口の解釈（[internal/orchestrator/quota.go:181](internal/orchestrator/quota.go#L181) の `OnStatusline`） |
 | **statusline が Claude Code へ返すもの** | **サブコマンド名**（`continuo statusline` の `statusline`）、**標準出力**（転送先が無ければ固定の1行 `continuo`（[internal/statuslineclient/client.go:55](internal/statuslineclient/client.go#L55)）、あれば転送した利用者のステータスラインの出力（設計 3-84）。変わると画面の版が動き、stall の判定を狂わせうる）、**終了コード 0** |
 
 **hook と違うところ。**ステータスラインは hook ではない。**壊れても、hook が届けている turn の終わりには効かない。**
@@ -221,7 +221,7 @@ exit status 2
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1676-1677](internal/cli/cli.go#L1676-L1677) と
+（[internal/cli/cli.go:1883-1884](internal/cli/cli.go#L1883-L1884) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -274,10 +274,10 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
-| [internal/cli/cli.go:171-192](internal/cli/cli.go#L171-L192) の `switch args[0]` と [internal/cli/cli.go:1505-1510](internal/cli/cli.go#L1505-L1510) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる。**`statusline` の分岐も同じで、名前を変えると使用率が届かなくなる** |
+| [internal/cli/cli.go:189-210](internal/cli/cli.go#L189-L210) の `switch args[0]` と [internal/cli/cli.go:1708-1713](internal/cli/cli.go#L1708-L1713) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる。**`statusline` の分岐も同じで、名前を変えると使用率が届かなくなる** |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行と、statusLine のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方（`hooks.sock` と `sl.sock`）。ずれると hook と statusline の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1486-1490](internal/orchestrator/orchestrator.go#L1486-L1490) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1695-1701](internal/orchestrator/orchestrator.go#L1695-L1701) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束。**`hookclient` は、`Stop` の表明の値が決まり以外のときに差し戻しの JSON を返すかどうかも決める**（4つ目の定義の「標準出力へ返す JSON」） |
 | [internal/statussignal/](internal/statussignal/) | 表明の読み方・取り得る値に在るかの判定・差し戻しの本文・`status-signal.json` の形。**hook と本体が同じものを呼ぶ。**読み方を変えると hook が差し戻す条件が変わり、ファイルの形を変えると、動いている本体が書いたファイルを新しい hook が読めなくなる |
 | [internal/statuslineclient/](internal/statuslineclient/) と [internal/statuslineserver/](internal/statuslineserver/) | 使用率を送る側と受ける側の約束（送る1行の欄・標準出力（転送先が無ければ固定の1行 `continuo`、あれば転送した出力。設計 3-84）・終了コード 0） |
@@ -357,13 +357,13 @@ git worktree remove "$ROLLBACK"
 ## 作業の進め方
 
 **ここから下（作業の進め方・PR を出すときの絶対条件・コードレビュー記録フロー）は、人間と直接やりとりしている AI に当てる。**
-**continuo が起動したエージェントは、ここから下と組み込みの指示書が食い違うときは、組み込みの指示書に従う。**
+**continuo が起動したエージェントは、ここから下と、continuo が渡す指示（組み込みのシステムプロンプトと、plugin `continuo-agent-procedures` のスキル）が食い違うときは、continuo が渡す指示に従う。**
 
 **規則は次の表の置き場にある。**`.claude/rules/` の2本のほかは、**自動では読まれない。ここから辿る。**
 
 | 何の規則か | どこにあるか | どう読むか |
 | --- | --- | --- |
-| **設計 → 設計レビュー → 実装 → 実装レビューの段取り、issue と PR のコメントの書き方、レビューの回し方、subagent への渡し方** | [internal/prompt/builtin.md](internal/prompt/builtin.md)（continuo の組み込みの指示書。3-2・3-6・5-5・5-6・5-7） | **Read で開く** |
+| **設計 → 設計レビュー → 実装 → 実装レビューの段取り、issue と PR のコメントの書き方、レビューの回し方、subagent への渡し方** | plugin `continuo-agent-procedures` のスキル（continuo が起動したエージェントへ渡す手順）。[writing-plan](plugins/continuo-agent-procedures/skills/writing-plan/SKILL.md)（計画を書き、人間の確認を受ける）・[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md)（設計レビューと実装レビュー・レビューの回し方）・[posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md)（判断票の貼り方・貼ったら検査を回し直す）・[finishing-pull-request](plugins/continuo-agent-procedures/skills/finishing-pull-request/SKILL.md)（収まったら draft を外す）・[writing-comments-for-humans](plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md)（人間へ質問・報告するコメントの書き方）・[briefing-subagents](plugins/continuo-agent-procedures/skills/briefing-subagents/SKILL.md)（subagent へ渡すもの） | **SKILL.md を Read で開く** |
 | **worktree・並列・プラグイン・issue の作り方と着手** | `maimuzo-dev-core` の `general-claude-md` スキル | **セッション開始時と compaction のあとに Skill で読む** |
 | **カンバンの操作** | `maimuzo-dev-core` の `issue-management` スキル | カンバンに触る前に Skill で読む |
 | **プランファイルの書き方** | `maimuzo-dev-core` の `docs-standard` スキル | プランファイルを書く前に Skill で読む |
@@ -374,20 +374,21 @@ git worktree remove "$ROLLBACK"
 
 **プラグインの規則は開発者の環境向けである**（上の「不特定多数の環境と、maimuzo の環境を混同しない」）。**このリポジトリを clone した人には当てはまらない。**
 
-### 組み込みの指示書を、自分の作業にも当てる
+### continuo の手順のスキルを、自分の作業にも当てる
 
 **この節は、人間と直接やりとりしている AI にだけ当てる。**
-**continuo が起動したエージェント（continuo が continuo 自身の issue を回したとき）は、この節を読み飛ばし、組み込みの指示書どおりに動く。**下の読み替えの表を当ててはならない。`CONTINUO-STATUS:` も `<!-- continuo:agent -->` も、指示書どおりに書く。
+**continuo が起動したエージェント（continuo が continuo 自身の issue を回したとき）は、この節を読み飛ばし、continuo が渡すシステムプロンプトとスキルのとおりに動く。**下の読み替えの表を当ててはならない。`CONTINUO-STATUS:` も `<!-- continuo:agent -->` も、スキルのとおりに書く。
 
-**組み込みの指示書は、continuo が起動したエージェントへ渡す文書である。**
-**人間と直接やりとりしている AI も、計画と pull request のレビュー（3-2・3-6）・issue と PR のコメントの書き方（5-5）・レビューの回し方（5-6）・subagent への渡し方（5-7）は、そこに従う。**
+**plugin `continuo-agent-procedures` のスキル（[plugins/continuo-agent-procedures/skills/](plugins/continuo-agent-procedures/skills/)）は、continuo が起動したエージェントへ渡す手順である。**
+**人間と直接やりとりしている AI も、計画と pull request のレビュー（writing-plan・running-review-loop・posting-review-verdict・finishing-pull-request）・issue と PR のコメントの書き方（writing-comments-for-humans）・レビューの回し方（running-review-loop の「レビューの回し方」）・subagent への渡し方（briefing-subagents）は、そこに従う。**
+**スキルの本文の山括弧の語（`<issue のリポジトリ>` など）は作業している issue の値で、`CONTINUO_PLUGIN_DIR` はリポジトリの [plugins/continuo-agent-procedures/](plugins/continuo-agent-procedures/) で読む。**continuo はこれらを、システムプロンプトの「この issue の値」と書き出し先の絶対パスで埋めて渡している。
 読み替えは次のとおりである。
 
-| 指示書の書き方 | このリポジトリを直す AI は |
+| スキルの書き方 | このリポジトリを直す AI は |
 | --- | --- |
 | 応答の最後に `CONTINUO-STATUS:` を書く | **書かない。**カンバンの操作は `issue-management` スキルに従う |
 | 質問は issue のコメントへ書いて止まる | **人間へチャットで訊く。**訊き方は [.claude/rules/reporting.md](.claude/rules/reporting.md) |
-| 4-4 の「このプロジェクトの決まり」 | **この CLAUDE.md が、それに当たる** |
+| 「このプロジェクトの決まり」の節 | **この CLAUDE.md が、それに当たる** |
 | 計画と設計レビューの判断票の1行目に `<!-- continuo:agent -->` を置く | **置かない。**判断票の1行目は目印そのもの（下の「貼る先と目印」） |
 | 設計レビューを飛ばす断りを、自分で書かない | **このリポジトリでは、作業している AI が貼る**（下の「貼る先と目印」） |
 | マージは、あなたの仕事ではない | **メインエージェントが自分で行う**（下の「PR のマージは、メインエージェントが自分で行う」） |
@@ -401,21 +402,21 @@ git worktree remove "$ROLLBACK"
 | --- | --- |
 | 1 | この CLAUDE.md |
 | 2 | `.claude/rules/` に残した2本 |
-| 3 | 組み込みの指示書（3-2・3-6・5-5・5-6・5-7） |
-| 4 | プラグインのスキル |
+| 3 | plugin `continuo-agent-procedures` のスキル（writing-plan・running-review-loop・posting-review-verdict・finishing-pull-request・writing-comments-for-humans・briefing-subagents） |
+| 4 | プラグインのスキル（上の「作業の進め方」の表の `maimuzo-dev-core` などのもの） |
 | 5 | メモリ（`~/.claude/projects/` の下。古い決まりが残っていることがある） |
 
 **とくに次の2つは、プラグインのスキルと食い違っている。**
-- **レビュワーへ渡すものは、組み込みの指示書の 5-6・5-7 に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（直しを任せる worker にも読ませる）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
+- **レビュワーへ渡すものは、running-review-loop の「レビューの回し方」と briefing-subagents の「subagent へ渡すもの」に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（直しを任せる worker にも読ませる）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
 - **MEDIUM と LOW を、新しい issue へ切り出さない**（`general-claude-md` の「スコープ外として放置しない。bug-reporter で issue に登録する」より、下の「このリポジトリに固有の決まり」が勝つ）
 
-**レビューを回すときは、毎周 5-6 を開き直す。**とくに次の2つを落とさない。
+**レビューを回すときは、毎周 running-review-loop の「レビューの回し方」を開き直す。**とくに次の2つを落とさない。
 
-- **重さは、受けた側が 5-6 の4段の定義で付け直す。**レビュワーが付けた重さをそのまま数えない
-- **直す前に、直す箇所と影響範囲を全部並べてから、一気に直す**（5-6 の「直す前に書くこと」）
+- **重さは、受けた側が「レビューの回し方」の4段の定義で付け直す。**レビュワーが付けた重さをそのまま数えない
+- **直す前に、直す箇所と影響範囲を全部並べてから、一気に直す**（「レビューの回し方」の「直す前に書くこと」）
 
 **開き直さなかったために、害の無い指摘を HIGH のまま数え、1本の pull request で31周回したことがある**（2026-09-22）。
-**組み込みの指示書は自動では読まれないので、読みに行かない限り効かない。**
+**このスキルは、人間と直接やりとりしている AI には自動では読まれないので、読みに行かない限り効かない。**
 
 ### このリポジトリに固有の決まり
 
@@ -426,7 +427,7 @@ git worktree remove "$ROLLBACK"
 - **このプロジェクトの開発のやりとりに書く時刻は、特別な理由が無い限り JST で書く。**issue と pull request のコメント・チャットの返答・計画ファイルが当たる。GitHub の API が返す時刻（`2026-09-25T05:14:21Z` のように末尾が `Z` のもの）と `date -u` の値は UTC なので、9時間足して `2026-09-25 14:14 (JST)` の形に直してから書く。**ただし continuo 本体が利用者へ出す時刻（ログ・continuo が issue へ書くコメント・ダッシュボード）は JST に固定しない。**continuo は世界中の人が使う
 - **設計を書く前に、そもそも対応するかを疑う。**非対応と文書に書くだけで済まないかを先に問う
 - **設計を書く前に、対象のファイル名・関数名・エラーの文面で [docs/plans/continuo_design.md](docs/plans/continuo_design.md) を grep する。**既に決定が無いかを探す
-- **レビュワーの割り当て。**組み込みの指示書の 5-6「誰に見せるか」の2つの役に、次を当てる
+- **レビュワーの割り当て。**running-review-loop の「レビューの回し方」の「誰に見せるか」の2つの役に、次を当てる
 
   | どのレビュー | 差分を読む役 | 関連処理まで見る役 |
   | --- | --- | --- |
@@ -472,10 +473,10 @@ git worktree remove "$ROLLBACK"
 2. **`/code-review` を通す**
 3. **レビュー結果と、指摘ごとの対応表を、その PR のコメントに貼る。**
    **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）。
-   **判断票の中身は [internal/prompt/builtin.md](internal/prompt/builtin.md) の 3-2 と 5-6 にある**
+   **判断票の中身は [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」と、[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」にある**
 4. **指摘に対応する。収まるまで 2〜4 を繰り返す。**「収まっている」の定義（CRITICAL と HIGH が0件）・収まったあと何周回すか・
-   連続10回で完全に止まることは、[internal/prompt/builtin.md](internal/prompt/builtin.md) の 5-6「何周回すか」にある。
-   **重さは、受けた側が同じ 5-6 の4段で付け直してから数える**
+   連続10回で完全に止まることは、[running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」の「何周回すか」にある。
+   **重さは、受けた側が同じ「レビューの回し方」の4段で付け直してから数える**
 5. **`gh pr ready` で draft を外す**
 
 **3 を飛ばしたものは、レビューを実施していないものとして扱う。**
@@ -487,7 +488,7 @@ git worktree remove "$ROLLBACK"
 
 | どこ | いつ止まるか |
 | --- | --- |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[internal/prompt/builtin.md](internal/prompt/builtin.md) の 3-2） |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **2つとも数える条件は同じである。**
@@ -509,7 +510,7 @@ git worktree remove "$ROLLBACK"
 
 **既に draft を外してある PR では、これは効かない。**`ready_for_review` は
 **draft を ready にしたときにしか起きない**ので、`gh pr ready <番号>` を打っても何も回らない。
-**その場合は `gh run rerun` で回し直す**（どの run を選ぶかは [internal/prompt/builtin.md](internal/prompt/builtin.md) の 3-6「貼ったら、検査を回し直す」）。
+**その場合は `gh run rerun` で回し直す**（どの run を選ぶかは [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「pull request のレビューを受ける」の「貼ったら、検査を回し直す」）。
 
 **逃がし口は無い。**
 **かつては環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` で hook を通せたが、その hook ごと廃止した。**
@@ -580,7 +581,7 @@ git worktree remove "$ROLLBACK"
 
 ## コードレビュー記録フロー
 
-**言いたいこと。**回し方の正は [internal/prompt/builtin.md](internal/prompt/builtin.md) の 5-6 である。**ここに写さない。**
+**言いたいこと。**回し方の正は [running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」である。**ここに写さない。**
 ここに置くのは、このリポジトリに固有の3つ（貼る先と目印・対で書くこと・人間へ見せるもの）だけである。
 
 **`/code-review` / `code-reviewer` / `security-reviewer` のどれで受けたときも同じである。**
@@ -593,7 +594,7 @@ git worktree remove "$ROLLBACK"
 | **設計レビューの判断票** | **その pull request が閉じる issue のコメント** | `<!-- design-review-result -->`（continuo が起動したエージェントは、1行目を `<!-- continuo:agent -->`、2行目をこの目印にする） |
 | **設計レビューを飛ばしてよい変更**（文書だけ・1行の修正） | **その pull request のコメント** | `<!-- design-review-skipped -->`。**2行目に理由を書く** |
 
-**CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は組み込みの指示書の 3-2、直す前の計画は 5-6 の「直す前に書くこと」にある。
+**CI が数えるので、1行目を変えない。**判断票の列と何周目かの書き方は [posting-review-verdict](plugins/continuo-agent-procedures/skills/posting-review-verdict/SKILL.md) の「判断票の貼り方」、直す前の計画は [running-review-loop](plugins/continuo-agent-procedures/skills/running-review-loop/SKILL.md) の「レビューの回し方」の「直す前に書くこと」にある。
 **判断票は、直す前に貼る。**貼らずに直したものは、レビューを実施していないものとして扱う。
 
 **判断票をプランファイルへ書かない。**指摘ごとの可否は修正の履歴そのもので、プランファイルは修正の履歴を持たない（`docs-standard` スキル）。
@@ -607,7 +608,7 @@ git worktree remove "$ROLLBACK"
 
 ### 人間へ見せるもの
 
-**連続10回で収まらずに止まったとき**（5-6 の「何周回すか」）は、次を揃えて人間へ見せる。
+**連続10回で収まらずに止まったとき**（running-review-loop の「レビューの回し方」の「何周回すか」）は、次を揃えて人間へ見せる。
 
 | 何を | 中身 |
 | --- | --- |
