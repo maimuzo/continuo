@@ -8,6 +8,73 @@
 
 Go で書いており、OpenAI の symphony の仕様を実装しています。**Claude Code は対話モードのまま動くので、何をしているかを見ながら進められます。**いつもの定額プランのまま使えます。
 
+## 紹介動画
+
+### continuo とは（30秒）
+
+https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
+
+### セットアップ（30秒）
+
+https://github.com/user-attachments/assets/220bab27-9f60-4cb6-8854-bd202b2e71d5
+
+<details>
+<summary><b>機能ごとの紹介動画（15秒 × 10本）</b>：クリックで開きます</summary>
+
+<br>
+
+**1. 置くだけで、始まる**：`Ready` に置くだけで、continuo が着手します
+
+https://github.com/user-attachments/assets/0b1c39d4-9a0b-4be3-8d31-35a5f98d3005
+
+**2. 見えるから、安心**：Claude Code は対話モードのまま動き、作業の様子が見えます
+
+https://github.com/user-attachments/assets/c984b525-bc41-4424-ab07-4d8d2b909872
+
+**3. カンバンは1枚でいい**：1枚のカンバンで、複数のリポジトリを回せます
+
+https://github.com/user-attachments/assets/ef9133bc-d6a5-4339-8239-cabe4e243d47
+
+**4. 詰まったら、ひとこと**：`Blocked` で止まります。コメントで答えて `Ready` へ戻すと再開します
+
+https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
+
+**5. チームで、入札**：チームの機械どうしで入札し、いちばん余裕のある機械がその issue を取ります
+
+https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
+
+**6. 尽きても、勝手に再開**：レートリミットが尽きたら、リセットを待つか、ほかの機械へ引き継ぎます
+
+https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
+
+**7. 誰の指示でも聞くわけじゃない**：従う相手を `OWNER` / `MEMBER` / `COLLABORATOR` に絞る指示書を渡します。穴を狭めるだけで、塞ぎはしません。[始める前に知っておくこと](#始める前に知っておくこと)を読んでください
+
+https://github.com/user-attachments/assets/d31128fa-7511-4aea-a885-d0f051a77bfb
+
+**8. 定額で使える**：いつもの定額プランのまま動きます
+
+https://github.com/user-attachments/assets/7e5805f6-0bfa-46e6-91ff-76bd8fb87527
+
+**9. 止めても、消えない**：continuo を止めても、次に起動すれば続きから進みます
+
+https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
+
+**10. 話したいときは、直接**：込み入ってきたら、`Direct Chat`（使うときだけ）へ動かして、Claude Code と直接話せます
+
+https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
+
+</details>
+
+## マスコット
+
+<img src="docs/images/mascot.png" alt="continuo のマスコットの、藍色の小さなクジラ" width="160" align="right">
+
+continuo のマスコットは、この藍色の小さなクジラです。紹介動画にも出てきます。
+
+continuo（通奏低音）は、バロック音楽で曲の最初から最後まで途切れずに鳴り、主役の後ろで全体を支える低音のパートです。カンバンを見張り、issue を途切れさせずに回し続ける continuo の役を、落ち着いていて頼れるクジラが演じています。
+
+<br clear="right">
+
 ---
 
 ## 何が手に入るか
