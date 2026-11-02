@@ -35,19 +35,19 @@ https://github.com/user-attachments/assets/c984b525-bc41-4424-ab07-4d8d2b909872
 
 https://github.com/user-attachments/assets/ef9133bc-d6a5-4339-8239-cabe4e243d47
 
-**4. 詰まったら、ひとこと**：`Blocked` で止まり、コメントで指示すると再開します
+**4. 詰まったら、ひとこと**：`Blocked` で止まります。コメントで答えて `Ready` へ戻すと再開します
 
 https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
 
-**5. チームで、入札**：チームの continuo どうしで入札し、いちばん余裕のある人が担当します
+**5. チームで、入札**：チームの機械どうしで入札し、いちばん余裕のある機械がその issue を取ります
 
 https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
 
-**6. 尽きても、勝手に再開**：レートリミットが尽きても、待つか引き継ぐかで止まりません
+**6. 尽きても、勝手に再開**：レートリミットが尽きたら、リセットを待つか、ほかの機械へ引き継ぎます
 
 https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
 
-**7. 誰の指示でも聞くわけじゃない**：他人のコメントには従いません
+**7. 誰の指示でも聞くわけじゃない**：従う相手を `OWNER` / `MEMBER` / `COLLABORATOR` に絞る指示書を渡します。穴を狭めるだけで、塞ぎはしません。[始める前に知っておくこと](#始める前に知っておくこと)を読んでください
 
 https://github.com/user-attachments/assets/d31128fa-7511-4aea-a885-d0f051a77bfb
 
@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/7e5805f6-0bfa-46e6-91ff-76bd8fb87527
 
 https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
 
-**10. 話したいときは、直接**：込み入ってきたら、Claude Code と直接話せます
+**10. 話したいときは、直接**：込み入ってきたら、`Direct Chat`（使うときだけ）へ動かして、Claude Code と直接話せます
 
 https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
 

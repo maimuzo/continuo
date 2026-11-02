@@ -37,19 +37,19 @@ https://github.com/user-attachments/assets/c984b525-bc41-4424-ab07-4d8d2b909872
 
 https://github.com/user-attachments/assets/ef9133bc-d6a5-4339-8239-cabe4e243d47
 
-**4. Stuck? Just say a word**: the agent stops in `Blocked`, and resumes when you answer in a comment
+**4. Stuck? Just say a word**: the issue moves to `Blocked`; answer in a comment and move it back to `Ready`, and the work resumes
 
 https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
 
-**5. Bidding as a team**: your team's continuo instances bid, and the one with the most room takes the issue
+**5. Bidding as a team**: your team's machines bid, and the one with the most room takes the issue
 
 https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
 
-**6. Out of quota, back on its own**: when the quota runs out, it waits or hands the work over, and never stops for good
+**6. Out of usage, back on its own**: when the usage window runs out, continuo waits for the reset or hands the issue to another machine
 
 https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
 
-**7. Not everyone's orders count**: it does not follow comments from strangers
+**7. Not everyone's orders count**: the brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR`. This narrows the hole; it does not close it — read [Before you start](#before-you-start)
 
 https://github.com/user-attachments/assets/d31128fa-7511-4aea-a885-d0f051a77bfb
 
@@ -61,7 +61,7 @@ https://github.com/user-attachments/assets/7e5805f6-0bfa-46e6-91ff-76bd8fb87527
 
 https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
 
-**10. Want to talk? Go direct**: when things get tangled, talk to Claude Code yourself
+**10. Want to talk? Go direct**: when things get tangled, move the issue to `Direct Chat` (optional) and talk to Claude Code yourself
 
 https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
 
