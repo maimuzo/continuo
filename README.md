@@ -8,6 +8,22 @@ continuo turns a GitHub Projects v2 kanban board into a work queue for coding ag
 
 It is written in Go and implements the [openai/symphony](https://github.com/openai/symphony) service specification. You watch the work happen in a real terminal, on your usual Claude subscription.
 
+## Intro video (30 seconds)
+
+https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
+
+This video is in Japanese. An English version is in the works.
+
+## Mascot
+
+<img src="docs/images/mascot.png" alt="continuo's mascot, a small indigo whale" width="160" align="right">
+
+continuo's mascot is this small indigo whale. You can spot it in the intro video, too.
+
+A basso continuo is the bass part in Baroque music that keeps playing from the first bar to the last, supporting everything from behind the melody. continuo watches your kanban board and keeps the issues moving without a break, and this calm, reliable whale plays that role.
+
+<br clear="right">
+
 ---
 
 ## What you get

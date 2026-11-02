@@ -8,6 +8,20 @@
 
 Go で書いており、OpenAI の symphony の仕様を実装しています。**Claude Code は対話モードのまま動くので、何をしているかを見ながら進められます。**いつもの定額プランのまま使えます。
 
+## 紹介動画（30秒）
+
+https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
+
+## マスコット
+
+<img src="docs/images/mascot.png" alt="continuo のマスコットの、藍色の小さなクジラ" width="160" align="right">
+
+continuo のマスコットは、この藍色の小さなクジラです。紹介動画にも出てきます。
+
+continuo（通奏低音）は、バロック音楽で曲の最初から最後まで途切れずに鳴り、主役の後ろで全体を支える低音のパートです。カンバンを見張り、issue を途切れさせずに回し続ける continuo の役を、落ち着いていて頼れるクジラが演じています。
+
+<br clear="right">
+
 ---
 
 ## 何が手に入るか
