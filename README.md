@@ -8,17 +8,70 @@ continuo turns a GitHub Projects v2 kanban board into a work queue for coding ag
 
 It is written in Go and implements the [openai/symphony](https://github.com/openai/symphony) service specification. You watch the work happen in a real terminal, on your usual Claude subscription.
 
-## Intro video (30 seconds)
+## Intro videos
+
+These videos are in Japanese. English versions are in the works.
+
+### What is continuo? (30 seconds)
 
 https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
 
-This video is in Japanese. An English version is in the works.
+### Setup (30 seconds)
+
+https://github.com/user-attachments/assets/220bab27-9f60-4cb6-8854-bd202b2e71d5
+
+<details>
+<summary><b>One video per feature (10 × 15 seconds)</b>: click to expand</summary>
+
+<br>
+
+**1. Drop it in, and it starts**: move an issue to `Ready`, and continuo picks it up
+
+https://github.com/user-attachments/assets/0b1c39d4-9a0b-4be3-8d31-35a5f98d3005
+
+**2. See it, and relax**: Claude Code stays in interactive mode, so you can watch it work
+
+https://github.com/user-attachments/assets/c984b525-bc41-4424-ab07-4d8d2b909872
+
+**3. One kanban board is enough**: one kanban board drives many repositories
+
+https://github.com/user-attachments/assets/ef9133bc-d6a5-4339-8239-cabe4e243d47
+
+**4. Stuck? Just say a word**: the agent stops in `Blocked`, and resumes when you answer in a comment
+
+https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
+
+**5. Bidding as a team**: your team's continuo instances bid, and the one with the most room takes the issue
+
+https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
+
+**6. Out of quota, back on its own**: when the quota runs out, it waits or hands the work over, and never stops for good
+
+https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
+
+**7. Not everyone's orders count**: it does not follow comments from strangers
+
+https://github.com/user-attachments/assets/d31128fa-7511-4aea-a885-d0f051a77bfb
+
+**8. On your usual subscription**: no metered API calls
+
+https://github.com/user-attachments/assets/7e5805f6-0bfa-46e6-91ff-76bd8fb87527
+
+**9. Stop it, and nothing is lost**: start continuo again, and the work picks up where it left off
+
+https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
+
+**10. Want to talk? Go direct**: when things get tangled, talk to Claude Code yourself
+
+https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
+
+</details>
 
 ## Mascot
 
 <img src="docs/images/mascot.png" alt="continuo's mascot, a small indigo whale" width="160" align="right">
 
-continuo's mascot is this small indigo whale. You can spot it in the intro video, too.
+continuo's mascot is this small indigo whale. You can spot it in the videos, too.
 
 A basso continuo is the bass part in Baroque music that keeps playing from the first bar to the last, supporting everything from behind the melody. continuo watches your kanban board and keeps the issues moving without a break, and this calm, reliable whale plays that role.
 

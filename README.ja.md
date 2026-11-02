@@ -8,9 +8,62 @@
 
 Go で書いており、OpenAI の symphony の仕様を実装しています。**Claude Code は対話モードのまま動くので、何をしているかを見ながら進められます。**いつもの定額プランのまま使えます。
 
-## 紹介動画（30秒）
+## 紹介動画
+
+### continuo とは（30秒）
 
 https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
+
+### セットアップ（30秒）
+
+https://github.com/user-attachments/assets/220bab27-9f60-4cb6-8854-bd202b2e71d5
+
+<details>
+<summary><b>機能ごとの紹介動画（15秒 × 10本）</b>：クリックで開きます</summary>
+
+<br>
+
+**1. 置くだけで、始まる**：`Ready` に置くだけで、continuo が着手します
+
+https://github.com/user-attachments/assets/0b1c39d4-9a0b-4be3-8d31-35a5f98d3005
+
+**2. 見えるから、安心**：Claude Code は対話モードのまま動き、作業の様子が見えます
+
+https://github.com/user-attachments/assets/c984b525-bc41-4424-ab07-4d8d2b909872
+
+**3. カンバンは1枚でいい**：1枚のカンバンで、複数のリポジトリを回せます
+
+https://github.com/user-attachments/assets/ef9133bc-d6a5-4339-8239-cabe4e243d47
+
+**4. 詰まったら、ひとこと**：`Blocked` で止まり、コメントで指示すると再開します
+
+https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
+
+**5. チームで、入札**：チームの continuo どうしで入札し、いちばん余裕のある人が担当します
+
+https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
+
+**6. 尽きても、勝手に再開**：レートリミットが尽きても、待つか引き継ぐかで止まりません
+
+https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
+
+**7. 誰の指示でも聞くわけじゃない**：他人のコメントには従いません
+
+https://github.com/user-attachments/assets/d31128fa-7511-4aea-a885-d0f051a77bfb
+
+**8. 定額で使える**：いつもの定額プランのまま動きます
+
+https://github.com/user-attachments/assets/7e5805f6-0bfa-46e6-91ff-76bd8fb87527
+
+**9. 止めても、消えない**：continuo を止めても、次に起動すれば続きから進みます
+
+https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
+
+**10. 話したいときは、直接**：込み入ってきたら、Claude Code と直接話せます
+
+https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
+
+</details>
 
 ## マスコット
 
