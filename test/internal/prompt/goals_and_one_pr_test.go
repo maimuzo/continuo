@@ -1,0 +1,169 @@
+// issue #321（全てのコメントに作業目標と残作業を書かせる）で足した3つの決まりを見張る検査である（設計 5-3za）。
+//
+//  1. エージェントが書くどのコメントにも、受け入れ目標・いまの作業とその寄与・残りを書かせる
+//  2. pull request を issue の Development にリンクさせる
+//  3. 1つの issue に pull request は1つにする
+//
+// **人間は「スキル化したあたりで明示的に指示を与えないとこのように動いてくれなくなった」と言っている。**
+// 決まりの文がスキルから落ちると、また黙って書かなくなる。
+package prompt_test
+
+import (
+	"strings"
+	"testing"
+)
+
+// goalsSectionHeading は、どのコメントにも置かせる1節の見出しである。
+const goalsSectionHeading = "## この issue の受け入れ目標と、いまの作業と、残り"
+
+// 目的: writing-comments-for-humans が、目標・寄与・残りを書かせる決まりと形を持つことを固定する。
+//
+// **8つの見出しを当てない例外も見る。**例外が無いと、「## の節には8つ」の決まりとぶつかり、
+// エージェントはこの1節にも8つの見出しを押し込む。
+//
+// 与える情報: スキル writing-comments-for-humans の全文。
+// 成功条件: 決まりの節・3つの語・形の見出し・例外・印より前に置かない文が在ること。
+func TestGoals_コメントの書き方が目標と寄与と残りを書かせる(t *testing.T) {
+	body := skillText(t, "writing-comments-for-humans")
+	for _, want := range []struct{ needle, why string }{
+		{"### どのコメントにも、受け入れ目標・いまの作業・残りを書く", "決まりの節が無いと、明示しない限り書かれません（issue #321 の本文）"},
+		{"受け入れ目標", "issue を閉じてよい条件が書かれないと、何が片付いたかが分かりません"},
+		{"それが受け入れ目標のどれに寄与するか", "いまの作業がどの目標に効くかが書かれません"},
+		{"誰の番か", "残りに誰の番かが無いと、人間は自分が何をすればよいか分かりません"},
+		{goalsSectionHeading, "形の見出しが無いと、置き場所と形がコメントごとにばらつきます"},
+		{"この節には8つの見出しを当てません", "例外が無いと、「## の節には8つ」とぶつかります"},
+		{"印より前には置きません", "印が先頭から外れると、continuo も CI もそのコメントを数えません"},
+		{"レビューで直さないと決めた指摘は、残りに入れません", "直さない指摘を残りに並べると、マージのあとに2つ目の pull request が生まれます"},
+	} {
+		if !strings.Contains(body, want.needle) {
+			t.Errorf("writing-comments-for-humans に %q がありません。%s", want.needle, want.why)
+		}
+	}
+}
+
+// 目的: 計画・成果の報告・判断票の見本が、印と題名のあとに目標の1節を持つことを固定する。
+//
+// **見本に無いと、決まりの節を読んでも写す形が見本のほうに引きずられる。**
+// **印の行より前に置かれていないことも見る。**前に置くと continuo が成果を数えない。
+//
+// 与える情報: 各スキルの全文。
+// 成功条件: 見本ごとに、印の行 < 目標の見出し < 最初の返信の節 の順で並ぶこと。
+func TestGoals_見本が目標の節を印のあとに置く(t *testing.T) {
+	for _, c := range []struct {
+		skill  string
+		marker string // 見本の印の行
+		next   string // 目標の節のあとに来る行
+	}{
+		{"writing-plan", "<!-- continuo:plan -->", "## <一言で中身が想像できる節の題名>"},
+		{"writing-comments-for-humans", "<!-- continuo:plan -->", "## <一言で中身が想像できる節の題名>"},
+		{"finishing-run", "# <何をしたかを一言で>", "ここに「writing-comments-for-humans」の8つの見出しで、何をしたかを書く（印は上の1行だけ）"},
+		{"posting-review-verdict", "<summary>1周目</summary>", "## <一言で中身が想像できる節の題名>"},
+		{"posting-review-verdict", "cat > \"$ROUND\" <<'ROUND'", "## <一言で中身が想像できる節の題名>"},
+	} {
+		body := skillText(t, c.skill)
+		m := strings.Index(body, c.marker)
+		if m < 0 {
+			t.Errorf("%s に見本の %q がありません", c.skill, c.marker)
+			continue
+		}
+		rest := body[m:]
+		g := strings.Index(rest, goalsSectionHeading)
+		n := strings.Index(rest, c.next)
+		if g < 0 || n < 0 || !(g < n) {
+			t.Errorf("%s の見本（%q から）で、目標の節（%d）が %q（%d）より前にありません", c.skill, c.marker, g, c.next, n)
+		}
+	}
+}
+
+// 目的: 途中経過とまとめて直したときの報告にも、目標・寄与・残りを書かせることを固定する。
+//
+// **この2つは8つの見出しの対象外である**ので、形が別に要る。途中経過は1行のまま書かせる。
+//
+// 与える情報: スキル reporting-progress と finishing-run の全文。
+// 成功条件: 途中経過の1行の形と、まとめて直したときの review と blocked の見本の行が在ること。
+func TestGoals_途中経過とまとめて直したときの報告にも書かせる(t *testing.T) {
+	progress := skillText(t, "reporting-progress")
+	if !strings.Contains(progress, "<いま何をしているか>。受け入れ目標「<目標を全部短く並べる>」のうち「<いまの作業が寄与するもの>」に寄与。残り: <残っている作業と、誰の番か>") {
+		t.Error("reporting-progress に、途中経過の1行の形がありません。途中経過だけを読んでも目標と残りが分かりません")
+	}
+	finishing := skillText(t, "finishing-run")
+	for _, want := range []struct {
+		needle string
+		n      int
+	}{
+		{"- この issue の受け入れ目標: <この issue を閉じてよい条件>", 2},
+		{"- 残り: <残っている作業と、誰の番か>", 2},
+		{"（残り: <残っている作業と、誰の番か>）", 1},
+	} {
+		if got := strings.Count(finishing, want.needle); got < want.n {
+			t.Errorf("finishing-run に %q が %d 箇所しかありません（%d 箇所要ります。まとめて直したときの見本）", want.needle, got, want.n)
+		}
+	}
+}
+
+// 目的: pull request を issue の Development にリンクさせ、確かめさせることを固定する。
+//
+// **`Closes #<番号>` は、向け先が既定の branch でないと GitHub が読まない。**
+// branch を issue に結びつける段と、成果の報告の前に確かめる段の両方が要る。
+// **結びつける段は push より前でなければならない。**先に push すると、スクリプトは「remote に在る」で何もしない。
+//
+// 与える情報: スキル implementing-and-pushing・finishing-run・reporting-progress の全文。
+// 成功条件: 決まりの文・スクリプトの叩き方・push を後に回す文・確かめのコマンドが在ること。
+func TestGoals_pullrequestをDevelopmentにリンクさせる(t *testing.T) {
+	ip := skillText(t, "implementing-and-pushing")
+	section := sectionOf(t, instructionsText(t), pullRequestHeading)
+	for _, want := range []struct{ where, needle, why string }{
+		{section, "**pull request は必ず issue の Development にリンクします。**", "人間が「必ずissueにリンクしろ」と指示しています"},
+		{section, "CONTINUO_PLUGIN_DIR/skills/implementing-and-pushing/scripts/link-branch.sh", "結びつけるスクリプトの叩き方が無いと、リンクされません"},
+		{section, "### 段2. branch を issue に結びつける", "結びつける段が無いと、向け先が既定でない pull request はリンクされません"},
+		{section, "### 段3. push して、draft で作る", "push が段2 より後でないと、結びつけられません"},
+		{ip, "ここで push せず、下の「pull request を出す」の段1 へ進みます", "「commit して push する」で先に push すると、結びつけられません"},
+	} {
+		if !strings.Contains(want.where, want.needle) {
+			t.Errorf("implementing-and-pushing に %q がありません。%s", want.needle, want.why)
+		}
+	}
+	if !strings.Contains(skillText(t, "reporting-progress"), "ここで push せず、「implementing-and-pushing」の「pull request を出す」の段1 から進み") {
+		t.Error("reporting-progress の途中の push が、開いた pull request が無いときに先に push しています。結びつけられなくなります")
+	}
+	finishing := skillText(t, "finishing-run")
+	for _, want := range []string{
+		"closingIssuesReferences",
+		"gh issue develop --list <issue の番号> --repo <issue のリポジトリ>",
+		"issue の Development 欄で pull request がつながっているかを確かめ、無ければつなぐ",
+	} {
+		if !strings.Contains(finishing, want) {
+			t.Errorf("finishing-run の確かめに %q がありません。リンクされていないことに誰も気づけません", want)
+		}
+	}
+}
+
+// 目的: 1つの issue に pull request を1つにさせることを固定する。
+//
+// **issue #318 では、直さない指摘を人間に投げた報告のあとに、同じ branch から PR が3つできた。**
+// 決まりの文・`--state all` で探すこと・fork を除くこと・2つ目の条件・別の名前で出さないこと・
+// 直さない指摘を投げないことを見る。
+//
+// 与える情報: スキル implementing-and-pushing・trusting-instructions・finishing-run の全文。
+// 成功条件: それぞれの文が在ること。
+func TestGoals_issueごとのpullrequestを1つにする(t *testing.T) {
+	section := sectionOf(t, instructionsText(t), pullRequestHeading)
+	for _, want := range []struct{ needle, why string }{
+		{"**1つの issue に pull request は1つです。**", "人間が「issueで作るPRは基本的に1つにしろ」と指示しています"},
+		{"--state all --json number,url,isCrossRepository,mergedAt,closedAt", "開いたものだけを探すと、マージ済みの PR を見落として黙って2つ目を作ります"},
+		{"`isCrossRepository` が `true` のもの", "fork の同じ名前の branch の PR を行き先と取り違えます"},
+		{"`mergedAt` と `closedAt` が両方 `null` かで決めます", "state の綴りは取り方で変わります"},
+		{"新しい作業を頼んでいるときだけ", "2つ目を作ってよい条件が無いと、特別な理由なしに作ります"},
+		{"close 済みの pull request を自分で開き直しません", "人間が閉じた PR を勝手に戻します"},
+	} {
+		if !strings.Contains(section, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", pullRequestHeading, want.needle, want.why)
+		}
+	}
+	if !strings.Contains(skillText(t, "trusting-instructions"), "2つ目の pull request を出すときも、別の名前にはしません。") {
+		t.Error("trusting-instructions が、2つ目の pull request を別の名前で出させています。次の run が見つけられず3つ目を作ります")
+	}
+	if !strings.Contains(skillText(t, "finishing-run"), "「直してほしければコメントしてください」と人間に投げません") {
+		t.Error("finishing-run が、直さない指摘を人間に投げることを止めていません（issue #318 の2つ目の PR の原因）")
+	}
+}

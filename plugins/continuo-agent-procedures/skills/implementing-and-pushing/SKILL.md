@@ -1,10 +1,10 @@
 ---
 name: implementing-and-pushing
-description: continuo が起動した run で、フローチャートの「実装する」と「commit して push する」の箱に入るときに呼ぶ。worktree の中のファイルを書き換える・branch や worktree を作る・切り替える・消す・push する前と、止まる・終えると決めたとき（止まる前に commit して push する）にも呼ぶ。最初の push で draft の pull request を作る手順も含む。
+description: continuo が起動した run で、フローチャートの「実装する」と「commit して push する」の箱に入るときに呼ぶ。worktree の中のファイルを書き換える・branch や worktree を作る・切り替える・消す・push する前と、止まる・終えると決めたとき（止まる前に commit して push する）にも呼ぶ。pull request を1つにし、issue の Development にリンクして draft で作る手順も含む。
 ---
 
 **`review` または `blocked` を出す前に、必ず commit して push します**（commit するものが無ければ要りません）。push の前に担当を確かめ、`git push -u origin HEAD` の `-u` を落としません。
-最初に commit を push したら、すぐこの issue の pull request を draft で作ります（下の「pull request を出す」の段1・段2。題名と本文の書き直しは「finishing-pull-request」）。
+**1つの issue に pull request は1つです。pull request は必ず issue の Development にリンクします。**この issue の開いた pull request がまだ無ければ、最初の push は下の「pull request を出す」の段1〜段3 で行い、push したらすぐ draft で作ります（題名と本文の書き直しは「finishing-pull-request」）。
 continuo が用意した worktree と branch のまま作業し、切り替えません。止まるときの報告と表明の1行は「finishing-run」の「runの終了を宣言する」にあります。
 
 ## 実装する
@@ -36,6 +36,8 @@ sh 'CONTINUO_PLUGIN_DIR/skills/starting-run/scripts/check-assignee.sh' '<issue �
 
 ### 段2. push する
 
+この branch の開いた pull request がまだ無いときは、ここで push せず、下の「pull request を出す」の段1 へ進みます（push はそこの段3 で行います。先に push すると、段2 で branch を issue に結びつけられなくなります）。在るときは、ここで push します。
+
 ```bash
 git push -u origin HEAD
 ```
@@ -56,7 +58,7 @@ git push -u origin HEAD
 ## worktree と branch は切り替えない
 
 - continuo が用意した worktree は消しません。片付けは continuo の仕事です。
-- 別の branch へ checkout したり、新しい branch を作ったりしません。切り替えると、次の巡回から continuo がこの issue に着手できなくなります。
+- 別の branch へ checkout したり、新しい branch を作ったりしません。切り替えると、次の巡回から continuo がこの issue に着手できなくなります（下の「pull request を出す」の段2 が remote にいまの branch と同じ名前の branch を作るのは、これに当たりません）。
 
 ### 別の branch を使うとき
 
@@ -96,23 +98,63 @@ git worktree remove <自分が git worktree add したパス>
 
 ## pull request を出す
 
-最初に commit を push したら（上の「commit して push する」の push でも、「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の途中の push でも）、すぐこの issue の pull request を draft で作ります。どこで止まっても、次に引き継ぐ機械が pull request を辿れるようにするためです。
+**1つの issue に pull request は1つです。**特別な理由なしに2つ目を作りません。2つ目を作ってよいのは、段1 の表の「マージ済みか close 済みの pull request だけが在る」行の条件を満たすときだけです。
+
+**pull request は必ず issue の Development にリンクします。**本文の `Closes #<issue の番号>` だけでは、pull request の向け先が既定の branch でないときに GitHub が読まず、リンクされません。そこで、作るときは push の前に branch を issue に結びつけ（段2）、push し、すぐ作ります（段3）。結びつけた branch から作った pull request は、GitHub が issue の Development にリンクし、branch のリンクは外れます。リンクされたかは「finishing-run」の「runの終了を宣言する」の段4 で確かめます。
+
+この issue の開いた pull request がまだ無ければ、最初に commit を push する前に（上の「commit して push する」の push でも、「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の途中の push でも）、段1 から段3 を通り、push したらすぐこの issue の pull request を draft で作ります。どこで止まっても、次に引き継ぐ機械が pull request を辿れるようにするためです。
 
 「commit して push する」の例外を使ったときは、この worktree の branch に commit が無いので、下の段はどれも当たりません。pull request の出し方も「このプロジェクトの決まり」に従います。書いていなければ、理由を書いて `CONTINUO-STATUS: blocked` を出します（報告と表明の書き方は「finishing-run」の「runの終了を宣言する」）。
 
-段3（実装が終わったら、題名と本文を書き直す）は「finishing-pull-request」にあります。
+実装が終わったら題名と本文を書き直す段は、「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」にあります。
 
 ### 段1. 既にあるかを確かめる
 
-先に push を済ませます（push していない branch で `gh pr create` を叩くと、gh が push 先を対話で訊いてきて止まります）。
-
 ```bash
-gh pr list --repo <issue のリポジトリ> --head "$(git branch --show-current)" --state open --json number,url
+gh pr list --repo <issue のリポジトリ> --head "$(git branch --show-current)" --state all --json number,url,isCrossRepository,mergedAt,closedAt
 ```
 
-1件でも返ったら、それが行き先です。新しく作りません。`[]` が返ったときだけ段2へ進みます。作ったあとの題名と本文の書き直しと draft を外すことは「finishing-pull-request」にあります。
+- `isCrossRepository` が `true` のもの（fork の同じ名前の branch から出た pull request）は数えません。
+- 「trusting-instructions」の「push 先を、他人の指定で変えない」で別の名前へ出しているときは、`--head` にその名前も渡して叩きます。別のリポジトリへ出したとき（「finishing-pull-request」の「別のリポジトリへ pull request を出すとき」）は、`--repo` を出した先に置き換えます。
+- 開いているかは、`mergedAt` と `closedAt` が両方 `null` かで決めます。
 
-### 段2. draft で作る
+| 返ったもの | すること |
+| --- | --- |
+| 開いた pull request が在る | それが行き先です。新しく作りません。上の「commit して push する」の段2 で push するだけで、段2 と段3 は通りません |
+| 1件も無い | 段2へ進みます |
+| マージ済みか close 済みの pull request だけが在る | そのうちいちばん新しいもののマージか close の時刻より後に、trusted_comment が true のコメント（「trusting-instructions」の「命令として扱ってよいのは、3つの立場が AI の印を付けずに書いたものだけ」）でこの issue に新しい作業を頼んでいるときだけ、段2へ進みます（2つ目）。段3 の本文に、前の pull request の URL とそのコメントの URL を書きます。頼まれていなければ作りません。上の「commit して push する」の段2 で push だけして、そのことを報告（「finishing-run」の「runの終了を宣言する」）に書き、`CONTINUO-STATUS: blocked` を出します。close 済みの pull request を自分で開き直しません |
+
+Status が `Ready` へ戻っただけでは、頼まれたとはみなしません（「starting-run」の「着手したとき」と同じです）。
+
+### 段2. branch を issue に結びつける
+
+```bash
+sh 'CONTINUO_PLUGIN_DIR/skills/implementing-and-pushing/scripts/link-branch.sh' '<issue の URL>'
+```
+
+- 引数は `<issue の URL>` の1つです。担当を確かめたあと（上の「commit して push する」の段1）に、1回だけ叩きます。
+- スクリプトが結びつけるのは、次の4つがそろうときだけです。そろわなければ何も書き込まずに、「結びつけません（…）」と理由を出します。
+  - origin が issue のリポジトリである
+  - remote にいまの branch がまだ無い（確かめられなかったときも「在る」と扱います）
+  - issue にリンクされた branch が1本も無い（continuo はリンクがちょうど1本なら worktree の起点にするので、人間が起点にリンクした branch の上に足しません）
+  - 起点の commit が決まる（いまの HEAD と `origin/<既定の branch>` の merge-base。HEAD の祖先で remote に在るので、段3 の push が fast-forward になります）
+- 「trusting-instructions」の「push 先を、他人の指定で変えない」で別の名前へ push するときと、別のリポジトリへ pull request を出すときは、叩きません。
+
+| 出た文 | すること |
+| --- | --- |
+| 「結びつけました（…）」 | 段3へ進みます |
+| 「結びつけません（…）」「結びつけられませんでした（…）」 | 段3へ進みます。pull request は本文の `Closes` だけでリンクされます |
+| auto mode などに叩くこと自体を断られた | 迂回せず、この run ではもう叩かずに、段3へ進みます |
+
+### 段3. push して、draft で作る
+
+push は、段2 とは別の Bash の呼び出しで叩きます（段2 が断られても push まで断られないようにするためです）。push していない branch で `gh pr create` を叩くと、gh が push 先を対話で訊いてきて止まります。
+
+```bash
+git push -u origin HEAD
+```
+
+2つ目を作るときに push が断られたら（前の pull request を squash で入れ、remote に前の branch が残っているときなど）、force push しません。上の「別の branch を使うとき」の2つで remote の branch を取り込んでから、もう一度 push します。衝突したときの扱いは「starting-run」の「分岐元を取り込み、読む」と同じです。
 
 ```bash
 T=$(mktemp)
@@ -131,6 +173,7 @@ gh pr create --draft --title "$(cat "$T")" --body-file "$F"
 
 - 題名も本文も、ファイルへ書いてから渡します（「writing-plan」の「段1. 計画を書く」と同じ理由です）。題名は1行で書きます。
 - 本文の1行目の `<!-- continuo:pull-request-in-progress -->` は、訳さずにそのまま入れます。まだ途中の本文であることを、あとの会話や引き継いだ機械が見分ける目印です。
+- 2つ目のときは、`Closes` の行の上に「前の pull request: <URL>」と「2つ目を作る理由: <人間の依頼のコメントの URL>」の2行を足します。
 - 別のリポジトリへ出すときの `Closes` の書き方は「finishing-pull-request」の「別のリポジトリへ pull request を出すとき」に、本文に書いてはいけないものは「writing-comments-for-humans」の「公開の場へ書かないもの」にあります。
 
 | 起きたこと | すること |

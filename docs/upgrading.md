@@ -115,6 +115,37 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.3.0 から次の版へ
+
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルだけです。
+
+| 何が変わったか | 設定の書き換え |
+| --- | --- |
+| **エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります** | 要りません |
+| **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
+| **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
+
+### エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります
+
+**誰に関係があるか。**全員です。設定の書き換えは要りません。
+
+計画・成果の報告・判断票・途中経過・まとめて直したときの報告の、どれにも入ります。形と置き場所は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
+
+### pull request が、issue の Development にリンクされます
+
+**誰に関係があるか。**pull request の向け先を既定の branch 以外（`develop` など）にしている人です。
+
+これまで、エージェントは pull request の本文に `Closes #<番号>` を書くだけでした。GitHub はこのキーワードを、向け先が既定の branch のときにしか読まないので、`develop` へ向けた pull request は issue にリンクされませんでした。
+**これからは、pull request を作る前に branch を issue に結びつけます。**結びつけた branch から作った pull request は、GitHub が issue の Development にリンクします（向け先が既定の branch の pull request で確かめました。既定でない branch では確かめていません）。issue に branch が既にリンクされているとき（起点にする branch をリンクしているときなど）は、結びつけません。
+
+**カンバンの自動化 `Pull request linked to issue` を有効にしていて、`tracker.automated_state_rewrite` が空の人は**、エージェントが pull request を作った直後に Status が書き換わり、run が止まるようになることがあります。直し方は [FAQ.md](FAQ.md) の「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。
+
+### 1つの issue に pull request は1つになります
+
+**誰に関係があるか。**全員です。
+
+前の pull request がマージか close されたあとに2つ目を作るのは、そのあとにあなたがその issue で新しい作業を頼んだコメントを書いたときだけです。2つ目も同じ branch から出し、本文に前の pull request とあなたのコメントの URL を書きます。**2つ目を別の名前の branch で出すことは、もうしません。**`WORKFLOW.md` の本文に「2本目の PR を出すときは別の名前へ」の趣旨を書いていたら、消してください（残っていると、エージェントへの指示が食い違います）。
+
 ## v0.2.1 から v0.3.0 へ
 
 **要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.2.1 から v0.3.0 へ上げるとき」を先に読んでください。**

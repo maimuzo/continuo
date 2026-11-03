@@ -93,10 +93,40 @@ cat > "$F" <<'DONE'
 <!-- continuo:agent -->
 # <何をしたかを一言で>
 
+## この issue の受け入れ目標と、いまの作業と、残り
+
+- 受け入れ目標:
+  1. <閉じてよい条件>
+- いまの作業: <この run でしたこと>（受け入れ目標の 1 に寄与）
+- 残り: <残っている作業と、誰の番か>
+
 ここに「writing-comments-for-humans」の8つの見出しで、何をしたかを書く（印は上の1行だけ）
 DONE
 gh issue comment <issue の URL> --body-file "$F"
 ```
+
+- 題名の直後の1節（受け入れ目標・いまの作業・残り）の書き方は、「writing-comments-for-humans」の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
+- **レビューで直さないと決めた指摘を、「直してほしければコメントしてください」と人間に投げません。**「残り」にも入れません。直さない理由だけを `### 詳細` に書きます。投げると、マージのあとに人間が「残りを進めて」と頼み、同じ issue に2つ目の pull request ができます（「implementing-and-pushing」の「pull request を出す」）。
+
+書く前に、pull request が issue の Development にリンクされたかを確かめます（「implementing-and-pushing」の「pull request を出す」）。1つ目はこの branch の開いた pull request と、それが閉じる issue を出します。2つ目は issue にリンクされたままの branch を出します。
+
+```bash
+gh pr list --repo <issue のリポジトリ> --head "$(git branch --show-current)" --state open --json number,isDraft,isCrossRepository,closingIssuesReferences --jq '.[] | select(.isCrossRepository | not) | {number, isDraft, closes: [.closingIssuesReferences[].number]}'
+```
+
+```bash
+gh issue develop --list <issue の番号> --repo <issue のリポジトリ>
+```
+
+- 「trusting-instructions」の「push 先を、他人の指定で変えない」で別の名前へ出したときは、`--head` にその名前を渡します。別のリポジトリへ出したときは、1つ目の `--repo` を出した先に置き換えます。
+
+| 出たもの | 報告に書くこと |
+| --- | --- |
+| 1つ目が何も出さない（開いた pull request が無い） | 確かめません |
+| `isDraft` が `true` | 「draft のあいだは確かめていない」と書きます（draft を外すまで `closes` が空のことがあります） |
+| `closes` にこの issue（まとめて直した issue も）が入っている | 何も書きません |
+| `closes` に入っていない issue がある | 「残り」に人間の番として「issue の Development 欄で pull request がつながっているかを確かめ、無ければつなぐ」と書きます |
+| 2つ目にいまの branch が出る | 「残り」に人間の番として「issue の Development 欄から、branch <名前> のリンクを外す」と書きます。残っていると、次の着手で continuo がその branch を worktree の起点にします |
 
 新しく1件投稿してください。途中経過の報告のコメントへ書き足すと、本文のいちばん上に途中経過の印が残るので、continuo は成果の報告として数えません。「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の「コメントは増やさないでください」は途中経過どうしの話で、この報告には当てはまりません。
 
@@ -137,7 +167,7 @@ sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/add-closes-line.sh' '<issue
 | pull request の URL（`gh pr edit` が出したもの） | 足しました。次へ進みます |
 | 「PR の本文を読めませんでした。書き換えていません」 | 書き戻していません。そのことを応答に書きます |
 
-**読めたことを確かめずに `gh pr edit` を叩かないでください。**本文が足した1行だけになり、`Closes #<issue の番号>` と説明が消えます。本文の書き直しの決まりは「finishing-pull-request」の「段3. 実装が終わったら、題名と本文を書き直す」にあります。
+**読めたことを確かめずに `gh pr edit` を叩かないでください。**本文が足した1行だけになり、`Closes #<issue の番号>` と説明が消えます。本文の書き直しの決まりは「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」にあります。
 
 ### どの issue へ説明を書くか
 
@@ -179,8 +209,8 @@ sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/append-group-report.sh' rea
 
 | 出した値 | 足す行 |
 | --- | --- |
-| `review` | `<前に書いていない分>（pull request: <PR の URL>）`。URL が無いと、前の試行の分とどれがどの話かを見分けられません |
-| `blocked` | `止まりました: <どこまで見て、なぜ止まったか>`。行頭の「止まりました:」が無いと、読む人が「直った」と読みます。pull request の URL は書きません |
+| `review` | `<前に書いていない分>（pull request: <PR の URL>）（寄与: <その issue の受け入れ目標>。残り: <残っている作業と、誰の番か>）`。URL が無いと、前の試行の分とどれがどの話かを見分けられません |
+| `blocked` | `止まりました: <どこまで見て、なぜ止まったか>（残り: <残っている作業と、誰の番か>）`。行頭の「止まりました:」が無いと、読む人が「直った」と読みます。pull request の URL は書きません |
 
 次で書き換えます。`<段1が返した URL>` は、読むときと同じものを毎回渡します。**書き換えは、印を確かめる `case` の中だけで行います**（スクリプトの中でそうしています）。外で行うと、読み取りに失敗したときに印ごと本文が消え、段1 がその報告を二度と見つけられません。
 
@@ -210,9 +240,12 @@ LINE
 ```bash
 sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/append-group-report.sh' new '<issue のリポジトリ>' '<その issue の番号>' '<issue の識別子>' <<'GROUP'
 
+- この issue の受け入れ目標: <この issue を閉じてよい条件>
 - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
+- 寄与: <直したことが、受け入れ目標のどれを満たすか>
 - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
 - pull request: <PR の URL>
+- 残り: <残っている作業と、誰の番か>
 GROUP
 ```
 
@@ -221,8 +254,11 @@ GROUP
 ```bash
 sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/append-group-report.sh' new '<issue のリポジトリ>' '<その issue の番号>' '<issue の識別子>' <<'GROUP'
 
+- この issue の受け入れ目標: <この issue を閉じてよい条件>
 - どこまで見たか: <調べたことと、分かったこと>
+- 寄与: <調べたことが、受け入れ目標のどれに効くか>
 - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
+- 残り: <残っている作業と、誰の番か>
 GROUP
 ```
 

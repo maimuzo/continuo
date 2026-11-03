@@ -9,9 +9,9 @@ description: continuo が起動した run で、フローチャートの「pull 
 
 ## pull request を出す
 
-段1・段2（既にあるかを確かめる・draft で作る）は「implementing-and-pushing」の「pull request を出す」にあります。ここは、実装が終わったあとの段3 です。
+段1〜段3（既にあるかを確かめる・branch を issue に結びつける・push して draft で作る）は「implementing-and-pushing」の「pull request を出す」にあります。ここは、実装が終わったあとの段4 です。
 
-### 段3. 実装が終わったら、題名と本文を書き直す
+### 段4. 実装が終わったら、題名と本文を書き直す
 
 いまの本文を読みます（読み方は「finishing-run」の「まとめて直したとき」と同じ `gh pr view <PR番号> --json body --jq .body`）。
 
@@ -34,7 +34,7 @@ PRBODY
 gh pr edit <PR番号> --repo <issue のリポジトリ> --title "$(cat "$T")" --body-file "$F"
 ```
 
-- **`Closes` で始まる行は、全部そのまま残してください。**まとめて直した issue の分も入っています（「finishing-run」の「まとめて直したとき」）。とくに `Closes #<issue の番号>` を落とすと、pull request と issue が結びつかず、次に起動されたとき「starting-run」の「紐づく pull request を読む」にこの pull request が出てこなくなり、設計のレビューを CI で数えている project では検査が赤のままになります。
+- **`Closes` で始まる行は、全部そのまま残してください。**まとめて直した issue の分も入っています（「finishing-run」の「まとめて直したとき」）。とくに `Closes #<issue の番号>` を落とすと、branch を issue に結びつけられなかったとき（「implementing-and-pushing」の「pull request を出す」の段2）に pull request と issue が結びつかず、次に起動されたとき「starting-run」の「紐づく pull request を読む」にこの pull request が出てこなくなり、設計のレビューを CI で数えている project では検査が赤のままになります。
 - **下の「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出したときは、`gh pr view` と `gh pr edit` の `--repo` を、出した先のリポジトリに置き換えてください。**置き換えないと、この issue のリポジトリの、同じ番号の無関係な pull request を読み書きします。
 
 ### 設計のレビューを飛ばす断りを、自分で書かない
