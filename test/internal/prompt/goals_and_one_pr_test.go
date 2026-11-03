@@ -30,6 +30,8 @@ func TestGoals_コメントの書き方が目標と寄与と残りを書かせ�
 		{"受け入れ目標", "issue を閉じてよい条件が書かれないと、何が片付いたかが分かりません"},
 		{"それが受け入れ目標のどれに寄与するか", "いまの作業がどの目標に効くかが書かれません"},
 		{"誰の番か", "残りに誰の番かが無いと、人間は自分が何をすればよいか分かりません"},
+		{"進める順に番号を付けた詳しい手順", "残りが一語だと、何をどうするのかが人間に伝わりません（人間のコメント 6599057291）"},
+		{"人間が次にすること", "人間が次に何をすればよいかが無いと、人間はコメントを読んでも動けません（人間のコメント 6599057291）"},
 		{goalsSectionHeading, "形の見出しが無いと、置き場所と形がコメントごとにばらつきます"},
 		{"この節には8つの見出しを当てません", "例外が無いと、「## の節には8つ」とぶつかります"},
 		{"印より前には置きません", "印が先頭から外れると、continuo も CI もそのコメントを数えません"},
@@ -83,7 +85,7 @@ func TestGoals_見本が目標の節を印のあとに置く(t *testing.T) {
 // 成功条件: 途中経過の1行の形と、まとめて直したときの review と blocked の見本の行が在ること。
 func TestGoals_途中経過とまとめて直したときの報告にも書かせる(t *testing.T) {
 	progress := skillText(t, "reporting-progress")
-	if !strings.Contains(progress, "<いま何をしているか>。受け入れ目標「<目標を全部短く並べる>」のうち「<いまの作業が寄与するもの>」に寄与。残り: <残っている作業と、誰の番か>") {
+	if !strings.Contains(progress, "<いま何をしているか>。受け入れ目標「<目標を全部短く並べる>」のうち「<いまの作業が寄与するもの>」に寄与。残りの作業: <進める順に、誰の番かを添えて>。人間が次にすること: <無ければ「ありません」>") {
 		t.Error("reporting-progress に、途中経過の1行の形がありません。途中経過だけを読んでも目標と残りが分かりません")
 	}
 	finishing := skillText(t, "finishing-run")
@@ -92,8 +94,8 @@ func TestGoals_途中経過とまとめて直したときの報告にも書か�
 		n      int
 	}{
 		{"- この issue の受け入れ目標: <この issue を閉じてよい条件>", 2},
-		{"- 残り: <残っている作業と、誰の番か>", 2},
-		{"残り: <残っている作業と、誰の番か>）`", 2},
+		{"- 人間が次にすること: <人間が次にする操作。", 2},
+		{"人間が次にすること: <無ければ「ありません」>）`", 2},
 	} {
 		if got := strings.Count(finishing, want.needle); got < want.n {
 			t.Errorf("finishing-run に %q が %d 箇所しかありません（%d 箇所要ります。まとめて直したときの見本）", want.needle, got, want.n)
@@ -187,7 +189,7 @@ func TestGoals_着手とPRを作るときに受け入れ目標を確かめる(t 
 		{"implementing-and-pushing", "目標そのものが間違っている可能性があります", "人間に確かめる理由が書かれていません"},
 		{"finishing-pull-request", "段0. 外す前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標を1つずつ見て", "draft を外す前に確かめないと、達成していない PR がマージできる状態になります"},
 		{"finishing-pull-request", goalsSectionHeading, "PR の本文に目標の節が無いと「例外なし」になりません"},
-		{"writing-comments-for-humans", "どれにも次の3つを書きます。例外はありません。", "人間は「例外なし」と指示しています"},
+		{"writing-comments-for-humans", "どれにも次の4つを書きます。例外はありません。", "人間は「例外なし」と指示しています"},
 	} {
 		if !strings.Contains(skillText(t, c.skill), c.needle) {
 			t.Errorf("%s に %q がありません。%s", c.skill, c.needle, c.why)
@@ -213,7 +215,7 @@ func TestGoals_作るときの本文とまとめて直すissueと人間向けの
 		t.Error("starting-run が、まとめて直す issue の目標を並べさせていません。一緒に閉じる issue の目標を確かめずに閉じます")
 	}
 	plugin := readSkill(t)
-	for _, want := range []string{"## 3. What every comment you write carries", "the acceptance goals of the issue", "whose turn it is"} {
+	for _, want := range []string{"## 3. What every comment you write carries", "the acceptance goals of the issue", "whose turn it is", "what the human should do next"} {
 		if !strings.Contains(plugin, want) {
 			t.Errorf("plugin continuo-issue-comments に %q がありません。人間が起動する Claude Code のコメントが例外になります", want)
 		}
