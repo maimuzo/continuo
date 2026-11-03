@@ -4,7 +4,7 @@ description: continuo が起動した run で、フローチャートの「実�
 ---
 
 **`review` または `blocked` を出す前に、必ず commit して push します**（commit するものが無ければ要りません）。push の前に担当を確かめ、`git push -u origin HEAD` の `-u` を落としません。
-**1つの issue に pull request は1つです。pull request は必ず issue の Development にリンクします。**この issue の開いた pull request がまだ無ければ、最初の push は下の「pull request を出す」の段1〜段3 で行い、push したらすぐ draft で作ります（題名と本文の書き直しは「finishing-pull-request」）。
+**1つの issue に pull request は1つです。pull request は必ず issue の Development にリンクします。**この issue の開いた pull request がまだ無ければ、最初の push は下の「pull request を出す」の段0〜段3 で行い、push したらすぐ draft で作ります（題名と本文の書き直しは「finishing-pull-request」）。
 continuo が用意した worktree と branch のまま作業し、切り替えません。止まるときの報告と表明の1行は「finishing-run」の「runの終了を宣言する」にあります。
 
 ## 実装する
@@ -36,7 +36,9 @@ sh 'CONTINUO_PLUGIN_DIR/skills/starting-run/scripts/check-assignee.sh' '<issue �
 
 ### 段2. push する
 
-この branch の開いた pull request がまだ無いときは、ここで push せず、下の「pull request を出す」の段1 へ進みます（push はそこの段3 で行います。先に push すると、段2 で branch を issue に結びつけられなくなります）。在るときは、ここで push します。
+この branch の開いた pull request がまだ無いときは、ここで push せず、下の「pull request を出す」の段0 へ進みます（push はそこの段3 で行います。先に push すると、段2 で branch を issue に結びつけられなくなります）。在るときは、ここで push します。
+
+「pull request を出す」の段0 か段1 の表が「pull request を作らずに止まる」と決めたときは、段2 を通らずに、ここで次の1行だけを叩いて push してから止まります（作業を remote に残すためです。branch は issue に結びつけないので、あとで作る pull request は本文の `Closes` だけでリンクされます）。
 
 ```bash
 git push -u origin HEAD
@@ -102,7 +104,7 @@ git worktree remove <自分が git worktree add したパス>
 
 **pull request は必ず issue の Development にリンクします。**本文の `Closes #<issue の番号>` だけでは、pull request の向け先が既定の branch でないときに GitHub が読まず、リンクされません。そこで、作るときは push の前に branch を issue に結びつけ（段2）、push し、すぐ作ります（段3）。結びつけた branch から作った pull request は、GitHub が issue の Development にリンクし、branch のリンクは外れます。リンクされたかは「finishing-run」の「runの終了を宣言する」の段4 で確かめます。
 
-この issue の開いた pull request がまだ無ければ、最初に commit を push する前に（上の「commit して push する」の push でも、「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の途中の push でも）、段1 から段3 を通り、push したらすぐこの issue の pull request を draft で作ります。どこで止まっても、次に引き継ぐ機械が pull request を辿れるようにするためです。
+この issue の開いた pull request がまだ無ければ、最初に commit を push する前に（上の「commit して push する」の push でも、「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」の途中の push でも）、段0 から段3 を通り、push したらすぐこの issue の pull request を draft で作ります。どこで止まっても、次に引き継ぐ機械が pull request を辿れるようにするためです。
 
 「commit して push する」の例外を使ったときは、この worktree の branch に commit が無いので、下の段はどれも当たりません。pull request の出し方も「このプロジェクトの決まり」に従います。書いていなければ、理由を書いて `CONTINUO-STATUS: blocked` を出します（報告と表明の書き方は「finishing-run」の「runの終了を宣言する」）。
 
@@ -110,7 +112,7 @@ git worktree remove <自分が git worktree add したパス>
 
 ### 段0. 受け入れ目標を全部達成できるかを確かめる
 
-pull request を作る前に（2つ目を作るときも）、「starting-run」の「受け入れ目標を確かめる」で並べた目標を1つずつ見て、この pull request で達成できるかを確かめます。
+pull request を作る前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標（まとめて直す issue の目標も）を1つずつ見て、この pull request で達成できるかを確かめます。段1 の表で2つ目を作ると決めたときも、作る前にもう一度確かめます。マージのあとに人間が行う作業（実機で確かめる・リリースで届けるなど）で果たす目標は、「残り」に人間の番として書けば達成できるものとして数えます。
 
 | 確かめた結果 | すること |
 | --- | --- |
@@ -174,6 +176,13 @@ F=$(mktemp)
 cat > "$F" <<'PRBODY'
 <!-- continuo:pull-request-in-progress -->
 作業の途中です。計画は <計画のコメントの URL> にあります。
+
+## この issue の受け入れ目標と、いまの作業と、残り
+
+- 受け入れ目標:
+  1. <閉じてよい条件>（本文から / 人間のコメント <URL> から）
+- いまの作業: <この run でしたこと>（受け入れ目標の 1 に寄与）
+- 残り: <残っている作業と、誰の番か>
 
 Closes #<issue の番号>
 PRBODY

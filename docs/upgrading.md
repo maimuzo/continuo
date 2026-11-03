@@ -123,13 +123,14 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | --- | --- |
 | **エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります** | 要りません |
 | **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
+| **エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます** | 要りません。**達成できない目標があると、エージェントは目標を変えずに `Blocked` で止まり、あなたに確かめます** |
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
 
 ### エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります
 
 **誰に関係があるか。**全員です。設定の書き換えは要りません。
 
-計画・成果の報告・判断票・途中経過・まとめて直したときの報告の、どれにも入ります。形と置き場所は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
+計画・成果の報告・判断票・途中経過・まとめて直したときの報告・pull request の本文の、どれにも入ります（例外はありません）。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足しました。continuo 本体が書くコメント（Status を動かした知らせなど）には入りません。形と置き場所は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
 
 ### pull request が、issue の Development にリンクされます
 
@@ -139,6 +140,12 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **これからは、pull request を作る前に branch を issue に結びつけます。**結びつけた branch から作った pull request は、GitHub が issue の Development にリンクします（向け先が既定の branch の pull request で確かめました。既定でない branch では確かめていません）。issue に branch が既にリンクされているとき（起点にする branch をリンクしているときなど）は、結びつけません。
 
 **カンバンの自動化 `Pull request linked to issue` を有効にしていて、`tracker.automated_state_rewrite` が空の人は**、エージェントが pull request を作った直後に Status が書き換わり、run が止まるようになることがあります。直し方は [FAQ.md](FAQ.md) の「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。
+
+### エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます
+
+**誰に関係があるか。**全員です。設定の書き換えは要りません。
+
+着手のたびに、エージェントは issue の本文とコメントから受け入れ目標（その issue を閉じてよい条件）を番号付きで並べます。pull request を作る前と、draft を外す前に、目標を全部達成できるか・したかを1つずつ確かめます。**達成できない目標があると、エージェントは目標を黙って変えたり外したりせず、理由を書いて `Blocked` で止まります。**目標を変えるかは、あなたが決めてください。
 
 ### 1つの issue に pull request は1つになります
 

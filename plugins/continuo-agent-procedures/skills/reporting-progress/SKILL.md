@@ -100,7 +100,7 @@ NOW
 
 push できる状態なら、あわせて push します（push の前の commit と担当の確かめは「implementing-and-pushing」の「commit して push する」）。
 
-この branch の開いた pull request がまだ無ければ、ここで push せず、「implementing-and-pushing」の「pull request を出す」の段1 から進み、そこで push して draft で作ります（先に push すると、branch を issue に結びつけられなくなります）。途中で止まっても、次に引き継ぐ機械が pull request を辿れます。開いた pull request が在れば、次で push します。
+この branch の開いた pull request がまだ無ければ、ここで push せず、「implementing-and-pushing」の「pull request を出す」の段0 から進み、そこで push して draft で作ります（先に push すると、branch を issue に結びつけられなくなります）。途中で止まっても、次に引き継ぐ機械が pull request を辿れます。開いた pull request が在れば、次で push します。
 
 ```bash
 git push -u origin HEAD

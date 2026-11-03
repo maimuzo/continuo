@@ -47,7 +47,7 @@ description: continuo が起動した run で、人間が読むコメント（�
 - 残り: <残っている作業>（AI の番） → <マージ>（人間の番）
 ```
 
-コメントの種類ごとの置き方は、次のとおりです。
+コメントの種類ごとの置き方は、次のとおりです。continuo 本体が書くコメント（Status を動かした知らせなど。印は `<!-- continuo:self -->` など）は、あなたが書くものではないので、この表の外です。
 
 | コメント | 置き方 |
 | --- | --- |
@@ -55,7 +55,7 @@ description: continuo が起動した run で、人間が読むコメント（�
 | 判断票（「posting-review-verdict」） | 周ごとに残りが変わるので、各周の `<details>` の中の先頭に置きます |
 | 途中経過（「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」） | 1行のまま、その1行に3つを書きます（形は「reporting-progress」にあります） |
 | まとめて直したときの、ほかの issue への説明（「finishing-run」の「まとめて直したとき」） | 見本の行に、その issue の受け入れ目標・寄与・残りを書きます（形は「finishing-run」にあります） |
-| pull request の本文（「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」） | 本文の先頭に上の1節を置き、目標ごとに、この pull request のどこで達成したかを書きます |
+| pull request の本文（「implementing-and-pushing」の「段3. push して、draft で作る」と「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」） | 本文に上の1節を置き、目標ごとに、この pull request のどこで達成したかを書きます。run のたびに最新へ差し替えます |
 
 ### 公開の場へ書かないもの
 

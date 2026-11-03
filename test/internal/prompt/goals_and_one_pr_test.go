@@ -117,13 +117,16 @@ func TestGoals_pullrequestをDevelopmentにリンクさせる(t *testing.T) {
 		{section, "CONTINUO_PLUGIN_DIR/skills/implementing-and-pushing/scripts/link-branch.sh", "結びつけるスクリプトの叩き方が無いと、リンクされません"},
 		{section, "### 段2. branch を issue に結びつける", "結びつける段が無いと、向け先が既定でない pull request はリンクされません"},
 		{section, "### 段3. push して、draft で作る", "push が段2 より後でないと、結びつけられません"},
-		{ip, "ここで push せず、下の「pull request を出す」の段1 へ進みます", "「commit して push する」で先に push すると、結びつけられません"},
+		{ip, "ここで push せず、下の「pull request を出す」の段0 へ進みます", "「commit して push する」で先に push すると、結びつけられません。段0 を通らないと、目標を確かめずに PR を作ります"},
+		{ip, "最初の push は下の「pull request を出す」の段0〜段3 で行い", "入口が段0 を指さないと、目標を確かめずに PR を作ります"},
+		{ip, "段0 から段3 を通り", "入口が段0 を指さないと、目標を確かめずに PR を作ります"},
+		{ip, "「pull request を作らずに止まる」と決めたときは、段2 を通らずに", "止まるときの push の道が無いと、PR を作る段へ戻るか、push せずに作業を失います"},
 	} {
 		if !strings.Contains(want.where, want.needle) {
 			t.Errorf("implementing-and-pushing に %q がありません。%s", want.needle, want.why)
 		}
 	}
-	if !strings.Contains(skillText(t, "reporting-progress"), "ここで push せず、「implementing-and-pushing」の「pull request を出す」の段1 から進み") {
+	if !strings.Contains(skillText(t, "reporting-progress"), "ここで push せず、「implementing-and-pushing」の「pull request を出す」の段0 から進み") {
 		t.Error("reporting-progress の途中の push が、開いた pull request が無いときに先に push しています。結びつけられなくなります")
 	}
 	finishing := skillText(t, "finishing-run")
