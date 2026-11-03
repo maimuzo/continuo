@@ -14639,6 +14639,8 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 | **結びつける条件** | origin が issue のリポジトリ・remote にいまの branch が無い（確かめられなければ在ると扱う）・issue にリンクされた branch が0本・起点の commit（HEAD と `origin/<既定の branch>` の merge-base）が決まる、の4つがそろうときだけ |
 | **確かめ** | 成果の報告を書く前（スキル finishing-run の段4）に、開いた PR の `closingIssuesReferences` と issue の `linkedBranches` を見て、つながっていなければ「残り」に人間の番として書く。draft のあいだは `closingIssuesReferences` を判定しない |
 | **PR は1つ** | `gh pr list --head <branch> --state all` で探し、開いた PR が在ればそれが行き先。マージ済みか close 済みだけが在るときは、そのあとに人間（trusted_comment）が新しい作業を頼んだコメントがあるときだけ、同じ branch で2つ目を作り、本文に前の PR とそのコメントの URL を書く。無ければ作らずに push だけして `blocked`。2つ目を別の名前の branch で出す許可は外した |
+| **受け入れ目標の確かめ** | 着手のとき（スキル starting-run の「受け入れ目標を確かめる」）に目標を番号付きで並べ直す。PR を作る前（implementing-and-pushing の「pull request を出す」の段0）と draft を外す前（finishing-pull-request の段0）に、全部達成できるか・したかを1つずつ確かめる。達成できない目標は目標が間違っている可能性があるので、AI が黙って変えたり外したり別の PR へ回したりせず、人間に確かめて `blocked`（人間のコメント 6597530623） |
+| **例外なし** | PR の本文の先頭にも同じ節を置き、目標ごとにどこで達成したかを書く（人間のコメント 6597530623「例外なし」） |
 | **2つ目の原因を止める** | レビューで直さないと決めた指摘を「直してほしければコメントを」と人間に投げない。「残り」にも入れない |
 
 **なぜ branch のリンクか。**`Closes #<番号>` は、PR の向け先が既定の branch のときだけ GitHub に読まれる（GitHub の文書）。2026-11-02 に、向け先が既定でない project の continuo の PR が、人間の手でつなぐまでリンクされていなかった。AI が叩ける API で PR を直接 issue へリンクする手段は見つかっていない。GitHub の文書「Creating a branch for an issue」は、リンクした branch から作った PR が自動で issue にリンクされると書いている。

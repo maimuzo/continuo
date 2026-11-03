@@ -27,6 +27,13 @@ cat > "$T" <<'TITLE'
 TITLE
 F=$(mktemp)
 cat > "$F" <<'PRBODY'
+## この issue の受け入れ目標と、いまの作業と、残り
+
+- 受け入れ目標:
+  1. <閉じてよい条件>（この pull request のどこで達成したか）
+- いまの作業: <この pull request でしたこと>（受け入れ目標の 1 に寄与）
+- 残り: <残っている作業と、誰の番か>
+
 <何をしたかの説明>
 
 <いまの本文に在る Closes の行を、全部ここへ写す>
@@ -34,6 +41,7 @@ PRBODY
 gh pr edit <PR番号> --repo <issue のリポジトリ> --title "$(cat "$T")" --body-file "$F"
 ```
 
+- 本文の先頭にも、受け入れ目標・いまの作業・残りの節を置きます（「writing-comments-for-humans」の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」。例外はありません）。目標ごとに、この pull request のどこで達成したかを書きます。
 - **`Closes` で始まる行は、全部そのまま残してください。**まとめて直した issue の分も入っています（「finishing-run」の「まとめて直したとき」）。とくに `Closes #<issue の番号>` を落とすと、branch を issue に結びつけられなかったとき（「implementing-and-pushing」の「pull request を出す」の段2）に pull request と issue が結びつかず、次に起動されたとき「starting-run」の「紐づく pull request を読む」にこの pull request が出てこなくなり、設計のレビューを CI で数えている project では検査が赤のままになります。
 - **下の「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出したときは、`gh pr view` と `gh pr edit` の `--repo` を、出した先のリポジトリに置き換えてください。**置き換えないと、この issue のリポジトリの、同じ番号の無関係な pull request を読み書きします。
 
@@ -54,6 +62,8 @@ gh pr edit <PR番号> --repo <issue のリポジトリ> --title "$(cat "$T")" --
 ## 収まったら draft を外す
 
 実装レビューループが「running-review-loop」の「何周回すか」で収まって終わったら（10回目で収まったときも）、実装レビューを回した pull request の draft を、次へ進む前に必ず外します。誰が draft で作ったかは問いません。
+
+段0. 外す前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標を1つずつ見て、この pull request で全部達成したかを確かめます。達成していない目標があれば外しません。それは下の2つ目（人間に訊くことが出たとき）に当たります。目標を黙って変えたり外したりせず、「implementing-and-pushing」の「pull request を出す」の段0 のとおり人間に確かめます。
 
 段1. draft かどうかを確かめます。
 

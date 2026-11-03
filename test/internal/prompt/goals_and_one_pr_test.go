@@ -167,3 +167,30 @@ func TestGoals_issueごとのpullrequestを1つにする(t *testing.T) {
 		t.Error("finishing-run が、直さない指摘を人間に投げることを止めていません（issue #318 の2つ目の PR の原因）")
 	}
 }
+
+// 目的: 着手のときに受け入れ目標を並べ、PR を作る前と draft を外す前に全部達成できるかを確かめさせ、
+// 達成できない目標を AI が黙って変えないことを固定する（issue #321 の人間のコメント 6597530623）。
+//
+// **人間は「達成できない場合は作業目標自体が間違っている可能性があるので、変更するなら人間に確認しろ」と言った。**
+// 目標を黙って外すと、残りが別の pull request に回り、PR が増える（issue #318）。
+//
+// 与える情報: スキル starting-run・implementing-and-pushing・finishing-pull-request・writing-comments-for-humans の全文。
+// 成功条件: それぞれの段と、例外なしの文と、PR の本文の見本の節が在ること。
+func TestGoals_着手とPRを作るときに受け入れ目標を確かめる(t *testing.T) {
+	for _, c := range []struct{ skill, needle, why string }{
+		{"starting-run", "## 受け入れ目標を確かめる", "着手のときに目標を並べないと、PR を作るときに照らす一覧がありません"},
+		{"starting-run", "**一覧の目標を、あなたの判断だけで変えたり外したりしません。**", "達成できない目標を黙って外すと、残りが別の PR に回ります"},
+		{"implementing-and-pushing", "### 段0. 受け入れ目標を全部達成できるかを確かめる", "PR を作る前に確かめないと、目標の一部を落としたまま出します"},
+		{"implementing-and-pushing", "目標そのものが間違っている可能性があります", "人間に確かめる理由が書かれていません"},
+		{"finishing-pull-request", "段0. 外す前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標を1つずつ見て", "draft を外す前に確かめないと、達成していない PR がマージできる状態になります"},
+		{"finishing-pull-request", goalsSectionHeading, "PR の本文に目標の節が無いと「例外なし」になりません"},
+		{"writing-comments-for-humans", "どれにも次の3つを書きます。例外はありません。", "人間は「例外なし」と指示しています"},
+	} {
+		if !strings.Contains(skillText(t, c.skill), c.needle) {
+			t.Errorf("%s に %q がありません。%s", c.skill, c.needle, c.why)
+		}
+	}
+	if strings.Contains(skillText(t, "writing-comments-for-humans"), "pull request の本文はコメントではないので、この節は当てません") {
+		t.Error("writing-comments-for-humans が PR の本文を対象から外しています。人間は「例外なし」と指示しています")
+	}
+}

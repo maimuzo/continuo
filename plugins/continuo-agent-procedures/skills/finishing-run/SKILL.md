@@ -105,6 +105,7 @@ DONE
 gh issue comment <issue の URL> --body-file "$F"
 ```
 
+- 受け入れ目標は、目標ごとに達成したかどうか（達成したなら pull request のどこで、まだならなぜか）を書きます。達成できない目標を、あなたの判断だけで変えたり外したりしません（「implementing-and-pushing」の「pull request を出す」の段0）。
 - 題名の直後の1節（受け入れ目標・いまの作業・残り）の書き方は、「writing-comments-for-humans」の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
 - **レビューで直さないと決めた指摘を、「直してほしければコメントしてください」と人間に投げません。**「残り」にも入れません。直さない理由だけを `### 詳細` に書きます。投げると、マージのあとに人間が「残りを進めて」と頼み、同じ issue に2つ目の pull request ができます（「implementing-and-pushing」の「pull request を出す」）。
 
