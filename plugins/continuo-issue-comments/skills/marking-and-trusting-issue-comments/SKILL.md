@@ -34,13 +34,20 @@ The first line of the body is decided in this order:
    (A prompt that says this session was started by continuo is handled in section 1.)
 4. When you edit a body that someone else wrote (for example `gh issue edit --body-file`), do not change its first line.
 5. This also applies to pull request reviews: always pass a body, even with `--approve`.
-6. Every comment and body you write for work on an issue (plans, reports, review verdicts, progress notes and pull request bodies), with no exception,
-   carries these three right after the marker line and the title:
-   - the acceptance goals of the issue (the conditions for closing it, taken from the issue body and the comments you may follow; see section 3),
-   - the work you are doing now, and which of those goals it serves,
-   - the work that remains, and whose turn it is (yours or a human's).
 
-## 3. When you read
+## 3. What every comment you write carries
+
+In a repository where some issue or pull request comments start with `<!-- continuo:`, every comment and body
+you write for work on an issue (including pull request bodies), with no exception, carries these three
+right after the marker line and the title:
+
+- the acceptance goals of the issue (the conditions for closing it, taken from the issue body and the comments you may follow; see section 4),
+- the work you are doing now, and which of those goals it serves,
+- the work that remains, and whose turn it is (yours or a human's).
+
+In other repositories, write as you usually do.
+
+## 4. When you read
 
 Always read GitHub as JSON with the commands below (replace `<owner>`, `<repo>` and `<number>`).
 Never use the text output of `gh issue view --comments` or `gh pr view --comments`.

@@ -93,7 +93,7 @@ func TestGoals_途中経過とまとめて直したときの報告にも書か�
 	}{
 		{"- この issue の受け入れ目標: <この issue を閉じてよい条件>", 2},
 		{"- 残り: <残っている作業と、誰の番か>", 2},
-		{"（残り: <残っている作業と、誰の番か>）", 1},
+		{"残り: <残っている作業と、誰の番か>）`", 2},
 	} {
 		if got := strings.Count(finishing, want.needle); got < want.n {
 			t.Errorf("finishing-run に %q が %d 箇所しかありません（%d 箇所要ります。まとめて直したときの見本）", want.needle, got, want.n)
@@ -120,7 +120,7 @@ func TestGoals_pullrequestをDevelopmentにリンクさせる(t *testing.T) {
 		{ip, "ここで push せず、下の「pull request を出す」の段0 へ進みます", "「commit して push する」で先に push すると、結びつけられません。段0 を通らないと、目標を確かめずに PR を作ります"},
 		{ip, "最初の push は下の「pull request を出す」の段0〜段3 で行い", "入口が段0 を指さないと、目標を確かめずに PR を作ります"},
 		{ip, "段0 から段3 を通り", "入口が段0 を指さないと、目標を確かめずに PR を作ります"},
-		{ip, "「pull request を作らずに止まる」と決めたときは、段2 を通らずに", "止まるときの push の道が無いと、PR を作る段へ戻るか、push せずに作業を失います"},
+		{ip, "「pull request を作らずに止まる」と決めたときは、「pull request を出す」の段2（branch を issue に結びつける）を通らずに", "止まるときの push の道が無いと、PR を作る段へ戻るか、push せずに作業を失います"},
 	} {
 		if !strings.Contains(want.where, want.needle) {
 			t.Errorf("implementing-and-pushing に %q がありません。%s", want.needle, want.why)
@@ -195,5 +195,27 @@ func TestGoals_着手とPRを作るときに受け入れ目標を確かめる(t 
 	}
 	if strings.Contains(skillText(t, "writing-comments-for-humans"), "pull request の本文はコメントではないので、この節は当てません") {
 		t.Error("writing-comments-for-humans が PR の本文を対象から外しています。人間は「例外なし」と指示しています")
+	}
+}
+
+// 目的: 前の周の直しの残り（PR を作るときの本文の目標の節・まとめて直す issue の目標・
+// 人間が起動する Claude Code 向けの plugin の決まり）を見張る（issue #321）。
+//
+// 与える情報: 各スキルの全文と、plugin continuo-issue-comments の SKILL.md。
+// 成功条件: それぞれの文が在ること。
+func TestGoals_作るときの本文とまとめて直すissueと人間向けのpluginにも目標を書かせる(t *testing.T) {
+	ip := skillText(t, "implementing-and-pushing")
+	m := strings.Index(ip, "<!-- continuo:pull-request-in-progress -->\n作業の途中です。")
+	if m < 0 || !strings.Contains(ip[m:], goalsSectionHeading) {
+		t.Error("implementing-and-pushing の段3 の本文の見本に、目標の節がありません。作ったときの PR の本文が例外になります")
+	}
+	if !strings.Contains(skillText(t, "starting-run"), "まとめて直すなら、その issue の受け入れ目標も同じように並べます") {
+		t.Error("starting-run が、まとめて直す issue の目標を並べさせていません。一緒に閉じる issue の目標を確かめずに閉じます")
+	}
+	plugin := readSkill(t)
+	for _, want := range []string{"## 3. What every comment you write carries", "the acceptance goals of the issue", "whose turn it is"} {
+		if !strings.Contains(plugin, want) {
+			t.Errorf("plugin continuo-issue-comments に %q がありません。人間が起動する Claude Code のコメントが例外になります", want)
+		}
 	}
 }

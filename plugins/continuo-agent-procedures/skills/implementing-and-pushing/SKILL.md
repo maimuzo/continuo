@@ -38,7 +38,7 @@ sh 'CONTINUO_PLUGIN_DIR/skills/starting-run/scripts/check-assignee.sh' '<issue �
 
 この branch の開いた pull request がまだ無いときは、ここで push せず、下の「pull request を出す」の段0 へ進みます（push はそこの段3 で行います。先に push すると、段2 で branch を issue に結びつけられなくなります）。在るときは、ここで push します。
 
-「pull request を出す」の段0 か段1 の表が「pull request を作らずに止まる」と決めたときは、段2 を通らずに、ここで次の1行だけを叩いて push してから止まります（作業を remote に残すためです。branch は issue に結びつけないので、あとで作る pull request は本文の `Closes` だけでリンクされます）。
+「pull request を出す」の段0 か段1 の表が「pull request を作らずに止まる」と決めたときは、「pull request を出す」の段2（branch を issue に結びつける）を通らずに、ここで次の1行だけを叩いて push してから止まります。作業を remote に残すためです。結びつけてから止まると、pull request ができないまま issue に branch のリンクが残り、次の着手で continuo がその branch を worktree の起点にしてしまいます。結びつけなかった branch は、あとで pull request を作っても本文の `Closes` だけでリンクされるので、止まるときの報告の「残り」に、人間の番として「pull request ができたら、向け先が既定の branch でなければ issue の Development 欄からつなぐ」と書きます。
 
 ```bash
 git push -u origin HEAD
@@ -112,12 +112,12 @@ git worktree remove <自分が git worktree add したパス>
 
 ### 段0. 受け入れ目標を全部達成できるかを確かめる
 
-pull request を作る前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標（まとめて直す issue の目標も）を1つずつ見て、この pull request で達成できるかを確かめます。段1 の表で2つ目を作ると決めたときも、作る前にもう一度確かめます。マージのあとに人間が行う作業（実機で確かめる・リリースで届けるなど）で果たす目標は、「残り」に人間の番として書けば達成できるものとして数えます。
+pull request を作る前に、「starting-run」の「受け入れ目標を確かめる」で並べた目標（まとめて直す issue の目標も）を1つずつ見て、この pull request で達成できるかを確かめます。段1 の表で2つ目を作ると決めたときも、作る前にもう一度確かめます。受け入れ目標の文そのものが、マージのあとに人間が行う作業（「リリースする」など）を求めているときだけ、その目標は「残り」に人間の番として書けば達成できるものとして数えます。あなたが自分でできる確かめを、人間の番へ回しません。
 
 | 確かめた結果 | すること |
 | --- | --- |
 | 全部達成できる | 段1へ進みます |
-| 達成できない目標がある | その目標を黙って変えたり、外したり、あとで別の pull request に回したりしません。目標そのものが間違っている可能性があります。どの目標が、なぜ達成できないかと、変えるならどう変えたいかを、報告（「finishing-run」の「runの終了を宣言する」）に書いて人間に確かめ、`CONTINUO-STATUS: blocked` を出します（止まる前の commit と push は上の「commit して push する」のとおりです） |
+| 達成できない目標がある（「pull request を作らずに止まる」） | その目標を黙って変えたり、外したり、あとで別の pull request に回したりしません。目標そのものが間違っている可能性があります。どの目標が、なぜ達成できないかと、変えるならどう変えたいかを、報告（「finishing-run」の「runの終了を宣言する」）に書いて人間に確かめ、`CONTINUO-STATUS: blocked` を出します（止まる前の commit と push は上の「commit して push する」のとおりです） |
 
 ### 段1. 既にあるかを確かめる
 

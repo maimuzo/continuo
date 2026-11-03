@@ -14374,9 +14374,9 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | **確かめられなかったら** | 1回だけ叩き直す。着手のときと終わりの push の前なら、push せずに `blocked`。**途中の push（5-3）の前なら、その回を見送って作業を続ける。**「担当が移った」とは書かせない |
 | **見本の道具** | `gh` 内蔵の `--jq` とシェルの `case` だけ。**単体の `jq` は使わない**（組み込みのプロンプトは、ほかでも使っていない） |
 | **pull request を作る時機** | 最初に commit を push した直後。3-4 の push でも 5-3 の push でも同じ。**開いた PR がまだ無ければ、最初の push は「pull request を出す」の段0〜段3 で行い、push の前に branch を issue に結びつける**（5-3za）。**いつも draft**（4-4 に「draft で作らない」と書いてあっても。途中の作業をマージできる状態にしない）。draft を断られたリポジトリでだけ `--draft` を外す。差分が無いなどで作れなければ止まらず、次の push でもう一度試す |
-| **途中の本文** | 1行目に目印 `<!-- continuo:pull-request-in-progress -->`、「作業の途中です」、`Closes #<番号>`、計画のコメントの URL。題名は issue の題名 |
+| **途中の本文** | 1行目に目印 `<!-- continuo:pull-request-in-progress -->`、「作業の途中です」、計画のコメントの URL、受け入れ目標・いまの作業・残りの節（5-3za）、`Closes #<番号>`。題名は issue の題名 |
 | **実装が終わったら** | いまの本文を読み、**目印の1行が残っていたら**題名と本文を書き直して目印を外す。残っていなければ触らない。`Closes` の行は全部残す |
-| **残っている手順** | pull request の本文ではなく、途中経過のコメント（5-3）の1行に書かせる |
+| **残っている手順** | 途中経過のコメント（5-3）の1行に書かせる。pull request の本文の「残り」は、目印が残っているあいだの書き直しのときだけ更新する（5-3za） |
 
 **目印 `<!-- continuo:pull-request-in-progress -->` を読むのは、エージェントだけである。**
 **continuo 本体も、CI（[.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) と、利用者へ配る雛形）も、リリース前の検査も読まない。**
@@ -14627,7 +14627,7 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 
 ### 5-3za. コメントに受け入れ目標・寄与・残りを書かせ、PR を1つにして issue の Development にリンクさせる
 
-**言いたいこと。**issue #321 の人間の3つの指示（「すべてのコメントに … issueの受け入れ目標 / 今行っている作業 … どの目標に寄与するのか / 残っている作業」「issueで生まれたPRは必ずissueにリンクしろ」「issueで作るPRは基本的に1つにしろ。特別な理由なしに何個も作るな」）を、plugin `continuo-agent-procedures` のスキルへ書いた。**雛形（`WORKFLOW.md` の本文）へは足さない**（5-3r と同じ理由。版を上げれば届くのはスキルのほうである）。
+**言いたいこと。**issue #321 の人間の指示（「すべてのコメントに … issueの受け入れ目標 / 今行っている作業 … どの目標に寄与するのか / 残っている作業」「issueで生まれたPRは必ずissueにリンクしろ」「issueで作るPRは基本的に1つにしろ。特別な理由なしに何個も作るな」）を、plugin `continuo-agent-procedures` のスキルへ書いた。**雛形（`WORKFLOW.md` の本文）へは足さない**（5-3r と同じ理由。版を上げれば届くのはスキルのほうである）。
 
 **採る形。**
 
@@ -14640,7 +14640,7 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 | **確かめ** | 成果の報告を書く前（スキル finishing-run の段4）に、開いた PR の `closingIssuesReferences` と issue の `linkedBranches` を見て、つながっていなければ「残り」に人間の番として書く。draft のあいだは `closingIssuesReferences` を判定しない |
 | **PR は1つ** | `gh pr list --head <branch> --state all` で探し、開いた PR が在ればそれが行き先。マージ済みか close 済みだけが在るときは、そのあとに人間（trusted_comment）が新しい作業を頼んだコメントがあるときだけ、同じ branch で2つ目を作り、本文に前の PR とそのコメントの URL を書く。無ければ作らずに push だけして `blocked`。2つ目を別の名前の branch で出す許可は外した |
 | **受け入れ目標の確かめ** | 着手のとき（スキル starting-run の「受け入れ目標を確かめる」）に目標を番号付きで並べ直す。PR を作る前（implementing-and-pushing の「pull request を出す」の段0）と draft を外す前（finishing-pull-request の段0）に、全部達成できるか・したかを1つずつ確かめる。達成できない目標は目標が間違っている可能性があるので、AI が黙って変えたり外したり別の PR へ回したりせず、人間に確かめて `blocked`（人間のコメント 6597530623） |
-| **例外なし** | PR の本文にも同じ節を置き（作るときと、run のたびに差し替える）、目標ごとにどこで達成したかを書く。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足す（人間のコメント 6597530623「例外なし」）。**continuo 本体が書くコメント（`<!-- continuo:self -->` など）は対象の外。**Go のコードが書くもので、この issue の「スキルを修正して」の外であり、本体はどの issue の目標も知らない |
+| **例外なし** | PR の本文にも同じ節を置き（作るときと、目印が残っているあいだの書き直しのとき。目印が無ければ触らない）、目標ごとにどこで達成したかを書く。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足す（continuo の印があるリポジトリだけ。人間のコメント 6597530623「例外なし」）。**continuo 本体が書くコメント（`<!-- continuo:self -->` など）は対象の外。**Go のコードが書くもので、この issue の「スキルを修正して」の外であり、本体はどの issue の目標も知らない |
 | **PR を作らずに止まるとき** | 段0 か段1 の表が「作らずに止まる」と決めたら、branch を issue に結びつけずに `git push -u origin HEAD` だけ叩いて止まる。あとで作る PR は `Closes` だけでリンクされる（限界） |
 | **2つ目の原因を止める** | レビューで直さないと決めた指摘を「直してほしければコメントを」と人間に投げない。「残り」にも入れない |
 
@@ -14666,9 +14666,10 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 | push のたびに結びつけを叩く | **採らない。**auto mode に断られた回数が積み上がる（3回続けてか通算20回で止まる。5-3w の前段）。PR を作る直前に1回だけ叩く |
 | 確かめるだけで結びつけない（つながっていなければ人間に頼む） | **採らない。**人間の指示は「リンクしろ」であり、手でつなぐ作業が残る |
 | マージのあとは PR を作らずに止める | **採らない。**マージ済みの PR には commit を足せないので、人間が新しい作業を頼んだときの出し先が無くなる。頼まれたときだけ2つ目を作る |
+| 段0・段1 で PR を作らずに止まるときも、結びつけてから push する | **採らない。**PR ができないまま issue に branch のリンクが残り、次の着手で continuo がその branch を worktree の起点にする（限界の1つ目）。結びつけずに push し、報告の「残り」で人間に知らせる |
 | 2つ目を別の名前の branch で出す（前の決まり） | **採らない。**次の run はいまの branch 名で PR を探すので見つけられず、3つ目を作る |
 
-**この節の文面を直すときは、スキル writing-comments-for-humans・implementing-and-pushing・finishing-run・reporting-progress・trusting-instructions も同時に直す。**スクリプトの条件は [test/internal/prompt/link_branch_test.go](../../test/internal/prompt/link_branch_test.go) が偽の gh と git で見張る。
+**この節の文面を直すときは、スキル writing-comments-for-humans・implementing-and-pushing・finishing-run・finishing-pull-request・starting-run・reporting-progress・trusting-instructions・writing-plan・posting-review-verdict と plugin `continuo-issue-comments` も同時に直す。**スクリプトの条件は [test/internal/prompt/link_branch_test.go](../../test/internal/prompt/link_branch_test.go) が偽の gh と git で見張る。
 
 ### 5-4. 2回目以降のプロンプト
 

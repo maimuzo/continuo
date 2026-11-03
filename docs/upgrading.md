@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルだけです。
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |

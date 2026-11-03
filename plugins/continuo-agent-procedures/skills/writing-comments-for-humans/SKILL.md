@@ -55,7 +55,7 @@ description: continuo が起動した run で、人間が読むコメント（�
 | 判断票（「posting-review-verdict」） | 周ごとに残りが変わるので、各周の `<details>` の中の先頭に置きます |
 | 途中経過（「reporting-progress」の「<進捗の間隔（分）>分以上黙らない」） | 1行のまま、その1行に3つを書きます（形は「reporting-progress」にあります） |
 | まとめて直したときの、ほかの issue への説明（「finishing-run」の「まとめて直したとき」） | 見本の行に、その issue の受け入れ目標・寄与・残りを書きます（形は「finishing-run」にあります） |
-| pull request の本文（「implementing-and-pushing」の「段3. push して、draft で作る」と「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」） | 本文に上の1節を置き、目標ごとに、この pull request のどこで達成したかを書きます。run のたびに最新へ差し替えます |
+| pull request の本文（「implementing-and-pushing」の「段3. push して、draft で作る」と「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」） | 本文に上の1節を置き、目標ごとに、この pull request のどこで達成したかを書きます。目印の1行が残っているあいだだけ書き直します（「finishing-pull-request」の「段4. 実装が終わったら、題名と本文を書き直す」） |
 
 ### 公開の場へ書かないもの
 
@@ -65,6 +65,8 @@ description: continuo が起動した run で、人間が読むコメント（�
                             範囲や叩いた場所を書くときだけ、`~/` から書きます（「running-review-loop」の「レビューの回し方」）
     資格情報                API キー・アクセストークン
     社内だけで引けるホスト名
+
+**書く先が issue と違う公開範囲のリポジトリ（private な issue から public なリポジトリへ pull request を出したときなど）では、** pull request の本文と、そこへ貼る判断票の受け入れ目標の節に、issue の文と URL を写しません。目標は、公開してよい言い方に要約して書きます。本文とコメントは編集履歴が残り、あとから消せません。
 
 - **コマンドの出力をそのまま貼るときは、混ざっていないかを見ます。**コメントは編集履歴が残るので、書いたら取り消せません。
 - **資格情報を書いてしまったときは、消す前にそれを無効化してください。**消せたかどうかに関わらず。
