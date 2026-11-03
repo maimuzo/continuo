@@ -3422,7 +3422,7 @@ stderr にも安定した形では出ないので、**「回線が切れた」�
 **`origin/` を付けない生の名前**であり、リンクが1本でないときは空文字である。
 **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
 `.push_branch` は「別の名前へ出せと issue に書かれていたときの候補」として渡す。
-**base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
+**base と push 先を同じものに固定すると、人間が「この branch へ出せ」と書いたときの出し先を書けなくなる。**（1つの issue に PR は1つである。5-3za）
 
 **`.push_branch` は base の門とは別の門を通る。**tracker 側の門（ちょうど1本・同じリポジトリ）
 だけを通った値であり、**workspace 側の門（正規化で名前が変わらないこと）は通っていない。**
@@ -14016,12 +14016,12 @@ push できる状態のときだけ**である。
 | 何を書くか | なぜ |
 | --- | --- |
 | **打ち消しの口は開けない** | **2026-09-03 の人間の判断である。**「まったく根拠がないだけでなく、害がある。変更するな」。**調査だけ・レビューだけの issue は、continuo に渡さない側で分ける。****この決定を確かめる検査は無い。**[test/internal/prompt/pull_request_test.go:61-68](../../test/internal/prompt/pull_request_test.go#L61-L68) に経緯のコメントが在るだけで、`t.Error` に繋がる条件は1つも無い。**送る文面を書き直す人は、このコメントを読んで判断すること** |
-| **既にある PR は、いま居る branch から引かせる** | `gh pr list --head "$(git branch --show-current)" --state open` を叩かせる。2回目以降の turn と、`attempt` が2以上の起動で2本目ができるのを防ぐ |
+| **既にある PR は、いま居る branch から引かせる** | `gh pr list --head "$(git branch --show-current)" --state all` を叩かせ、開いているかは `mergedAt` と `closedAt` で決める（5-3za。`state` の綴りでは決めない）。fork の同じ名前の branch の PR は `isCrossRepository` で除く。2回目以降の turn と、`attempt` が2以上の起動で2本目ができるのを防ぐ |
 | **`## 4-2. 紐づく pull request を読む` の一覧から選ばせない** | **あの一覧は「この issue を閉じる PR」ではなく「この issue に言及があった PR」を返す。**実測（2026-09-03）: issue #60 の timeline は PR #112 を返すが、PR #112 が閉じるのは issue #87 であり、本文に `#60` は0件である。**その branch へ push させると、別の issue で動いているエージェントの作業が消える。**`state` の綴りも取り方で `OPEN` と `open` の2通りになる |
 | **既にあると断られたら、それを行き先にする** | 判定が外れたときの出口が `blocked` だけだと、**PR はあるのに人間待ちで止まる** |
 | **別のリポジトリへ出すときは `Closes <owner>/<repo>#<番号>`** | `Closes #<番号>` は、**PR を出したリポジトリの同じ番号の issue を指す** |
 | **本文へ `Closes #<番号>` を入れさせる** | `## 4-2. 紐づく pull request を読む` の1つ目のコマンドが `closingIssuesReferences` で探す。**入れないと、次の turn がレビューの指摘を読む先を失う** |
-| **push してから叩かせる** | push していない branch で `gh pr create` を叩くと、**gh が push 先を対話で聞いて止まる**（`gh pr create --help` に記載。gh 2.97.0 で確認） |
+| **push してから叩かせる** | push していない branch で `gh pr create` を叩くと、**gh が push 先を対話で聞いて止まる**（`gh pr create --help` に記載。gh 2.97.0 で確認）。**ただし最初の push は、branch を issue に結びつけたあとに行う**（5-3za。先に push すると結びつけられない） |
 | **作れなかったら `blocked`** | push だけして黙って終えると、人間はどこを見ればよいか分からない |
 
 **なぜ雛形ではなく組み込みか。**
@@ -14373,10 +14373,10 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | **担当者が1人もいなかったら** | **止めない。push もする**（3-77d。本体もそう動く。誰の作業ともぶつからない） |
 | **確かめられなかったら** | 1回だけ叩き直す。着手のときと終わりの push の前なら、push せずに `blocked`。**途中の push（5-3）の前なら、その回を見送って作業を続ける。**「担当が移った」とは書かせない |
 | **見本の道具** | `gh` 内蔵の `--jq` とシェルの `case` だけ。**単体の `jq` は使わない**（組み込みのプロンプトは、ほかでも使っていない） |
-| **pull request を作る時機** | 最初に commit を push した直後。3-4 の push でも 5-3 の push でも同じ。**いつも draft**（4-4 に「draft で作らない」と書いてあっても。途中の作業をマージできる状態にしない）。draft を断られたリポジトリでだけ `--draft` を外す。差分が無いなどで作れなければ止まらず、次の push でもう一度試す |
-| **途中の本文** | 1行目に目印 `<!-- continuo:pull-request-in-progress -->`、「作業の途中です」、`Closes #<番号>`、計画のコメントの URL。題名は issue の題名 |
+| **pull request を作る時機** | 最初に commit を push した直後。3-4 の push でも 5-3 の push でも同じ。**開いた PR がまだ無ければ、最初の push は「pull request を出す」の段0〜段3 で行い、push の前に branch を issue に結びつける**（5-3za）。**いつも draft**（4-4 に「draft で作らない」と書いてあっても。途中の作業をマージできる状態にしない）。draft を断られたリポジトリでだけ `--draft` を外す。差分が無いなどで作れなければ止まらず、次の push でもう一度試す |
+| **途中の本文** | 1行目に目印 `<!-- continuo:pull-request-in-progress -->`、「作業の途中です」、計画のコメントの URL、受け入れ目標・いまの作業・残りの節（5-3za）、`Closes #<番号>`。題名は issue の題名 |
 | **実装が終わったら** | いまの本文を読み、**目印の1行が残っていたら**題名と本文を書き直して目印を外す。残っていなければ触らない。`Closes` の行は全部残す |
-| **残っている手順** | pull request の本文ではなく、途中経過のコメント（5-3）の1行に書かせる |
+| **残っている手順** | 途中経過のコメント（5-3）の1行に書かせる。pull request の本文の「残り」は、目印が残っているあいだの書き直しのときだけ更新する（5-3za） |
 
 **目印 `<!-- continuo:pull-request-in-progress -->` を読むのは、エージェントだけである。**
 **continuo 本体も、CI（[.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) と、利用者へ配る雛形）も、リリース前の検査も読まない。**
@@ -14395,7 +14395,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 - **continuo が動いていて、担当が移ってから `recheck_interval_ms` 以内にエージェントが先に気づいて `blocked` を出すと、元の機械の continuo が、移ったあとの issue の Status を引き渡しへ動かす**（[internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `handleTurnEnd`。確かめ直しが期限前なら、表明をそのまま読む）。**新しい担当の機械は、それを見て worker を止める**（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go)）。**`after_run` に `git push` を書いている機械では、そのとき本体が push する**（`finishRunClaimed` は担当を見ない。3-77h の手当ては、本体が自分で気づいた経路だけである）。**この窓は、この決定の前から在る**（同じ窓でエージェントが `review` や `blocked` を出せば、同じことが起きていた）。窓を閉じるには、turn の終わりで毎回担当を確かめ直すことになり、hook を受けた run の扱いに触るので、ここでは入れていない。**起きるのは、走っている run の担当を人間が手で付け替えたときである。**付け替える前に元の機械を止めれば起きない。
 - **`tracker.provider.token_source: env` で、`gh` とは別のアカウントのトークンを渡している構成では、毎回「別の人が担当」になる**（3-65。担当者に入るのはトークンの持ち主である）。
 - **push せずに止まった commit は、その機械の worktree にしか無い。**既定（`cleanup.require_pushed: true`）では片付けが見送られて残る。
-- **カンバンの自動化（`Pull request linked to issue`）が Status を書き換える時機も、実装の途中へ動く。**`tracker.automated_state_rewrite` が空のカンバンでは、continuo の知らない Status になってから `tracker.unknown_state_grace_ms`（既定10分）のあと、実装の途中で run が止まる。この決定の前は、実装が終わって pull request を作った直後に止まっていた。
+- **カンバンの自動化（`Pull request linked to issue`）が Status を書き換える時機も、実装の途中へ動く。**5-3za で、向け先が既定の branch でない PR も branch のリンク経由で issue に結びつくようになったので、これまで発火していなかったそういう project でも発火する（測ったのは向け先が既定の branch の PR だけである）。`tracker.automated_state_rewrite` が空のカンバンでは、continuo の知らない Status になってから `tracker.unknown_state_grace_ms`（既定10分）のあと、実装の途中で run が止まる。この決定の前は、実装が終わって pull request を作った直後に止まっていた。
 - **この決まりが届くのは、continuo が起動した Claude Code の会話だけである。**
 
 ### 5-3x. レビュワーと直す側の両方に、検討の経緯を読ませる
@@ -14624,6 +14624,52 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 | compaction のあと毎回全部を Read で読む | レビューループのように同じ段に何度も入るところで、同じ本文が何度も入る |
 | 古い plugin を continuo の起動のときに消す | 立て直したあとも pane の Claude Code は古い `--plugin-dir` を読み続けるので、手順もスクリプトも失われる |
 | 版が読めないときも起動しない | 上の「読めないときに止めない理由」 |
+
+### 5-3za. コメントに受け入れ目標・寄与・残りを書かせ、PR を1つにして issue の Development にリンクさせる
+
+**言いたいこと。**issue #321 の人間の指示（「すべてのコメントに … issueの受け入れ目標 / 今行っている作業 … どの目標に寄与するのか / 残っている作業」「issueで生まれたPRは必ずissueにリンクしろ」「issueで作るPRは基本的に1つにしろ。特別な理由なしに何個も作るな」）を、plugin `continuo-agent-procedures` のスキルへ書いた。**雛形（`WORKFLOW.md` の本文）へは足さない**（5-3r と同じ理由。版を上げれば届くのはスキルのほうである）。
+
+**採る形。**
+
+| 何 | 決めたこと |
+| --- | --- |
+| **目標・寄与・残り** | エージェントが書くどのコメントにも書かせる。残りは進める順の詳しい手順（手順ごとに誰の番か）で書き、加えて「人間が次にすること」（そのまま貼れるコマンドつき。人間の番が無ければ「ありません」）を書く（人間のコメント 6599057291「このissueの残作業を詳細な手順としてまとめろ。そして、人間は次に何をすればいいのかをまとめろ」）。形は `## この issue の受け入れ目標と、いまの作業と、残り` の1節（3つの箇条。8つの見出しは当てない）で、印と `# 題名` の後、最初の `## ` の節の前に置く。判断票は周ごとの `<details>` の中の先頭、途中経過は1行の中、まとめて直したときは見本の行に書く（スキル writing-comments-for-humans の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」） |
+| **受け入れ目標の拾い方** | `trusted_body` が true の本文と、`trusted_comment` が true のコメントから。明示されていなければ、読み取った目標だと書き、どの文から読んだかを添える |
+| **Development へのリンク** | PR を作るときは、push の前にスクリプト `link-branch.sh` で branch を issue に結びつけ（GraphQL の `createLinkedBranch`）、push し、すぐ作る。本文の `Closes` も今までどおり書く |
+| **結びつける条件** | origin が issue のリポジトリ・remote にいまの branch が無い（確かめられなければ在ると扱う）・issue にリンクされた branch が0本・起点の commit（HEAD と `origin/<既定の branch>` の merge-base）が決まる、の4つがそろうときだけ |
+| **確かめ** | 成果の報告を書く前（スキル finishing-run の段4）に、開いた PR の `closingIssuesReferences` と issue の `linkedBranches` を見て、つながっていなければ「残り」に人間の番として書く。draft のあいだは `closingIssuesReferences` を判定しない |
+| **PR は1つ** | `gh pr list --head <branch> --state all` で探し、開いた PR が在ればそれが行き先。マージ済みか close 済みだけが在るときは、そのあとに人間（trusted_comment）が新しい作業を頼んだコメントがあるときだけ、同じ branch で2つ目を作り、本文に前の PR とそのコメントの URL を書く。無ければ作らずに push だけして `blocked`。2つ目を別の名前の branch で出す許可は外した |
+| **受け入れ目標の確かめ** | 着手のとき（スキル starting-run の「受け入れ目標を確かめる」）に目標を番号付きで並べ直す。PR を作る前（implementing-and-pushing の「pull request を出す」の段0）と draft を外す前（finishing-pull-request の段0）に、全部達成できるか・したかを1つずつ確かめる。達成できない目標は目標が間違っている可能性があるので、AI が黙って変えたり外したり別の PR へ回したりせず、人間に確かめて `blocked`（人間のコメント 6597530623） |
+| **例外なし** | PR の本文にも同じ節を置き（作るときと、目印が残っているあいだの書き直しのとき。目印が無ければ触らない）、目標ごとにどこで達成したかを書く。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足す（continuo の印があるリポジトリだけ。人間のコメント 6597530623「例外なし」）。**continuo 本体が書くコメント（`<!-- continuo:self -->` など）は対象の外。**Go のコードが書くもので、この issue の「スキルを修正して」の外であり、本体はどの issue の目標も知らない |
+| **PR を作らずに止まるとき** | 段0 か段1 の表が「作らずに止まる」と決めたら、branch を issue に結びつけずに `git push -u origin HEAD` だけ叩いて止まる。あとで作る PR は `Closes` だけでリンクされる（限界） |
+| **2つ目の原因を止める** | レビューで直さないと決めた指摘を「直してほしければコメントを」と人間に投げない。「残り」にも入れない |
+
+**なぜ branch のリンクか。**`Closes #<番号>` は、PR の向け先が既定の branch のときだけ GitHub に読まれる（GitHub の文書）。2026-11-02 に、向け先が既定でない project の continuo の PR が、人間の手でつなぐまでリンクされていなかった。AI が叩ける API で PR を直接 issue へリンクする手段は見つかっていない。GitHub の文書「Creating a branch for an issue」は、リンクした branch から作った PR が自動で issue にリンクされると書いている。
+
+**測った値（2026-11-03、issue #321、向け先は main、public）。**PR #323 を `gh pr create` で作る前は #321 の `linkedBranches` が1本、作ったあとは0本。#321 の timeline に、PR からの cross-referenced（11:44:11 JST）の1秒後に `connected`（11:44:12 JST）が出た。PR #323 の `closingIssuesReferences(userLinkedOnly: true)` は `[321]`、`Closes` だけの #318 の PR #322 は `[]` だった。**branch から来たリンクは、手でつないだリンクとして入る。**
+
+**測っていないこと。**向け先が既定でない PR で、branch のリンクが外れるか・`closingIssuesReferences` に入るか。人間が起点に別の branch をリンクしていた issue で PR を作ったとき。既に remote に在る branch を `createLinkedBranch` に渡したときの動き（在れば叩かないので通らない）。`createLinkedBranch` が利用者の auto mode に断られるか（この issue の run では `gh issue develop` は通り、`deleteLinkedBranch` は断られた）。
+
+**起点の機能（3-22d）とぶつからない理由。**issue にリンクが1本でも在れば結びつけないので、人間が起点にリンクした branch の上に足して2本にすることは無い。結びつけたリンクは、PR を作ると外れる（上の実測）。
+
+**限界。**
+
+- **結びつけたあと push が落ちるか PR を作れずに run が終わると、作業 branch のリンクが残る。**次の着手で continuo はそれを worktree の起点にし、`.continuo.json` の base が `origin/<作業 branch>` になる。そこへ人間が起点のリンクを足すと2本になり、既定の branch に倒れる。確かめの段が「残り」に「リンクを外す」を書かせる。
+- **まとめて直したほかの issue と、別のリポジトリへ出した PR は、branch のリンクでは結べない。**`Closes` に頼り、入っていなければ人間の番になる。
+- **カンバンの自動化 `Pull request linked to issue` が、向け先が既定でない project でも発火するようになる**（5-3w の限界）。
+
+**比較した案と、採らなかった理由。**
+
+| 案 | 採否 |
+| --- | --- |
+| `gh issue develop --base <base>` で結びつける | **採らない。**base の先端に branch を作るので、手元の HEAD がそれを含まないと push が fast-forward にならない。merge-base を oid に渡せる `createLinkedBranch` を直に叩く |
+| push のたびに結びつけを叩く | **採らない。**auto mode に断られた回数が積み上がる（3回続けてか通算20回で止まる。5-3w の前段）。PR を作る直前に1回だけ叩く |
+| 確かめるだけで結びつけない（つながっていなければ人間に頼む） | **採らない。**人間の指示は「リンクしろ」であり、手でつなぐ作業が残る |
+| マージのあとは PR を作らずに止める | **採らない。**マージ済みの PR には commit を足せないので、人間が新しい作業を頼んだときの出し先が無くなる。頼まれたときだけ2つ目を作る |
+| 段0・段1 で PR を作らずに止まるときも、結びつけてから push する | **採らない。**PR ができないまま issue に branch のリンクが残り、次の着手で continuo がその branch を worktree の起点にする（限界の1つ目）。結びつけずに push し、報告の「残り」で人間に知らせる |
+| 2つ目を別の名前の branch で出す（前の決まり） | **採らない。**次の run はいまの branch 名で PR を探すので見つけられず、3つ目を作る |
+
+**この節の文面を直すときは、スキル writing-comments-for-humans・implementing-and-pushing・finishing-run・finishing-pull-request・starting-run・reporting-progress・trusting-instructions・writing-plan・posting-review-verdict と plugin `continuo-issue-comments` も同時に直す。**スクリプトの条件は [test/internal/prompt/link_branch_test.go](../../test/internal/prompt/link_branch_test.go) が偽の gh と git で見張る。
 
 ### 5-4. 2回目以降のプロンプト
 
@@ -16045,8 +16091,8 @@ owner を引く。書くと、伏せたはずの名前がテストに残る。
 
 | 表明 | 段2b の見本に何を書かせるか |
 | --- | --- |
-| **`review`** | 何を直したか / 触ったファイル（リポジトリの根からの相対パス）/ pull request の URL |
-| **`blocked`** | どこまで見たか / なぜ止まったか。**「まとめて直しました」と pull request の URL は書かせない** |
+| **`review`** | その issue の受け入れ目標 / 何を直したか / 寄与 / 触ったファイル（リポジトリの根からの相対パス）/ pull request の URL / 残り（5-3za） |
+| **`blocked`** | その issue の受け入れ目標 / どこまで見たか / 寄与 / なぜ止まったか / 残り（5-3za）。**「まとめて直しました」と pull request の URL は書かせない** |
 
 **代表へは新しいコメントを1件も増やさない。**3-7 の成果報告の中に URL を並べる。
 **だから `applySignals` の「記録は動かされた issue へ書く」は1文字も変わらない。**

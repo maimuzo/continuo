@@ -89,6 +89,10 @@ NOW
 
 - 印の2行は、見本のとおり行の先頭から書き、字下げしません（スクリプトはそう書きます）。字下げすると印が本文の中の引用とみなされ、このコメントがこの run の成果の報告として数えられます（最後の報告を書かずに終えても、continuo は書き直させません）。
 - 2行目の `<!-- continuo:progress -->` を落としません。continuo が「進捗が書かれた」と数えるのは、この印が付いたコメントだけです。落とすと次の段1が見つけられずにコメントが増え、期限が来ると担当が外れて、別の機械がこの issue を最初からやり直します。
+- `<いま何をしていて、あと何が残っているか>` は、1行で次の形に書きます（「writing-comments-for-humans」の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」）。途中経過のコメントだけを読んでも、issue の目標の全体と、いまの作業がどれに効くかと、残りが分かるようにするためです。
+
+      <いま何をしているか>。受け入れ目標「<目標を全部短く並べる>」のうち「<いまの作業が寄与するもの>」に寄与。残りの作業: <進める順に、誰の番かを添えて>。人間が次にすること: <無ければ「ありません」>
+
 - `<いま何をしていて、あと何が残っているか>` は `<<'NOW'` の下に書き、二重引用符の中へ書きません。backtick や `$` をシェルが実行します（段2a も同じです）。
 - この印を、最後の成果報告の先頭には付けません。付けると continuo はその報告を数えず、セッションを復元してもう一度書かせます。本文の途中で引用するのはかまいませんが、囲み付きのまま引用すると、次の進捗報告がその成果報告へ書き足してしまいます。
 
@@ -96,11 +100,11 @@ NOW
 
 push できる状態なら、あわせて push します（push の前の commit と担当の確かめは「implementing-and-pushing」の「commit して push する」）。
 
+この branch の開いた pull request がまだ無ければ、ここで push せず、「implementing-and-pushing」の「pull request を出す」の段0 から進み、そこで push して draft で作ります（先に push すると、branch を issue に結びつけられなくなります）。途中で止まっても、次に引き継ぐ機械が pull request を辿れます。開いた pull request が在れば、次で push します。
+
 ```bash
 git push -u origin HEAD
 ```
-
-push が通って、この branch の pull request がまだ無ければ、「implementing-and-pushing」の「pull request を出す」のとおりに draft で作ります。途中で止まっても、次に引き継ぐ機械が pull request を辿れます。
 
 ## レートリミットのマージンを切ったら、切り上げる
 
@@ -128,7 +132,7 @@ continuo から「レートリミットのマージンを切りました」と�
 1. 新しいサブエージェントは起動しません。走っているサブエージェントは止めません
 2. **先に、いまある変更を commit して push します**（「implementing-and-pushing」の「commit して push する」）
 3. 走っているサブエージェントの結果が返ったら、その分も commit して push します
-4. どこまで進んだか・次に何をするかを、issue のコメントに書きます。このコメントは、その run の何をしたかの報告に当たります。印は「finishing-run」の「runの終了を宣言する」と同じ1行（`<!-- continuo:agent -->`）で、「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」の8つの見出しで書きます。「finishing-run」の「runの終了を宣言する」の段3 の、「issue を読む」と「紐づく pull request を読む」の読み直しと、「finishing-run」の「まとめて直したとき」は省いてかまいません
+4. どこまで進んだか・次に何をするかを、issue のコメントに書きます。このコメントは、その run の何をしたかの報告に当たります。印は「finishing-run」の「runの終了を宣言する」と同じ1行（`<!-- continuo:agent -->`）で、「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」の8つの見出しで書きます（題名の直後に、同じスキルの「どのコメントにも、受け入れ目標・いまの作業・残りを書く」の節を置きます）。「finishing-run」の「runの終了を宣言する」の段3 の、「issue を読む」と「紐づく pull request を読む」の読み直しと、「finishing-run」の「まとめて直したとき」は省いてかまいません
 5. 応答の最後に `CONTINUO-STATUS: working` を書いて終えます。人間へ戻すか別の機械へ引き継ぐかは、continuo が決めます
 
 <!-- continuo-skill-end: reporting-progress CONTINUO_PLUGIN_HASH -->

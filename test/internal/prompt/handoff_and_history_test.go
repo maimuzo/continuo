@@ -101,7 +101,7 @@ func TestTemplate_pushしない場合は3つで担当者がいなければpush�
 		"書く前に、「starting-run」の「分岐元を取り込み、読む」の見本で担当を確かめます。",
 		"| 「止まります」 | 途中経過のコメントも push もせず、「starting-run」の「分岐元を取り込み、読む」の段1 の表のとおりに止まります（「finishing-run」の「runの終了を宣言する」の報告は書きます） |",
 		"| 「確かめられませんでした」 | 途中経過のコメントは書き、今回の push だけを見送って作業を続けます。",
-		"push が通って、この branch の pull request がまだ無ければ、「implementing-and-pushing」の「pull request を出す」のとおりに draft で作ります。",
+		"この branch の開いた pull request がまだ無ければ、ここで push せず、「implementing-and-pushing」の「pull request を出す」の段0 から進み、そこで push して draft で作ります",
 		"<いま何をしていて、あと何が残っているか>",
 	} {
 		if !strings.Contains(progress, want) {
@@ -124,8 +124,10 @@ func TestTemplate_最初のpushでdraftのpullrequestを作り実装のあとに
 
 	for _, want := range []string{
 		// **「最初に push したら」と「すぐ draft で作る」は、間に括弧の注記を挟んで1文になっている。**
-		"最初に commit を push したら（",
-		"すぐこの issue の pull request を draft で作ります。",
+		// **最初の push は「pull request を出す」の段0〜段3 で行い、push したらすぐ作る**（issue #321。
+		// 先に push すると、branch を issue に結びつけられなくなる）。
+		"最初に commit を push する前に（",
+		"push したらすぐこの issue の pull request を draft で作ります。",
 		`gh pr create --draft --title "$(cat "$T")" --body-file "$F"`,
 		"<!-- continuo:pull-request-in-progress -->",
 		// **起きたことごとの扱いは表の行で書いてある。**行の頭と、すること の欄を続けて見る。
@@ -133,7 +135,7 @@ func TestTemplate_最初のpushでdraftのpullrequestを作り実装のあとに
 		"| draft を作れないリポジトリだと断られた | `--draft` を外して作ります |",
 		"止まらずに作業を続け、次に push したときにもう一度試します。",
 		"| 目印の1行が残っている | 題名と本文を書き直し、目印の1行を外します。",
-		"| 目印の1行が無い | 誰かが書き直しています。書き直しません |",
+		"| 目印の1行が無い | 誰かが書き直しています。書き直しません（受け入れ目標の節も触りません。",
 		"**`Closes` で始まる行は、全部そのまま残してください。**",
 		`gh pr edit <PR番号> --repo <issue のリポジトリ> --title "$(cat "$T")" --body-file "$F"`,
 		"訳さずにそのまま入れます。",
