@@ -45,7 +45,7 @@ https://github.com/user-attachments/assets/49a1253d-550f-4255-947b-03ad82bf8c63
 
 https://github.com/user-attachments/assets/1ac9c200-8b4d-43ec-86b0-a34da0771635
 
-**6. Out of usage, back on its own**: when you reach the margin you keep for yourself, Claude Code wraps up and the issue moves to `Blocked`; move it back to `Ready` after the reset, and the work picks up where it left off
+**6. Out of usage, back on its own**: when you reach the margin you keep for yourself, Claude Code wraps up and the issue moves to `Blocked`; move it back to `Ready` after the reset, and the work picks up where it left off. If the weekly window would take too long to reset, continuo lets go of the issue so another machine can bid on it. The video shows the behavior up to v0.2.1; today continuo waits for the reset and carries on only for a window whose margin is `0`, or when usage reaches 100% before Claude Code can wrap up
 
 https://github.com/user-attachments/assets/6fe03706-81eb-4511-ac7b-4a41c1f7d8d5
 
@@ -86,8 +86,8 @@ A basso continuo is the bass part in Baroque music that keeps playing from the f
 - **Claude Code in interactive mode.** It runs in a herdr pane you can open and read at any time
 - **No metered API calls.** No `claude -p`, no Agent SDK, no HTTP API — it stays on your usual subscription
 - **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
-- **continuo leaves you a margin of your usage window.** When it is reached, Claude Code pushes its work, leaves a hand-off comment, and the issue moves to `Blocked`. Move it back to `Ready` after the reset, and the work picks up where it left off. If the weekly window would take too long to reset, it lets go of the issue so another machine can bid on it
-- **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
+- **continuo leaves you a margin of your usage window.** When it is reached, Claude Code pushes its work, leaves a comment saying how far it got, and the issue moves to `Blocked`. Move it back to `Ready` after the reset, and the work picks up where it left off. If the weekly window would take too long to reset, continuo lets go of the issue so another machine can bid on it
+- **Several machines can share one kanban board.** They bid with the usage window they have left, and the one with the most room takes the issue
 - **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR`, and never a comment that an AI marked as its own — read [Before you start](#before-you-start)
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
 - **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to six roles (the sixth, direct chat, can be skipped)
