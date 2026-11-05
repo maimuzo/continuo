@@ -1151,6 +1151,7 @@ tracker:
 ##### 揃っていないと壊れるキー
 
 **共有すると、次が自動的に揃います。**それがこの使い方の効き目です。
+**ただし、誰かが `WORKFLOW.local.md` で上書きすると、その機械だけ値が変わります**（下の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。この表のキーを上書きするときは、表の「揃えないと何が起きるか」を受け入れたうえで行ってください。
 
 | キー | 揃えないと何が起きるか |
 | --- | --- |
@@ -1174,7 +1175,7 @@ tracker:
 **見分けるのは、その機械の `gh` がログインしている GitHub アカウントです。**
 だから、共有する1枚に機械ごとの値を書き分ける必要はありません。
 
-**機械ごとに違う値になりうるのは2つだけです。**
+**`WORKFLOW.local.md` を使わない限り、機械ごとに違う値になりうるのは2つだけです。**
 
 | キー | なぜ |
 | --- | --- |
@@ -1235,7 +1236,8 @@ echo 'WORKFLOW.local.md' >> .gitignore
 | `WORKFLOW.local.md` に書いたもの | 結果 |
 | --- | --- |
 | 入れ子の1キー（上の例の `weekly_margin_percent`） | そのキーだけ変わります。`five_hour_margin_percent` などの兄弟は `WORKFLOW.md` の値のままです |
-| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残ります。ただし `workspace_hooks.after_create`・`claude.hook_bridge.listen`・`server.port` のように「未設定」を取れる欄は、未設定になります |
+| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残ります |
+| 「未設定」を取れる欄そのものに値を書かない行（`workspace_hooks:` の下の `after_create:` だけ、`server:` の下の `port:` だけ、など） | 未設定になります（`WORKFLOW.md` の値は外れます）。`workspace_hooks:` だけを書いたときは、子の値は残ります |
 | 対応表（`tracker.status_signal_map`・`claude.env` など）とリスト（`tracker.active_states` など） | 丸ごと置き換わります。`WORKFLOW.md` の行や要素は残りません |
 | front matter が空・注釈だけ | 何も変わりません |
 | 本文（front matter より下） | 中身があれば、`WORKFLOW.md` の本文と丸ごと差し替えます。HTML コメントと中身の無い見出しだけなら、`WORKFLOW.md` の本文が送られます |
@@ -1246,7 +1248,7 @@ echo 'WORKFLOW.local.md' >> .gitignore
 | --- | --- |
 | **変えたい行だけを書く** | `WORKFLOW.md` を丸ごと写すと、全部のキーと本文が自分の値で固定され、チームがあとで `WORKFLOW.md` を直しても、あなたの機械には届きません |
 | **本文を上書きすると、チームの本文の変更も届かなくなる** | 差し替えは丸ごとです。チームが `WORKFLOW.md` の本文へあとから足した決まりは、あなたのエージェントには送られません |
-| **`WORKFLOW.md` の値を「消す」書き方は無い** | 本文を空にしても、`WORKFLOW.md` の本文が送られます |
+| **本文を空にする上書きはできない** | 本文を空にしても、`WORKFLOW.md` の本文が送られます。front matter の値は、「未設定」を取れる欄を未設定にする・対応表を `{}`・リストを `[]` にする、の形でだけ外せます |
 | **同じカンバンを複数の機械で見張っているなら、「揃っていないと壊れるキー」を上書きしない** | 上の「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」の表のキーです。**マージンは上書きしてかまいませんが、その機械は判定スコアと入札に参加する条件が他の機械と変わります**（その表のとおり） |
 | **`continuo setup` と `continuo doctor` の未記入の項目は、`WORKFLOW.md` だけを読み書きします** | 共有するファイルを直すための道具だからです。`WORKFLOW.local.md` で Status のキーやカンバン（`owner`・`project_number`・`host`）を上書きしていると、`continuo setup` の結果は効きません。未記入の項目は、`WORKFLOW.local.md` に書いたキーも「`WORKFLOW.md` に書かれていない」と出します |
 | **誤りの文言を読む** | `WORKFLOW.local.md` の未知のキーと区切りの誤りは `WORKFLOW.local.md` を名指します。値の誤りは、どちらの値か分からないので両方を名指します。ただし、マージンを切ったときの案内などは `WORKFLOW.md` を名指したままです。上書きしたキーなら `WORKFLOW.local.md` を直してください |

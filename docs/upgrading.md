@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -160,6 +160,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 `WORKFLOW.md` と同じディレクトリに `WORKFLOW.local.md` を置くと、その front matter に書いた分だけが上書きされます（文法は `WORKFLOW.md` と同じです）。本文に中身があれば、本文も差し替えます。置かなければ何も変わりません。
 **既に `WORKFLOW.local.md` という名前のファイルを別の用途で置いていたら、次の起動から読まれます。**front matter の区切りが無いと起動しないので、名前を変えてください。
+**`continuo team.md` のように別の名前で起動している人は、`team.local.md` が読まれます**（拡張子の前に `.local` を挟んだ名前です）。
 使い方と気をつけることは [FAQ.md](FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
 
 ## v0.2.1 から v0.3.0 へ

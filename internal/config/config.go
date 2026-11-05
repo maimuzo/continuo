@@ -232,7 +232,7 @@ func readLocal(localPath string) (localFile, error) {
 		return localFile{}, nil
 	}
 	raw, err := os.ReadFile(localPath)
-	if errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, fs.ErrNotExist) && !nameExists(localPath) {
 		return localFile{}, nil
 	}
 	if err != nil {
@@ -243,6 +243,19 @@ func readLocal(localPath string) (localFile, error) {
 		return localFile{}, i18n.Errorf(i18n.KeyConfigLoadFrontMatterSplitFailed, localPath, err)
 	}
 	return localFile{path: localPath, frontMatter: frontMatter, body: body}, nil
+}
+
+// nameExists は、その名前のディレクトリ項目が在るかを返す（symlink は辿らない）。
+//
+// **リンク先の無い symlink を「無い」と取り違えないためにある。**`os.ReadFile` はリンク先が無いと
+// ENOENT を返すので、それだけで「無い」とすると、dotfiles へリンクして置いた個人の上書きが、
+// リンク先を動かしただけで黙って外れる（設計 5-1a の「在るのに読めないときは止める」に反する）。
+//
+// path: 確かめるパス。
+// 戻り値: 名前が在れば真（リンク先の有無は問わない）。
+func nameExists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
 }
 
 // hasYAMLContent は、front matter に値が1つでも書いてあるかを返す（設計 5-1a）。
@@ -289,7 +302,7 @@ func resolveRelativePaths(baseDir string, cfg *Config) {
 // **書いていない欄は、いまの値のまま残る。**だから WORKFLOW.md を読んだ cfg の上へ
 // WORKFLOW.local.md をもう一度読むと、書いた分だけが上書きされる（設計 5-1a）。
 // 入れ子の欄はキーごとに重なり、map とリストは丸ごと置き換わり、値を書かない行は
-// いまの値を残す（ポインタの欄だけは nil になる）。**WORKFLOW.md に同じ文字を書いたときと同じ意味である。**
+// いまの値を残す（ポインタの欄そのものに値を書かない行だけは nil になる）。**WORKFLOW.md に同じ文字を書いたときと同じ意味である。**
 //
 // frontMatter: front matter の YAML 本体（区切り行を含まない）。
 // cfg: 読み込み先。

@@ -126,8 +126,7 @@ func TestLoadLocal_空のfront_matterは何も変えない(t *testing.T) {
 			path := writeWorkflow(t, teamFrontMatter, "本文\n")
 			writeLocal(t, path, "---\n"+fm+"---\n")
 			loaded := mustLoad(t, path)
-			if !reflect.DeepEqual(loaded.Config.Tracker, base.Config.Tracker) ||
-				!reflect.DeepEqual(loaded.Config.Claude.Env, base.Config.Claude.Env) {
+			if !reflect.DeepEqual(loaded.Config, base.Config) {
 				t.Errorf("空の front matter で設定が変わった")
 			}
 		})
@@ -333,5 +332,38 @@ func TestDirectChatConflictsInFile_WORKFLOW_local_mdも見る(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("重なりに tracker.running_state が無い: %v", conflicts)
+	}
+}
+
+// 目的: リンク先の無い symlink の WORKFLOW.local.md を「無い」と取り違えず、止まることを確かめる
+// （実装レビュー1周目の HIGH。黙って飛ばすと個人の上書きが外れたことに気づけない）。
+// 与える情報: 存在しない先を指す symlink を WORKFLOW.local.md として置く。
+// 成功条件: Load が WORKFLOW.local.md のパスを名指す誤りを返し、StampOf は誤りを返さずに「無い」とは違う印を返すこと。
+func TestLoadLocal_リンク先の無いsymlinkは止まる(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink を作れない環境がある")
+	}
+	path := writeWorkflow(t, teamFrontMatter, "")
+	absent, err := config.StampOf(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localPath := filepath.Join(filepath.Dir(path), "WORKFLOW.local.md")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "nowhere.md"), localPath); err != nil {
+		t.Fatal(err)
+	}
+	_, err = config.Load(path)
+	if err == nil {
+		t.Fatal("リンク先が無いのに誤りが返らなかった")
+	}
+	if !strings.Contains(err.Error(), localPath) {
+		t.Errorf("誤りが WORKFLOW.local.md を名指していない: %v", err)
+	}
+	dangling, err := config.StampOf(path)
+	if err != nil {
+		t.Fatalf("StampOf が誤りを返した: %v", err)
+	}
+	if absent.Same(dangling) {
+		t.Error("リンク先の無い symlink を置いても、無いときと同じ印になった")
 	}
 }

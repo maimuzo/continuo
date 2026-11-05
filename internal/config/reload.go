@@ -360,7 +360,8 @@ func localStampOf(localPath string) LocalStamp {
 		return LocalStamp{State: "absent"}
 	}
 	raw, err := os.ReadFile(localPath)
-	if errors.Is(err, fs.ErrNotExist) {
+	// **リンク先の無い symlink は「無い」ではなく「読めない」である**（nameExists。Load と同じ判定）。
+	if errors.Is(err, fs.ErrNotExist) && !nameExists(localPath) {
 		return LocalStamp{State: "absent"}
 	}
 	if err != nil {

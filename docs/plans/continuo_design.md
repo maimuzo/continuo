@@ -12941,11 +12941,12 @@ sequenceDiagram
 | `WORKFLOW.local.md` に書いたもの | 結果 |
 | --- | --- |
 | 入れ子の欄（`handoff:` の下の1キー） | そのキーだけ変わり、兄弟は `WORKFLOW.md` の値のまま |
-| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残る（ポインタの欄、たとえば `workspace_hooks.after_create`・`claude.hook_bridge.listen`・`server.port` だけは未設定（nil）になる） |
+| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残る |
+| ポインタの欄そのものに値を書かない行（`workspace_hooks:` の下の `after_create:` だけ、`hook_bridge:` の下の `listen:` だけ、`server:` の下の `port:` だけ） | 未設定（nil）になる。**`workspace_hooks:` だけを書いたときは、子の値は残る** |
 | map（`tracker.status_signal_map`・`claude.env` など）とリスト（`tracker.active_states` など） | 丸ごと置き換わる。`WORKFLOW.md` の要素は残らない |
 | front matter が空・空行・注釈だけ | 何も変わらない |
 
-**`WORKFLOW.md` にある値を「消す」書き方は無い**（map を `{}`、リストを `[]` にすることはできる）。
+**`WORKFLOW.md` の値は、ポインタの欄を未設定にする・map を `{}`・リストを `[]` にする、の形でだけ外せる。**ほかの欄（数・文字列）は別の値で上書きするしかない。
 
 **本文。**`WORKFLOW.local.md` の本文に中身があれば、`WORKFLOW.md` の本文と**丸ごと差し替える**。
 「中身がある」は、送る前に取り除く HTML コメントと中身の無い見出しを落としたあとで決める（`prompt.BodyOf`。`prompt.Build` の判定と同じ）。
@@ -13615,7 +13616,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 
 ### 5-3g. `continuo init` が置く設定は1枚
 
-**言いたいこと。****設定は `WORKFLOW.md` の1枚だけである。**
+**言いたいこと。****`continuo init` が置く設定は `WORKFLOW.md` の1枚だけである**（個人の上書き `WORKFLOW.local.md` は利用者が自分で置く。5-1a）。
 **front matter（設定）と本文（固有の指示）が、1つのファイルに入っている。**
 **`continuo init` はもう1枚（`continuo-ci.yaml`）も置くが、そちらは設定ではない**（5-3o）。
 
