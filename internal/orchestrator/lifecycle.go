@@ -171,7 +171,8 @@ func (o *Orchestrator) decideAfterMarginCut(ctx context.Context, rs *runState) b
 			"identifier", rs.issue().Identifier)
 		return false
 	}
-	switch handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), o.now(), handoff.PhaseRunning) {
+	now := o.now()
+	switch handoff.Decide(usable, o.bidMargins(usable, now), o.weeklyWaitLimit(), now, handoff.PhaseRunning) {
 	case handoff.DestBlocked:
 		o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, o.marginCutBlockedReason(usable))
 		return true

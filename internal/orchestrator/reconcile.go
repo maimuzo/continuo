@@ -581,7 +581,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **手放しの判定には使わない。**新しい写しだけを渡す（上のとおり）。
 	var shortKinds string
 	if quotaSnap != nil {
-		shortKinds = strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
+		shortKinds = strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins(quotaSnap, now))), ", ")
 	}
 	// **`claude.turn_timeout_ms` は、この巡回のあいだ1つの値に固定する**（issue #173）。
 	// **ループの中で3回読んでいた**（`silence` の計算と `stallDetectionOff()` を2回）。
@@ -1248,7 +1248,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// 枠の一覧を走査して closure を2つ確保することになる。**捨てる値である。
 	if quotaFresh != nil {
 		// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
-		weeklyShort := quotaFresh.AnySelected(handoff.ShortWeekly(o.bidMargins()))
+		weeklyShort := quotaFresh.AnySelected(handoff.ShortWeekly(o.bidMargins(quotaFresh, now)))
 		for _, rs := range o.snapshotRuns() {
 			rs.noteWeeklyShort(weeklyShort, now)
 		}
@@ -1543,7 +1543,7 @@ func (o *Orchestrator) reconcileAwaitDestination(ctx context.Context, usable *ra
 		if usable.AnySelected(handoff.CannotWork()) {
 			continue
 		}
-		switch handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseRunning) {
+		switch handoff.Decide(usable, o.bidMargins(usable, now), o.weeklyWaitLimit(), now, handoff.PhaseRunning) {
 		case handoff.DestNone:
 			o.returnFromAwaitDestination(rs, now, "マージンを切った期間がもう無いので、作業へ戻します")
 		case handoff.DestBlocked:

@@ -295,14 +295,15 @@ func (o *Orchestrator) handoffGate(
 // 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。
 // 戻り値の2つ目: 入札しないと決めた理由。SkipNone なら入札してよい。
 func (o *Orchestrator) evaluateBidWith(snap *ratelimit.Snapshot) (handoff.Bid, handoff.SkipReason) {
+	now := o.now()
 	return handoff.Evaluate(
 		snap,
 		// **`rate_limit.source: none` は「読めなかった」ではない**（設計 3-27 の逃げ道）。
 		// 運用者が枠で判定しないと決めた状態なので、そこで黙らせると
 		// **その機械は1件も処理しなくなる。**
 		o.cfg.RateLimit.Source != ratelimit.SourceNone,
-		o.bidMargins(),
-		o.now(),
+		o.bidMargins(snap, now),
+		now,
 	)
 }
 
@@ -680,7 +681,7 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	}
 	// **1つだけ組み立てて、下の `LatestResetForWaitLimit` にも同じものを渡す**（issue #173）。
 	// **「余裕が無い」と数えた集合と、リセット時刻を引く集合がずれてはならない。**
-	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	shortWeekly := handoff.ShortWeekly(o.bidMargins(snap, o.now()))
 	if !snap.AnySelected(shortWeekly) {
 		return false
 	}
@@ -1589,13 +1590,13 @@ func (o *Orchestrator) ownIssueMarginGate(
 		return handoffDecision{proceed: true}
 	}
 	now := o.now()
-	dest := handoff.Decide(usable, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch)
+	dest := handoff.Decide(usable, o.bidMargins(usable, now), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch)
 	if dest == handoff.DestNone {
 		return handoffDecision{proceed: true}
 	}
 	cannot := usable.AnySelected(handoff.CannotWork())
 	if dest == handoff.DestRelease {
-		if handoff.Decide(fresh, o.bidMargins(), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch) != handoff.DestRelease {
+		if handoff.Decide(fresh, o.bidMargins(fresh, now), o.weeklyWaitLimit(), now, handoff.PhaseBeforeDispatch) != handoff.DestRelease {
 			// **Debug にする。**新しい値が無いあいだ（使える値は最長30分残る）、巡回のたびに issue ごとに出るためである。
 			o.logger.Debug("担当が自分の issue ですが、担当を外すかを新しい値で確かめられないので、この巡回では着手しません（次の巡回で判定し直します）",
 				"identifier", issue.Identifier)

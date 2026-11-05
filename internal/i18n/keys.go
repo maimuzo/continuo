@@ -1501,6 +1501,10 @@ const (
 	// **5時間と1週間で同じ文言を使う。**求めるものが同じなので、
 	// 2つに分けると同じ日本語を2箇所で直すことになる。
 	KeyConfigValidateHandoffMarginRange Key = "config.validate.handoff_margin_range"
+	// KeyConfigValidateHandoffMarginDaysRange は
+	// tracker.provider.handoff.weekly_margin_percent_by_days_until_reset のキー（残り日数）が
+	// 1〜7 の外にあるときに出る（issue #324）。値の範囲の誤りは KeyConfigValidateHandoffMarginRange を使う。
+	KeyConfigValidateHandoffMarginDaysRange Key = "config.validate.handoff_margin_days_range"
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
@@ -3367,6 +3371,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffProgressIntervalTooLong,
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
+	KeyConfigValidateHandoffMarginDaysRange,
 	KeyConfigValidateHandoffOnAssigneeGate,
 	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,

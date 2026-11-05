@@ -254,7 +254,8 @@ func (r SkipReason) String() string {
 //	余裕が無い枠   = 余裕値 <= 0
 //
 // **マージンは種別ごとに引く。**5時間の枠には `five_hour_margin_percent`、
-// 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く。
+// 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く
+// （残り日数ごとの表にその日の値があればそちら。呼ぶ側が `WeeklyMarginFor` で選んで `Margins.Weekly` に入れる。issue #324）。
 //
 // **知らない種別は数えない。**`Evaluate` は `SessionPercent` と `WeeklyPercent` から
 // 余裕値を作るので、**その2つが見ない種別をここで数えると、線がまた2本に割れる。**

@@ -144,7 +144,12 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
 	// **マージンは `bidMargins` から取る**（実装レビュー1周目の LOW）。
 	// **ここで手で組み立てると、キーを1本増やしたときに片方だけが直る。**
-	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	//
+	// **保管値から `snapshotOf` で写しを作って渡す**（issue #324）。1週間のマージンはリセットまでの残り日数で
+	// 変わり、残り日数は写しの `weekly_all` のリセット時刻から数える。**保管値の `ResetsAt` をそのまま
+	// 使ってはならない。**usage API が `resets_at: null` を返した期間には、continuo が仮の期限（数分先）を
+	// 付けており、それを「残り1日」と読むと、ここだけ入札と別の線になる。写しはその期限を nil にする。
+	shortWeekly := handoff.ShortWeekly(o.bidMargins(snapshotOf(o.quota.windows, now, now), now))
 	for kind, w := range o.quota.windows {
 		if !w.ResetsAt.After(now) {
 			continue
