@@ -200,6 +200,8 @@ const (
 	KeyDoctorConfigRemedyInit Key = "doctor.config.remedy_init"
 	// KeyDoctorConfigRemedyPermission は権限が足りなくて読めなかったときの直し方に出る。
 	KeyDoctorConfigRemedyPermission Key = "doctor.config.remedy_permission"
+	// KeyDoctorConfigRemedyLocal は WORKFLOW.local.md が無い先を指す・ディレクトリなどで読めなかったときの直し方に出る（設計 5-1a）。
+	KeyDoctorConfigRemedyLocal Key = "doctor.config.remedy_local"
 	// KeyDoctorConfigRemedyFrontMatter は読めたが front matter が通らなかったときの直し方に出る。
 	KeyDoctorConfigRemedyFrontMatter Key = "doctor.config.remedy_front_matter"
 	// KeyDoctorConfigOK は読めたときの説明に出る。
@@ -2819,6 +2821,7 @@ var allKeys = []Key{
 	KeyDoctorConfigUnreadable,
 	KeyDoctorConfigRemedyInit,
 	KeyDoctorConfigRemedyPermission,
+	KeyDoctorConfigRemedyLocal,
 	KeyDoctorConfigRemedyFrontMatter,
 	KeyDoctorConfigOK,
 	KeyDoctorLabelClaudeHome,

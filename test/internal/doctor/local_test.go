@@ -58,3 +58,40 @@ func TestDoctorLocal_重ねたら設定ファイルの行が両方を名指す(t
 		t.Fatalf("設定ファイルの行が両方を名指していない: %q", res.Detail)
 	}
 }
+
+// 目的: リンク先の無い WORKFLOW.local.md・ディレクトリの WORKFLOW.local.md のとき、
+// doctor が `continuo init` も「ファイルは読めています」も勧めず、WORKFLOW.local.md を確かめる案内を出すことを確かめる
+// （実装レビュー2周目の HIGH。init を勧めると、--force でチームの WORKFLOW.md を潰す道へ案内する）。
+// 与える情報: 2通りの読めない WORKFLOW.local.md。
+// 成功条件: 設定ファイルが ✗ で、直し方に `continuo init` と「ファイルは読めています」が無く、「`ls -l <WORKFLOW.local.md のパス>`」があること。
+func TestDoctorLocal_読めないWORKFLOW_local_mdでinitを勧めない(t *testing.T) {
+	for name, place := range map[string]func(t *testing.T, localPath string){
+		"リンク先の無いsymlink": func(t *testing.T, localPath string) {
+			if err := os.Symlink(filepath.Join(t.TempDir(), "nowhere.md"), localPath); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"ディレクトリ": func(t *testing.T, localPath string) {
+			if err := os.Mkdir(localPath, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fx := newFixture(t)
+			localPath := filepath.Join(filepath.Dir(fx.WorkflowPath), "WORKFLOW.local.md")
+			place(t, localPath)
+
+			report := fx.Run(t)
+
+			res := assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
+			remedies := strings.Join(res.Remedies, "\n")
+			if strings.Contains(remedies, "`continuo init` で雛形") || strings.Contains(remedies, "ファイルは読めています") {
+				t.Fatalf("WORKFLOW.local.md が読めないのに init か front matter の直しを勧めている: %v", res.Remedies)
+			}
+			if !strings.Contains(remedies, "`ls -l "+localPath+"`") {
+				t.Fatalf("直し方が WORKFLOW.local.md を名指していない: %v", res.Remedies)
+			}
+		})
+	}
+}

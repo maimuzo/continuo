@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "ad43fcae2eb9ab9f4cd375a4b416c61254b45bd5bca6de5429c70b8ccffd32aa",
+  "_source_sha256": "b93f58964327a2d80633f92523c04aacc3abc76623ba7fe7b3d8525ab5224f5b",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -448,6 +448,7 @@
   "doctor.clone.remedy_install_bin": "Install %s, add it to PATH, then run continuo doctor again.",
   "doctor.config.ok": "Read %s (front matter validated)",
   "doctor.config.remedy_front_matter": "The file can be read. Fix the front matter (do not use `continuo init --force` — it overwrites your config with the template).",
+  "doctor.config.remedy_local": "Run `ls -l %s` to see what your personal override file points to, then make it a readable file or remove it (do not use `continuo init` — the shared WORKFLOW.md is fine).",
   "doctor.config.remedy_init": "`continuo init` writes the template.",
   "doctor.config.remedy_permission": "Run `ls -l %s` to check the owner and permissions, and make it readable by you (whether you need `chmod` or `chown` depends on the owner).",
   "doctor.config.unreadable": "Cannot read %s: %v",

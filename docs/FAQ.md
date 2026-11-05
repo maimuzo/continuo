@@ -1253,7 +1253,9 @@ echo 'WORKFLOW.local.md' >> .gitignore
 | **`continuo setup` と `continuo doctor` の未記入の項目は、`WORKFLOW.md` だけを読み書きします** | 共有するファイルを直すための道具だからです。`WORKFLOW.local.md` で Status のキーやカンバン（`owner`・`project_number`・`host`）を上書きしていると、`continuo setup` の結果は効きません。未記入の項目は、`WORKFLOW.local.md` に書いたキーも「`WORKFLOW.md` に書かれていない」と出します |
 | **誤りの文言を読む** | `WORKFLOW.local.md` の未知のキーと区切りの誤りは `WORKFLOW.local.md` を名指します。値の誤りは、どちらの値か分からないので両方を名指します。ただし、マージンを切ったときの案内などは `WORKFLOW.md` を名指したままです。上書きしたキーなら `WORKFLOW.local.md` を直してください |
 
-**常駐中に直しても効きます。**`WORKFLOW.md` と同じく、置いた・直した・消したときは巡回の頭で読み直します（走行中に効くのは4キーだけで、残りは再起動で効きます）。
+**常駐中に直したときは、`WORKFLOW.md` と同じく巡回の頭で読み直しますが、走行中に効くのは4キー（`agent.max_concurrent_agents` など）だけです。**マージン（`five_hour_margin_percent` / `weekly_margin_percent`）を含む残りは、continuo を再起動して効きます（読み直したときに「再起動が要ります」と出ます）。
+
+**`WORKFLOW.local.md` が在るのに読めないと、continuo は起動しません。**リンク先の無いシンボリックリンクも同じです（個人の上書きが黙って外れないようにするためです）。`continuo doctor` が、確かめるファイルを名指します。
 `continuo doctor` の「設定ファイル」の行と、`continuo prompt --show` の内訳に、重ねたファイルと本文の出どころが出ます。
 
 #### 同じ GitHub アカウントで、複数の PC を動かしたい

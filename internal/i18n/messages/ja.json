@@ -447,6 +447,7 @@
   "doctor.clone.remedy_install_bin": "%s を入れて PATH を通してから、もう一度 continuo doctor を実行してください",
   "doctor.config.ok": "%s を読めました（front matter の検証も通りました）",
   "doctor.config.remedy_front_matter": "ファイルは読めています。front matter を直してください（`continuo init --force` は使わないでください。設定を雛形で潰します）",
+  "doctor.config.remedy_local": "`ls -l %s` で、個人の上書きのファイルが何を指しているかを確かめ、読めるファイルにするか取り除いてください（`continuo init` は使わないでください。共有している WORKFLOW.md は無事です）",
   "doctor.config.remedy_init": "`continuo init` で雛形を置けます",
   "doctor.config.remedy_permission": "`ls -l %s` で所有者と権限を確かめ、自分が読める状態にしてください（`chmod` と `chown` のどちらが要るかは所有者次第です）",
   "doctor.config.unreadable": "%s を読めません: %v",

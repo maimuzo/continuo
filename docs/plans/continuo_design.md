@@ -12972,6 +12972,8 @@ sequenceDiagram
 | **`WORKFLOW.local.md` 単独では値を検査しない** | `owner` のような必須の値を、個人のファイルに書かなくてよいようにする |
 | **重ねたあとの検査・展開の誤りは両方のファイルを名指す** | どちらの値かは分からない。`WORKFLOW.md` だけを名指すと、利用者は共有のファイルを直しに行く |
 | **`WORKFLOW.local.md` が在るのに読めない・区切りが無いときは止める** | 黙って飛ばすと、個人の上書きが効いていないことに気づけない |
+| **リンク先の無い symlink も「在るのに読めない」として止める**（`os.Lstat` で名前が在るかを見る） | dotfiles などへリンクして置いた人がリンク先を動かすと、`os.ReadFile` は ENOENT を返す。それを「無い」とすると、個人の上書きが黙って外れる |
+| **`continuo doctor` は、読めなかったのが `WORKFLOW.local.md` なら、`WORKFLOW.local.md` を確かめる案内を出す**（`continuo init` を勧めない） | 誤りの種類だけで分けると「無い」で `continuo init` を勧め、`--force` を足した利用者がチームの `WORKFLOW.md` を雛形で潰す（issue #11 と同じ事故） |
 | **本文の判定は `prompt` に置く** | 取り除く規則が `prompt` にあり、`prompt` が `config` を import しているので、`config` 側には置けない |
 | **置き場所は `WORKFLOW.md` と同じディレクトリに固定し、CLI のフラグは足さない** | issue が求めていない |
 | **`Loaded.Path` は `WORKFLOW.md` のまま** | 身元ファイルとの一致検査（3-18 / 3-23）と読み直しの宛先に使う |

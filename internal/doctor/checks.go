@@ -46,7 +46,7 @@ func checkConfig(path string) (Result, loadedConfig) {
 			Label:    LabelConfig,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorConfigUnreadable, path, err),
-			Remedies: configRemedies(failedPath(path, err), err),
+			Remedies: configRemedies(path, err),
 		}
 		if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
 			res.Notes = []string{i18n.T(i18n.KeyDoctorFilesystemFault)}
@@ -137,14 +137,26 @@ func failedPath(path string, err error) string {
 // err: config.Load が返したエラー。
 // 戻り値: 画面に出す直し方の並び。
 func configRemedies(path string, err error) []string {
+	// **読めなかったのが WORKFLOW.local.md なら、WORKFLOW.local.md を確かめさせる**（設計 5-1a）。
+	// 誤りの種類だけで分けると、リンク先の無い WORKFLOW.local.md（ENOENT）で `continuo init` を勧め、
+	// 「既にあります」に `--force` を足した利用者が、チームで共有している WORKFLOW.md を雛形で潰す。
+	failed := failedPath(path, err)
+	local := failed != path
 	switch fsprobe.Classify(err) {
 	case fsprobe.FaultNotExist:
+		if local {
+			return []string{i18n.T(i18n.KeyDoctorConfigRemedyLocal, failed)}
+		}
 		return []string{i18n.T(i18n.KeyDoctorConfigRemedyInit)}
 	case fsprobe.FaultPermission:
-		return []string{i18n.T(i18n.KeyDoctorConfigRemedyPermission, path)}
+		return []string{i18n.T(i18n.KeyDoctorConfigRemedyPermission, failed)}
 	case fsprobe.FaultFilesystem:
 		return filesystemRemedies()
 	default:
+		// **WORKFLOW.local.md を開けなかった（ディレクトリなど）なら、「ファイルは読めています」とは言わない。**
+		if local {
+			return []string{i18n.T(i18n.KeyDoctorConfigRemedyLocal, failed)}
+		}
 		return []string{i18n.T(i18n.KeyDoctorConfigRemedyFrontMatter)}
 	}
 }
