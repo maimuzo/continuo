@@ -3,6 +3,7 @@ package handoff
 import (
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
@@ -10,8 +11,9 @@ import (
 //
 // **1週間の枠の残りは7日を超えない。**ただし時計のずれで7日と数秒になりうるので、
 // `DaysUntilReset` は7を超えた分をここへ寄せる。
-// `tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` のキーの上限でもある。
-const MaxDaysUntilReset = 7
+// **値は `internal/config` の1か所が持つ**（検査が同じ上限でキーを弾く。config は handoff を読めないので、
+// こちらが config を読む）。
+const MaxDaysUntilReset = config.MaxWeeklyMarginDaysUntilReset
 
 // DaysUntilReset は、1週間の枠のリセットまでの残り日数を数える（issue #324）。
 //
@@ -25,9 +27,8 @@ const MaxDaysUntilReset = 7
 //
 // **7を超えたら7に寄せる。**
 //
-// resetsAt: 1週間全体の枠（`weekly_all`）のリセット時刻。
-// now: 数える時刻。**呼ぶ側が判定に使っている時刻を渡す**（中で時計を引き直すと、
-// 同じ判定の中でマージンを選ぶ時刻と判定する時刻がずれる）。
+// resetsAt: その1週間の枠のリセット時刻。
+// now: 数える時刻。**呼ぶ側が判定に使っている時刻を渡す。**
 // 戻り値の1つ目: 残り日数（1〜7）。
 // 戻り値の2つ目: 数えられたら true。リセット時刻が now 以前なら false（その期間はもう終わっている）。
 func DaysUntilReset(resetsAt, now time.Time) (int, bool) {
@@ -45,42 +46,20 @@ func DaysUntilReset(resetsAt, now time.Time) (int, bool) {
 	return days, true
 }
 
-// WeeklyAllResetAt は、写しから1週間全体の枠（`weekly_all`）のリセット時刻を引く（issue #324）。
+// WeeklyMarginFor は、1週間の枠1つから引くマージン（%）を選ぶ（issue #324）。
 //
-// **残り日数の起点は `weekly_all` だけである。**モデル別の枠（`weekly_scoped`）も同じ日数の
-// マージンを使う。`Evaluate` は2つの1週間の使用率の最大に1つのマージンを引くので、
-// 枠ごとに日数を分けるとその形が崩れる。
+// **残り日数は、その枠自身のリセット時刻から数える。**全体の枠（`weekly_all`）とモデル別の枠
+// （`weekly_scoped`）はリセットの時刻が違いうる。全体の枠の最後の日に書いた小さい値を、
+// リセットが数日先のモデル別の枠にも当てると、人間が残したいそのモデルの枠を continuo が使い切りうる
+// （実装レビュー1周目の HIGH）。
 //
-// **写しの `ResetsAt` が nil のもの（usage API が `resets_at: null` を返した期間）は数えない。**
-// 写しは continuo が付けた仮の期限を nil にして渡す（orchestrator の `snapshotOf`）。
-//
-// snap: 判定に使っている写し（nil 可）。
-// 戻り値: リセット時刻。分からなければ nil。
-func WeeklyAllResetAt(snap *ratelimit.Snapshot) *time.Time {
-	if snap == nil {
-		return nil
-	}
-	for _, l := range snap.Limits {
-		if matchesKind(l.Kind, weeklyAllKinds) && l.ResetsAt != nil {
-			resetsAt := *l.ResetsAt
-			return &resetsAt
-		}
-	}
-	return nil
-}
-
-// weeklyAllKinds は1週間全体の枠の種別である（`weeklyKinds` と同じく、呼ぶたびに slice を作らない）。
-var weeklyAllKinds = []string{LimitKindWeeklyAll}
-
-// WeeklyMarginFor は、その時点で1週間の枠から引くマージン（%）を選ぶ（issue #324）。
-//
-// **残り日数の表に、その日の値が書いてあればそれを使う。**書いていない日・リセット時刻が
-// 分からないとき（写しが無い・`weekly_all` が無い・`resets_at` が null・
-// `rate_limit.source: none`）は `base`（`weekly_margin_percent`）を使う。
+// **残り日数の表に、その日の値が書いてあればそれを使う。**書いていない日・その枠のリセット時刻が
+// 分からないとき（`resets_at` が null。写しは continuo が付けた仮の期限も nil にして渡す）は
+// `base`（`weekly_margin_percent`）を使う。
 //
 // base: `tracker.provider.handoff.weekly_margin_percent`。
 // byDays: `tracker.provider.handoff.weekly_margin_percent_by_days_until_reset`（nil 可）。
-// resetsAt: `weekly_all` のリセット時刻（nil 可）。
+// resetsAt: その枠のリセット時刻（nil 可）。
 // now: 数える時刻。
 // 戻り値の1つ目: 引くマージン（%）。
 // 戻り値の2つ目: 表から選んだときの残り日数。表を使わなかったら 0。
@@ -97,4 +76,38 @@ func WeeklyMarginFor(base int, byDays map[int]int, resetsAt *time.Time, now time
 		return base, 0
 	}
 	return margin, days
+}
+
+// For は、その枠から引くマージン（%）を返す（issue #324）。
+//
+// 5時間の枠は `FiveHour`、1週間の枠は `WeeklyFor` である。**知らない種別は `FiveHour` を返すが、
+// 判定（`Short`）は知らない種別を数えないので効かない。**
+//
+// l: 枠。
+// 戻り値: 引くマージン（%）。
+func (m Margins) For(l ratelimit.Limit) int {
+	if IsWeeklyKind(l.Kind) {
+		return m.WeeklyFor(l)
+	}
+	return m.FiveHour
+}
+
+// WeeklyFor は、1週間の枠1つから引くマージン（%）を返す（issue #324。`WeeklyMarginFor` を参照）。
+//
+// l: 1週間の枠。
+// 戻り値: 引くマージン（%）。
+func (m Margins) WeeklyFor(l ratelimit.Limit) int {
+	margin, _ := m.WeeklyDaysFor(l)
+	return margin
+}
+
+// WeeklyDaysFor は、1週間の枠1つから引くマージン（%）と、表から選んだときの残り日数を返す（issue #324）。
+//
+// **ログが「表の何日目の値か」を出すために、日数も返す。**選び方を2か所に持たないためである。
+//
+// l: 1週間の枠。
+// 戻り値の1つ目: 引くマージン（%）。
+// 戻り値の2つ目: 表から選んだときの残り日数。表を使わなかったら 0。
+func (m Margins) WeeklyDaysFor(l ratelimit.Limit) (int, int) {
+	return WeeklyMarginFor(m.Weekly, m.WeeklyByDaysUntilReset, l.ResetsAt, m.At)
 }

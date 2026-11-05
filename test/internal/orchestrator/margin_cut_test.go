@@ -657,3 +657,39 @@ func TestMarginCut_行き先を待つrunは行き先がBlockedに変わったら
 		t.Errorf("Blocked へ戻す run に指示を送っています（%d 回）:\n%s", len(got), got[2])
 	}
 }
+
+// 目的: `weekly_margin_percent_by_days_until_reset` を書いたとき、margin-status が、1週間の枠ごとに
+// その枠のリセットまでの残り日数の値で切ったかを書くことを確かめる（issue #324）。
+//
+// **Claude Code はこのファイルを読んで切り上げる**ので、入札と同じ値で書かれていないと、
+// 表で使い切ってよい日にも Claude Code が切り上げてしまう。
+//
+// 与える情報: 表 {1: 0, 2: 5}。5時間の期間は 10%。全体の1週間の期間は 96% で、リセットが残り6時間（1日目）と残り30時間（2日目）の2通り。
+// 成功条件: 1日目はマージン0なので `MARGIN: ok`、2日目はマージン5で余裕値が -1 なので `MARGIN: cut kind=weekly_all used=96 margin=5` であること。
+func TestMarginCut_margin_statusは残り日数の値で書く(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		left   time.Duration
+		prefix string
+	}{
+		{"1日目はマージン0で切っていない", 6 * time.Hour, "MARGIN: ok"},
+		{"2日目はマージン5で切った", 30 * time.Hour, "MARGIN: cut kind=weekly_all used=96 margin=5 resets_at="},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fx, root := marginFixture(t, []map[string]any{
+				{"kind": "session", "percent": 10, "resets_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+				{"kind": "weekly_all", "percent": 96, "resets_at": time.Now().Add(c.left).UTC().Format(time.RFC3339), "severity": "normal"},
+			}, func(cfg *config.Config) {
+				cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = map[int]int{1: 0, 2: 5}
+			})
+			fx.Orc.Tick(context.Background())
+			data, err := os.ReadFile(filepath.Join(root, "margin-status"))
+			if err != nil {
+				t.Fatalf("margin-status を読めません: %v\n%s", err, fx.Logs.String())
+			}
+			if !strings.HasPrefix(string(data), c.prefix) {
+				t.Errorf("margin-status = %q（%q で始まることを期待）", data, c.prefix)
+			}
+		})
+	}
+}

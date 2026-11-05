@@ -194,8 +194,16 @@ const (
 type Margins struct {
 	// FiveHour は5時間の枠から引く割合である。
 	FiveHour int
-	// Weekly は1週間の枠から引く割合である。
+	// Weekly は1週間の枠から引く割合である（`weekly_margin_percent`）。
+	//
+	// **1週間の枠に当てるときは、直に読まず `WeeklyFor` を通す**（issue #324）。
+	// 下の表にその枠の残り日数の値があれば、そちらが効く。
 	Weekly int
+	// WeeklyByDaysUntilReset は、1週間の枠のリセットまでの残り日数ごとに `Weekly` を上書きする表である
+	// （`weekly_margin_percent_by_days_until_reset`。issue #324）。nil なら `Weekly` だけを使う。
+	WeeklyByDaysUntilReset map[int]int
+	// At は残り日数を数える時刻である。**判定に使っている時刻を入れる**（`bidMargins` が入れる）。
+	At time.Time
 }
 
 // SkipReason は「入札しない」と決めた理由である（設計 3-77 の表）。
@@ -255,7 +263,7 @@ func (r SkipReason) String() string {
 //
 // **マージンは種別ごとに引く。**5時間の枠には `five_hour_margin_percent`、
 // 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く
-// （残り日数ごとの表にその日の値があればそちら。呼ぶ側が `WeeklyMarginFor` で選んで `Margins.Weekly` に入れる。issue #324）。
+// （残り日数ごとの表に、その枠のリセットまでの日の値があればそちら。`Margins.WeeklyFor`。issue #324）。
 //
 // **知らない種別は数えない。**`Evaluate` は `SessionPercent` と `WeeklyPercent` から
 // 余裕値を作るので、**その2つが見ない種別をここで数えると、線がまた2本に割れる。**
@@ -269,7 +277,7 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 	return func(l ratelimit.Limit) bool {
 		switch {
 		case IsWeeklyKind(l.Kind):
-			return fullPercent-l.Percent-margins.Weekly <= 0
+			return fullPercent-l.Percent-margins.WeeklyFor(l) <= 0
 		case matchesKind(l.Kind, sessionKinds):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
@@ -477,7 +485,12 @@ func Evaluate(
 	margins Margins,
 	at time.Time,
 ) (Bid, SkipReason) {
-	sessionPercent, weeklyPercent := 0, 0
+	sessionPercent := 0
+	// **1週間余裕値は、1週間の枠ごとの `100 − 使用率 − その枠のマージン` の最小である**（issue #324）。
+	// マージンは枠ごとに、その枠のリセットまでの残り日数で変わりうる（`Margins.WeeklyFor`）。
+	// 表が無ければ、どの枠も `Weekly` なので、今までの `100 − いちばん大きい使用率 − Weekly` と同じ値になる。
+	// **`Short` と同じ選び方にする。**1点でもずれると、入札が黙る線と手放しの線が割れる。
+	weekly := fullPercent - margins.Weekly
 	if quotaEnabled {
 		// **1件も読めていない（写しが無い）なら「読めなかった」である。**
 		// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**
@@ -491,11 +504,20 @@ func Evaluate(
 			return Bid{}, SkipQuotaUnreadable
 		}
 		sessionPercent, _ = SessionPercent(snap)
-		weeklyPercent, _ = WeeklyPercent(snap)
+		// **1週間の枠が1つも無ければ、使用率0として `100 − Weekly` のまま**（今までと同じ）。
+		found := false
+		for _, l := range snap.Limits {
+			if !IsWeeklyKind(l.Kind) {
+				continue
+			}
+			if h := fullPercent - l.Percent - margins.WeeklyFor(l); !found || h < weekly {
+				weekly = h
+				found = true
+			}
+		}
 	}
 
 	fiveHour := fullPercent - sessionPercent - margins.FiveHour
-	weekly := fullPercent - weeklyPercent - margins.Weekly
 	// **0 も「余裕が無い」に含める**（人間の決定。2026-09-06。issue #173）。
 	// **余裕値0 は、マージンをちょうど食い潰した状態である。**そこから着手すると、
 	// **人間のために取り置いた分へ食い込む。**

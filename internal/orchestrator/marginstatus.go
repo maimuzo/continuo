@@ -131,7 +131,7 @@ func (o *Orchestrator) marginCutForTurn(usable *ratelimit.Snapshot) bool {
 	if usable.AnySelected(handoff.CannotWork()) {
 		return false
 	}
-	return usable.AnySelected(handoff.MarginCut(o.bidMargins(usable, o.now())))
+	return usable.AnySelected(handoff.MarginCut(o.bidMargins(o.now())))
 }
 
 // marginCutKinds は、マージンを切った期間の種別を返す（ログと理由のコメントに使う）。
@@ -139,7 +139,7 @@ func (o *Orchestrator) marginCutKinds(usable *ratelimit.Snapshot) []string {
 	if usable == nil {
 		return nil
 	}
-	return usable.SelectedKinds(handoff.MarginCut(o.bidMargins(usable, o.now())))
+	return usable.SelectedKinds(handoff.MarginCut(o.bidMargins(o.now())))
 }
 
 // marginPeriods は、使える値から、マージンを切った期間の一覧を作る（`margin-status` と理由のコメントに使う）。
@@ -147,17 +147,14 @@ func (o *Orchestrator) marginPeriods(usable *ratelimit.Snapshot) []marginstatus.
 	if usable == nil {
 		return nil
 	}
-	m := o.bidMargins(usable, o.now())
+	m := o.bidMargins(o.now())
 	cut := handoff.MarginCut(m)
 	var periods []marginstatus.Period
 	for _, l := range usable.Limits {
 		if !cut(l) {
 			continue
 		}
-		margin := m.FiveHour
-		if handoff.IsWeeklyKind(l.Kind) {
-			margin = m.Weekly
-		}
+		margin := m.For(l)
 		periods = append(periods, marginstatus.Period{Kind: l.Kind, Used: l.Percent, Margin: margin, ResetsAt: l.ResetsAt})
 	}
 	return periods
@@ -215,12 +212,29 @@ func (o *Orchestrator) marginCutBlockedReason(usable *ratelimit.Snapshot) string
 		"レートリミットのマージンを切ったので、Claude Code に作業を切り上げさせ、Status を戻しました。"+
 			"**担当者はこの機械のままです。**%s"+
 			"\n【確かめ方】この issue に、Claude Code が書いた引き継ぎのコメント（どこまで進んだか・次に何をするか）があるはずです。"+
-			"\n【対処】リセットのあとに Status を着手待ちへ戻してください。リセットの前に戻すと、もう1度この Status へ戻ります。"+
+			"\n【対処】リセットのあとに Status を着手待ちへ戻してください。リセットの前に戻すと、もう1度この Status へ戻ります。%s"+
 			"マージンは WORKFLOW.md の `tracker.provider.handoff.five_hour_margin_percent` と "+
 			"`tracker.provider.handoff.weekly_margin_percent` で変えられます"+
 			"（1週間のマージンは、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` に"+
 			"リセットまでの残り日数ごとの値を書くと、その日はそちらが使われます）。",
-		describeMarginPeriods(o.marginPeriods(usable)))
+		describeMarginPeriods(o.marginPeriods(usable)), o.daysTableReturnNote())
+}
+
+// daysTableReturnNote は、`Blocked` へ戻したときの【対処】に足す1文を返す（issue #324）。
+//
+// **`weekly_margin_percent_by_days_until_reset` を書いているときだけ足す。**1週間の期間は、リセットより前でも、
+// 残り日数が変わってマージンが下がれば余裕が戻りうる。「リセットの前に戻すと、もう1度戻る」だけを書くと、
+// 人間は戻せる日数ぶん issue を止めたままにする（実装レビュー1周目の MEDIUM）。
+// **表を書いていない人には足さない。**その人には「リセットの前に戻すと戻る」がそのまま正しい。
+//
+// 戻り値: 足す1文。表を書いていなければ空。
+func (o *Orchestrator) daysTableReturnNote() string {
+	if len(o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset) == 0 {
+		return ""
+	}
+	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` を書いているので、" +
+		"リセットまでの残り日数が変わってマージンが下がった時刻のあとなら、リセットの前でも着手できることがあります" +
+		"（そのときマージンを切っていなければ着手し、切っていればもう1度この Status へ戻ります）。"
 }
 
 // describeMarginPeriods は、マージンを切った期間を人間が読む1文にする。
@@ -252,7 +266,7 @@ func (o *Orchestrator) beforeDispatchPeriods(usable *ratelimit.Snapshot) []margi
 	if usable == nil {
 		return nil
 	}
-	m := o.bidMargins(usable, o.now())
+	m := o.bidMargins(o.now())
 	cut := handoff.MarginCut(m)
 	cannot := handoff.CannotWork()
 	var periods []marginstatus.Period
@@ -260,10 +274,7 @@ func (o *Orchestrator) beforeDispatchPeriods(usable *ratelimit.Snapshot) []margi
 		if !cut(l) && !cannot(l) {
 			continue
 		}
-		margin := m.FiveHour
-		if handoff.IsWeeklyKind(l.Kind) {
-			margin = m.Weekly
-		}
+		margin := m.For(l)
 		periods = append(periods, marginstatus.Period{Kind: l.Kind, Used: l.Percent, Margin: margin, ResetsAt: l.ResetsAt})
 	}
 	return periods

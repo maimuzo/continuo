@@ -789,7 +789,7 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 	sort.Ints(days)
 	for _, d := range days {
 		key := fmt.Sprintf("tracker.provider.handoff.weekly_margin_percent_by_days_until_reset.%d", d)
-		if d < 1 || d > 7 {
+		if d < 1 || d > MaxWeeklyMarginDaysUntilReset {
 			return invalidValueError(key, d, i18n.T(i18n.KeyConfigValidateHandoffMarginDaysRange))
 		}
 		if v := h.WeeklyMarginPercentByDaysUntilReset[d]; v < 0 || v >= 100 {

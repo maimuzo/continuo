@@ -336,7 +336,7 @@ usage API が返す値と、Claude Code のステータスラインが運ぶ `us
 
 **マージンは `WORKFLOW.md` に持つ。**単位は %。「continuo のために残しておきたい割合」である。
 **キーは `tracker.provider.handoff.five_hour_margin_percent` と `tracker.provider.handoff.weekly_margin_percent` である**（既定はどちらも 10）。
-**1週間のマージンは、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` にリセットまでの残り日数（1〜7）ごとの値を書くと、その日はそちらを使う**（issue #324。残り日数は `weekly_all` のリセットまでの残りを24時間単位で切り上げた数）。
+**1週間のマージンは、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` にリセットまでの残り日数（1〜7）ごとの値を書くと、その日はそちらを使う**（issue #324。残り日数は、その1週間の枠のリセットまでの残りを24時間単位で切り上げた数。全体の枠とモデル別の枠はそれぞれ自分のリセットで数える）。
 **`rate_limit` の下ではない。**
 
 ## 値が古ければ、usage API か statusline取得で値が入ってから入札する

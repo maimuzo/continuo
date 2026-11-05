@@ -26,11 +26,7 @@ import (
 func MarginCut(margins Margins) func(l ratelimit.Limit) bool {
 	short := Short(margins)
 	return func(l ratelimit.Limit) bool {
-		margin := margins.FiveHour
-		if IsWeeklyKind(l.Kind) {
-			margin = margins.Weekly
-		}
-		return margin >= 1 && short(l)
+		return margins.For(l) >= 1 && short(l)
 	}
 }
 
@@ -48,12 +44,15 @@ func MarginCut(margins Margins) func(l ratelimit.Limit) bool {
 func CannotWork() func(l ratelimit.Limit) bool {
 	full := Full()
 	return func(l ratelimit.Limit) bool {
-		if !matchesKind(l.Kind, sessionKinds) && !matchesKind(l.Kind, []string{LimitKindWeeklyAll}) {
+		if !matchesKind(l.Kind, sessionKinds) && !matchesKind(l.Kind, weeklyAllKinds) {
 			return false
 		}
 		return full(l)
 	}
 }
+
+// weeklyAllKinds は1週間全体の枠の種別である（`weeklyKinds` と同じく、呼ぶたびに slice を作らない）。
+var weeklyAllKinds = []string{LimitKindWeeklyAll}
 
 // Destination は、マージンを切ったときの行き先である（issue #262。設計 3-27a の行き先の表）。
 type Destination int

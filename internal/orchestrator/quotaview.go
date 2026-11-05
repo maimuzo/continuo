@@ -81,15 +81,12 @@ func (o *Orchestrator) QuotaView() QuotaView {
 	if reads.usable == nil {
 		return v
 	}
-	margins := o.bidMargins(reads.usable, o.now())
+	margins := o.bidMargins(o.now())
 	short := handoff.MarginCut(margins)
 	full := handoff.Full()
 	v.Windows = make([]QuotaWindowView, 0, len(reads.usable.Limits))
 	for _, l := range reads.usable.Limits {
-		margin := margins.FiveHour
-		if handoff.IsWeeklyKind(l.Kind) {
-			margin = margins.Weekly
-		}
+		margin := margins.For(l)
 		w := QuotaWindowView{
 			Kind:          l.Kind,
 			Percent:       l.Percent,
