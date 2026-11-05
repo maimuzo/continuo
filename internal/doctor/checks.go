@@ -45,7 +45,7 @@ func checkConfig(path string) (Result, loadedConfig) {
 			Label:    LabelConfig,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorConfigUnreadable, path, err),
-			Remedies: configRemedies(path, err),
+			Remedies: configRemedies(remedyPath(path), err),
 		}
 		if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
 			res.Notes = []string{i18n.T(i18n.KeyDoctorFilesystemFault)}
@@ -55,7 +55,8 @@ func checkConfig(path string) (Result, loadedConfig) {
 	return Result{
 		Label:  LabelConfig,
 		Symbol: SymbolOK,
-		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.Path),
+		// **WORKFLOW.local.md を重ねたら、両方を名指す**（設計 5-1a）。
+		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.SourceLabel()),
 	}, loadedConfig{OK: true, Config: loaded.Config, Loaded: loaded}
 }
 
@@ -81,7 +82,9 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 	}
 	loaded := cfg.Loaded
 
-	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
+	// **本文は WORKFLOW.local.md から来ることがある**（設計 5-1a）。選ぶのは prompt.BodyOf である。
+	_, bodyPath := prompt.BodyOf(loaded)
+	frag := prompt.BuildLoaded(loaded)
 	if err := frag.Validate(); err != nil {
 		return Result{
 			Label:    LabelPromptVariables,
@@ -98,8 +101,27 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 	return Result{
 		Label:  LabelPromptVariables,
 		Symbol: SymbolOK,
-		Detail: i18n.T(key, loaded.Path),
+		Detail: i18n.T(key, bodyPath),
 	}
+}
+
+// remedyPath は、直し方に名指すファイルを決める（設計 5-1a）。
+//
+// **隣に WORKFLOW.local.md が在れば、両方を名指す。**読めなかったのがどちらかは
+// 誤りの文言に出ているが、直し方が WORKFLOW.md だけを名指すと、利用者はチームで共有している
+// WORKFLOW.md を直しに行く。
+//
+// path: WORKFLOW.md の絶対パス。
+// 戻り値: 直し方に入れる文字列。
+func remedyPath(path string) string {
+	lp := config.LocalPathFor(path)
+	if lp == "" {
+		return path
+	}
+	if _, err := os.Lstat(lp); err != nil {
+		return path
+	}
+	return i18n.T(i18n.KeyConfigLoadMergedLabel, path, lp)
 }
 
 // configRemedies は設定ファイルを読めなかった理由ごとの直し方を返す（issue #11）。

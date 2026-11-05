@@ -305,6 +305,8 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 `continuo init` が2枚置きます。**設定は `WORKFLOW.md` の1枚だけです。**先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
 
+**`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
+
 **2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
 
 **指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**指示書は2つに分かれています。システムプロンプト（全体の流れのフローチャートと、どこでどのスキルを使うかの表）と、手順の本文を持つ plugin `continuo-agent-procedures` のスキルです（リポジトリの [plugins/continuo-agent-procedures/skills/](plugins/continuo-agent-procedures/skills/) にあり、continuo が Claude Code を起動するたびに実行時ディレクトリへ書き出します）。本文は、システムプロンプトの最後の `# このプロジェクトの決まり` の下へ差し込まれ、同じ本文が最初のプロンプトにも入ります。**送られるシステムプロンプトと最初のプロンプトは `continuo prompt --show` で読めます。スキルの本文は出ません。**（前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、issue のコメントから送る直前に組み立てるので、ここには出ません）

@@ -541,7 +541,8 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
+	// **本文は WORKFLOW.local.md から来ることがある**（設計 5-1a）。内訳には実際に来たファイルを出す。
+	frag := prompt.BuildLoaded(loaded)
 
 	if !urlGiven {
 		fmt.Fprint(stdout, frag.Text())

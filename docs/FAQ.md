@@ -1155,7 +1155,7 @@ tracker:
 | キー | 揃えないと何が起きるか |
 | --- | --- |
 | **`tracker.provider.handoff.bid_window_ms`** | 締め切りの計算がずれ、機械ごとに勝者の判定が食い違います |
-| **`five_hour_margin_percent` / `weekly_margin_percent`** | **2つ効きます。**マージンが大きい機械ほど余裕値が下がって**判定スコアで負け続け**、さらに**入札に参加する条件そのものが機械ごとに変わります**（余裕値が0以下なら入札しません） |
+| **`five_hour_margin_percent` / `weekly_margin_percent`** | **2つ効きます。**マージンが大きい機械ほど余裕値が下がって**判定スコアで負け続け**、さらに**入札に参加する条件そのものが機械ごとに変わります**（余裕値が0以下なら入札しません）。**週のリセットに合わせて自分だけ変えたいときは、その結果を受け入れたうえで `WORKFLOW.local.md` で上書きできます**（下の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」） |
 | **`idle_timeout_ms` と `progress_interval_ms`** | **この2つは機械をまたいで組で効きます。**担当している側の `progress_interval_ms` が、見ている側の `idle_timeout_ms` より長いと、**エージェントが指示どおり書いていても担当が外れます。****1枚の中では検査されます**（`progress_interval_ms` が `idle_timeout_ms` 以上だと起動しません）。**機械をまたいだ組み合わせだけが検査されません** |
 | **`recheck_interval_ms`** | **0 を書いた機械は、走っている最中に担当を取られたことに気づきません** |
 | **`rate_limit.source`** | 片方だけ `none` にすると、**その機械が使用率0として常に入札し、勝ち続けます** |
@@ -1207,6 +1207,52 @@ tracker:
 `<root>/<host>/<owner>/<repo>/<スラグ>` の4階層に固定されていて、
 `<host>` は issue の URL のホスト部です（普通の GitHub 利用では全機械で `github.com` になります）。
 **`<スラグ>` は branch 名そのままではありません。**`/` をハイフンに置き換えた1階層ぶんの名前です。
+
+#### 共有している WORKFLOW.md の値を、自分だけ上書きしたい
+
+**`WORKFLOW.md` と同じディレクトリに `WORKFLOW.local.md` を置いてください。**
+**文法は `WORKFLOW.md` と同じで、書いた分だけが上書きされます。**置かなければ、何も変わりません。
+週のレートリミットのリセットが人によって違うので、マージンだけを自分の値にする、という使い方を想定しています。
+
+```markdown
+---
+tracker:
+  provider:
+    handoff:
+      weekly_margin_percent: 30
+---
+```
+
+**`WORKFLOW.local.md` は `.gitignore` に入れてください。**個人の値なので、共有するリポジトリへ commit しません
+（`continuo init` は `.gitignore` に足しません）。
+
+```bash
+echo 'WORKFLOW.local.md' >> .gitignore
+```
+
+**どう重なるか。**`WORKFLOW.local.md` に書いたものは、`WORKFLOW.md` に同じ文字を書いたときと同じ意味で上書きします。
+
+| `WORKFLOW.local.md` に書いたもの | 結果 |
+| --- | --- |
+| 入れ子の1キー（上の例の `weekly_margin_percent`） | そのキーだけ変わります。`five_hour_margin_percent` などの兄弟は `WORKFLOW.md` の値のままです |
+| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残ります。ただし `workspace_hooks.after_create`・`claude.hook_bridge.listen`・`server.port` のように「未設定」を取れる欄は、未設定になります |
+| 対応表（`tracker.status_signal_map`・`claude.env` など）とリスト（`tracker.active_states` など） | 丸ごと置き換わります。`WORKFLOW.md` の行や要素は残りません |
+| front matter が空・注釈だけ | 何も変わりません |
+| 本文（front matter より下） | 中身があれば、`WORKFLOW.md` の本文と丸ごと差し替えます。HTML コメントと中身の無い見出しだけなら、`WORKFLOW.md` の本文が送られます |
+
+**気をつけること。**
+
+| 何を | なぜ |
+| --- | --- |
+| **変えたい行だけを書く** | `WORKFLOW.md` を丸ごと写すと、全部のキーと本文が自分の値で固定され、チームがあとで `WORKFLOW.md` を直しても、あなたの機械には届きません |
+| **本文を上書きすると、チームの本文の変更も届かなくなる** | 差し替えは丸ごとです。チームが `WORKFLOW.md` の本文へあとから足した決まりは、あなたのエージェントには送られません |
+| **`WORKFLOW.md` の値を「消す」書き方は無い** | 本文を空にしても、`WORKFLOW.md` の本文が送られます |
+| **同じカンバンを複数の機械で見張っているなら、「揃っていないと壊れるキー」を上書きしない** | 上の「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」の表のキーです。**マージンは上書きしてかまいませんが、その機械は判定スコアと入札に参加する条件が他の機械と変わります**（その表のとおり） |
+| **`continuo setup` と `continuo doctor` の未記入の項目は、`WORKFLOW.md` だけを読み書きします** | 共有するファイルを直すための道具だからです。`WORKFLOW.local.md` で Status のキーやカンバン（`owner`・`project_number`・`host`）を上書きしていると、`continuo setup` の結果は効きません。未記入の項目は、`WORKFLOW.local.md` に書いたキーも「`WORKFLOW.md` に書かれていない」と出します |
+| **誤りの文言を読む** | `WORKFLOW.local.md` の未知のキーと区切りの誤りは `WORKFLOW.local.md` を名指します。値の誤りは、どちらの値か分からないので両方を名指します。ただし、マージンを切ったときの案内などは `WORKFLOW.md` を名指したままです。上書きしたキーなら `WORKFLOW.local.md` を直してください |
+
+**常駐中に直しても効きます。**`WORKFLOW.md` と同じく、置いた・直した・消したときは巡回の頭で読み直します（走行中に効くのは4キーだけで、残りは再起動で効きます）。
+`continuo doctor` の「設定ファイル」の行と、`continuo prompt --show` の内訳に、重ねたファイルと本文の出どころが出ます。
 
 #### 同じ GitHub アカウントで、複数の PC を動かしたい
 
