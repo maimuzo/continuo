@@ -88,12 +88,13 @@ func TestMarginCut_着手の前に5時間の期間を切っていればBlocked�
 	}
 	found := false
 	for _, c := range fx.Tracker.HandoffCommentsOf("I_node301") {
-		if strings.Contains(c.Body, "レートリミットのマージンを切っている") && strings.Contains(c.Body, "5時間の期間が 93%") {
+		if strings.Contains(c.Body, "レートリミットのマージンを切っている") && strings.Contains(c.Body, "5時間の期間が 93%（マージン 10%）") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("理由のコメントに、切った期間が書かれていません: %+v", fx.Tracker.HandoffCommentsOf("I_node301"))
+		// **マージンにも % が付くことまで見る**（issue #324。人間の指摘「単位が％であることはどこに書いてあるの?」）。
+		t.Errorf("理由のコメントに、切った期間とマージン（%%付き）が書かれていません: %+v", fx.Tracker.HandoffCommentsOf("I_node301"))
 	}
 }
 
@@ -655,5 +656,99 @@ func TestMarginCut_行き先を待つrunは行き先がBlockedに変わったら
 	}
 	if got := texts(); len(got) > 2 {
 		t.Errorf("Blocked へ戻す run に指示を送っています（%d 回）:\n%s", len(got), got[2])
+	}
+}
+
+// 目的: `weekly_margin_percent_by_days_until_reset` を書いたとき、margin-status が、1週間の枠ごとに
+// その枠のリセットまでの残り日数の値で切ったかを書くことを確かめる（issue #324）。
+//
+// **Claude Code はこのファイルを読んで切り上げる**ので、入札と同じ値で書かれていないと、
+// 表で使い切ってよい日にも Claude Code が切り上げてしまう。
+//
+// 与える情報: 表 {1: 0, 2: 5}。5時間の期間は 10%。全体の1週間の期間は 96% で、リセットが残り6時間（1日目）と残り30時間（2日目）の2通り。
+// 成功条件: 1日目はマージン0なので `MARGIN: ok`、2日目はマージン5で余裕値が -1 なので `MARGIN: cut kind=weekly_all used=96 margin=5` であること。
+func TestMarginCut_margin_statusは残り日数の値で書く(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		left   time.Duration
+		prefix string
+	}{
+		{"1日目はマージン0で切っていない", 6 * time.Hour, "MARGIN: ok"},
+		{"2日目はマージン5で切った", 30 * time.Hour, "MARGIN: cut kind=weekly_all used=96 margin=5 resets_at="},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fx, root := marginFixture(t, []map[string]any{
+				{"kind": "session", "percent": 10, "resets_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+				{"kind": "weekly_all", "percent": 96, "resets_at": time.Now().Add(c.left).UTC().Format(time.RFC3339), "severity": "normal"},
+			}, func(cfg *config.Config) {
+				cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = map[int]int{1: 0, 2: 5}
+			})
+			fx.Orc.Tick(context.Background())
+			data, err := os.ReadFile(filepath.Join(root, "margin-status"))
+			if err != nil {
+				t.Fatalf("margin-status を読めません: %v\n%s", err, fx.Logs.String())
+			}
+			if !strings.HasPrefix(string(data), c.prefix) {
+				t.Errorf("margin-status = %q（%q で始まることを期待）", data, c.prefix)
+			}
+		})
+	}
+}
+
+// 目的: `Blocked` へ戻した理由のコメントに、残り日数の表で「リセットより前にマージンが下がる日がある」ときだけ、
+// 早く戻せることがある旨の1文を足すことを確かめる（issue #324。実装レビュー6周目・7周目の MEDIUM）。
+//
+// **足さないと、人間は戻せる日数ぶん issue を止めたままにする。足しすぎると、早く戻した issue が `Blocked` へ跳ね返される。**
+//
+// 与える情報: 待つ上限を 0（上限なし）にし、1週間全体の枠が 96%（リセットまで50時間 = 残り3日。その日の値は weekly_margin_percent の 10）。
+// この機械が担当者の `Ready` の issue が1件。表は2通り（{1: 0} は1日目に 0 へ下がる。{1: 20} は下がる日が無い）。
+// 成功条件: どちらも `Blocked` へ戻り、{1: 0} のときだけ理由のコメントにその1文があること。
+func TestMarginCut_表でマージンが下がる日があるときだけ早く戻せる旨を書く(t *testing.T) {
+	const note = "から余裕が戻ります。その時刻のあとに戻せば"
+	for _, c := range []struct {
+		name       string
+		table      map[int]int
+		scopedFull bool
+		want       bool
+	}{
+		{"1日目に0へ下がるなら書く", map[int]int{1: 0}, false, true},
+		{"下がる日が無いなら書かない", map[int]int{1: 20}, false, false},
+		// **戻らない期間が1つでも残れば書かない**（実装レビュー8周目の MEDIUM）。モデル別の枠が使用率100%で残る。
+		{"ほかの期間が戻らないなら書かない", map[int]int{1: 0}, true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			limits := []map[string]any{
+				{"kind": "session", "percent": 10, "resets_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+				{"kind": "weekly_all", "percent": 96, "resets_at": time.Now().Add(50 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+			}
+			if c.scopedFull {
+				limits = append(limits, map[string]any{"kind": "weekly_scoped", "percent": 100, "resets_at": time.Now().Add(120 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"})
+			}
+			fx, _ := marginFixture(t, limits, func(cfg *config.Config) {
+				cfg.RateLimit.WeeklyWaitLimitMinutes = 0
+				cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = c.table
+			})
+			issue := assignedIssue(331, "Ready", testGHLogin)
+			fx.Tracker.AddIssue(issue)
+
+			fx.Orc.Tick(context.Background())
+
+			if got := fx.Tracker.StateOf(issue.ID); got != "Blocked" {
+				t.Fatalf("Status = %q（Blocked を期待）:\n%s", got, fx.Logs.String())
+			}
+			reason, has := false, false
+			for _, cm := range fx.Tracker.HandoffCommentsOf("I_node331") {
+				if strings.Contains(cm.Body, "1週間の期間が 96%（マージン 10%）") {
+					reason = true
+					has = has || strings.Contains(cm.Body, note)
+				}
+			}
+			if !reason {
+				t.Fatalf("理由のコメントがありません: %+v", fx.Tracker.HandoffCommentsOf("I_node331"))
+			}
+			if has != c.want {
+				t.Errorf("理由のコメントに1文があるか: %v（want %v）: %+v", has, c.want, fx.Tracker.HandoffCommentsOf("I_node331"))
+			}
+		})
 	}
 }

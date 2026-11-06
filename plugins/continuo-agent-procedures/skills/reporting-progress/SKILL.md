@@ -132,7 +132,7 @@ continuo から「レートリミットのマージンを切りました」と�
 1. 新しいサブエージェントは起動しません。走っているサブエージェントは止めません
 2. **先に、いまある変更を commit して push します**（「implementing-and-pushing」の「commit して push する」）
 3. 走っているサブエージェントの結果が返ったら、その分も commit して push します
-4. どこまで進んだか・次に何をするかを、issue のコメントに書きます。このコメントは、その run の何をしたかの報告に当たります。印は「finishing-run」の「runの終了を宣言する」と同じ1行（`<!-- continuo:agent -->`）で、「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」の8つの見出しで書きます（題名の直後に、同じスキルの「どのコメントにも、受け入れ目標・いまの作業・残りを書く」の節を置きます）。「finishing-run」の「runの終了を宣言する」の段3 の、「issue を読む」と「紐づく pull request を読む」の読み直しと、「finishing-run」の「まとめて直したとき」は省いてかまいません
+4. どこまで進んだか・次に何をするかを、issue のコメントに書きます。このコメントは、その run の何をしたかの報告に当たります。印は「finishing-run」の「runの終了を宣言する」と同じ1行（`<!-- continuo:agent -->`）で、「writing-comments-for-humans」の「人間へ質問・報告するコメントの書き方」の8つの見出しで書きます（題名の直後に、同じスキルの「どのコメントにも、受け入れ目標・いまの作業・残りを書く」の節を置きます）。「finishing-run」の「runの終了を宣言する」の段3 の、「issue を読む」と「紐づく pull request を読む」の読み直しと、「finishing-run」の「まとめて直したとき」は省いてかまいません。この branch の開いた pull request があるか（`gh pr list --repo <issue のリポジトリ> --head "$(git branch --show-current)" --state open --json number,isCrossRepository --jq '.[] | select(.isCrossRepository | not) | .number'` が番号を出すか。別の名前へ出したときは `--head` にその名前を、別のリポジトリへ出したときは `--repo` に出した先を渡します）を確かめ、あれば検査を待たずに「finishing-run」の「runの終了を宣言する」の段4 の段A を叩いて、受け入れ目標の節の直後に「レビューの結果と、pull request の状態」の節を置きます
 5. 応答の最後に `CONTINUO-STATUS: working` を書いて終えます。人間へ戻すか別の機械へ引き継ぐかは、continuo が決めます
 
 <!-- continuo-skill-end: reporting-progress CONTINUO_PLUGIN_HASH -->

@@ -228,6 +228,11 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// ファイルへ書いてから `--body-file` で渡させる。
 	b.WriteString("本文は、ファイルへ書いてから `--body-file` で渡してください。" +
 		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n")
+	// **報告の形はスキル finishing-run の段4 にあると、ここでも名指しする**（issue #332。設計 5-3zc）。
+	// 書かせ直しは `review` で終えた run にも届く。下の見本だけを写すと、
+	// 人間が知りたい「レビューの結果と、pull request の状態」の節（スクリプトが出す）が報告から落ちる。
+	b.WriteString("報告の形は、スキル finishing-run の「runの終了を宣言する」の段4 のとおりです" +
+		"（開いた pull request があれば、段A のスクリプトが出す「レビューの結果と、pull request の状態」の節を置きます）。\n")
 	// **見本は囲みに入れ、中身を行頭から書く。**この文面は表示されず、文字列のまま届く。
 	// 字下げした見本をそのまま写すと、`DONE` の行が終わりと読まれず、後ろの `gh` まで本文に取り込まれて
 	// 何も投稿されないまま終了コード 0 で終わる（設計 5-3t）。

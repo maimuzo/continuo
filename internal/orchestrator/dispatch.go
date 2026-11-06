@@ -286,11 +286,12 @@ func (o *Orchestrator) ownAssigneeLostSinceSnapshot(
 // snap: この巡回で `quotaForBid` から1回だけ受けた写し（古ければ nil）。
 // 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
 func (o *Orchestrator) newWorkBlockedWith(snap *ratelimit.Snapshot) handoff.SkipReason {
+	now := o.now()
 	_, skip := handoff.Evaluate(
 		snap,
 		o.cfg.RateLimit.Source != ratelimit.SourceNone,
-		o.bidMargins(),
-		o.now(),
+		o.bidMargins(now),
+		now,
 	)
 	return skip
 }
@@ -378,7 +379,20 @@ func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
 func (o *Orchestrator) logNewWorkBlocked(
 	skip handoff.SkipReason, snap *ratelimit.Snapshot,
 ) {
-	h := o.cfg.Tracker.Provider.Handoff
+	// **マージンは、写しを nil にする前に選ぶ**（issue #324）。1週間のマージンは枠ごとのリセット時刻で変わる。
+	// 写しを nil にするのは枠を読めなかったときだけで、そのときはマージンを出さない（下の門）。
+	// **ログに出す1週間のマージンは、全体の枠（`weekly_all`）に当てた値である。**モデル別の枠の値は、
+	// 「余裕の無い枠」に名前が出たときに、ダッシュボードで読める。
+	margins := o.bidMargins(o.now())
+	weeklyMargin, weeklyDays := margins.Weekly, 0
+	if snap != nil {
+		for _, l := range snap.Limits {
+			if l.Kind == handoff.LimitKindWeeklyAll {
+				weeklyMargin, weeklyDays = margins.WeeklyDaysFor(l)
+				break
+			}
+		}
+	}
 	args := []any{
 		"理由", skip.String(),
 	}
@@ -404,7 +418,7 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **使用率は最大を採って1つに畳むので、それだけでは
 	// `weekly_scoped`（1週間のモデル別の枠）が原因のときに読めない。**
 	// claude.ai の画面に出る週次の全体が30%でも、**よく使っているモデルの枠に余裕が無ければ止まる。**
-	if kinds := snap.SelectedKinds(handoff.Short(o.bidMargins())); len(kinds) > 0 {
+	if kinds := snap.SelectedKinds(handoff.Short(margins)); len(kinds) > 0 {
 		args = append(args, "余裕の無い枠", strings.Join(kinds, ", "))
 	}
 	// **閾値とマージンも、枠を読めなかったときは出さない**（issue #173）。
@@ -412,12 +426,22 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **その隣に2本のマージンの現在値と閾値を並べると、読む人はそこへ手を伸ばす。**
 	// **数字を消したのと同じ理由である。**言っていることと、並べている値が食い違う。
 	if skip != handoff.SkipQuotaUnreadable {
+		// **1週間は、いま効いている値を出す**（issue #324）。`weekly_margin_percent_by_days_until_reset` で
+		// 上書きしているときに設定の `weekly_margin_percent` を並べると、効いていない値へ手を伸ばさせる。
+		// **表から選んだときは、何日目の値かも出す。**値だけでは、既定値か表の値かを読めない。
 		args = append(args,
-			"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
-			"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
-			"five_hour_margin_percent", h.FiveHourMarginPercent,
-			"weekly_margin_percent", h.WeeklyMarginPercent,
+			"5時間の枠の閾値", o.thresholdText(margins.FiveHour),
+			"1週間の枠の閾値", o.thresholdText(weeklyMargin),
+			"five_hour_margin_percent", margins.FiveHour,
 		)
+		if weeklyDays > 0 {
+			args = append(args,
+				"weekly_margin_percent_by_days_until_reset", weeklyMargin,
+				"リセットまでの残り日数", weeklyDays,
+			)
+		} else {
+			args = append(args, "weekly_margin_percent", weeklyMargin)
+		}
 	}
 	// **出すのは1行だけにする**（人間の決定。2026-09-06。issue #173）。
 	// **「この巡回では1件も着手しません」は消えた。**丸ごとやめる段が無くなったためである。
@@ -431,7 +455,8 @@ func (o *Orchestrator) logNewWorkBlocked(
 	msg := "枠に余裕が無いので、入札の要る issue には着手しません" +
 		"（担当が既にこの機械にある issue は、マージンを見て着手するかを決めます。走っている run は、マージンを切ったら切り上げさせます）。" +
 		"枠が戻れば自分で再開します。すぐ動かしたいときは " +
-		"tracker.provider.handoff の2つのマージンを見てください"
+		"tracker.provider.handoff のマージン（five_hour_margin_percent・weekly_margin_percent・" +
+		"weekly_margin_percent_by_days_until_reset）を見てください"
 	// **使用率100 の枠があるときは、マージンでは動き出さない**（実装レビュー4周目の MEDIUM）。
 	// **マージンは 0〜99 に制限されている**（`internal/config/validate.go` の `validateHandoff`）。
 	// **だから余裕値は `100 − 100 − マージン` で、どの値を書いても必ず0以下になる。**
@@ -489,14 +514,26 @@ func (o *Orchestrator) thresholdText(margin int) string {
 
 // bidMargins は入札の余裕値を作るときに引くマージンを返す（設計 3-77。issue #173）。
 //
-// **1箇所にまとめてある。**同じ2つのキーを各所で組み立てると、
+// **1箇所にまとめてある。**同じキーを各所で組み立てると、
 // **入札の線と、枠待ちの線と、1週間の枠を待つ上限の線がずれる。**
 //
-// 戻り値: 5時間と1週間のマージン（%）。
-func (o *Orchestrator) bidMargins() handoff.Margins {
+// **1週間のマージンは、その枠のリセットまでの残り日数で変わる**（issue #324）。
+// 返した `Margins` は表と時刻を持ち、1週間の枠ごとに `WeeklyFor` で値を選ぶ
+// （`weekly_margin_percent_by_days_until_reset` にその枠の日の値があればそれ、無ければ `weekly_margin_percent`）。
+// 残り日数は、判定する枠そのものの `resets_at` から数える（写しは仮の期限を nil にして渡す）。
+//
+// **判定に使っている時刻を渡すこと。**判定と表示（理由のコメント・ログ）が別々に時計を引くと、
+// 日の境目の数秒だけ、表示のマージンが判定と食い違いうる（表示だけで、次の巡回で揃う）。
+//
+// now: その判定に使っている時刻。
+// 戻り値: 5時間と1週間のマージン（%）と、1週間の残り日数の表。
+func (o *Orchestrator) bidMargins(now time.Time) handoff.Margins {
+	h := o.cfg.Tracker.Provider.Handoff
 	return handoff.Margins{
-		FiveHour: o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
-		Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
+		FiveHour:               h.FiveHourMarginPercent,
+		Weekly:                 h.WeeklyMarginPercent,
+		WeeklyByDaysUntilReset: map[int]int(h.WeeklyMarginPercentByDaysUntilReset),
+		At:                     now,
 	}
 }
 

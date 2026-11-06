@@ -779,6 +779,23 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
 			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
+	// **残り日数ごとの表も、同じ理由で100を弾く**（issue #324）。
+	// **キーは1〜7だけを通す。**0 や 8 を書いても、その日は来ないので黙って効かない。
+	// **小さいキーから順に見る。**map をそのまま回すと、誤りが2件以上のときに報告するキーが毎回変わる。
+	days := make([]int, 0, len(h.WeeklyMarginPercentByDaysUntilReset))
+	for d := range h.WeeklyMarginPercentByDaysUntilReset {
+		days = append(days, d)
+	}
+	sort.Ints(days)
+	for _, d := range days {
+		key := fmt.Sprintf("tracker.provider.handoff.weekly_margin_percent_by_days_until_reset.%d", d)
+		if d < 1 || d > MaxWeeklyMarginDaysUntilReset {
+			return invalidValueError(key, d, i18n.T(i18n.KeyConfigValidateHandoffMarginDaysRange))
+		}
+		if v := h.WeeklyMarginPercentByDaysUntilReset[d]; v < 0 || v >= 100 {
+			return invalidValueError(key, v, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
+		}
+	}
 	// **決められた値だけを通す**（issue #134 / #136 / #140）。
 	// **知らない値を黙って既定へ倒さない。**`warn_only` のつもりで打ち間違えた設定が
 	// 通ってしまうと、切ったはずの案内が issue へ書かれる。**書いたものは消せない。**

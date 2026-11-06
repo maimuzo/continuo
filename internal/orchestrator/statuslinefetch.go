@@ -144,13 +144,21 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
 	// **マージンは `bidMargins` から取る**（実装レビュー1周目の LOW）。
 	// **ここで手で組み立てると、キーを1本増やしたときに片方だけが直る。**
-	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	shortWeekly := handoff.ShortWeekly(o.bidMargins(now))
 	for kind, w := range o.quota.windows {
 		if !w.ResetsAt.After(now) {
 			continue
 		}
 		if kind == handoff.LimitKindWeeklyScoped {
-			if shortWeekly(ratelimit.Limit{Kind: kind, Percent: w.Percent}) {
+			// **リセット時刻も渡す**（issue #324）。1週間のマージンは、その枠のリセットまでの残り日数で変わる。
+			// **仮の期限（`Standin`）は渡さない。**usage API が `resets_at: null` を返した期間に continuo が付けた
+			// 数分先の期限で、「残り1日」と読むと、ここだけ入札と別の線になる（写しの `snapshotOf` と同じ扱い）。
+			l := ratelimit.Limit{Kind: kind, Percent: w.Percent}
+			if !w.Standin {
+				resetsAt := w.ResetsAt
+				l.ResetsAt = &resetsAt
+			}
+			if shortWeekly(l) {
 				return true
 			}
 			continue
