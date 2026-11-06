@@ -704,20 +704,27 @@ func TestMarginCut_margin_statusは残り日数の値で書く(t *testing.T) {
 // この機械が担当者の `Ready` の issue が1件。表は2通り（{1: 0} は1日目に 0 へ下がる。{1: 20} は下がる日が無い）。
 // 成功条件: どちらも `Blocked` へ戻り、{1: 0} のときだけ理由のコメントにその1文があること。
 func TestMarginCut_表でマージンが下がる日があるときだけ早く戻せる旨を書く(t *testing.T) {
-	const note = "リセットより前にマージンが下がる日があります"
+	const note = "から余裕が戻ります。その時刻のあとに戻せば"
 	for _, c := range []struct {
-		name  string
-		table map[int]int
-		want  bool
+		name       string
+		table      map[int]int
+		scopedFull bool
+		want       bool
 	}{
-		{"1日目に0へ下がるなら書く", map[int]int{1: 0}, true},
-		{"下がる日が無いなら書かない", map[int]int{1: 20}, false},
+		{"1日目に0へ下がるなら書く", map[int]int{1: 0}, false, true},
+		{"下がる日が無いなら書かない", map[int]int{1: 20}, false, false},
+		// **戻らない期間が1つでも残れば書かない**（実装レビュー8周目の MEDIUM）。モデル別の枠が使用率100%で残る。
+		{"ほかの期間が戻らないなら書かない", map[int]int{1: 0}, true, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			fx, _ := marginFixture(t, []map[string]any{
+			limits := []map[string]any{
 				{"kind": "session", "percent": 10, "resets_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
 				{"kind": "weekly_all", "percent": 96, "resets_at": time.Now().Add(50 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
-			}, func(cfg *config.Config) {
+			}
+			if c.scopedFull {
+				limits = append(limits, map[string]any{"kind": "weekly_scoped", "percent": 100, "resets_at": time.Now().Add(120 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"})
+			}
+			fx, _ := marginFixture(t, limits, func(cfg *config.Config) {
 				cfg.RateLimit.WeeklyWaitLimitMinutes = 0
 				cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = c.table
 			})

@@ -223,56 +223,60 @@ func (o *Orchestrator) marginCutBlockedReason(usable *ratelimit.Snapshot) string
 
 // daysTableReturnNote は、`Blocked` へ戻したときの【対処】に足す1文を返す（issue #324）。
 //
-// **足すのは、表を書いていて、切った1週間の枠のどれかに「リセットより前に、今より小さいマージンで余裕が戻る日」があるときだけである。**
+// **足すのは、表を書いていて、理由に挙げた期間の全部が「リセットより前に、残り日数が変わってマージンが下がり、余裕が戻る」ときだけである。**
+// そのとき、全部の期間の余裕が戻るいちばん遅い時刻を書く。人間はその時刻のあとに戻せばよい。
 // 「リセットの前に戻すと、もう1度戻る」だけを書くと、人間は戻せる日数ぶん issue を止めたままにする（実装レビュー1周目の MEDIUM）。
-// 逆に、その日が無いのに足すと、人間が早く戻して `Blocked` へ跳ね返される（6周目と7周目の MEDIUM）。だから次では足さない。
+// 逆に、戻らない期間が1つでも残っているのに足すと、早く戻した issue が跳ね返される（6〜8周目の MEDIUM）。だから次が1つでもあれば足さない。
 //
-//	5時間の枠だけで切った                     … 表は5時間の枠に効かない
+//	1週間の枠でない期間（5時間の枠）         … 表は効かない
 //	リセット時刻が分からない枠                 … 表を当てない（weekly_margin_percent のまま）
 //	使用率100%の枠                             … マージンがいくつでも余裕は戻らない
-//	リセットまで24時間以内（残り日数が1）       … これより前の日が無い
-//	残りの日の値がどれも今と同じか大きい・余裕が戻らない … 例: 表が {5: 0} で残り3日、表が {1: 20}
+//	リセットより前に余裕が戻る日が無い枠       … 残り日数が1・残りの日の値で余裕が戻らない（例: 表が {5: 0} で残り3日、表が {1: 20}）
 //
 // **既定の待つ上限（300分）では、1週間の枠で `Blocked` になるのはリセットの5時間前からなので、
 // この1文が付くのは、待つ上限を延ばしたか 0 にした人だけである。**
+// **余裕が戻るのは、それまで使用率が増えなかったときである。**だから「着手できることがあります」と書く。
 //
 // periods: 理由のコメントに書く、切った期間（と、着手の前なら Claude Code が動けない期間）。
 // 戻り値: 足す1文。足さないときは空。
 func (o *Orchestrator) daysTableReturnNote(periods []marginstatus.Period) string {
 	h := o.cfg.Tracker.Provider.Handoff
-	if len(h.WeeklyMarginPercentByDaysUntilReset) == 0 {
+	if len(h.WeeklyMarginPercentByDaysUntilReset) == 0 || len(periods) == 0 {
 		return ""
 	}
 	now := o.now()
-	found := false
+	var latest time.Time
 	for _, p := range periods {
 		if !handoff.IsWeeklyKind(p.Kind) || p.ResetsAt == nil || p.Used >= 100 {
-			continue
+			return ""
 		}
 		days, ok := handoff.DaysUntilReset(*p.ResetsAt, now)
 		if !ok {
-			continue
+			return ""
 		}
-		for d := 1; d < days; d++ {
+		// **いちばん早く余裕が戻る日を探す。**残り日数は時間とともに減るので、大きい日ほど先に来る。
+		var back time.Time
+		for d := days - 1; d >= 1; d-- {
 			margin, ok := h.WeeklyMarginPercentByDaysUntilReset[d]
 			if !ok {
 				margin = h.WeeklyMarginPercent
 			}
-			if margin < p.Margin && 100-p.Used-margin > 0 {
-				found = true
+			if 100-p.Used-margin > 0 {
+				// 残り日数が d になるのは、リセットの d×24時間前（ちょうどを含む）からである（handoff.DaysUntilReset）。
+				back = p.ResetsAt.Add(-time.Duration(d) * 24 * time.Hour)
 				break
 			}
 		}
-		if found {
-			break
+		if back.IsZero() {
+			return ""
+		}
+		if back.After(latest) {
+			latest = back
 		}
 	}
-	if !found {
-		return ""
-	}
-	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` で、" +
-		"リセットより前にマージンが下がる日があります。その日になってから戻せば、リセットの前でも着手できることがあります" +
-		"（そのときマージンを切っていなければ着手し、切っていればもう1度この Status へ戻ります）。"
+	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` で、リセットより前にマージンが下がり、" +
+		latest.Local().Format("2006-01-02 15:04 (MST)") + " から余裕が戻ります。その時刻のあとに戻せば、リセットの前でも着手できることがあります" +
+		"（それまでに使用率が増えてマージンを切っていれば、もう1度この Status へ戻ります）。"
 }
 
 // describeMarginPeriods は、マージンを切った期間を人間が読む1文にする。
