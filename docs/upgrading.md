@@ -122,6 +122,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
 | **エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります** | 要りません |
+| **エージェントが書くコメントの節の題名に、報告・質問・依頼のどれかが付きます** | 要りません。**確認の節の題名は `質問: 頼みが要る操作の確認` になります** |
 | **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
 | **エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます** | 要りません。**達成できない目標があると、エージェントは目標を変えずに `Blocked` で止まり、あなたに確かめます** |
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
@@ -136,6 +137,19 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **誰に関係があるか。**全員です。設定の書き換えは要りません。
 
 計画・成果の報告・判断票・途中経過・まとめて直したときの報告・pull request の本文の、どれにも入ります（例外はありません）。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足しました。continuo 本体が書くコメント（Status を動かした知らせなど）には入りません。形と置き場所は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
+
+### エージェントが書くコメントの節の題名に、報告・質問・依頼のどれかが付きます
+
+**誰に関係があるか。**全員です。設定の書き換えは要りません。
+
+計画・判断票・何をしたかの報告・pull request の本文の `## ` の節の題名が、`報告: `・`質問: `・`依頼: ` のどれかで始まります。返事が要る節は `質問: `、あなたが自分で操作する節（マージなど）は `依頼: ` なので、題名だけを見て、どこに答えればよいかが分かります。`WORKFLOW.md` の本文で英語で書かせていても、この語は訳されません（エージェントが、あなたの答えをどの問いへの答えかを見分けるのに使うためです）。マージや本番への書き込みの許可を訊く節の題名は `質問: 頼みが要る操作の確認` になります。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足しました（continuo の印があるリポジトリだけ。語はコメントの言語で書きます）。入れている人は、次の2つで上げてください。
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+決まりの全文は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「節の題名の頭に種類を書く」にあります。
 
 ### pull request が、issue の Development にリンクされます
 
