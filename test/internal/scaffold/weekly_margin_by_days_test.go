@@ -45,6 +45,20 @@ func TestTemplate_残り日数ごとの1週間のマージンの全キーをコ�
 		}
 	}
 
+	// **値の単位と意味も、コメントだけで読めるように書く**（人間の指摘「1:0の0の単位が％であることはどこに書いてあるの?」。
+	// issue #324 のコメント 6680279690）。
+	for _, want := range []string{
+		"値はその日のマージン（単位は %。0以上100未満の整数。意味は weekly_margin_percent と同じ）",
+		"「1: 0」は「残り1日の日は、マージンを 0% にして使い切る」",
+		"キーが 1〜7 の外か、値が 0以上100未満の外だと、continuo は起動しない",
+		"書き換えたら continuo を立て直す",
+		"WORKFLOW.local.md にこの表を書くと、この表は丸ごと置き換わる",
+	} {
+		if !strings.Contains(base, want) {
+			t.Errorf("雛形の表の説明に「%s」が無い", want)
+		}
+	}
+
 	const header = "      # weekly_margin_percent_by_days_until_reset:"
 	var b strings.Builder
 	found := map[string]bool{}
