@@ -306,7 +306,7 @@ func TestTemplate_衝突の扱いと残ったdraftの扱いが別の節にも届
 	}
 
 	plan := sectionOf(t, body, planReviewHeading)
-	if !strings.Contains(plan, "draft の pull request が残っていても閉じず、その URL を報告に書きます。") {
+	if !strings.Contains(plan, "draft の pull request が残っていても閉じず、その URL を題名と一緒に報告に書きます。") {
 		t.Error("「計画を書き、レビューを受ける」が、「対応しない」と決めたときに残っている draft の pull request の扱いを決めていません（issue #251）")
 	}
 }

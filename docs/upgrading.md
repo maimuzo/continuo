@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -125,6 +125,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
 | **エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます** | 要りません。**達成できない目標があると、エージェントは目標を変えずに `Blocked` で止まり、あなたに確かめます** |
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
+| **エージェントが、issue と pull request を URL で書きます** | 要りません。**本文で番号の形（`Fixes #123` など）を決めているなら、その行はそのまま番号で書きます** |
 | **`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます** | 要りません。**同じ名前のファイルを既に置いていたら、中身を確かめてください**（次の起動から読まれます） |
 
 ### エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります
@@ -153,6 +154,19 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **誰に関係があるか。**全員です。
 
 前の pull request がマージか close されたあとに2つ目を作るのは、そのあとにあなたがその issue で新しい作業を頼んだコメントを書いたときだけです。2つ目も同じ branch から出し、本文に前の pull request とあなたのコメントの URL を書きます。**2つ目を別の名前の branch で出すことは、もうしません。**`WORKFLOW.md` の本文に「2本目の PR を出すときは別の名前へ」の趣旨を書いていたら、消してください（残っていると、エージェントへの指示が食い違います）。
+
+### エージェントが、issue と pull request を URL で書きます
+
+**誰に関係があるか。**全員です。設定の書き換えは要りません。
+
+エージェントは、issue と pull request を指すとき、同じリポジトリのものでも `#123` ではなく URL で書き、題名を添えます。コメント・本文・題名欄と commit メッセージに当てます。`#123` だけで書くと、GitHub は書いた先のリポジトリの123番へリンクするので、別のリポジトリのものを指すつもりの番号が無関係なものを指していました。`Closes` の行と `CONTINUO-STATUS:` の行は今までどおりです。`WORKFLOW.md` の本文で番号の形を決めている行（`Fixes #123` など）も、その決まりのまま書きます。人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` にも同じ決まりを足しました（continuo の印があるリポジトリだけ）。入れている人は、次の2つで上げてください。
+
+```bash
+claude plugin marketplace update continuo
+claude plugin update continuo-issue-comments@continuo
+```
+
+決まりの全文は、スキル [writing-comments-for-humans](../plugins/continuo-agent-procedures/skills/writing-comments-for-humans/SKILL.md) の「issue と pull request は URL で指す」にあります。
 
 ### `WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます
 
