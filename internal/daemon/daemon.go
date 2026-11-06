@@ -446,7 +446,9 @@ func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
 // logger: ログの出力先。**nil を渡してはならない。**
 // 戻り値: 組み立てた断片と、起動を止める理由。
 func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, error) {
-	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
+	// **本文は WORKFLOW.local.md から来ることがある**（設計 5-1a）。選ぶのは prompt.BodyOf である。
+	body, bodyPath := prompt.BodyOf(loaded)
+	frag := prompt.Build(body, bodyPath)
 	if err := frag.Validate(); err != nil {
 		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunPromptInvalid, ErrStartup, err)
 	}
@@ -454,7 +456,8 @@ func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, 
 	// **送る文面の本文の行数ではない**（設計 5-3m。取り除いたあとは 0 行になりうる）。
 	// **その数が要る人は `continuo prompt --show` の内訳を見ること。**あちらは展開後を数える。
 	logger.Info("送るプロンプトを組み立てました（本文の行数は、取り除く前の値である）",
-		"workflow", loaded.Path, "body_lines_before_strip", lineCount(loaded.PromptTemplate))
+		"workflow", loaded.Path, "workflow_local", loaded.LocalPath,
+		"body", bodyPath, "body_lines_before_strip", lineCount(body))
 	return frag, nil
 }
 

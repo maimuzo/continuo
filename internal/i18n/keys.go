@@ -200,6 +200,8 @@ const (
 	KeyDoctorConfigRemedyInit Key = "doctor.config.remedy_init"
 	// KeyDoctorConfigRemedyPermission は権限が足りなくて読めなかったときの直し方に出る。
 	KeyDoctorConfigRemedyPermission Key = "doctor.config.remedy_permission"
+	// KeyDoctorConfigRemedyLocal は WORKFLOW.local.md が無い先を指す・ディレクトリなどで読めなかったときの直し方に出る（設計 5-1a）。
+	KeyDoctorConfigRemedyLocal Key = "doctor.config.remedy_local"
 	// KeyDoctorConfigRemedyFrontMatter は読めたが front matter が通らなかったときの直し方に出る。
 	KeyDoctorConfigRemedyFrontMatter Key = "doctor.config.remedy_front_matter"
 	// KeyDoctorConfigOK は読めたときの説明に出る。
@@ -1438,6 +1440,11 @@ const (
 	KeyConfigLoadFrontMatterInvalid Key = "config.load.front_matter_invalid"
 	// KeyConfigLoadExpandFailed は設定値の環境変数の展開・チルダの展開に失敗したときに出る。
 	KeyConfigLoadExpandFailed Key = "config.load.expand_failed"
+	// KeyConfigLoadLocalReadFailed は WORKFLOW.local.md が在るのに読めなかったときに出る（設計 5-1a）。
+	KeyConfigLoadLocalReadFailed Key = "config.load.local_read_failed"
+	// KeyConfigLoadMergedLabel は、WORKFLOW.md と WORKFLOW.local.md を重ねた設定を名指す句である（設計 5-1a）。
+	// 重ねたあとの検査と展開の誤りの文言に、ファイルのパスの代わりに入る。
+	KeyConfigLoadMergedLabel Key = "config.load.merged_label"
 )
 
 // front matter の切り出し（internal/config の splitFrontMatter）のエラーの文言。
@@ -2818,6 +2825,7 @@ var allKeys = []Key{
 	KeyDoctorConfigUnreadable,
 	KeyDoctorConfigRemedyInit,
 	KeyDoctorConfigRemedyPermission,
+	KeyDoctorConfigRemedyLocal,
 	KeyDoctorConfigRemedyFrontMatter,
 	KeyDoctorConfigOK,
 	KeyDoctorLabelClaudeHome,
@@ -3353,6 +3361,8 @@ var allKeys = []Key{
 	KeyConfigLoadFrontMatterSplitFailed,
 	KeyConfigLoadFrontMatterInvalid,
 	KeyConfigLoadExpandFailed,
+	KeyConfigLoadLocalReadFailed,
+	KeyConfigLoadMergedLabel,
 	KeyConfigFrontMatterNoStartDelimiter,
 	KeyConfigFrontMatterNoEndDelimiter,
 	KeyConfigPlaceholderRemaining,

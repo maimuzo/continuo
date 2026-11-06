@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -55,7 +56,8 @@ func checkConfig(path string) (Result, loadedConfig) {
 	return Result{
 		Label:  LabelConfig,
 		Symbol: SymbolOK,
-		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.Path),
+		// **WORKFLOW.local.md を重ねたら、両方を名指す**（設計 5-1a）。
+		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.SourceLabel()),
 	}, loadedConfig{OK: true, Config: loaded.Config, Loaded: loaded}
 }
 
@@ -81,7 +83,9 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 	}
 	loaded := cfg.Loaded
 
-	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
+	// **本文は WORKFLOW.local.md から来ることがある**（設計 5-1a）。選ぶのは prompt.BodyOf である。
+	frag := prompt.BuildLoaded(loaded)
+	bodyPath := frag.BodyPath()
 	if err := frag.Validate(); err != nil {
 		return Result{
 			Label:    LabelPromptVariables,
@@ -98,8 +102,26 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 	return Result{
 		Label:  LabelPromptVariables,
 		Symbol: SymbolOK,
-		Detail: i18n.T(key, loaded.Path),
+		Detail: i18n.T(key, bodyPath),
 	}
+}
+
+// failedPath は、直し方に名指すファイルを、読めなかったファイルそのものに決める（設計 5-1a）。
+//
+// **WORKFLOW.local.md を読めなかったときは、WORKFLOW.local.md を名指す。**WORKFLOW.md を名指すと、
+// 利用者はチームで共有している WORKFLOW.md を直しに行く。
+// **1つのパスだけを返す。**直し方の文言は `ls -l %s` のようにパスをコマンドへ埋めるので、
+// 2つのファイルを名指す句を入れると、貼っても叩けないコマンドになる。
+//
+// path: WORKFLOW.md の絶対パス。
+// err: config.Load が返したエラー。
+// 戻り値: 誤りが *fs.PathError を包んでいればその Path、そうでなければ path。
+func failedPath(path string, err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) && pe.Path != "" {
+		return pe.Path
+	}
+	return path
 }
 
 // configRemedies は設定ファイルを読めなかった理由ごとの直し方を返す（issue #11）。
@@ -115,14 +137,26 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 // err: config.Load が返したエラー。
 // 戻り値: 画面に出す直し方の並び。
 func configRemedies(path string, err error) []string {
+	// **読めなかったのが WORKFLOW.local.md なら、WORKFLOW.local.md を確かめさせる**（設計 5-1a）。
+	// 誤りの種類だけで分けると、リンク先の無い WORKFLOW.local.md（ENOENT）で `continuo init` を勧め、
+	// 「既にあります」に `--force` を足した利用者が、チームで共有している WORKFLOW.md を雛形で潰す。
+	failed := failedPath(path, err)
+	local := failed != path
 	switch fsprobe.Classify(err) {
 	case fsprobe.FaultNotExist:
+		if local {
+			return []string{i18n.T(i18n.KeyDoctorConfigRemedyLocal, failed)}
+		}
 		return []string{i18n.T(i18n.KeyDoctorConfigRemedyInit)}
 	case fsprobe.FaultPermission:
-		return []string{i18n.T(i18n.KeyDoctorConfigRemedyPermission, path)}
+		return []string{i18n.T(i18n.KeyDoctorConfigRemedyPermission, failed)}
 	case fsprobe.FaultFilesystem:
 		return filesystemRemedies()
 	default:
+		// **WORKFLOW.local.md を開けなかった（ディレクトリなど）なら、「ファイルは読めています」とは言わない。**
+		if local {
+			return []string{i18n.T(i18n.KeyDoctorConfigRemedyLocal, failed)}
+		}
 		return []string{i18n.T(i18n.KeyDoctorConfigRemedyFrontMatter)}
 	}
 }

@@ -515,6 +515,36 @@ type Fragments struct {
 	hasBody bool
 }
 
+// BodyOf は、送る本文と、それが来たファイルのパスを選ぶ（設計 5-1a）。
+//
+// **WORKFLOW.local.md の本文に中身があれば、それを丸ごと送る。**無ければ WORKFLOW.md の本文を送る。
+// **「中身がある」は、送る前に取り除く HTML コメントと中身の無い見出しを落としたあとで決める**
+// （`Build` の hasBody と同じ判定）。生の文字列で決めると、雛形を写して本文を案内のコメントだけにした
+// WORKFLOW.local.md でも差し替えが起き、取り除いたあとに0行になって、
+// **チームの本文が1行も送られなくなる。**
+//
+// **判定をここに置くのは、取り除く規則が prompt にあり、prompt が config を import しているためである**
+// （config 側には置けない）。本文を使う箇所は、全部この関数を通す。
+//
+// loaded: config.Load の結果。
+// 戻り値の1つ目: 送る本文（取り除く前の文字列）。
+// 戻り値の2つ目: その本文が来たファイルの絶対パス。
+func BodyOf(loaded *config.Loaded) (string, string) {
+	if loaded.LocalPath != "" &&
+		strings.TrimSpace(dropEmptySections(stripComments(loaded.LocalPromptTemplate))) != "" {
+		return loaded.LocalPromptTemplate, loaded.LocalPath
+	}
+	return loaded.PromptTemplate, loaded.Path
+}
+
+// BuildLoaded は、config.Load の結果から2つの文面の断片を決める（BodyOf で選んだ本文で Build する）。
+//
+// loaded: config.Load の結果。
+// 戻り値: 連結する順に並んだ断片。
+func BuildLoaded(loaded *config.Loaded) Fragments {
+	return Build(BodyOf(loaded))
+}
+
 // Build は、WORKFLOW.md の本文から2つの文面の断片を決める（設計 5-3c）。
 //
 // **並びは、組み込みの前半 + 本文 + 組み込みの後半で固定である。**

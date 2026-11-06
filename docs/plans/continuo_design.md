@@ -3505,6 +3505,7 @@ run 中の Claude Code は前回のパスを持ったままなので、引き継
 **言いたいこと。**`WORKFLOW.md` を書き換えたら、巡回の頭で自動的に読み直す。
 **ただし走行中に差し替えるのは4キーだけで、残りは凍結する。**変わっていたら「効きません」と知らせる。
 **読み直しに失敗したら、最後に正常だった設定のまま動き続ける。**
+**隣の `WORKFLOW.local.md`（5-1a）を置いた・直した・消したときも、同じく読み直す。**
 
 **仕様 6.2 の要求。**
 
@@ -12942,12 +12943,105 @@ continuo /path/to/WORKFLOW.md   ← 位置引数で明示する
 
 **このファイル1つで設定もプロンプトも完結する。**ほかに設定ファイルは要らない
 （issue ごとの Claude Code の設定は continuo が自動で作る。3-12）。
+**ただし、チームで共有するときに個人の値を上書きしたい人は、同じディレクトリに `WORKFLOW.local.md` を置ける**（5-1a）。
+**置かなければ、このファイル1つで完結する。**
 
 **相対パスは、このファイルが置かれているディレクトリを基準に解決する**（`SPEC.md` 5.3.3 / 6.1）。
 **解決の対象は `workspace.root` だけである。**`claude.hook_bridge.listen` は
 絶対パスを要求する（相対だと身元ファイルとの一致検査（3-23 / 3-18）が成立しない）。
 **ロックの場所は設定に持たない**（3-17）。`herdr.socket` は continuo が作る場所ではなく herdr が待ち受けている場所なので、
 このファイルの置き場所を基準にしない。
+
+### 5-1a. 個人の上書き `WORKFLOW.local.md`
+
+**言いたいこと。**`WORKFLOW.md` をチームで共有したまま、個人の値（週のレートリミットのリセットに合わせたマージンなど）を、
+**同じディレクトリの `WORKFLOW.local.md` に書いて上書きできる**（issue #325。人間の依頼）。
+**無ければ、いままでと同じに動く。**文法は `WORKFLOW.md` と同じで、**書いた分だけ**が上書きされる。
+
+**仕組みは1行である。**`DefaultConfig()` の上へ `WORKFLOW.md` の front matter を読み、
+**同じ構造体の上へ `WORKFLOW.local.md` の front matter をもう一度読む**（どちらも `yaml.Strict()`）。
+そのあとで、プレースホルダ・値・展開・絶対パスの検査を、重ねた結果へ1回だけ掛ける（`internal/config/config.go` の `Load`）。
+
+```mermaid
+sequenceDiagram
+    participant L as config.Load
+    participant Y as goccy/go-yaml
+    L->>Y: DefaultConfig() の上へ WORKFLOW.md の front matter を読む
+    L->>L: 隣の WORKFLOW.local.md を読む（無ければここから下を飛ばす）
+    alt front matter に値が1つでもある
+        L->>Y: 同じ構造体の上へ WORKFLOW.local.md の front matter を読む
+    else 空・空行・注釈だけ
+        L->>L: 読まない
+    end
+    L->>L: 検査・展開・相対パス・絶対パスの検査（重ねた結果に1回）
+```
+
+**重なり方は、goccy/go-yaml v1.19.2 の振る舞いそのものである**（2026-11-05 に実測）。
+
+| `WORKFLOW.local.md` に書いたもの | 結果 |
+| --- | --- |
+| 入れ子の欄（`handoff:` の下の1キー） | そのキーだけ変わり、兄弟は `WORKFLOW.md` の値のまま |
+| 値を書かない行（`handoff:` だけ） | `WORKFLOW.md` の値が残る |
+| ポインタの欄そのものに値を書かない行（`workspace_hooks:` の下の `after_create:` だけ、`hook_bridge:` の下の `listen:` だけ、`server:` の下の `port:` だけ） | 未設定（nil）になる。**`workspace_hooks:` だけを書いたときは、子の値は残る** |
+| map（`tracker.status_signal_map`・`claude.env` など）とリスト（`tracker.active_states` など） | 丸ごと置き換わる。`WORKFLOW.md` の要素は残らない |
+| front matter が空・空行・注釈だけ | 何も変わらない |
+
+**`WORKFLOW.md` の値は、ポインタの欄を未設定にする・map を `{}`・リストを `[]` にする、の形でだけ外せる。**ほかの欄（数・文字列）は別の値で上書きするしかない。
+
+**本文。**`WORKFLOW.local.md` の本文に中身があれば、`WORKFLOW.md` の本文と**丸ごと差し替える**。
+「中身がある」は、送る前に取り除く HTML コメントと中身の無い見出しを落としたあとで決める（`prompt.BodyOf`。`prompt.Build` の判定と同じ）。
+**だから本文を空にする上書きはできない**（空なら `WORKFLOW.md` の本文が送られる）。
+**本文を上書きした人には、そのあとチームが `WORKFLOW.md` の本文へ足した決まりは届かない。**
+5-3c が組み込みと本文を「全文の差し替え」にしなかった理由と同じ帰結だが、issue は本文の上書きを求めているので、仕組みは変えずに FAQ で知らせる。
+
+**パスの決め方**（`config.LocalPathFor`）。同じディレクトリで、拡張子の前に `.local` を挟む。
+
+| 渡された WORKFLOW のパス | 重ねるファイル |
+| --- | --- |
+| `WORKFLOW.md` | `WORKFLOW.local.md` |
+| `team.md` | `team.local.md` |
+| `WORKFLOW`（拡張子なし） | `WORKFLOW.local` |
+| `WORKFLOW.local.md`・`team.local.md`・`WORKFLOW.local`（拡張子を除いた名前が `.local` で終わる、または拡張子が `.local`） | 重ねない（それを主のファイルとして読む） |
+
+**決めたことと理由。**
+
+| 決めたこと | 理由 |
+| --- | --- |
+| **同じ構造体の上へ続けて読む** | `WORKFLOW.local.md` に書いた文字が、`WORKFLOW.md` に書いたときと同じ意味になる。書き出し直しが要らず、未知のキーと型の誤りはそれぞれのファイルの行番号で出る |
+| **front matter が空・注釈だけなら読まない** | goccy/go-yaml は空の文書を読むと、読み込み先の構造体を丸ごとゼロにする（実測）。判定は同じライブラリで `any` へ読んで nil かで決める |
+| **`WORKFLOW.local.md` 単独では値を検査しない** | `owner` のような必須の値を、個人のファイルに書かなくてよいようにする |
+| **重ねたあとの検査・展開の誤りは両方のファイルを名指す** | どちらの値かは分からない。`WORKFLOW.md` だけを名指すと、利用者は共有のファイルを直しに行く |
+| **`WORKFLOW.local.md` が在るのに読めない・区切りが無いときは止める** | 黙って飛ばすと、個人の上書きが効いていないことに気づけない |
+| **リンク先の無い symlink も「在るのに読めない」として止める**（`os.Lstat` で名前が在るかを見る） | dotfiles などへリンクして置いた人がリンク先を動かすと、`os.ReadFile` は ENOENT を返す。それを「無い」とすると、個人の上書きが黙って外れる |
+| **`continuo doctor` は、読めなかったのが `WORKFLOW.local.md` なら、`WORKFLOW.local.md` を確かめる案内を出す**（`continuo init` を勧めない） | 誤りの種類だけで分けると「無い」で `continuo init` を勧め、`--force` を足した利用者がチームの `WORKFLOW.md` を雛形で潰す（issue #11 と同じ事故） |
+| **本文の判定は `prompt` に置く** | 取り除く規則が `prompt` にあり、`prompt` が `config` を import しているので、`config` 側には置けない |
+| **置き場所は `WORKFLOW.md` と同じディレクトリに固定し、CLI のフラグは足さない** | issue が求めていない |
+| **`Loaded.Path` は `WORKFLOW.md` のまま** | 身元ファイルとの一致検査（3-18 / 3-23）と読み直しの宛先に使う |
+| **`continuo init` は `.gitignore` に足さない** | issue が求めていない。利用者のリポジトリへの書き込みを増やさない。FAQ で案内する |
+
+**比べて捨てた案。**YAML の木のまま深く重ねて書き出し直す案は捨てた。
+値を書かない行（null）で `WORKFLOW.md` の値ではなく組み込みの既定値に戻る、
+map の意味が `WORKFLOW.md` に書いたとき（丸ごと置き換え）と変わる、
+書き出し直しで上書きしていない値（ブロックスカラーなど）まで変わりうる、の3つが理由である（issue #325 の設計レビュー1周目）。
+
+**読み直し（3-24）。**`config.StampOf` は `WORKFLOW.local.md` の有無と中身の印も取る。
+**置いた・直した・消したときも読み直す。**`WORKFLOW.local.md` が在るのに読めないときは、
+**誤りを返さずに印へ入れる**（誤りを返すと読み直しが黙って止まる）。読み直した `Load` が「読み込めません」で WARN を出す。
+
+**`Load` を通らない経路。**
+
+| 場所 | 扱い |
+| --- | --- |
+| `continuo doctor` の direct chat の重なり（`config.DirectChatConflictsInFile`） | 重ねて読む（非 Strict・空なら読まない、はこの関数の決まりのまま） |
+| `continuo doctor` の未記入の項目と `--missing-keys-patch` | 重ねない。`WORKFLOW.md` の原文と雛形を突き合わせ、`WORKFLOW.md` へ足す差分を作るのが目的 |
+| `continuo setup` | 重ねない。共有の `WORKFLOW.md` の Status の9キーを書き換えるのが目的。`WORKFLOW.local.md` でそのキーやカンバン（owner・project_number・host）を上書きしていると、setup の結果は効かない |
+
+**限界。**エディタが保存の途中で `WORKFLOW.local.md` を一瞬消すと、その巡回だけ `WORKFLOW.md` の値で読み直しうる
+（効くのは読み直せる4キー。rename で保存するエディタでは起きない）。
+
+**hook と statusline には効かない。**`continuo hook` と `continuo statusline` は設定ファイルを読まない。
+hook の経路のキー（`claude.hook_bridge.listen` など）を `WORKFLOW.local.md` で上書きした場合も、
+`WORKFLOW.md` を書き換えたときと同じで、読み直しでは効かず再起動で効く。
 
 ### 5-2. front matter（設定）
 
@@ -13577,7 +13671,7 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 
 ### 5-3g. `continuo init` が置く設定は1枚
 
-**言いたいこと。****設定は `WORKFLOW.md` の1枚だけである。**
+**言いたいこと。****`continuo init` が置く設定は `WORKFLOW.md` の1枚だけである**（個人の上書き `WORKFLOW.local.md` は利用者が自分で置く。5-1a）。
 **front matter（設定）と本文（固有の指示）が、1つのファイルに入っている。**
 **`continuo init` はもう1枚（`continuo-ci.yaml`）も置くが、そちらは設定ではない**（5-3o）。
 
@@ -13590,6 +13684,11 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 **なぜ設定を2枚に分けないか。**設定も固有の指示も「この project の人が書くもの」である。
 **分けると、片方だけ在る状態が生まれ、`continuo init` はその組み合わせを全部扱うことになる。**
 **利用者の側も、どちらに書けばよいかを毎回思い出すことになる。**
+
+**`WORKFLOW.local.md`（5-1a）はこの決定を一部覆している。**人間の依頼（issue #325）である。
+**`continuo init` は今も1枚しか置かない。**`WORKFLOW.local.md` は利用者が必要なときだけ自分で作り、
+**中身は「`WORKFLOW.md` から変えたい行だけ」なので、どちらに書くかは「チームの値か、自分の値か」で決まる。**
+片方だけ在る状態（`WORKFLOW.local.md` が無い）は、いままでの1枚の状態そのものである。
 
 **`continuo-ci.yaml` はこの理由に当たらない。**あれは設定ではなく、
 **利用者が `.github/workflows/` へ移すための見本である。**continuo は起動時に1バイトも読まない。

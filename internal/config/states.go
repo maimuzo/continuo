@@ -213,6 +213,7 @@ func DirectChatConflicts(cfg Config) []string {
 // 動かない検査を、重なりのために置くことになる。**そこで front matter を検証せずに読み直す
 // （`internal/doctor/missing_keys.go` が同じ理由で原文を読んでいる）。
 // **未知のキーでは落とさない。**ここで知りたいのは Status の割り当てだけである。
+// **隣の WORKFLOW.local.md も、Load と同じ順に重ねて読む**（設計 5-1a）。
 //
 // path: WORKFLOW.md のパス。
 // 戻り値の1つ目: 重なっている相手のキー名（`DirectChatConflicts` と同じ順）。
@@ -230,6 +231,19 @@ func DirectChatConflictsInFile(path string) ([]string, string, error) {
 	cfg := DefaultConfig()
 	if err := yaml.Unmarshal([]byte(frontMatter), cfg); err != nil {
 		return nil, "", err
+	}
+	// **WORKFLOW.local.md も、Load と同じ順に重ねる**（設計 5-1a）。重ねないと、
+	// 個人のファイルで Status のキーを変えたときに、Load は重なりで落ちるのに doctor が理由を出さない。
+	// **ここでも Strict にしない・空なら読まない。**未知のキーで落とさないのはこの関数の決まりで、
+	// 空の front matter を読むと構造体がゼロになり、重なりを見逃す。
+	local, err := readLocal(LocalPathFor(path))
+	if err != nil {
+		return nil, "", err
+	}
+	if local.path != "" && hasYAMLContent(local.frontMatter) {
+		if err := yaml.Unmarshal([]byte(local.frontMatter), cfg); err != nil {
+			return nil, "", err
+		}
 	}
 	return DirectChatConflicts(*cfg), cfg.Tracker.DirectChatState, nil
 }
