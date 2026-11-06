@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -127,6 +127,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
 | **エージェントが、issue と pull request を URL で書きます** | 要りません。**本文で番号の形（`Fixes #123` など）を決めているなら、その行はそのまま番号で書きます** |
 | **`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます** | 要りません。**同じ名前のファイルを既に置いていたら、中身を確かめてください**（次の起動から読まれます） |
+| **エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）** | 要りません。**使いたいなら、いまの `WORKFLOW.md` の本文へ節を貼り、continuo を再起動してください** |
 
 ### エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります
 
@@ -176,6 +177,17 @@ claude plugin update continuo-issue-comments@continuo
 **既に `WORKFLOW.local.md` という名前のファイルを別の用途で置いていたら、次の起動から読まれます。**front matter の区切りが無いと起動しないので、名前を変えてください。
 **`continuo team.md` のように別の名前で起動している人は、`team.local.md` が読まれます**（拡張子の前に `.local` を挟んだ名前です）。
 使い方と気をつけることは [FAQ.md](FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
+
+### エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）
+
+**誰に関係があるか。**画面を持つものを continuo に作らせていて、エージェントに画面でも確かめさせたい人です。
+
+`continuo init` が置く雛形の本文に、`### 画面で動作を確かめる道具` の節が増えました。
+Claude in Chrome（あなたの Chrome を操作する拡張機能）が使える機械では、エージェントは作っているものを手元で立ち上げた画面を開いて確かめます。使えない機械では、画面では確かめていないと報告に書きます。
+**continuo は `WORKFLOW.md` を書き換えないので、いまの `WORKFLOW.md` には入りません。**
+使いたいなら、[FAQ.md](FAQ.md) の「エージェントにブラウザで画面を確かめさせたい」に載せた全文を本文へ貼り、continuo を再起動してください。**貼る前に、同じ項目の危険と止まる場面を読んでください**（その Chrome は、あなたがログインしたままのものです）。
+
+**上の「v0.1.13 より前の「本文へこう足してください」は、もう当てないこと」とは別の話です。**あちらは組み込みの指示の写しを本文へ足さないことで、こちらは雛形に新しく足した、プロジェクトごとに選ぶ節です。組み込みの指示には同じ指示が入っていないので、貼っても2回は届きません。
 
 ## v0.2.1 から v0.3.0 へ
 
