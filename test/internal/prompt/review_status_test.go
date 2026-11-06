@@ -17,7 +17,7 @@ import (
 )
 
 // reviewStatusHeading は、報告に置かせる節の見出しである。
-const reviewStatusHeading = "## レビューの結果と、pull request の状態"
+const reviewStatusHeading = "## 報告: レビューの結果と、pull request の状態"
 
 // 目的: finishing-run の段4 が、節を置く条件・叩く時点・2段の見本・`review` の表を持つことを固定する。
 //

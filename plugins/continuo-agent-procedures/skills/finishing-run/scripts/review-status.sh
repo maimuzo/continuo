@@ -170,7 +170,7 @@ checks() {
     }'
 }
 
-echo '## レビューの結果と、pull request の状態'
+echo '## 報告: レビューの結果と、pull request の状態'
 echo
 verdict 計画 設計レビュー
 echo

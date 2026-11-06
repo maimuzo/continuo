@@ -14,7 +14,7 @@ import (
 )
 
 // goalsSectionHeading は、どのコメントにも置かせる1節の見出しである。
-const goalsSectionHeading = "## この issue の受け入れ目標と、いまの作業と、残り"
+const goalsSectionHeading = "## 報告: この issue の受け入れ目標と、いまの作業と、残り"
 
 // 目的: writing-comments-for-humans が、目標・寄与・残りを書かせる決まりと形を持つことを固定する。
 //
@@ -56,11 +56,11 @@ func TestGoals_見本が目標の節を印のあとに置く(t *testing.T) {
 		marker string // 見本の印の行
 		next   string // 目標の節のあとに来る行
 	}{
-		{"writing-plan", "<!-- continuo:plan -->", "## <一言で中身が想像できる節の題名>"},
-		{"writing-comments-for-humans", "<!-- continuo:plan -->", "## <一言で中身が想像できる節の題名>"},
+		{"writing-plan", "<!-- continuo:plan -->", "## 報告: <一言で中身が想像できる節の題名>"},
+		{"writing-comments-for-humans", "<!-- continuo:plan -->", "## 報告: <一言で中身が想像できる節の題名>"},
 		{"finishing-run", "# <何をしたかを一言で>", "ここに「writing-comments-for-humans」の8つの見出しで、何をしたかを書く（印は上の1行だけ）"},
-		{"posting-review-verdict", "<summary>1周目</summary>", "## <一言で中身が想像できる節の題名>"},
-		{"posting-review-verdict", "cat > \"$ROUND\" <<'ROUND'", "## <一言で中身が想像できる節の題名>"},
+		{"posting-review-verdict", "<summary>1周目</summary>", "## 報告: <一言で中身が想像できる節の題名>"},
+		{"posting-review-verdict", "cat > \"$ROUND\" <<'ROUND'", "## 報告: <一言で中身が想像できる節の題名>"},
 	} {
 		body := skillText(t, c.skill)
 		m := strings.Index(body, c.marker)

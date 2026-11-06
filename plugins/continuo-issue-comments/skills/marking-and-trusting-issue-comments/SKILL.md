@@ -47,6 +47,20 @@ right after the marker line and the title:
 - the work that remains, as numbered steps in the order they will be done, each with whose turn it is (yours or a human's),
 - what the human should do next (what to read, what to decide, where to write it, with commands ready to paste), or "nothing" when it is not their turn.
 
+In such a repository, also start the title of every `## ` section in those comments and bodies with its kind,
+so that a human can tell from the titles alone which sections need an answer and which ask them to act.
+Pick the first kind that fits:
+
+- question: the section asks the human for an answer or a decision, written as a comment, that the AI will read to go on.
+  It may also ask for the steps needed to give that answer (such as moving the Status back).
+- request: the section asks the human to do something themselves (such as reviewing and merging a pull request), and the AI does not wait for an answer.
+- report: anything else (what you did, what you found, the current state). The section with the acceptance goals above is a report.
+
+Write the kind in the language of the comment, followed by a colon and one space:
+`報告: ` / `質問: ` / `依頼: ` in Japanese, `Report: ` / `Question: ` / `Request: ` in English.
+After it, state the point of the section in a few words (the question itself, or the action you ask for).
+When you ask a human to answer or to act, give it a `## ` section of its own with that kind.
+
 In such a repository, also point to every issue and pull request by its full URL, even when it is in the same repository,
 and add its title: `https://<host>/<owner>/<repo>/issues/<number>` or `https://<host>/<owner>/<repo>/pull/<number>`,
 with the host where that issue or pull request lives (do not assume `github.com`).
