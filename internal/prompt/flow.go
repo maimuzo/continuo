@@ -200,6 +200,11 @@ var OperationRules = []OperationRule{
 		Skills: []string{SkillTrustingInstructions},
 	},
 	{
+		Before: "本番の環境への書き込み・pull request のマージ・release の作成をする・訊く",
+		Skills: []string{SkillTrustingInstructions},
+		Notes:  map[string]string{SkillTrustingInstructions: "頼みが要る操作"},
+	},
+	{
 		Before: "人間が読むコメント（計画・確認・判断票・報告・途中経過）を書く",
 		Skills: []string{SkillWritingCommentsForHumans},
 	},

@@ -40,6 +40,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **枠を読むために、Claude Code を自分で起動する** | 枠の使用率を読む usage API が誤りのあいだは、Claude Code のステータスラインから受け取ります。**値が古いと、`trust.repositories` の信頼済みの clone の中で haiku の Claude Code を短く起動し、`hello` を1回送って閉じます**（既定で最大5分に1回）。道具を外し、`--restricted` と `--permission-mode dontAsk` で起動するので、利用者の設定ファイル・MCP サーバー・その clone の hook は読み込まれません。会話の記録は残しません。**API キーで動かしている機械では、この会話が従量で課金されます**（`rate_limit.source: none` で止まります） |
 | **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
 | **`continuo abandon` はカンバンも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
+| **信頼できる立場のコメントで頼まれると、エージェントが本番へ書き込み・マージ・release を行う** | 担当の issue のコメントで、宛先のリポジトリへ書き込み権限を持つ人がはっきり頼んだときだけ行います（頼まれなければ行いません）。**印を付け忘れた同じアカウントの AI のコメントや、印を変えた利用者では、エージェントの報告が人間のコメントに見えることがあります。**頼みの文や project の文書が本番と書いていない branch が実は本番だったときは止められません。記録のコメントの書き換えや削除も見分けられません |
 
 **これらを踏まえたうえで、想定を超える挙動があれば報告してください。**たとえば次のようなものです。
 
@@ -47,7 +48,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 - **カンバンに載せていない** issue が処理される
 - インストーラーが**取ってくる先を、警告なしに変えられる**
 - 秘密が**ログや issue のコメントに漏れる**
-- worktree の**外**へ書き込まれる
+- 頼まれていないのに、worktree の**外**へ書き込まれる
 
 ## 使う前に減らせる危険
 
@@ -56,6 +57,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **自分が書いた issue だけを進める** | `Ready` へ動かすのは人間です。知らない issue を動かさないでください |
 | **ラベルで絞る** | `tracker.required_labels` に印を入れ、それが付いた issue だけを対象にします |
 | **信頼するリポジトリを減らす** | `continuo init` が並べた `trust.repositories` から、要らない行を消してください |
+| **本番への書き込み・マージ・release を頼めなくする** | WORKFLOW.md の本文に「本番の環境への書き込み・マージ・release の作成は行わない」と書くか、それらのコマンドを `claude.permissions.deny` に足します（既定の deny の `AskUserQuestion` は残します）。どちらも変えたら continuo を再起動します。`WORKFLOW.local.md` に書くと、その機械ではその欄が置き換わります |
 | **危ない道具の呼び出しを断らせる** | `claude.tool_gate.mode` は既定で `off` です。`public_only` にすると、公開リポジトリの issue のときだけ `Bash` の呼び出しを実行の前に検査します（`on` ならいつでも）。**コメントで許可を出しても通りません**（この検査は hook の入力だけを見るので、continuo が最初のメッセージに付けて渡したコメントも読みません） |
 | **コメントの許可を判定役へ渡さない** | `agent.relay_trusted_comments: false` を書きます。閉じた記録も書かなくなります。許可を出す先は `claude.permissions.allow` だけになります |
 | **ブラウザを触らせない** | `claude.permissions.deny` に `"mcp__claude-in-chrome__*"` を足して continuo を再起動します（deny は `auto` でも効きます）。または、Claude Code の `/chrome` で「Enabled by default」を外します。**`WORKFLOW.md` の本文の `### 画面で動作を確かめる道具` を消すだけでは止まりません** |
@@ -97,6 +99,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **It starts Claude Code on its own to read the usage window** | While the usage API that reports the usage window returns errors, the usage window comes from Claude Code's status line. **When the last value is stale, continuo starts a short haiku session of Claude Code inside a trusted clone from `trust.repositories`, sends `hello` once, and closes it** (at most once every five minutes by default). It starts with no tools, `--restricted` and `--permission-mode dontAsk`, so your settings files, MCP servers and that clone's hooks are not loaded, and no transcript is kept. **On a machine that runs on an API key, that session is billed per use** (`rate_limit.source: none` stops it) |
 | **`continuo abandon` deletes** | It removes the worktree, the branch, and the herdr workspace. **With `--force` it takes uncommitted changes and unpushed commits with them** (`--dry-run` shows what would go first) |
 | **`continuo abandon` also writes to the board** | If continuo is running, it moves the Status to `--park` (default: `tracker.failure_state`) to make continuo let go of the issue. With `--to` it moves the Status again after cleanup. **`--dry-run` writes neither; it only announces the values it would write** |
+| **Asked in a comment from a trusted role, the agent writes to production, merges, and creates releases** | It does so only when someone with write access to the target repository asks clearly in a comment on the issue it is working on (it does not do so unasked). **If an AI comment from the same account lacks the marker, or you changed the markers, the agent's own report can look like a human comment.** It cannot stop a push to a branch that turns out to be production when neither the request nor the project's documents say so. It cannot tell when a record comment was edited or deleted |
 
 **With that understood, please report anything beyond it** — for example:
 
@@ -104,7 +107,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 - An issue that is not on the board gets picked up
 - The installer's download source can be changed without a warning
 - Secrets leak into logs or issue comments
-- Something is written outside the worktree
+- Something is written outside the worktree without being asked for
 
 ## Reducing the risk before you start
 
@@ -113,6 +116,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **Only advance issues you wrote** | A human moves things into `Ready`. Do not move an issue you did not read |
 | **Filter by label** | Set `tracker.required_labels` so only issues carrying your marker are eligible |
 | **Trust fewer repositories** | Delete the lines you do not need from the `trust.repositories` list that `continuo init` writes |
+| **Stop the agent from being asked to write to production, merge, or release** | Write "do not write to production, merge pull requests, or create releases" in the body of WORKFLOW.md, or add those commands to `claude.permissions.deny` (keep the default `AskUserQuestion` in deny). Restart continuo after changing either. Writing them in `WORKFLOW.local.md` replaces that field on that machine |
 | **Have dangerous tool calls refused** | `claude.tool_gate.mode` defaults to `off`. Set it to `public_only` to inspect `Bash` calls before they run when the issue is in a public repository (`on` for always). **Granting permission in a comment does not get past it** (this check only sees the hook input, so it does not read the comments continuo attaches to the first message either) |
 | **Keep comment permissions away from the classifier** | Set `agent.relay_trusted_comments: false`. continuo then stops posting closed records, and `claude.permissions.allow` is the only place to grant permission |
 | **Keep the agent off your browser** | Add `"mcp__claude-in-chrome__*"` to `claude.permissions.deny` and restart continuo (`deny` works under `auto` too). Or turn off "Enabled by default" in Claude Code's `/chrome`. **Deleting the `### 画面で動作を確かめる道具` section from the body of `WORKFLOW.md` does not stop it** |
