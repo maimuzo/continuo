@@ -379,6 +379,15 @@ diff <(git show "$prev":internal/config/types.go     | grep -o 'yaml:"[^"]*"' | 
 **1つも増えていなければ、「増えたキーはありません」とだけ書く。**節そのものは作る。
 **「何も無い」と書いてあることが、読む人には要る。**
 
+**実行ファイルを入れ替える1行を書くときは、`--version vX.Y.Z` を付ける**（`vX.Y.Z` はその節の版）。
+**インストーラーは既定で、公開から 168 時間（7日）経った版だけを入れる**（クールダウン。設計 3-36）。
+**付けないと、出してから 168 時間のあいだは1つ前の版が入り、**節のとおりに直した `WORKFLOW.md` を古い実行ファイルが読めないことがある。
+[docs/FAQ.md](FAQ.md) の版ごとの節に書く1行も同じである。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version vX.Y.Z
+```
+
 ## 6. リリースノートを書く
 
 **利用者のための文書であって、作業の報告ではない。**
@@ -503,9 +512,12 @@ gh release view "$next" --json body --jq .body | grep -c 'breaking:start'
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<owner>/continuo/main/install.sh \
-  | sh -s -- --no-deps --dir /tmp/continuo-check
+  | sh -s -- --no-deps --dir /tmp/continuo-check --version <打ったタグ>
 /tmp/continuo-check/continuo version
 ```
+
+**`--version` を落とさない。**インストーラーは既定で公開から 168 時間経った版だけを入れる（クールダウン。設計 3-36）ので、
+**付けないと、出した直後の版は見送られ、1つ前の版が入る。**それでは打ったタグを確かめたことにならない。
 
 **打ったタグと同じ版が返れば成功である。**
 **`continuo --version` は無い。**`flag provided but not defined: -version` で終了コード 2 になる。
