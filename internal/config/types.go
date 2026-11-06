@@ -192,7 +192,9 @@ type TrackerProviderHandoffConfig struct {
 	//
 	// **リセット時刻はアカウントごとに違う。**同じ表を書いた機械どうしでも、同じ瞬間のマージンは
 	// リセットの近い機械ほど小さくなりうる。リセットの近い機械に使い切らせるのが、この表の狙いである。
-	WeeklyMarginPercentByDaysUntilReset map[int]int `yaml:"weekly_margin_percent_by_days_until_reset"`
+	//
+	// **値の無い日の行（`1:` だけ）は起動しない**（`WeeklyMarginTable` の `UnmarshalYAML`）。
+	WeeklyMarginPercentByDaysUntilReset WeeklyMarginTable `yaml:"weekly_margin_percent_by_days_until_reset"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
 	// OnAssigneeGateWarnAndComment（既定）と OnAssigneeGateWarnOnly の2つだけである。

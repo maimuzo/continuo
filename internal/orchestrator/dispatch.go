@@ -532,7 +532,7 @@ func (o *Orchestrator) bidMargins(now time.Time) handoff.Margins {
 	return handoff.Margins{
 		FiveHour:               h.FiveHourMarginPercent,
 		Weekly:                 h.WeeklyMarginPercent,
-		WeeklyByDaysUntilReset: h.WeeklyMarginPercentByDaysUntilReset,
+		WeeklyByDaysUntilReset: map[int]int(h.WeeklyMarginPercentByDaysUntilReset),
 		At:                     now,
 	}
 }

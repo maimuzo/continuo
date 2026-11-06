@@ -267,6 +267,7 @@
   "config.validate.direct_chat_state_conflict": "%s と違う Status 名にすること（人間が pane で直接続けるあいだだけ置く Status なので、他の役割と重なると、同じカードが「手を離す」と「着手する」の両方に当たる。3-83k）。tracker.direct_chat_state をこの WORKFLOW.md に書いていない場合は、既定値の \"Direct Chat\" が使われている。この機能を使わないなら、tracker: の下に direct_chat_state: \"\" と書くこと",
   "config.validate.handoff_bid_window_range": "0以上にすること（0 なら締め切りを待たずに勝者を決める）",
   "config.validate.handoff_idle_timeout_range": "0以上にすること（0 なら既定の18時間を使う）",
+  "config.validate.handoff_margin_days_no_value": "tracker.provider.handoff.weekly_margin_percent_by_days_until_reset の %d の行に値が無い。その日のマージン（0以上100未満の整数。単位は %%）を書くか、行ごと消すこと（値が無いと 0 になり、その日は使用率100%%まで使い切ってしまう）",
   "config.validate.handoff_margin_days_range": "残り日数のキーは1から7までにすること（1週間の枠のリセットまでの残りを24時間単位で切り上げた数なので、0 や 8 以上の日は来ず、書いても効かない）",
   "config.validate.handoff_margin_range": "0以上100未満にすること（100 だと使用率0でも余裕値が0になり、永久に入札しない）",
   "config.validate.handoff_on_assignee_gate": "\"warn_and_comment\" か \"warn_only\" にすること",

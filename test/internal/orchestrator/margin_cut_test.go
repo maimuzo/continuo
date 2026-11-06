@@ -88,12 +88,13 @@ func TestMarginCut_着手の前に5時間の期間を切っていればBlocked�
 	}
 	found := false
 	for _, c := range fx.Tracker.HandoffCommentsOf("I_node301") {
-		if strings.Contains(c.Body, "レートリミットのマージンを切っている") && strings.Contains(c.Body, "5時間の期間が 93%") {
+		if strings.Contains(c.Body, "レートリミットのマージンを切っている") && strings.Contains(c.Body, "5時間の期間が 93%（マージン 10%）") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("理由のコメントに、切った期間が書かれていません: %+v", fx.Tracker.HandoffCommentsOf("I_node301"))
+		// **マージンにも % が付くことまで見る**（issue #324。人間の指摘「単位が％であることはどこに書いてあるの?」）。
+		t.Errorf("理由のコメントに、切った期間とマージン（%%付き）が書かれていません: %+v", fx.Tracker.HandoffCommentsOf("I_node301"))
 	}
 }
 

@@ -1512,6 +1512,10 @@ const (
 	// tracker.provider.handoff.weekly_margin_percent_by_days_until_reset のキー（残り日数）が
 	// 1〜7 の外にあるときに出る（issue #324）。値の範囲の誤りは KeyConfigValidateHandoffMarginRange を使う。
 	KeyConfigValidateHandoffMarginDaysRange Key = "config.validate.handoff_margin_days_range"
+	// KeyConfigValidateHandoffMarginDaysNoValue は
+	// tracker.provider.handoff.weekly_margin_percent_by_days_until_reset に値の無い日（`1:` だけ）があるときに出る（issue #324）。
+	// **値が無いと YAML の読み込みで 0（使い切る）になる**ので、黙って通さない。
+	KeyConfigValidateHandoffMarginDaysNoValue Key = "config.validate.handoff_margin_days_no_value"
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
@@ -3382,6 +3386,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffMarginDaysRange,
+	KeyConfigValidateHandoffMarginDaysNoValue,
 	KeyConfigValidateHandoffOnAssigneeGate,
 	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,

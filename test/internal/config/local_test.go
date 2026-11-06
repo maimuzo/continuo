@@ -387,6 +387,8 @@ func TestLoadLocal_残り日数の表は丸ごと置き換わり空にすれば�
 		{"weekly_margin_percent だけなら表は残る", "      weekly_margin_percent: 30\n", map[int]int{1: 0, 2: 5}},
 		{"表を書けば丸ごと置き換わる", "      weekly_margin_percent_by_days_until_reset:\n        1: 3\n", map[int]int{1: 3}},
 		{"{} なら表が外れる", "      weekly_margin_percent_by_days_until_reset: {}\n", map[int]int{}},
+		// **キーだけ書いて値を書かない行は、チームの表を残す**（雛形と FAQ に書いたこと。値の無い日の行を弾く型を置いても変わらない）。
+		{"キーだけ書けば表は残る", "      weekly_margin_percent_by_days_until_reset:\n", map[int]int{1: 0, 2: 5}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			path := writeWorkflow(t, team, "")
