@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strconv"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -45,7 +47,7 @@ func (t *WeeklyMarginTable) UnmarshalYAML(unmarshal func(any) error) error {
 			return i18n.Errorf(i18n.KeyConfigValidateHandoffMarginDaysNoValue, d)
 		}
 		if !ok {
-			return i18n.Errorf(i18n.KeyConfigValidateHandoffMarginDaysNotInteger, d, raw[d])
+			return i18n.Errorf(i18n.KeyConfigValidateHandoffMarginDaysNotInteger, d, valueText(raw[d]))
 		}
 		out[d] = v
 	}
@@ -75,4 +77,17 @@ func integerValue(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// valueText は、誤りの文面に出す値を、書いたとおりに読める形にする。
+//
+// **文字列は引用符を付けて出す。**`2: "5"` と書いた人に「値 5」と出すと、引用符が原因だと分からない（実装レビュー7周目の LOW）。
+//
+// v: 読んだ値。
+// 戻り値: 文面に出す文字列。
+func valueText(v any) string {
+	if s, ok := v.(string); ok {
+		return strconv.Quote(s)
+	}
+	return fmt.Sprint(v)
 }

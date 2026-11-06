@@ -223,32 +223,55 @@ func (o *Orchestrator) marginCutBlockedReason(usable *ratelimit.Snapshot) string
 
 // daysTableReturnNote は、`Blocked` へ戻したときの【対処】に足す1文を返す（issue #324）。
 //
-// **足すのは、表を書いていて、かつ切った期間に「リセットまで24時間を超える1週間の枠」があるときだけである。**
-// そのときだけ、リセットより前に、残り日数が変わってマージンが下がり、余裕が戻りうる。
+// **足すのは、表を書いていて、切った1週間の枠のどれかに「リセットより前に、今より小さいマージンで余裕が戻る日」があるときだけである。**
 // 「リセットの前に戻すと、もう1度戻る」だけを書くと、人間は戻せる日数ぶん issue を止めたままにする（実装レビュー1周目の MEDIUM）。
-// **5時間の枠だけで切ったとき・リセット時刻が分からない枠（表を当てない）・リセットまで24時間以内（残り日数はもう1から下がらない）では
-// 足さない**（実装レビュー6周目の MEDIUM）。既定の待つ上限（300分）では、1週間の枠で `Blocked` になるのはリセットの5時間前からなので、
-// この1文が付くのは待つ上限を延ばしたか 0 にした人だけである。
+// 逆に、その日が無いのに足すと、人間が早く戻して `Blocked` へ跳ね返される（6周目と7周目の MEDIUM）。だから次では足さない。
+//
+//	5時間の枠だけで切った                     … 表は5時間の枠に効かない
+//	リセット時刻が分からない枠                 … 表を当てない（weekly_margin_percent のまま）
+//	使用率100%の枠                             … マージンがいくつでも余裕は戻らない
+//	リセットまで24時間以内（残り日数が1）       … これより前の日が無い
+//	残りの日の値がどれも今と同じか大きい・余裕が戻らない … 例: 表が {5: 0} で残り3日、表が {1: 20}
+//
+// **既定の待つ上限（300分）では、1週間の枠で `Blocked` になるのはリセットの5時間前からなので、
+// この1文が付くのは、待つ上限を延ばしたか 0 にした人だけである。**
 //
 // periods: 理由のコメントに書く、切った期間（と、着手の前なら Claude Code が動けない期間）。
 // 戻り値: 足す1文。足さないときは空。
 func (o *Orchestrator) daysTableReturnNote(periods []marginstatus.Period) string {
-	if len(o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset) == 0 {
+	h := o.cfg.Tracker.Provider.Handoff
+	if len(h.WeeklyMarginPercentByDaysUntilReset) == 0 {
 		return ""
 	}
 	now := o.now()
 	found := false
 	for _, p := range periods {
-		if handoff.IsWeeklyKind(p.Kind) && p.ResetsAt != nil && p.ResetsAt.Sub(now) > 24*time.Hour {
-			found = true
+		if !handoff.IsWeeklyKind(p.Kind) || p.ResetsAt == nil || p.Used >= 100 {
+			continue
+		}
+		days, ok := handoff.DaysUntilReset(*p.ResetsAt, now)
+		if !ok {
+			continue
+		}
+		for d := 1; d < days; d++ {
+			margin, ok := h.WeeklyMarginPercentByDaysUntilReset[d]
+			if !ok {
+				margin = h.WeeklyMarginPercent
+			}
+			if margin < p.Margin && 100-p.Used-margin > 0 {
+				found = true
+				break
+			}
+		}
+		if found {
 			break
 		}
 	}
 	if !found {
 		return ""
 	}
-	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` を書いているので、" +
-		"リセットまでの残り日数が変わってマージンが下がった時刻のあとなら、リセットの前でも着手できることがあります" +
+	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` で、" +
+		"リセットより前にマージンが下がる日があります。その日になってから戻せば、リセットの前でも着手できることがあります" +
 		"（そのときマージンを切っていなければ着手し、切っていればもう1度この Status へ戻ります）。"
 }
 

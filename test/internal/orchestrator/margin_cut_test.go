@@ -694,3 +694,54 @@ func TestMarginCut_margin_statusは残り日数の値で書く(t *testing.T) {
 		})
 	}
 }
+
+// 目的: `Blocked` へ戻した理由のコメントに、残り日数の表で「リセットより前にマージンが下がる日がある」ときだけ、
+// 早く戻せることがある旨の1文を足すことを確かめる（issue #324。実装レビュー6周目・7周目の MEDIUM）。
+//
+// **足さないと、人間は戻せる日数ぶん issue を止めたままにする。足しすぎると、早く戻した issue が `Blocked` へ跳ね返される。**
+//
+// 与える情報: 待つ上限を 0（上限なし）にし、1週間全体の枠が 96%（リセットまで50時間 = 残り3日。その日の値は weekly_margin_percent の 10）。
+// この機械が担当者の `Ready` の issue が1件。表は2通り（{1: 0} は1日目に 0 へ下がる。{1: 20} は下がる日が無い）。
+// 成功条件: どちらも `Blocked` へ戻り、{1: 0} のときだけ理由のコメントにその1文があること。
+func TestMarginCut_表でマージンが下がる日があるときだけ早く戻せる旨を書く(t *testing.T) {
+	const note = "リセットより前にマージンが下がる日があります"
+	for _, c := range []struct {
+		name  string
+		table map[int]int
+		want  bool
+	}{
+		{"1日目に0へ下がるなら書く", map[int]int{1: 0}, true},
+		{"下がる日が無いなら書かない", map[int]int{1: 20}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fx, _ := marginFixture(t, []map[string]any{
+				{"kind": "session", "percent": 10, "resets_at": time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+				{"kind": "weekly_all", "percent": 96, "resets_at": time.Now().Add(50 * time.Hour).UTC().Format(time.RFC3339), "severity": "normal"},
+			}, func(cfg *config.Config) {
+				cfg.RateLimit.WeeklyWaitLimitMinutes = 0
+				cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = c.table
+			})
+			issue := assignedIssue(331, "Ready", testGHLogin)
+			fx.Tracker.AddIssue(issue)
+
+			fx.Orc.Tick(context.Background())
+
+			if got := fx.Tracker.StateOf(issue.ID); got != "Blocked" {
+				t.Fatalf("Status = %q（Blocked を期待）:\n%s", got, fx.Logs.String())
+			}
+			reason, has := false, false
+			for _, cm := range fx.Tracker.HandoffCommentsOf("I_node331") {
+				if strings.Contains(cm.Body, "1週間の期間が 96%（マージン 10%）") {
+					reason = true
+					has = has || strings.Contains(cm.Body, note)
+				}
+			}
+			if !reason {
+				t.Fatalf("理由のコメントがありません: %+v", fx.Tracker.HandoffCommentsOf("I_node331"))
+			}
+			if has != c.want {
+				t.Errorf("理由のコメントに1文があるか: %v（want %v）: %+v", has, c.want, fx.Tracker.HandoffCommentsOf("I_node331"))
+			}
+		})
+	}
+}
