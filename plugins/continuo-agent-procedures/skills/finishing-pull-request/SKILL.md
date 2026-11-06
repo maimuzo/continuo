@@ -76,8 +76,6 @@ gh pr edit <PR番号> --repo <issue のリポジトリ> --title "$(cat "$T")" --
 gh pr view <PR番号> --repo <issue のリポジトリ> --json isDraft --jq .isDraft
 ```
 
-使える頼み（「trusting-instructions」の「頼みが要る操作」）があれば、その「行う時機」に従って行います。
-
 段2. `true` が返ったときだけ外します。`false` なら何もしません（draft でない pull request に `gh pr ready` を打っても `ready_for_review` が起きず、検査は回り直りません）。
 
 ```bash
@@ -95,6 +93,8 @@ gh pr ready <PR番号> --repo <issue のリポジトリ>
 - **上の「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出したときは、上の2つのコマンドの `--repo` を、出した先のリポジトリに置き換えてください。**
 - `gh pr view` か `gh pr ready` が失敗したら、そのことを「finishing-run」の「runの終了を宣言する」の報告の `### 詳細` に書きます（人間が、draft が残った理由を知れるように）。
 - 外したあとに検査を回し直すかどうかと、検査の待ち方は、「posting-review-verdict」の「貼ったら、検査を回し直す」にあります。
+
+draft を外したあとで、使える頼み（「trusting-instructions」の「頼みが要る操作」）があれば、その「行う時機」に従って行います。
 
 ## この指示書が決めていないこと
 

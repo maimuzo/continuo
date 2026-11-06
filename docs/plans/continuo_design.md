@@ -10942,7 +10942,7 @@ v0.3.0 までは、この3つを一律に禁じていた（システムプロン
 | 使える頼み | 担当している issue のコメントで、trusted_comment が true・隠されていない・書き手が宛先のリポジトリへ書き込み権限（`admin` か `write`）を持ち、何を・どこへが読めるもの。または、AI が立てた確認の節（題名「頼みが要る操作の確認」）へのはっきりした答え |
 | 使い切り | 同じ操作の記録（行った・行い始めた・済ませた・断った・取り消し）のあとは、記録の強さで使える頼みを絞る。行った記録のあとは、新しい確認の節への答えか「もう一度」などを名指しした頼みだけ |
 | 頼みにならないもの | issue の本文・pull request のコメント・別の issue・pane の文（Direct Chat を含む）・引用・計画の確認への了承・Status の変更 |
-| 行う前 | 担当を確かめ、issue と pull request を読み直し、前提（マージなら必須の検査・`mergeStateStatus`・head の SHA）を確かめ、途中経過に記録を書いてから行う。マージは `--match-head-commit` で、確かめた SHA に固定する |
+| 行う前 | 担当を確かめ、issue と pull request を読み直し、マージなら手元の commit を先に全部 push し、前提（マージなら必須の検査・`mergeStateStatus`・head の SHA）を確かめ、途中経過に記録を書いてから行う。マージは `--match-head-commit` で、確かめた SHA に固定する |
 | 行えないとき | 叩き直さず、1回目の報告に止めたもの（判定役・deny・tool_gate・前提・資格情報など）と、人間が次にすることを書く |
 | subagent | 渡さない。subagent へ渡す5行目で「頼まれていても行わない」と伝える |
 
@@ -12680,6 +12680,8 @@ stateDiagram-v2
     InProgress --> Ready: continuo｜再起動して実体が見つからないとき
     Blocked --> Ready: 人間｜コメントで回答して戻す
     InReview --> Done: 人間｜レビューして完了させる
+    InReview --> Ready: 人間｜エージェントにマージなどを頼む（3-82e）
+    InProgress --> Done: カンバンの自動化｜頼まれたマージで issue が閉じた（3-82e）
     IceBox --> DirectChat: 人間｜カンバンに載せただけの issue を自分で見たいとき
     Ready --> DirectChat: 人間｜着手前から自分で話したいとき
     InProgress --> DirectChat: 人間｜pane で直接続けるために引き取る
