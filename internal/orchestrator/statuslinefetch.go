@@ -144,7 +144,6 @@ func (o *Orchestrator) maybeStartStatuslineFetch(ctx context.Context) {
 func (o *Orchestrator) statuslineFetchPointless(now time.Time) bool {
 	// **マージンは `bidMargins` から取る**（実装レビュー1周目の LOW）。
 	// **ここで手で組み立てると、キーを1本増やしたときに片方だけが直る。**
-	//
 	shortWeekly := handoff.ShortWeekly(o.bidMargins(now))
 	for kind, w := range o.quota.windows {
 		if !w.ResetsAt.After(now) {

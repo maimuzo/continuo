@@ -239,7 +239,7 @@ func (o *Orchestrator) daysTableReturnNote() string {
 
 // describeMarginPeriods は、マージンを切った期間を人間が読む1文にする。
 //
-// 例: 「5時間の期間が 93%（マージン 10）で、リセットは 2026-10-17 14:00 (JST) です。」
+// 例: 「5時間の期間が 93%（マージン 10%）で、リセットは 2026-10-17 14:00 (JST) です。」
 func describeMarginPeriods(periods []marginstatus.Period) string {
 	var b strings.Builder
 	for _, p := range periods {
@@ -255,7 +255,8 @@ func describeMarginPeriods(periods []marginstatus.Period) string {
 			// **機械のタイムゾーンで書く**（continuo 自身のほかのコメントと同じ形。issue #258）。
 			resets = "リセットは " + p.ResetsAt.Local().Format("2006-01-02 15:04 (MST)") + " です"
 		}
-		fmt.Fprintf(&b, "%sが %d%%（マージン %d）で、%s。", name, p.Used, p.Margin, resets)
+		// **マージンにも % を付ける**（issue #324。人間の指摘「単位が％であることはどこに書いてあるの?」と同じ種類の漏れ）。
+		fmt.Fprintf(&b, "%sが %d%%（マージン %d%%）で、%s。", name, p.Used, p.Margin, resets)
 	}
 	return b.String()
 }

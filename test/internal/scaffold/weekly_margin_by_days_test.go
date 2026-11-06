@@ -47,19 +47,38 @@ func TestTemplate_残り日数ごとの1週間のマージンの全キーをコ�
 
 	// **値の単位と意味も、コメントだけで読めるように書く**（人間の指摘「1:0の0の単位が％であることはどこに書いてあるの?」。
 	// issue #324 のコメント 6680279690）。
+	// **雛形だけを初めて読む利用者が迷う点も書く**（実装レビュー4周目の3つ目の役の指摘）。
 	for _, want := range []string{
-		"値はその日のマージン（単位は %。0以上100未満の整数。意味は weekly_margin_percent と同じ）",
-		"「1: 0」は「残り1日の日は、マージンを 0% にして使い切る」",
-		"キーが 1〜7 の外か、値が 0以上100未満の外だと、continuo は起動しない",
+		"値はその日のマージン（単位は %。0以上100未満の整数）",
+		"値は % を付けずに数字だけ書く",
+		"「2: 5」なら、残り2日の日は1週間の使用率が 95% に達したら作業しない",
+		"「1: 0」なら、残り1日の日は使用率100%まで使い切る",
+		"値に % などの文字を付けたりすると、continuo は起動しない",
+		"今効いている値は、server.port を設定したダッシュボードのレートリミットの区画の「マージン」の欄で見る",
+		"「リセット」の欄の時刻は UTC（末尾が Z）。「あと N日M時間」は切り捨てなので、「あと1日5時間」なら効くキーは 2",
+		"Blocked へ戻った issue は、日が変わってマージンが下がっても自動では戻らない",
 		"書き換えたら continuo を立て直す",
-		"WORKFLOW.local.md にこの表を書くと、この表は丸ごと置き換わる",
+		"WORKFLOW.local.md で weekly_margin_percent だけを変えても、この表に書いた日は表の値が効く",
+		"WORKFLOW.local.md にこの表を書くと丸ごと置き換わる",
 	} {
 		if !strings.Contains(base, want) {
 			t.Errorf("雛形の表の説明に「%s」が無い", want)
 		}
 	}
 
+	// **既にある WORKFLOW.md へ足す見本（docs/upgrading.md）は、雛形の塊と同じであること**（実装レビュー4周目の LOW）。
+	// 雛形だけを直すと、既存の利用者が写す見本が古いまま残る。
 	const header = "      # weekly_margin_percent_by_days_until_reset:"
+	block := base[strings.Index(base, header):]
+	block = block[:strings.Index(block, "      weekly_margin_percent: 10")]
+	upgrading, err := os.ReadFile("../../../docs/upgrading.md")
+	if err != nil {
+		t.Fatalf("docs/upgrading.md を読めません: %v", err)
+	}
+	if !strings.Contains(string(upgrading), block) {
+		t.Error("docs/upgrading.md の見本が、雛形の残り日数の表の塊と同じではない")
+	}
+
 	var b strings.Builder
 	found := map[string]bool{}
 	for _, l := range strings.Split(base, "\n") {
