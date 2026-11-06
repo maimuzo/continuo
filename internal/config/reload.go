@@ -2,7 +2,9 @@ package config
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 	"strings"
@@ -127,7 +129,7 @@ func (c FrozenChange) String() string { return fmt.Sprintf("%s: %s → %s", c.Ke
 // **本文は Config の中に無い**（config.Loaded の PromptTemplate は Config の兄弟である）。
 // **だから設定の差分だけを見ると、本文だけを直した人には1行も出ない。**
 // 読み直しは走るので、利用者は「本文も効いた」と読んでしまう。
-const PromptBodyKey = "WORKFLOW.md の本文（エージェントへ送る指示書）"
+const PromptBodyKey = "WORKFLOW.md（か WORKFLOW.local.md）の本文（エージェントへ送る指示書）"
 
 // FrozenChanges は、読み直しても効かなかった項目を並べる。
 //
@@ -299,17 +301,39 @@ type FileStamp struct {
 	// **更新時刻と大きさだけでは足りない。**エディタは中身を変えずに保存し直すことがあり、
 	// そのたびに読み直すと、変えていない設定の読み直しが走る。
 	Sum [sha256.Size]byte
+	// Local は、上に重ねる WORKFLOW.local.md の状態である（設計 5-1a）。
+	//
+	// **WORKFLOW.local.md だけを直したとき・置いたとき・消したときも読み直すためにある。**
+	// WORKFLOW.md の印だけを見ると、個人の上書きを変えても常駐中の continuo には効かない。
+	Local LocalStamp
+}
+
+// LocalStamp は、WORKFLOW.local.md の有無と中身の印である（設計 5-1a）。
+type LocalStamp struct {
+	// State は "absent"（無い）・"present"（読めた）・"unreadable: <理由>"（在るのに読めない）のどれかである。
+	//
+	// **読めないことを誤りとして返さず、印に入れる。**誤りにすると、呼び出し側
+	// （internal/orchestrator/reload.go）は黙って次の巡回へ回るので、WORKFLOW.local.md を
+	// 直すまで WORKFLOW.md の読み直しまで止まり、何も出ない。印に入れれば読み直しが走り、
+	// config.Load が「読めません」と WARN を出す。
+	State string
+	// Sum は中身の SHA-256 である。State が "present" のときだけ意味を持つ。
+	Sum [sha256.Size]byte
 }
 
 // Same は2つの印が同じ中身を指しているかを返す。
 //
 // **中身のハッシュだけで決める。**更新時刻が動いても中身が同じなら、読み直す必要は無い。
-func (s FileStamp) Same(other FileStamp) bool { return s.Sum == other.Sum }
+// **WORKFLOW.local.md の有無と中身も比べる**（設計 5-1a）。
+func (s FileStamp) Same(other FileStamp) bool { return s.Sum == other.Sum && s.Local == other.Local }
 
 // StampOf は path のファイルの印を取る。
 //
+// **隣の WORKFLOW.local.md の印も一緒に取る**（設計 5-1a）。WORKFLOW.local.md が無いのは
+// 正常なので、誤りにはしない（LocalStamp の State が "absent" になる）。
+//
 // path: WORKFLOW.md の絶対パス。
-// 戻り値: 印と、読めなかった場合のエラー。
+// 戻り値: 印と、WORKFLOW.md を読めなかった場合のエラー。
 // **呼び出し側は、エラーを致命として扱ってはならない。**エディタが書き換えている最中は
 // 一時的に読めないことがある（rename の途中など）。次の巡回で取り直せばよい。
 func StampOf(path string) (FileStamp, error) {
@@ -321,5 +345,27 @@ func StampOf(path string) (FileStamp, error) {
 	if err != nil {
 		return FileStamp{}, err
 	}
-	return FileStamp{ModTime: fi.ModTime(), Size: fi.Size(), Sum: sha256.Sum256(raw)}, nil
+	return FileStamp{
+		ModTime: fi.ModTime(), Size: fi.Size(), Sum: sha256.Sum256(raw),
+		Local: localStampOf(LocalPathFor(path)),
+	}, nil
+}
+
+// localStampOf は WORKFLOW.local.md の印を取る。**誤りは返さない**（LocalStamp の State を見よ）。
+//
+// localPath: WORKFLOW.local.md の絶対パス。空文字なら重ねるものが無い。
+// 戻り値: 印。
+func localStampOf(localPath string) LocalStamp {
+	if localPath == "" {
+		return LocalStamp{State: "absent"}
+	}
+	raw, err := os.ReadFile(localPath)
+	// **リンク先の無い symlink は「無い」ではなく「読めない」である**（nameExists。Load と同じ判定）。
+	if errors.Is(err, fs.ErrNotExist) && !nameExists(localPath) {
+		return LocalStamp{State: "absent"}
+	}
+	if err != nil {
+		return LocalStamp{State: "unreadable: " + err.Error()}
+	}
+	return LocalStamp{State: "present", Sum: sha256.Sum256(raw)}
 }

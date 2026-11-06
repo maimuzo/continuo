@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // reloadConfig は WORKFLOW.md が変わっていれば読み直し、差し替えてよいキーだけを入れ替える
-// （設計 3-24。`SPEC.md` 6.2）。
+// （設計 3-24。`SPEC.md` 6.2）。**隣の WORKFLOW.local.md が変わったときも読み直す**
+// （config.StampOf がその印も取る。設計 5-1a）。
 //
 // **巡回の頭で1回だけ呼ぶ。**turn の途中では呼ばない。
 //
@@ -82,7 +84,9 @@ func (o *Orchestrator) reloadConfig(_ context.Context) {
 		o.logger.Warn("読み直しても効かない項目を数えられませんでした（差し替えは行います）",
 			"path", o.configPath, "error", err)
 	}
-	if o.promptBodyChanged(loaded.PromptTemplate) {
+	// **比べるのは、送る本文である**（WORKFLOW.local.md の本文を送っていればそちら。設計 5-1a）。
+	body, _ := prompt.BodyOf(loaded)
+	if o.promptBodyChanged(body) {
 		// **本文は Config の中に無い**ので、設定の差分には出てこない。
 		// **出さないと、本文だけを直した人が「効いた」と読む。**
 		frozen = append([]config.FrozenChange{{
@@ -107,10 +111,10 @@ func (o *Orchestrator) reloadConfig(_ context.Context) {
 	o.noteReload(reloadNoteOf(applied, frozen), func() {
 		if len(applied) > 0 {
 			o.logger.Info("WORKFLOW.md を読み直しました", "path", o.configPath,
-				"効いた項目", strings.Join(applied, " / "))
+				"local", loaded.LocalPath, "効いた項目", strings.Join(applied, " / "))
 		} else {
 			o.logger.Info("WORKFLOW.md を読み直しました（走行中に効く項目の変更はありません）",
-				"path", o.configPath)
+				"path", o.configPath, "local", loaded.LocalPath)
 		}
 		if len(frozen) > 0 {
 			lines := make([]string, 0, len(frozen))

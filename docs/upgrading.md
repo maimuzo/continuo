@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足すものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡す plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -125,6 +125,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
 | **エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます** | 要りません。**達成できない目標があると、エージェントは目標を変えずに `Blocked` で止まり、あなたに確かめます** |
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
+| **`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます** | 要りません。**同じ名前のファイルを既に置いていたら、中身を確かめてください**（次の起動から読まれます） |
 
 ### エージェントが書くコメントに、issue の受け入れ目標・いまの作業とその寄与・残りの作業が入ります
 
@@ -152,6 +153,15 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **誰に関係があるか。**全員です。
 
 前の pull request がマージか close されたあとに2つ目を作るのは、そのあとにあなたがその issue で新しい作業を頼んだコメントを書いたときだけです。2つ目も同じ branch から出し、本文に前の pull request とあなたのコメントの URL を書きます。**2つ目を別の名前の branch で出すことは、もうしません。**`WORKFLOW.md` の本文に「2本目の PR を出すときは別の名前へ」の趣旨を書いていたら、消してください（残っていると、エージェントへの指示が食い違います）。
+
+### `WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます
+
+**誰に関係があるか。**`WORKFLOW.md` をチームで共有している人です。設定の書き換えは要りません。
+
+`WORKFLOW.md` と同じディレクトリに `WORKFLOW.local.md` を置くと、その front matter に書いた分だけが上書きされます（文法は `WORKFLOW.md` と同じです）。本文に中身があれば、本文も差し替えます。置かなければ何も変わりません。
+**既に `WORKFLOW.local.md` という名前のファイルを別の用途で置いていたら、次の起動から読まれます。**front matter の区切りが無いと起動しないので、名前を変えてください。
+**`continuo team.md` のように別の名前で起動している人は、`team.local.md` が読まれます**（拡張子の前に `.local` を挟んだ名前です）。
+使い方と気をつけることは [FAQ.md](FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
 
 ## v0.2.1 から v0.3.0 へ
 
