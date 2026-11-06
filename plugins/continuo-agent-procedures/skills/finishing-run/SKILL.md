@@ -87,6 +87,26 @@ gh api repos/<issue のリポジトリ>/pulls/<PR番号>/reviews --paginate --jq
     削除の要約                     「running-review-loop」の「issue に無いものを削る」。削った周の判断票にも1行ずつ残っています
     draft を外せなかったこと       「finishing-pull-request」の「収まったら draft を外す」
 
+この branch の開いた pull request があるとき（下の確かめの1つ目のコマンドが何かを出したとき）は、`review` でも `blocked` でも、受け入れ目標の節の直後に「レビューの結果と、pull request の状態」の節を置きます。人間が知りたいのは、レビューが収まったか・周ごとの件数・draft か・マージできるか・閉じるまでに何が残っているかで、「レビューに回しました」ではありません。中身はスクリプトが GitHub から読んで出すので、あなたが記憶から書き写しません。
+
+段A. 開いた pull request があるときだけ、先にスクリプトを叩き、出力を一時ファイルへ書いて読みます。この run で実装の判断票を貼ったときは、「posting-review-verdict」の「貼ったら、検査を回し直す」の段3（検査の待ち）を済ませてから叩きます。貼っていない run では待たずに叩きます（走っている検査は pending と出ます）。
+
+```bash
+S=$(mktemp)
+sh 'CONTINUO_PLUGIN_DIR/skills/finishing-run/scripts/review-status.sh' \
+  ISSUE_URL='<issue の URL>' ISSUE_REPO='<issue のリポジトリ>' \
+  PR='<PR番号>' PRREPO='<issue のリポジトリ>' > "$S"
+echo "exit=$? S=$S"
+cat "$S"
+```
+
+- **「finishing-pull-request」の「別のリポジトリへ pull request を出すとき」で別のリポジトリへ出したときは、`PRREPO=` を出した先（`<owner>/<repo>`）に書き換えてください。**書き換えないと、issue のリポジトリの同じ番号の、無関係な pull request の状態を出します。
+- `exit=` が 0 でなければ、標準エラーの理由のとおり引数を直して段A をやり直します。段B へ進みません（節が空のまま投稿されます）。
+- スクリプトは1回だけ叩きます。段B は、段A が出した `S=` のファイルを読みます（2回叩くと、そのあいだに検査が変わり、節と残りが食い違います）。
+- 別のリポジトリへ出し、issue が public で出した先が private のときは、段A を叩かず、段B の `cat` の行の代わりに「pull request の公開範囲が issue と違うので、レビューの結果と状態は pull request の側を見てください」と1行だけ書きます（private 側の検査の名前を public の issue に残さないためです）。
+
+段B. 段A の出力を読んでから、受け入れ目標の節（残りの作業・人間が次にすること）を書き、投稿します。開いた pull request が無いときは、段A を飛ばし、`cat` の行を消します。
+
 ```bash
 F=$(mktemp)
 cat > "$F" <<'DONE'
@@ -103,14 +123,39 @@ cat > "$F" <<'DONE'
   2. <手順>（AI の番 / 人間の番）
 - 人間が次にすること: <人間が次にする操作。そのまま貼れるコマンドを添える。無ければ「ありません（AI が進めます）」>
 
+DONE
+cat '<段A が出した S のパス>' >> "$F"
+cat >> "$F" <<'DONE'
+
 ここに「writing-comments-for-humans」の8つの見出しで、何をしたかを書く（印は上の1行だけ）
 DONE
 gh issue comment <issue の URL> --body-file "$F"
 ```
 
+- 題名は、状態を書きます（例: 「実装レビューが3周目で収まり、pull request https://github.com/octocat/hello-world/pull/12 の draft を外しました」）。pull request は URL で書きます。**「レビューに回しました」「In Review にしました」だけの題名や節を書きません。**Status の変化は continuo が別のコメントで知らせていて、言い直しても人間は何も知れません。
 - 受け入れ目標は、目標ごとに達成したかどうか（達成したなら pull request のどこで、まだならなぜか）を書きます。達成できない目標を、あなたの判断だけで変えたり外したりしません（「implementing-and-pushing」の「pull request を出す」の段0）。
 - 題名の直後の1節（受け入れ目標・いまの作業・残り）の書き方は、「writing-comments-for-humans」の「どのコメントにも、受け入れ目標・いまの作業・残りを書く」にあります。
 - **レビューで直さないと決めた指摘を、「直してほしければコメントしてください」と人間に投げません。**「残り」にも入れません。直さない理由だけを `### 詳細` に書きます。投げると、マージのあとに人間が「残りを進めて」と頼み、同じ issue に2つ目の pull request ができます（「implementing-and-pushing」の「pull request を出す」）。
+- まとめて直したときも、段A を叩くのは代表の issue の報告のときだけです。ほかの issue への説明（下の「まとめて直したとき」）には、この節を置きません。
+
+**`review` で終えるときの残りの作業。**`review` を出すと run が終わり、その AI は戻りません。だから残りの作業は全部人間の番です。段A の節の事実を、下の表に上から当て、最初に当たった1行の手だけを書きます（行に枝があるときは、当たった枝だけを書きます）。その手は「人間が次にすること」にも書きます。「検査」は、節に「必須の検査なし」と出たときは全部の検査の数で、それ以外は必須の検査の数で当てます。下の確かめの表や受け入れ目標が「残り」へ足させる人間の手は、これとは別に、そのまま書きます。
+
+| 順 | 節に出た事実 | 残りの作業に書く手（人間の番） | 閉じるまでの手を足すか |
+| --- | --- | --- | --- |
+| 1 | 設計か実装のレビューが「収まった」でない（設計は「飛ばした」も可）、またはどれかの項目が「読めませんでした」 | 判断票と pull request の画面を開いて確かめ、マージしてよいかを決める | 足す（前に「マージしてよいと決めたら」を置く） |
+| 2 | draft のまま | 「このプロジェクトの決まり」に「draft のまま人間へ渡す」と書いてあるときは「中身を見て draft を外す」、無いときは「draft を外せなかった理由（この報告の `### 詳細`）を見て決める」の、当たる方だけ | 足す |
+| 3 | 検査に fail か cancel がある | 落ちた検査の名前を見て、直してほしいことを issue にコメントしてから Status を Ready へ戻す | 足さない |
+| 4 | 検査に pending がある | 終わるのを待ち、pull request の画面でマージできるかを見る | 足す |
+| 5 | `mergeStateStatus` が `UNKNOWN` | 少し待って pull request の画面を開き直す | 足す |
+| 6 | `reviewDecision` が `REVIEW_REQUIRED` | 作者以外の人に承認してもらう（1人で運用しているなら、branch の保護の承認の設定を見直す。作者は自分の pull request を承認できません） | 足す |
+| 7 | `reviewDecision` が `CHANGES_REQUESTED`、または `mergeStateStatus` が `DIRTY` か `BEHIND` | 直してほしいことを issue にコメントしてから Status を Ready へ戻す | 足さない |
+| 8 | `mergeStateStatus` が `BLOCKED` | pull request の画面で branch の保護の条件を確かめる | 足す |
+| 9 | `mergeStateStatus` が `CLEAN` / `UNSTABLE` / `HAS_HOOKS` | pull request をマージする（`UNSTABLE` なら、全部の検査で落ちたものの名前を見てから） | 閉じるまでの手の2つ目から続ける |
+
+閉じるまでの手（この順）: pull request をマージする → issue が閉じたかを確かめ、閉じていなければ閉じる（向け先が既定の branch でないと `Closes` が読まれません） → カンバンの自動化が動かさなければ、Status を Done へ動かす。
+
+- Status を Ready へ戻すと、次の run が作業して新しい報告を書くので、その行（3 と 7）には閉じるまでの手を足しません。次の run は AI の印の無い人間のコメントを受け取るので、直してほしいことを先にコメントしてもらいます。
+- `blocked` と `working` で終えるときは、この表を当てません。残りの作業は、訊いたことへの答えと次の手を今までどおり書きます（節の事実は置きます）。
 
 書く前に、pull request が issue の Development にリンクされたかを確かめます（「implementing-and-pushing」の「pull request を出す」）。1つ目はこの branch の開いた pull request と、それが閉じる issue を出します。2つ目は issue にリンクされたままの branch を出します。
 
