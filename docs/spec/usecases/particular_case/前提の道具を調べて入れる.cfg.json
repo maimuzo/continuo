@@ -3,7 +3,7 @@
   "usecase_name": "前提の道具を調べて入れる",
   "source": {
     "file": "docs/spec/usecases/particular_case/前提の道具を調べて入れる.rucm.md",
-    "rucm_block_sha256": "adc6a3923e66d6efeaa6f8854097100e7eac6017451ed819752004402393a7a5"
+    "rucm_block_sha256": "0fa7bfb1dff676217ca7f4ae8fe3b9fe27760dff7706343cfb8870730b003b50"
   },
   "root": "BASIC FLOW-1",
   "flows": {

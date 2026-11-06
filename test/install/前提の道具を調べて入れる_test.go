@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "37a49d28523d2641fa50a3223c18761ad88096fc840791557aa6fce65a88d28a", "SOURCE": "docs/spec/usecases/particular_case/前提の道具を調べて入れる.cfg.json"}
+// {"RUCM-CFG-SHA256": "3c58fe488c48007d005b7efaa102da0da01d164e0a7e9c888124d5748b8283e0", "SOURCE": "docs/spec/usecases/particular_case/前提の道具を調べて入れる.cfg.json"}
 //
 // **ユースケース記述「前提の道具を調べて入れる」の経路に対応づけたテストである。**
 // 関数名の `P007` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。

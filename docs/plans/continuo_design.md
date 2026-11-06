@@ -6723,11 +6723,11 @@ clone した人の手元では、独立した2つのファイルに戻る。
 **版を指定しなければ、公開から 168 時間（7日）経った版だけを入れる**（下の「クールダウン」）。
 
 **ユースケース記述は [docs/spec/usecases/particular_case/continuoを入れる.rucm.md](../spec/usecases/particular_case/continuoを入れる.rucm.md) にある。**
-この記述（経路8本）が、`配布物を取って置く`（経路13本）と `前提の道具を調べて入れる`（経路18本）を引く。
+この記述（経路9本）が、`配布物を取って置く`（経路16本）と `前提の道具を調べて入れる`（経路18本）を引く。
 2026-10-02 に install.sh と突き合わせて3本へ分けた（それまでは1本だった）。
-テストは記述ごとのファイルに在る。[test/install/continuoを入れる_test.go](../../test/install/continuoを入れる_test.go) が8本のうち4本を、
-[test/install/配布物を取って置く_test.go](../../test/install/配布物を取って置く_test.go) が13本のうち8本を通している。
-[test/install/前提の道具を調べて入れる_test.go](../../test/install/前提の道具を調べて入れる_test.go) が18本のうち6本を通している。残りは、端末（`/dev/tty`）が要る経路と、同じテストの中で通るやり直しの経路である（理由は記述の冒頭に在る。2026-10-02 に `RUCM-PATH` の印を数えた）。
+テストは記述ごとのファイルに在る。[test/install/continuoを入れる_test.go](../../test/install/continuoを入れる_test.go) が9本のうち5本を、
+[test/install/配布物を取って置く_test.go](../../test/install/配布物を取って置く_test.go) が16本のうち11本を通している。
+[test/install/前提の道具を調べて入れる_test.go](../../test/install/前提の道具を調べて入れる_test.go) が18本のうち6本を通している。残りは、端末（`/dev/tty`）が要る経路と、同じテストの中で通るやり直しの経路である（理由は記述の冒頭に在る。2026-11-07 にクールダウンの経路を足して `RUCM-PATH` の印を数え直した）。
 
 **利用者が叩くのは1行だけである。**
 
