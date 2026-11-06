@@ -221,6 +221,12 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	if !strings.Contains(sent, "終わりの語を別のものに変えてください") {
 		t.Errorf("本文に終わりの語だけの行を作るなという注意がありません:\n%s", sent)
 	}
+	// **報告の形はスキル finishing-run の段4 のとおりだと名指しする**（issue #332。設計 5-3zc）。
+	// 書かせ直しは `review` で終えた run にも届く。見本だけを写すと、レビューの結果と pull request の状態の節が落ちる。
+	if !strings.Contains(sent, "スキル finishing-run の「runの終了を宣言する」の段4 のとおり") ||
+		!strings.Contains(sent, "「レビューの結果と、pull request の状態」の節") {
+		t.Errorf("報告の形をスキル finishing-run の段4 へ案内していません:\n%s", sent)
+	}
 	if !strings.Contains(sent, "囲み付きの") {
 		t.Errorf("禁じる印を「囲み付き」と名指ししていません:\n%s", sent)
 	}
