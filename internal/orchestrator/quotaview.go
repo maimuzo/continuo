@@ -46,7 +46,8 @@ type QuotaWindowView struct {
 	// （usage API が `resets_at: null` を返した期間。continuo が付けた仮の期限は出さない）。
 	ResetsAt *time.Time
 	// MarginPercent は、この期間から引くマージン（%）である。5時間の期間は
-	// `five_hour_margin_percent`、1週間の期間は `weekly_margin_percent`。
+	// `five_hour_margin_percent`、1週間の期間は `weekly_margin_percent`
+	// （`weekly_margin_percent_by_days_until_reset` にその日の値があればそちら。issue #324）。
 	MarginPercent int
 	// Short は、マージンを切ったかである（`handoff.MarginCut`。マージンが1以上で、余裕値が0以下）。
 	//
@@ -80,15 +81,12 @@ func (o *Orchestrator) QuotaView() QuotaView {
 	if reads.usable == nil {
 		return v
 	}
-	margins := o.bidMargins()
+	margins := o.bidMargins(o.now())
 	short := handoff.MarginCut(margins)
 	full := handoff.Full()
 	v.Windows = make([]QuotaWindowView, 0, len(reads.usable.Limits))
 	for _, l := range reads.usable.Limits {
-		margin := margins.FiveHour
-		if handoff.IsWeeklyKind(l.Kind) {
-			margin = margins.Weekly
-		}
+		margin := margins.For(l)
 		w := QuotaWindowView{
 			Kind:          l.Kind,
 			Percent:       l.Percent,

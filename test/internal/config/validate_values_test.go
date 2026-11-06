@@ -602,3 +602,54 @@ func TestDirectChatConflicts_7つの相手を全部見る(t *testing.T) {
 		t.Fatalf("空の direct_chat_state で重なりを返した: %v", got)
 	}
 }
+
+// TestValidate_残り日数ごとの1週間のマージン は、`weekly_margin_percent_by_days_until_reset` の検査を確かめる（issue #324）。
+//
+// **キーは1〜7だけを通す。**0 や 8 の日は来ないので、書いても黙って効かない。
+// **値は `weekly_margin_percent` と同じく 0以上100未満。**100 だと、その日は使用率0でも余裕値が0になる。
+// **整数でないキー（曜日の書き方など）は、YAML の型の誤りで起動しない。**
+//
+// 目的: 誤った表を起動前に弾き、正しい表は通して値を読むこと。
+// 与える情報: `weekly_margin_percent` の行の下に表を足した WORKFLOW.md。
+// 成功条件: 誤りはエラーになって表のキー名がエラーに入り、正しい表は通ること。
+func TestValidate_残り日数ごとの1週間のマージン(t *testing.T) {
+	withTable := func(entries string) string {
+		return "      weekly_margin_percent: 10\n      weekly_margin_percent_by_days_until_reset:\n" + entries
+	}
+	for _, tc := range []struct {
+		name    string
+		entries string
+		want    string
+	}{
+		{"残り日数が0", "        0: 5", "weekly_margin_percent_by_days_until_reset.0"},
+		{"残り日数が8", "        8: 5", "weekly_margin_percent_by_days_until_reset.8"},
+		{"値が100", "        1: 100", "weekly_margin_percent_by_days_until_reset.1"},
+		{"値が負", "        2: -1", "weekly_margin_percent_by_days_until_reset.2"},
+		{"誤りが2件なら小さい日から報告する", "        9: 5\n        0: 5", "weekly_margin_percent_by_days_until_reset.0"},
+		{"整数でないキー", "        fri: 0", "weekly_margin_percent_by_days_until_reset"},
+		// **値に % を付けると起動しない**（雛形と FAQ が「% は付けずに数字だけ書く」「付けると起動しない」と書いている）。
+		{"値に % を付けた", "        2: 5%", "weekly_margin_percent_by_days_until_reset"},
+		// **値の無い日の行は起動しない**（実装レビュー5周目の HIGH）。goccy は値の無い行を 0（使い切る）にするので、黙って通さない。
+		{"値の無い日の行", "        1:\n        2: 5", "1 の行に値が無い"},
+		// **小数は起動しない**（実装レビュー6周目の LOW）。goccy は int へ読むと小数を黙って切り捨てる（0.5 が 0 = 使い切る）。
+		{"値が小数", "        1: 0.5", "1 の値 0.5 は、0以上100未満の整数として読めない"},
+		{"値が引用符の数字", "        2: \"5\"", "2 の値 \"5\" は、0以上100未満の整数として読めない"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := loadWithReplaced(t, "weekly_margin_percent", withTable(tc.entries))
+			if err == nil {
+				t.Fatalf("%s を弾いていない", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("どのキーが悪いか分からない（want %q を含む）: %v", tc.want, err)
+			}
+		})
+	}
+	t.Run("1から7までの0以上100未満は通る", func(t *testing.T) {
+		err := loadWithReplaced(t, "weekly_margin_percent",
+			withTable("        1: 0\n        2: 5\n        3: 10\n        4: 10\n        5: 10\n        6: 10\n        7: 99"))
+		if err != nil {
+			t.Fatalf("正しい表を弾いた: %v", err)
+		}
+	})
+}

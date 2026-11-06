@@ -139,3 +139,55 @@ func TestQuotaView_sourceがnoneなら期間を出さない(t *testing.T) {
 		}
 	})
 }
+
+// 目的: 1週間のマージンが、リセットまでの残り日数の表（`weekly_margin_percent_by_days_until_reset`）に従って
+// 日ごとに変わり、ダッシュボードの写しと新しい着手の判定の両方に同じ値が効くことを確かめる（issue #324）。
+//
+// **人間の例と同じ形である。**リセット前の最後の24時間（1日目）は 0 で使い切り、2日目は 5、
+// それより前は書かないので `weekly_margin_percent`（既定10）を使う。
+//
+// 与える情報: 表 {1: 0, 2: 5}。1週間の期間のリセットを今から72時間後に固定し、使用率 96% の行を、
+// 今・49時間後（残り23時間 → 1日目）・25時間後（残り47時間 → 2日目）にそれぞれ入れ直す。
+// 成功条件: 1週間の期間のマージンと short と新しい着手の止め方が、表のとおりに変わること。
+func TestQuotaView_1週間のマージンはリセットまでの残り日数で変わる(t *testing.T) {
+	cases := []struct {
+		name    string
+		after   time.Duration
+		margin  int
+		short   bool
+		blocked bool
+	}{
+		{"残り72時間は表に無いので既定の10", 0, 10, true, true},
+		{"残り47時間は2日目の5", 25 * time.Hour, 5, true, true},
+		{"残り23時間は1日目の0（切ったと呼ばず、着手も止めない）", 49 * time.Hour, 0, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				fx := newQuotaStubFixture(t, func(cfg *config.Config) {
+					cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset = map[int]int{1: 0, 2: 5}
+				})
+				defer fx.Close()
+				reset := time.Now().Add(72 * time.Hour)
+				time.Sleep(c.after)
+				now := time.Now()
+				five := slWin(10, now.Add(2*time.Hour))
+				seven := slWin(96, reset)
+				fx.Orc.OnStatusline(slLine("s", 100, five, seven))
+				fx.Orc.OnStatusline(slLine("s", 200, five, seven))
+
+				v := fx.Orc.QuotaView()
+				w, ok := quotaWindowOf(v, handoff.LimitKindWeeklyAll)
+				if !ok {
+					t.Fatalf("1週間の期間が出ていない: %+v", v.Windows)
+				}
+				if w.MarginPercent != c.margin || w.Short != c.short {
+					t.Errorf("1週間の期間が違う（want margin=%d short=%v）: %+v", c.margin, c.short, w)
+				}
+				if v.NewWorkBlocked != c.blocked {
+					t.Errorf("新しい着手を止めているか: %v（want %v）", v.NewWorkBlocked, c.blocked)
+				}
+			})
+		})
+	}
+}

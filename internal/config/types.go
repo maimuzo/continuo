@@ -177,6 +177,24 @@ type TrackerProviderHandoffConfig struct {
 	// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、
 	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
+	// WeeklyMarginPercentByDaysUntilReset は、1週間の枠のリセットまでの残り日数ごとに
+	// `WeeklyMarginPercent` を上書きする表である（issue #324）。**キーは残り日数（1〜7）、値は %。**
+	//
+	// **残り日数は、その1週間の枠の `resets_at` までの残りを24時間単位で切り上げた数である**
+	// （`handoff.DaysUntilReset`）。今が金曜 03:00 で、リセットが金曜 09:00 なら、残り6時間なので 1 を使う。
+	// **全体の枠（`weekly_all`）とモデル別の枠（`weekly_scoped`）は、それぞれ自分のリセット時刻で数える**
+	// （`handoff.Margins.WeeklyFor`）。
+	//
+	// **書いていない日と、その枠のリセット時刻が分からないとき**（写しが無い・`resets_at` が null・
+	// `rate_limit.source: none`）は `WeeklyMarginPercent` を使う。**書かなければ nil で、今までどおりである。**
+	//
+	// **キーは 1〜`MaxWeeklyMarginDaysUntilReset`、値は0以上100未満**（`validateHandoff`）。
+	//
+	// **リセット時刻はアカウントごとに違う。**同じ表を書いた機械どうしでも、同じ瞬間のマージンは
+	// リセットの近い機械ほど小さくなりうる。リセットの近い機械に使い切らせるのが、この表の狙いである。
+	//
+	// **値の無い日の行（`1:` だけ）は起動しない**（`WeeklyMarginTable` の `UnmarshalYAML`）。
+	WeeklyMarginPercentByDaysUntilReset WeeklyMarginTable `yaml:"weekly_margin_percent_by_days_until_reset"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
 	// OnAssigneeGateWarnAndComment（既定）と OnAssigneeGateWarnOnly の2つだけである。
@@ -188,6 +206,11 @@ type TrackerProviderHandoffConfig struct {
 	// WARN の1行とダッシュボードの表はそのまま出る。止まるのは issue への書き込みだけである。
 	OnAssigneeGate string `yaml:"on_assignee_gate"`
 }
+
+// MaxWeeklyMarginDaysUntilReset は、`weekly_margin_percent_by_days_until_reset` のキー（リセットまでの残り日数）の
+// 最大である（issue #324）。1週間の枠の残りは7日を超えない。**この1か所が持つ。**`internal/handoff` の
+// `MaxDaysUntilReset` もこれを使う（config は handoff を読めないので、こちらに置く）。
+const MaxWeeklyMarginDaysUntilReset = 7
 
 // OnAssigneeGateWarnAndComment は、担当者が付いていて着手できないときに
 // WARN を出し、issue へも1回だけ書く値である（issue #134 / #136 / #140）。**既定である。**

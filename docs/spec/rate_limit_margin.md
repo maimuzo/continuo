@@ -10,7 +10,7 @@
 
 | 語 | 意味 |
 | --- | --- |
-| マージン | 人間のために残しておく割合（%）。5時間の期間は `tracker.provider.handoff.five_hour_margin_percent`、1週間の期間（全体の `weekly_all` とモデル別の `weekly_scoped`）は `weekly_margin_percent`。既定はどちらも10 |
+| マージン | 人間のために残しておく割合（%）。5時間の期間は `tracker.provider.handoff.five_hour_margin_percent`、1週間の期間（全体の `weekly_all` とモデル別の `weekly_scoped`）は `weekly_margin_percent`（`weekly_margin_percent_by_days_until_reset` にリセットまでの残り日数ごとの値があれば、その日はそちら。issue #324）。既定はどちらも10 |
 | 余裕% | `100 − (使用済み% + マージン%)`。期間ごとに別々に計算する。コードでは「余裕値」と呼ぶ |
 | マージンを切る | **マージンが1以上の期間で**、余裕%が0以下になること（使用率100も含む）。マージンが0の期間は、使用率100に達しても「マージンを切る」とは呼ばない |
 | Claude Code が動けない | 5時間の期間か、全体の1週間の期間（`weekly_all`）が使用率100であること。モデル別の1週間の期間（`weekly_scoped`）の100は数えない |

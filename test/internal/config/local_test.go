@@ -367,3 +367,36 @@ func TestLoadLocal_リンク先の無いsymlinkは止まる(t *testing.T) {
 		t.Error("リンク先の無い symlink を置いても、無いときと同じ印になった")
 	}
 }
+
+// 目的: チームの WORKFLOW.md の残り日数の表（`weekly_margin_percent_by_days_until_reset`）が、WORKFLOW.local.md で
+// どう扱われるかを確かめる（issue #324。FAQ の「1週間のマージンを、リセットの直前だけ小さくしたい」と雛形のコメントに書いたこと）。
+//
+// 与える情報: チームの WORKFLOW.md に表 {1: 0, 2: 5}。WORKFLOW.local.md は3通り（`weekly_margin_percent` だけ・表を {1: 3}・表を {}）。
+// 成功条件: `weekly_margin_percent` だけなら表は残る。表を書けば丸ごと置き換わる（2 は残らない）。{} なら表が外れる。
+func TestLoadLocal_残り日数の表は丸ごと置き換わり空にすれば外れる(t *testing.T) {
+	team := strings.Replace(teamFrontMatter, "      weekly_margin_percent: 20\n",
+		"      weekly_margin_percent: 20\n      weekly_margin_percent_by_days_until_reset:\n        1: 0\n        2: 5\n", 1)
+	if team == teamFrontMatter {
+		t.Fatal("チームの front matter に表を足せない")
+	}
+	for _, c := range []struct {
+		name  string
+		local string
+		want  map[int]int
+	}{
+		{"weekly_margin_percent だけなら表は残る", "      weekly_margin_percent: 30\n", map[int]int{1: 0, 2: 5}},
+		{"表を書けば丸ごと置き換わる", "      weekly_margin_percent_by_days_until_reset:\n        1: 3\n", map[int]int{1: 3}},
+		{"{} なら表が外れる", "      weekly_margin_percent_by_days_until_reset: {}\n", map[int]int{}},
+		// **キーだけ書いて値を書かない行は、チームの表を残す**（雛形と FAQ に書いたこと。値の無い日の行を弾く型を置いても変わらない）。
+		{"キーだけ書けば表は残る", "      weekly_margin_percent_by_days_until_reset:\n", map[int]int{1: 0, 2: 5}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeWorkflow(t, team, "")
+			writeLocal(t, path, "---\ntracker:\n  provider:\n    handoff:\n"+c.local+"---\n")
+			got := mustLoad(t, path).Config.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset
+			if len(got) != len(c.want) || !reflect.DeepEqual(map[int]int(got), c.want) && len(c.want) > 0 {
+				t.Errorf("表 = %v、want %v", got, c.want)
+			}
+		})
+	}
+}
