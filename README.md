@@ -103,9 +103,9 @@ Put your task in an issue, move it to `Ready`, and continuo takes it from there.
 | --- | --- | --- |
 | `Ready` | **You** | continuo picks these up in the order they sit on the kanban board and starts them in herdr |
 | `In Progress` | continuo | Work has started. A feature branch and a git worktree exist for this issue |
-| `In Review` | continuo | The agent finished. Open the issue and check the result — **moving it to `Done` is yours to decide** |
+| `In Review` | continuo | The agent finished. Open the issue and check the result — **moving it to `Done` is yours to decide**. If you asked the agent to merge, the kanban board's automation may move it to `Done` |
 | `Blocked` | continuo | The agent got stuck or needs an answer. Reply in an issue comment, then move it back to `Ready` |
-| `Done` | **You** | continuo removes the worktree and the branch |
+| `Done` | **You** | continuo removes the worktree and the branch (a merge you asked the agent for can also let the kanban board's automation move it here) |
 | `Direct Chat` (optional) | **You** | You keep talking to Claude Code in the pane yourself, and continuo sends nothing. Assign the issue to exactly one person — the `gh` account of the continuo on the machine that should open the pane. Move it back to `Ready` or `In Progress` when you are done |
 
 **Your Status names do not have to match.** `Ready` or `Todo`, `In Review` or `Needs review` — you map your own option names to these roles once, with `continuo setup` (six roles; the sixth, direct chat, can be skipped).

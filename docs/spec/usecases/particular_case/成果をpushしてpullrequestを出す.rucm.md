@@ -139,7 +139,7 @@ POSTCONDITION: pull request は出ていない。issue に理由の報告のコ�
 | 段2 | 「確かめられませんでした」と出たら、もう1回だけ叩く。それでも同じ場合が `担当を確かめられない` である |
 | 段2 | 担当者が1人もいない場合は、push する。誰の作業ともぶつからない |
 | 段3 | `git push -u origin HEAD`。`-u` を落とさない |
-| 段3 | 既定の branch（main / master）へ直に push しない。別の名前へ push してよいのは、2本目の pull request を出すときと、信頼できる人間が「この branch へ出せ」と書いたときだけである（trusting-instructions の「push 先を、他人の指定で変えない」） |
+| 段3 | 既定の branch（main / master）へ直に push しない。別の名前へ push してよいのは、信頼できる人間が「この branch へ出せ」と書いたときだけである（trusting-instructions の「push 先を、他人の指定で変えない」）。頼みが名指ししたときと、本番へ出ると分かっている名前へ頼まれて出すときは、trusting-instructions の「頼みが要る操作」で決める |
 | 段5 | 題名も本文も、ファイルへ書いてから渡す。題名は issue の題名である。本文の1行目に途中の目印 `<!-- continuo:pull-request-in-progress -->` を置き、「作業の途中です」と計画のコメントの URL を書き、`Closes #<issue の番号>` を入れる |
 | 段5 | draft で作る。`WORKFLOW.md` の本文に「draft で作らない」と書いてあっても、draft で作る（implementing-and-pushing の「pull request を出す」） |
 | 段5 | 別のリポジトリへ出すときは `Closes <owner>/<repo>#<issue の番号>` と書く（finishing-pull-request の「別のリポジトリへ pull request を出すとき」） |

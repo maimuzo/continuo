@@ -101,9 +101,9 @@ continuo（通奏低音）は、バロック音楽で曲の最初から最後ま
 | --- | --- | --- |
 | `Ready` | **あなた** | continuo がカンバンの上から順に拾い、herdr で動かします |
 | `In Progress` | continuo | 着手すると自動で移ります。feature branch を作り、git worktree の上で作業を始めます |
-| `In Review` | continuo | エージェントが作業を終えると自動で移ります。issue を開いて結果を確認してください。**`Done` へ動かすかどうかは、あなたが決めます** |
+| `In Review` | continuo | エージェントが作業を終えると自動で移ります。issue を開いて結果を確認してください。**`Done` へ動かすかどうかは、あなたが決めます**。エージェントにマージを頼んだときは、カンバンの自動化が `Done` へ動かすことがあります |
 | `Blocked` | continuo | エージェントが行き詰まったときと、あなたの回答を待っているときに自動で移ります。issue のコメントに対応方法を書いて、`Ready` へ戻してください |
-| `Done` | **あなた** | ここへ動かすと、continuo が worktree と branch を消します |
+| `Done` | **あなた** | ここへ動かすと、continuo が worktree と branch を消します（エージェントに頼んだマージで、カンバンの自動化が動かすこともあります） |
 | `Direct Chat`（使うときだけ） | **あなた** | あなたが pane で Claude Code と直接話し続けます。continuo は指示を送りません。**issue の担当者を1人だけにしてください。**その1人は、pane を開きたい PC の continuo が使っている `gh` のアカウントです。切りがついたら `Ready` か `In Progress` へ戻してください |
 
 **Status の名前は、いま使っているものそのままで構いません。**`Ready` でも `Todo` でも、`continuo setup` で6つの役割に一度だけ対応づけます（6つ目の direct chat は飛ばせます）。
