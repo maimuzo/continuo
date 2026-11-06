@@ -143,3 +143,39 @@ func TestEvaluate_表が無ければ1週間余裕値は今までどおり(t *tes
 		t.Errorf("1週間の枠が無いときの1週間余裕値が %d（want 90）skip=%v", bid.Weekly, skip)
 	}
 }
+
+// 目的: 雛形と FAQ に書いた「リセットが火曜 9:00 のとき、各日が指す期間」が、実際の数え方と一致することを確かめる（issue #324。
+// 人間の問い「たとえば週間レートリミットのリセットが火曜日午前9:00JSTのとき、上記1:0は何曜日の何時から何曜日の何時までの期間を指しているの?」）。
+//
+// **始まりの時刻ちょうどを含み、終わりの時刻ちょうどは含まない**と書いたので、境目の前後を両方見る。
+//
+// 与える情報: リセットを火曜 9:00（2026-11-10）と、その1週間後の火曜 9:00（2026-11-17）に置いた時刻の組。
+// 成功条件: 月 9:00 ちょうどから 1、月 8:59 は 2、日 9:00 ちょうどは 2、リセット直後の火 9:00 から 7、水 9:00 ちょうどは 6 であること。
+func TestDaysUntilReset_リセットが火曜9時のときの各日の期間(t *testing.T) {
+	jst := time.FixedZone("JST", 9*60*60)
+	tue := time.Date(2026, 11, 10, 9, 0, 0, 0, jst)
+	nextTue := tue.Add(7 * 24 * time.Hour)
+	cases := []struct {
+		name  string
+		reset time.Time
+		now   time.Time
+		days  int
+	}{
+		{"月 9:00 ちょうどは1日目の始まり", tue, time.Date(2026, 11, 9, 9, 0, 0, 0, jst), 1},
+		{"火 8:59 は1日目", tue, time.Date(2026, 11, 10, 8, 59, 0, 0, jst), 1},
+		{"月 8:59 は2日目", tue, time.Date(2026, 11, 9, 8, 59, 0, 0, jst), 2},
+		{"日 9:00 ちょうどは2日目の始まり", tue, time.Date(2026, 11, 8, 9, 0, 0, 0, jst), 2},
+		{"土 9:00 ちょうどは3日目の始まり", tue, time.Date(2026, 11, 7, 9, 0, 0, 0, jst), 3},
+		{"水 9:00 ちょうどは6日目の始まり", tue, time.Date(2026, 11, 4, 9, 0, 0, 0, jst), 6},
+		{"リセット直後の火 9:00 は次のリセットまでの7日目", nextTue, tue, 7},
+		{"水 8:59 は7日目", nextTue, time.Date(2026, 11, 11, 8, 59, 0, 0, jst), 7},
+		{"水 9:00 ちょうどは6日目", nextTue, time.Date(2026, 11, 11, 9, 0, 0, 0, jst), 6},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if days, ok := handoff.DaysUntilReset(c.reset, c.now); !ok || days != c.days {
+				t.Errorf("DaysUntilReset = (%d, %v)（want %d）", days, ok, c.days)
+			}
+		})
+	}
+}

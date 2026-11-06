@@ -27,6 +27,24 @@ func TestTemplate_残り日数ごとの1週間のマージンの全キーをコ�
 		t.Error("金曜 3:00 の例が雛形に無い")
 	}
 
+	// **日ごとの行に、その日が指す期間の例を書く**（人間の求め「WORKFLOW.mdの1:0部分のコメントに書いてあるべきじゃない?」。
+	// issue #324 のコメント 6678703481）。例はリセットが火曜 9:00 のとき。
+	for day, period := range map[string]string{
+		"1": "月 9:00 から火 9:00 まで", "2": "日 9:00 から月 9:00 まで", "3": "土 9:00 から日 9:00 まで",
+		"4": "金 9:00 から土 9:00 まで", "5": "木 9:00 から金 9:00 まで", "6": "水 9:00 から木 9:00 まで",
+		"7": "火 9:00 から水 9:00 まで",
+	} {
+		found := false
+		for _, l := range strings.Split(base, "\n") {
+			if strings.HasPrefix(l, "      #   "+day+": ") && strings.Contains(l, "例: "+period) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s の行のコメントに期間の例「%s」が無い", day, period)
+		}
+	}
+
 	const header = "      # weekly_margin_percent_by_days_until_reset:"
 	var b strings.Builder
 	found := map[string]bool{}
