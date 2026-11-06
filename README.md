@@ -192,8 +192,22 @@ The installer detects your OS and architecture, pulls the matching binary from [
 | `--yes` | Answer yes to every prompt, including package installs |
 | `--no-deps` | Install nothing but continuo; just list what is missing |
 | `--dir DIR` | Install somewhere else (default `~/.local/bin`) |
-| `--version V` | Install a specific release instead of the latest |
+| `--version V` | Install a specific release (default: the newest stable release published at least 168 hours ago) |
+| `--cooldown-hours H` | Only install releases published at least H hours ago (default 168 = 7 days; `0` installs the latest) |
+| `--force` | Replace the installed binary even if the chosen release is older than it |
 | `--repo O/R` | Install from a fork. **Using it prints a warning** |
+
+**By default it only installs a release that was published at least 168 hours (7 days) ago — a cooldown.** If a fresh release turns out to be broken and gets replaced, you will not have picked it up in the meantime.
+The installer prints which releases it skipped and which one it installs, in a few lines starting with `クールダウン:` (the installer's messages are in Japanese).
+To install the latest release without waiting, pass `--cooldown-hours 0`; to change the wait, pass `--cooldown-hours <hours>`.
+`--version` skips the cooldown.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --cooldown-hours 0
+```
+
+**If the chosen release is older than the one already installed, it leaves the binary alone.** This happens when you installed the latest with `--cooldown-hours 0` and then run the installer again without options.
+It keeps the installed version and says so; pass `--force` to downgrade.
 
 **It stops if it cannot verify the checksum.** Pass `--insecure-no-checksum` to go ahead anyway.
 

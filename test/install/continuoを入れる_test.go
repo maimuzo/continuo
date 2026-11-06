@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "af9a0e7c7747584a526a3e353d15cab9fbdbafc08d23864ff217084667f303d2", "SOURCE": "docs/spec/usecases/particular_case/continuoを入れる.cfg.json"}
+// {"RUCM-CFG-SHA256": "d1d9ffe46ecbb214510920568d81a62d59ed9842571620f495dfde25a27cd2a4", "SOURCE": "docs/spec/usecases/particular_case/continuoを入れる.cfg.json"}
 //
 // **ユースケース記述「continuoを入れる」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -261,16 +261,19 @@ func Test_continuoを入れる_P001_版を名乗らないものからは警告�
 // **警告は付随的なものである。**release の一覧を引けないことで導入を止めてはならない
 // （設計 3-36「破壊的変更を集めるときの決めごと」の「何も言わない場合」）。
 //
-// 目的: 一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
-// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧を配らない偽サーバ（/api は 404 を返す）。
+// **この決めごとが残るのは `--version` の実行だけである。**版を指定しない実行では、
+// 一覧が入れる版の決め手なので、引けなければ止まる（クールダウン。設計 3-36）。
+//
+// 目的: `--version` の実行で一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧に 404 を返す偽サーバ（FailList）。
 // 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
 func Test_continuoを入れる_P001_一覧を引けなくても入れるのは止めない(t *testing.T) {
-	// **SetReleases を呼ばない。**releases が空なので /api は 404 を返す。
 	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.FailList()
 	dir := t.TempDir()
 	placeInstalled(t, dir, "v0.2.0")
 
-	code, out := runInstaller(t, fr, dir, "--no-deps")
+	code, out := runInstaller(t, fr, dir, "--no-deps", "--version", "v0.10.0")
 	if code != 0 {
 		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
 	}
@@ -334,5 +337,30 @@ func Test_continuoを入れる_P001_印を読み出せなくても入れるの�
 	if strings.Contains(out, "破壊的変更があります") ||
 		strings.Contains(out, "読み出せないので出てはいけません") {
 		t.Errorf("読み出せていないのに警告を出しています:\n%s", out)
+	}
+}
+
+// {"RUCM-PATH": "P009"}
+//
+// Test_continuoを入れる_P009_クールダウン_値の誤りは取得の前に弾く は、`--cooldown-hours` の値の検査を確かめる。
+//
+// 目的: 整数でない値・空の値・7桁以上の値を、配布サーバへ繋ぐ前に弾くこと。
+// 与える情報: 誤った値を1つずつ。
+// 成功条件: 終了コードが 0 でなく、値の誤りを名指しし、何も置かないこと。
+func Test_continuoを入れる_P009_クールダウン_値の誤りは取得の前に弾く(t *testing.T) {
+	for _, bad := range []string{"1.5", "", "-1", "24h", "1000000", "00001000000"} {
+		t.Run(bad, func(t *testing.T) {
+			dir := t.TempDir()
+			code, out := runInstaller(t, nil, dir, "--no-deps", "--cooldown-hours", bad)
+			if code == 0 {
+				t.Fatalf("誤った値 %q を通しています:\n%s", bad, out)
+			}
+			if !strings.Contains(out, "--cooldown-hours には 0 以上の整数（時間）を続けてください") {
+				t.Errorf("値の誤りを名指ししていません:\n%s", out)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "continuo")); err == nil {
+				t.Error("誤った値なのに実行ファイルを置いています")
+			}
+		})
 	}
 }

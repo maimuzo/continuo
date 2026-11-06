@@ -8,8 +8,10 @@
 # **やること。**
 #   1. OS と命令セットを見分ける（Windows なら WSL2 を案内して止まる）
 #   2. GitHub の release から、その組み合わせの実行ファイルを取る
+#      （**既定では公開から 168 時間経った版だけを入れる。**クールダウン。設計 3-36）
 #   3. 前提の道具が揃っているかを調べ、**足りないものは1つずつ聞いてから**入れる
 #   4. `~/.local/bin/continuo` へ置き、PATH の通し方を案内する
+#      （**クールダウンで選んだ版がいま入っている版より古ければ、既定では置き換えない**）
 #   5. **上げるときに破壊的変更があれば、入れたうえで名指しで知らせる**（止めない）
 #
 # **`herdr` と `claude` は入れない。**どちらも独自の配布経路と認証があり、
@@ -19,7 +21,10 @@
 #   --yes       すべての確認に「はい」と答える（依存も入れる）
 #   --no-deps   依存を1つも入れない（不足を並べるだけ）
 #   --dir DIR   置き先を変える（既定 ~/.local/bin）
-#   --version V 版を指定する（既定は最新の release）
+#   --version V 版を指定する（既定は、公開から 168 時間経った最新の正式版）
+#   --cooldown-hours H
+#               公開から H 時間経った版だけを入れる（既定 168 = 7日。0 で最新版）
+#   --force     選んだ版が、いま入っている版より古くても入れ替える
 #
 # POSIX sh で書く。**bash を前提にしない**（Linux の /bin/sh は dash のことが多い）。
 #
@@ -50,11 +55,24 @@ INSTALL_DIR="${CONTINUO_INSTALL_DIR:-$HOME/.local/bin}"
 ASSUME_YES=0
 # SKIP_DEPS が 1 なら、依存を1つも入れない。
 SKIP_DEPS=0
-# VERSION が空なら最新の release を使う。
+# VERSION が空なら、release の一覧からクールダウンを当てて選ぶ。
 VERSION=""
+# VERSION_GIVEN が 1 なら、`--version` で版を名指しされている（クールダウンを使わない）。
+VERSION_GIVEN=0
+
+# COOLDOWN_HOURS は、公開から何時間経った版だけを入れるかである（設計 3-36）。
+#
+# **環境変数からは読まない。**取得先と同じく、`curl … | VAR=… sh` を貼らせるだけで
+# 挙動が変わる入口を増やさない。外すのは利用者に見える形（引数）だけにする。
+DEFAULT_COOLDOWN_HOURS=168
+COOLDOWN_HOURS="$DEFAULT_COOLDOWN_HOURS"
+
+# FORCE が 1 なら、選んだ版がいま入っている版より古くても入れ替える。
+FORCE=0
 
 # BASE_URL は実行ファイルの取得先である。
-# API_URL は最新の版を引く先である。
+# API_URL は、`/releases/latest` で終わる問い合わせ先である。
+# **これ自体はもう引かない。**末尾の `/latest` を落として、release の一覧（RELEASES_URL）を組み立てるのに使う。
 #
 # **どちらも固定である。**環境変数では差し替えられない。
 # **`--base-url` を渡したときだけ差し替わり、そのときは大きな警告を出す。**
@@ -66,7 +84,10 @@ VERSION=""
 BASE_URL=""
 API_URL=""
 
-# RELEASES_URL は release の一覧を引く先である（破壊的変更の印を読むために使う）。
+# RELEASES_URL は release の一覧を引く先である。
+#
+# **版を指定しない実行では、入れる版をこの一覧から決める**（クールダウン。resolve_version）。
+# 破壊的変更の印も、同じ一覧から読む（collect_breaking）。
 #
 # **API_URL から組み立てる。**`--api-url` でテストの偽サーバへ向けたときも、
 # 同じ規則（末尾の `/latest` を落とす）で一覧に辿り着ける。set_urls が行う。
@@ -170,7 +191,32 @@ while [ $# -gt 0 ]; do
 					;;
 			esac
 			VERSION="$2"
+			VERSION_GIVEN=1
 			shift 2
+			;;
+		--cooldown-hours)
+			# **時間の整数だけを受ける。**小数や単位付きの値は受けない。
+			# 先頭の 0 を落としてから桁数を数える（`08` を sh の算術が8進数と読んで落ちるため）。
+			# **6桁（999999 時間）までに限る。**それより大きいと、シェルの数の範囲を越えうる。
+			[ $# -ge 2 ] || die "--cooldown-hours には時間を続けてください（例: --cooldown-hours 24）"
+			case "$2" in
+				"" | *[!0-9]*)
+					die "--cooldown-hours には 0 以上の整数（時間）を続けてください（例: --cooldown-hours 24）: $2"
+					;;
+			esac
+			ch_value="$(printf '%s' "$2" | sed 's/^0*//')"
+			[ -n "$ch_value" ] || ch_value=0
+			if [ "${#ch_value}" -gt 6 ]; then
+				die "--cooldown-hours には 0 以上の整数（時間）を続けてください（例: --cooldown-hours 24）: $2"
+			fi
+			COOLDOWN_HOURS="$ch_value"
+			shift 2
+			;;
+		--force)
+			# **選んだ版がいま入っている版より古くても入れ替える。**
+			# `--version` と一緒に付けたときは何もしない（名指しの版はもともと上書きする）。
+			FORCE=1
+			shift
 			;;
 		--repo)
 			# **fork した人のための入口である。**既定と違えば、下で警告して尋ねる。
@@ -216,8 +262,10 @@ continuo のネットワークインストーラー
 やること:
   1. OS と命令セットを見分ける（Windows なら WSL2 を案内して止まる）
   2. GitHub の release から、その組み合わせの実行ファイルを取る
+     （既定では、公開から 168 時間経った版だけを入れます）
   3. 前提の道具が揃っているかを調べ、足りないものは1つずつ聞いてから入れる
   4. ~/.local/bin/continuo へ置き、PATH の通し方を案内する
+     （選んだ版がいま入っている版より古ければ、既定では入れ替えません）
   5. 上げるときに破壊的変更があれば、入れたうえで知らせる（インストールは止めません）
 
 herdr と claude は入れません。どちらも独自の配布経路と認証があり、
@@ -227,7 +275,10 @@ herdr と claude は入れません。どちらも独自の配布経路と認証
   --yes, -y     すべての確認に「はい」と答える（依存も入れる）
   --no-deps     依存を1つも入れない（不足を並べるだけ）
   --dir DIR     置き先を変える（既定 ~/.local/bin）
-  --version V   版を指定する（既定は最新の release）
+  --version V   版を指定する（既定は、公開から 168 時間経った最新の正式版）
+  --cooldown-hours H
+                公開から H 時間経った版だけを入れる（既定 168 = 7日。0 で最新版）
+  --force       選んだ版が、いま入っている版より古くても入れ替える
   --insecure-no-checksum
                 チェックサムを照合できなくても続ける（既定では止まります）
   -h, --help    この案内を出す
@@ -236,7 +287,7 @@ herdr と claude は入れません。どちらも独自の配布経路と認証
 
 テスト用（ふだんは使いません）:
   --base-url U  実行ファイルの取得先を差し替える
-  --api-url U   版の問い合わせ先を差し替える
+  --api-url U   版の一覧の問い合わせ先を差し替える（末尾の /latest を落として使う）
                 どちらも HTTPS の強制が外れます。使うと警告が出ます。
 
 環境変数:
@@ -357,55 +408,350 @@ download() {
 	fi
 }
 
+# shquote は、貼らせる1行に置く値を、そのまま貼れる形にする。
+#
+# **英数字と `. _ / - +` だけなら、そのまま書く。**それ以外を含めば一重引用符で囲み、
+# 値の中の `'` は `'\''` に替える。**`~` は裸で書かない。**貼ったシェルが `$HOME` へ展開し、
+# 別の場所を指してしまう（sh と dash で実測）。
+#
+# $1: 値。
+shquote() {
+	case "$1" in
+		"" | *[!A-Za-z0-9._/+-]*)
+			printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+			;;
+		*)
+			printf '%s' "$1"
+			;;
+	esac
+}
+
+# install_line は、利用者に貼らせる1行を組み立てる。
+#
+# **表示どおりに貼った結果が、表示と同じになるようにする。**だから、いまの実行で効いている
+# 取得元・置き先・時間を足す。置き先は `--dir` で渡したか、環境変数 `CONTINUO_INSTALL_DIR` で
+# 渡したかを問わない（どちらも INSTALL_DIR に入る）。
+#
+# **URL は既定のリポジトリの install.sh のままにする。**fork の `main` の install.sh が、
+# 新しいオプションを知らないことがあるためである。fork は `--repo` で渡す。
+#
+# $1: 時間を足すか（`keep` なら、既定と違う `--cooldown-hours` を足す。`drop` なら足さない）。
+# $2 以降: 末尾に足すオプション（そのまま貼れる形で渡す）。
+install_line() {
+	il_keep="$1"
+	shift
+	il_line="curl -fsSL https://raw.githubusercontent.com/${DEFAULT_REPO}/main/install.sh | sh -s --"
+	if [ "$REPO" != "$DEFAULT_REPO" ]; then
+		il_line="$il_line --repo $(shquote "$REPO")"
+	fi
+	if [ "$INSTALL_DIR" != "$HOME/.local/bin" ]; then
+		il_line="$il_line --dir $(shquote "$INSTALL_DIR")"
+	fi
+	if [ "$il_keep" = "keep" ] && [ "$COOLDOWN_HOURS" != "$DEFAULT_COOLDOWN_HOURS" ]; then
+		il_line="$il_line --cooldown-hours $COOLDOWN_HOURS"
+	fi
+	for il_opt in "$@"; do
+		il_line="$il_line $il_opt"
+	done
+	printf '%s' "$il_line"
+}
+
+# cooldown_label は、「公開から 168 時間（7日）」の形の文言を返す。
+#
+# **日数の括弧は、時間が 24 の倍数のときだけ付ける。**30 時間を「1日」と書くと嘘になる。
+cooldown_label() {
+	if [ "$COOLDOWN_HOURS" -gt 0 ] && [ $((COOLDOWN_HOURS % 24)) -eq 0 ]; then
+		printf '公開から %s 時間（%s日）' "$COOLDOWN_HOURS" "$((COOLDOWN_HOURS / 24))"
+	else
+		printf '公開から %s 時間' "$COOLDOWN_HOURS"
+	fi
+}
+
+# AWK_VCMP は、版を比べる awk の関数である。**select_release と breaking_lines の両方の先頭に付ける。**
+#
+# **1つだけ置く。**下がるかどうかの判定と、破壊的変更を並べる範囲が、同じ規則で版を比べるためである。
+# 片方だけ直すと、2つが「どちらが新しいか」で食い違う。
+#
+# **`-` や `+` から後ろは落として比べる。**そのため `v2.98.0-rc1` と `v2.98.0` は同じ大きさになる
+# （設計 3-36。rc を出すことにするなら、先にここを直すこと）。
+AWK_VCMP='
+		# vpart は版の i 番目の数を返す。先頭の v と、- や + から後ろは落とす。
+		function vpart(v, i,   a, n) {
+			sub(/^[vV]/, "", v)
+			sub(/[-+].*$/, "", v)
+			n = split(v, a, "[.]")
+			if (i > n) { return 0 }
+			return a[i] + 0
+		}
+		# vcmp は2つの版を比べる。**桁ごとに数として比べる。**
+		# 文字列として比べると v0.10.0 が v0.2.0 より小さくなる。
+		function vcmp(x, y,   i, dx, dy) {
+			for (i = 1; i <= 3; i++) {
+				dx = vpart(x, i)
+				dy = vpart(y, i)
+				if (dx != dy) { return (dx < dy) ? -1 : 1 }
+			}
+			return 0
+		}
+'
+
+# select_release は、release の一覧から入れる版を選ぶ。
+#
+# 標準入力: GitHub API の release の一覧（JSON）。**引数では渡さない。**
+# いまの一覧は18件で 290,624 バイトあり、引数の長さの上限に当たりうる。
+# $1: いまの時刻（`date -u '+%Y-%m-%dT%H:%M:%SZ'` の形）。
+# $2: 公開から何時間経った版を入れるか（0 なら時刻で絞らない）。
+# $3: いま入っている版（vN.N.N の形でなければ空を渡す）。
+# 標準出力: 1行に1件、先頭の1文字で種類を分け、欄はタブで区切る。
+#   N <正式版の数>
+#   C <版> <公開の時刻> <公開から何時間>                  選んだ版
+#   S <版> <公開の時刻> <公開から何時間> <あと何時間>     見送った版（選んだ版より大きいもの。大きい順）
+#   E <版> <公開の時刻> <公開から何時間> <あと何時間>     入れてよい版が無いとき、いちばん早く入れられる版
+#   D cooldown|newer                                     選んだ版がいま入っている版より小さい（その理由）
+#   U                                                    見送った版に、いま入っている版より大きいものがある
+#
+# **JSON を厳密に解釈しない**（設計 3-36。POSIX sh に道具が無く、`jq` は前提にできない）。
+# 鍵は、引用符で囲んだ名前の直後に（空白を挟んでもよい）`:` が来るものだけを数える。
+# `"name": "draft"` の値を鍵と取り違えないためである。`"tag_name"` を拾ったら、そのあとに
+# 現れる `"draft"`・`"prerelease"`・`"published_at"` を、その release のものとする。
+# この4つは release の階層にだけ現れる（資産の欄は `created_at` と `updated_at` だけ）。
+#
+# **正式版**は、`draft` も `prerelease` も `false` で、公開の時刻が読めるものである。
+# 版の文字が `--version` と同じ規則（英数字と `. _ + -`）に外れるものは数えない（URL に入るため）。
+#
+# **選ぶのは、入れてよい正式版のうち版の数がいちばん大きいものである。**公開の新しさでは選ばない。
+# 古い系列へ修正版を出しても新しい系列を選び、下がるかどうかの比べと同じ規則に揃えるためである。
+# 版の比べ方は breaking_lines の `vcmp` と同じ（桁ごとに数として比べ、`-` と `+` から後ろは落とす）。
+#
+# **経過時間が負なら 0 とみなす。**手元の時計が遅れていても、0 で最新を入れられるようにする。
+select_release() {
+	awk -v now="$1" -v hours="$2" -v installed="$3" "$AWK_VCMP"'
+		# epoch は 2026-11-05T06:00:00Z の形を、1970-01-01 からの秒へ直す。
+		# 読めなければ -1 を返す。**mktime は POSIX に無いので、日付から通し日数を出す式で数える。**
+		function epoch(s,   y, m, d, hh, mm, ss, mp, doy, days) {
+			if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$/) { return -1 }
+			y = substr(s, 1, 4) + 0
+			m = substr(s, 6, 2) + 0
+			d = substr(s, 9, 2) + 0
+			hh = substr(s, 12, 2) + 0
+			mm = substr(s, 15, 2) + 0
+			ss = substr(s, 18, 2) + 0
+			if (m <= 2) { y = y - 1 }
+			mp = (m + 9) % 12
+			doy = int((153 * mp + 2) / 5) + d - 1
+			days = y * 365 + int(y / 4) - int(y / 100) + int(y / 400) + doy - 719468
+			return days * 86400 + hh * 3600 + mm * 60 + ss
+		}
+		# show は 2026-11-05T06:00:00Z を 2026-11-05 06:00 UTC の形にする。
+		function show(s) {
+			return substr(s, 1, 10) " " substr(s, 12, 5) " UTC"
+		}
+		function flush() {
+			if (tag != "" && draft == "false" && pre == "false" && tag !~ /[^A-Za-z0-9._+-]/) {
+				t = epoch(pub)
+				if (t >= 0) {
+					n++
+					rt[n] = tag
+					rp[n] = pub
+					rs[n] = t
+				}
+			}
+			tag = ""
+			draft = ""
+			pre = ""
+			pub = ""
+		}
+		BEGIN {
+			re = "\"(tag_name|draft|prerelease|published_at)\"[ \t\r\n]*:[ \t\r\n]*"
+			n = 0
+		}
+		# **1行ずつ読む。**応答を1つの文字列に溜めて切り出すと、件数に対して2乗で遅くなる
+		# （整形済みの100件で 2.5 秒かかった）。JSON の文字列は生の改行を含まないので、
+		# 鍵と値は同じ行に在る。release の欄は行をまたいで tag などに持ち越す。
+		{
+			rest = $0
+			while (match(rest, re)) {
+				key = substr(rest, RSTART + 1, RLENGTH)
+				sub(/".*$/, "", key)
+				rest = substr(rest, RSTART + RLENGTH)
+				if (substr(rest, 1, 1) == "\"") {
+					rest = substr(rest, 2)
+					q = index(rest, "\"")
+					if (q == 0) { break }
+					val = substr(rest, 1, q - 1)
+					rest = substr(rest, q + 1)
+				} else {
+					val = rest
+					sub(/[] \t\r\n,}].*$/, "", val)
+					rest = substr(rest, length(val) + 1)
+				}
+				if (key == "tag_name") {
+					flush()
+					tag = val
+				} else if (key == "draft") {
+					draft = val
+				} else if (key == "prerelease") {
+					pre = val
+				} else if (key == "published_at") {
+					pub = val
+				}
+			}
+		}
+		END {
+			flush()
+			printf "N\t%d\n", n
+			if (n == 0) { exit 0 }
+
+			nowt = epoch(now)
+			if (nowt < 0) { exit 2 }
+			need = hours * 3600
+
+			# 入れてよい版のうち、版の数がいちばん大きいものを選ぶ。
+			ci = 0
+			for (i = 1; i <= n; i++) {
+				el[i] = nowt - rs[i]
+				if (el[i] < 0) { el[i] = 0 }
+				ok[i] = (hours == 0 || el[i] >= need) ? 1 : 0
+				if (ok[i] && (ci == 0 || vcmp(rt[i], rt[ci]) > 0)) { ci = i }
+			}
+
+			if (ci == 0) {
+				# いちばん早く入れられる版（残り時間がいちばん短いもの）。
+				ei = 0
+				for (i = 1; i <= n; i++) {
+					if (ei == 0 || need - el[i] < need - el[ei]) { ei = i }
+				}
+				left = need - el[ei]
+				printf "E\t%s\t%s\t%d\t%d\n", rt[ei], show(rp[ei]), int(el[ei] / 3600), int((left + 3599) / 3600)
+				exit 0
+			}
+
+			printf "C\t%s\t%s\t%d\n", rt[ci], show(rp[ci]), int(el[ci] / 3600)
+
+			# 見送った版: 選んだ版より大きく、まだ時間が経っていないもの。大きい順に並べる。
+			m = 0
+			for (i = 1; i <= n; i++) {
+				if (!ok[i] && vcmp(rt[i], rt[ci]) > 0) {
+					m++
+					sk[m] = i
+				}
+			}
+			for (a = 2; a <= m; a++) {
+				x = sk[a]
+				for (b = a - 1; b >= 1 && vcmp(rt[sk[b]], rt[x]) < 0; b--) { sk[b + 1] = sk[b] }
+				sk[b + 1] = x
+			}
+			up = 0
+			cause = "newer"
+			for (a = 1; a <= m; a++) {
+				i = sk[a]
+				left = need - el[i]
+				printf "S\t%s\t%s\t%d\t%d\n", rt[i], show(rp[i]), int(el[i] / 3600), int((left + 3599) / 3600)
+				if (installed != "" && vcmp(rt[i], installed) >= 0) { cause = "cooldown" }
+				if (installed != "" && vcmp(rt[i], installed) > 0) { up = 1 }
+			}
+			if (installed != "" && vcmp(rt[ci], installed) < 0) {
+				printf "D\t%s\n", cause
+				if (up) { printf "U\n" }
+			}
+		}
+	'
+}
+
 # resolve_version は入れる版を決める。
 #
-# **`--version` があればそれを使う。**無ければ GitHub API で最新の release を引く。
-# **release が1つも無ければ、その旨を告げて止まる**（まだ配布していない状態である）。
+# **`--version` があればそれを使い、クールダウンを当てない。**版を名指しした人は、その版が欲しいと決めている。
+#
+# **無ければ release の一覧を1回引き、クールダウンを当てて選ぶ**（設計 3-36）。
+# 引いた一覧は LIST_BODY に残し、破壊的変更の印を読むときにも使う（未認証の 60回/時の上限を食わないように）。
+#
+# **版を指定しない実行では、一覧を引けなければ止まる。**一覧が版の決め手だからである
+# （以前の `/releases/latest` を引けないときも止まっていた。引く API が替わっただけである）。
+#
+# 選んだ版がいま入っている版より古いときは、`--force` が無ければ KEEP_INSTALLED を 1 にする。
+# 呼び出し元は、そのとき実行ファイルを置き換えない。
+LIST_BODY=""
+KEEP_INSTALLED=0
 resolve_version() {
-	if [ -n "$VERSION" ]; then
+	if [ "$VERSION_GIVEN" = "1" ]; then
+		say "クールダウン: --version で版を指定されたので、使いません。"
 		return 0
 	fi
 
-	# **「引けなかった」と「1つも無い」を分ける。**
+	# **「引けなかった」「リポジトリが無い」「1つも無い」を分ける。**
 	# GitHub の API は未認証だと 60回/時・IP 単位で、NAT の内側では普通に枯れる。
-	# 区別しないと、**release が実在するのに「まだ配布していません」と断言してしまう**。
 	#
-	# **404 だけが「1つも無い」である。**403 と 429 はレートリミット、
+	# **一覧の API は、release が1つも無くても 200 と `[]` を返す。**だから 404 は
+	# 「リポジトリが見つからない」（`--repo` の打ち間違いなど）である。403 と 429 はレートリミット、
 	# それ以外は繋がらなかったということである。
 	http_code=""
 	body=""
 	if have curl; then
 		# `-w` で状態コードを最終行に足し、あとで切り離す。
 		if [ "$INSECURE_SOURCE" = "1" ]; then
-			body="$(curl --max-time 60 -sSL -w '\n%{http_code}' "$API_URL" 2> /dev/null || true)"
+			body="$(curl --max-time 60 -sSL -w '\n%{http_code}' "$RELEASES_URL" 2> /dev/null || true)"
 		else
 			body="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
-				--max-time 60 -sSL -w '\n%{http_code}' "$API_URL" 2> /dev/null || true)"
+				--max-time 60 -sSL -w '\n%{http_code}' "$RELEASES_URL" 2> /dev/null || true)"
 		fi
 		http_code="$(printf '%s' "$body" | tail -1)"
 		body="$(printf '%s' "$body" | sed '$d')"
 	else
-		# wget では状態コードを素直に取れないので、区別しない。
-		body="$(fetch "$API_URL" 2> /dev/null || true)"
-		[ -n "$body" ] && http_code="200" || http_code="404"
+		# wget では状態コードを素直に取れない。**空の本文は「問い合わせられなかった」とする。**
+		# 1つも無いリポジトリは `[]` を返すので、空にはならない。
+		body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
+		[ -n "$body" ] && http_code="200" || http_code=""
 	fi
 
-	if [ "$http_code" != "200" ] && [ "$http_code" != "404" ]; then
+	if [ "$http_code" = "404" ]; then
 		say ""
-		say "配布された版を問い合わせられませんでした: $API_URL"
+		say "リポジトリが見つかりません: $RELEASES_URL"
+		say ""
+		if [ "$REPO" != "$DEFAULT_REPO" ]; then
+			say "--repo の値を確かめてください。"
+			say ""
+		fi
+		die "リポジトリが見つかりません（${REPO}）"
+	fi
+
+	if [ "$http_code" != "200" ]; then
+		say ""
+		say "配布された版を問い合わせられませんでした: $RELEASES_URL"
 		say ""
 		say "ネットワークに繋がらないか、GitHub の API の呼び出し回数の上限に達しています"
 		say "（未認証では1時間あたり60回、接続元のアドレスごとに数えられます）。"
 		say ""
 		say "時間をおいて試し直すか、版を指定してください。"
 		say ""
-		say "    curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh -s -- --version v0.1.0"
+		# **例の版を書かない。**実在の版を書くと、貼った人がそのまま古い版へ下がる
+		# （`--version` の実行は下げない判定を当てない）。版は一覧の画面で選んでもらう。
+		say "    $(install_line drop --version "$(shquote '<版>')")"
 		say ""
-		die "配布された版を問い合わせられません（応答: ${http_code}）"
+		say "配布している版は https://github.com/${REPO}/releases で確かめられます。"
+		say ""
+		die "配布された版を問い合わせられません（応答: ${http_code:-なし}）"
+	fi
+	LIST_BODY="$body"
+
+	rv_now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" || die "いまの時刻を読めません（date -u が失敗しました）"
+	rv_installed=""
+	if is_release_version "$INSTALLED_VERSION"; then
+		rv_installed="$INSTALLED_VERSION"
+	fi
+	# **選ぶ処理が落ちたら、理由を出して止める。**`set -eu` の下で代入が落ちると、
+	# 何も出さずに終わってしまう（collect_breaking の注記と同じ落とし穴）。
+	if ! rv_out="$(printf '%s\n' "$LIST_BODY" | select_release "$rv_now" "$COOLDOWN_HOURS" "$rv_installed")"; then
+		say ""
+		say "release の一覧から版を選べませんでした（awk が失敗しました）。"
+		say "版を指定すれば、一覧を読まずに入れられます。"
+		say ""
+		say "    $(install_line drop --version "$(shquote '<版>')")"
+		say ""
+		die "release の一覧を読めません"
 	fi
 
-	VERSION="$(printf '%s' "$body" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-	if [ -z "$VERSION" ]; then
+	rv_count="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "N" {print $2}')"
+	if [ "${rv_count:-0}" = "0" ]; then
 		say ""
 		say "$REPO には release がまだ1つもありません。"
 		say ""
@@ -422,6 +768,86 @@ resolve_version() {
 		say "    go build -o \"$INSTALL_DIR/continuo\" ./cmd/continuo"
 		say ""
 		exit 1
+	fi
+
+	rv_label="$(cooldown_label)"
+
+	# 入れてよい版が1つも無い（公開から時間が経っていない版しか無い）。
+	rv_e="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "E" {print $2 "\t" $3 "\t" $4 "\t" $5}')"
+	if [ -n "$rv_e" ]; then
+		IFS='	' read -r e_tag e_pub e_el e_left << EOF
+$rv_e
+EOF
+		say "クールダウン: ${rv_label}経った版がありません。"
+		say "  いちばん早く入れられる版: ${e_tag}（${e_pub} 公開。公開から ${e_el} 時間。あと ${e_left} 時間で入れられます）"
+		say "  待たずに入れるときは、クールダウンを 0 にします。"
+		say "    $(install_line drop --cooldown-hours 0)"
+		die "公開から ${COOLDOWN_HOURS} 時間経った版が無いので、入れませんでした"
+	fi
+
+	rv_c="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "C" {print $2 "\t" $3 "\t" $4}')"
+	IFS='	' read -r c_tag c_pub c_el << EOF
+$rv_c
+EOF
+	VERSION="$c_tag"
+	rv_skipped="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "S"')"
+	rv_down="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "D" {print $2}')"
+	rv_up="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "U" {print "1"}')"
+
+	if [ "$COOLDOWN_HOURS" = "0" ]; then
+		say "クールダウン: 0 時間を指定されたので、公開からの時間で絞りません。"
+	else
+		say "クールダウン: ${rv_label}経った版だけを入れます。"
+	fi
+
+	# 見送った版を、大きい順に5行まで並べる。残りは1行にまとめる。
+	rv_n=0
+	if [ -n "$rv_skipped" ]; then
+		while IFS='	' read -r s_kind s_tag s_pub s_el s_left; do
+			[ "$s_kind" = "S" ] || continue
+			rv_n=$((rv_n + 1))
+			if [ "$rv_n" -le 5 ]; then
+				say "  見送った版: ${s_tag}（${s_pub} 公開。公開から ${s_el} 時間。あと ${s_left} 時間で入れられます）"
+			fi
+		done << EOF
+$rv_skipped
+EOF
+		if [ "$rv_n" -gt 5 ]; then
+			say "  ほか $((rv_n - 5)) 件"
+		fi
+	fi
+
+	if [ -n "$rv_down" ] && [ "$FORCE" != "1" ]; then
+		KEEP_INSTALLED=1
+		say "  選んだ版:   ${c_tag}（${c_pub} 公開。公開から ${c_el} 時間）"
+		if [ "$rv_down" = "cooldown" ]; then
+			say "  いま入っているのは ${INSTALLED_VERSION} です。クールダウンを当てると ${INSTALLED_VERSION} → ${c_tag} へ版が下がるので、入れ替えません。"
+		else
+			say "  いま入っているのは ${INSTALLED_VERSION} です。配布している正式版のどれより新しい版です（取り下げられた版か prerelease の可能性があります）。入れ替えません。"
+		fi
+		if [ -n "$rv_up" ]; then
+			say "  見送った版をすぐに入れるときは、クールダウンを 0 にします。"
+			say "    $(install_line drop --cooldown-hours 0)"
+		fi
+		say "  ${c_tag} へ下げるときは、--force を付けます。"
+		say "    $(install_line keep --force)"
+		if [ "$COOLDOWN_HOURS" != "0" ]; then
+			say "  時間を変えるときは --cooldown-hours <時間> を付けます（例: --cooldown-hours 24）。"
+		fi
+		return 0
+	fi
+
+	say "  入れる版:   ${c_tag}（${c_pub} 公開。公開から ${c_el} 時間）"
+	if [ -n "$rv_down" ]; then
+		# **ここで終えない。**下げて入れるときも、見送った版へ上がる道と時間の変え方を続けて出す。
+		say "  いま入っているのは ${INSTALLED_VERSION} です。--force が付いているので、${INSTALLED_VERSION} → ${c_tag} へ版を下げます。"
+	fi
+	if [ "$rv_n" -gt 0 ]; then
+		say "  見送った版をすぐに入れるときは、クールダウンを 0 にします。"
+		say "    $(install_line drop --cooldown-hours 0)"
+		say "  時間を変えるときは --cooldown-hours <時間> を付けます（例: --cooldown-hours 24）。"
+	elif [ "$COOLDOWN_HOURS" != "0" ]; then
+		say "  時間を変えるときは --cooldown-hours <時間> を付けます（例: --cooldown-hours 24）。0 にすると、公開直後の版も入れます。"
 	fi
 }
 
@@ -641,25 +1067,7 @@ is_release_version() {
 # **本文は JSON の文字列1つに収まっている**ので、印の始まりと終わりは同じ行に来る。
 # 応答が整形されていても1行にまとめられていても、同じ読み方で拾える。
 breaking_lines() {
-	awk -v from="$1" -v to="$2" '
-		# vpart は版の i 番目の数を返す。先頭の v と、- や + から後ろは落とす。
-		function vpart(v, i,   a, n) {
-			sub(/^[vV]/, "", v)
-			sub(/[-+].*$/, "", v)
-			n = split(v, a, "[.]")
-			if (i > n) { return 0 }
-			return a[i] + 0
-		}
-		# vcmp は2つの版を比べる。**桁ごとに数として比べる。**
-		# 文字列として比べると v0.10.0 が v0.2.0 より小さくなる。
-		function vcmp(x, y,   i, dx, dy) {
-			for (i = 1; i <= 3; i++) {
-				dx = vpart(x, i)
-				dy = vpart(y, i)
-				if (dx != dy) { return (dx < dy) ? -1 : 1 }
-			}
-			return 0
-		}
+	awk -v from="$1" -v to="$2" "$AWK_VCMP"'
 		# unesc は JSON の文字列の中の書き換えを戻す。
 		#
 		# **戻すのは改行・タブ・引用符だけである。**JSON では制御文字が
@@ -751,7 +1159,13 @@ collect_breaking() {
 	is_release_version "$INSTALLED_VERSION" || return 0
 	is_release_version "$VERSION" || return 0
 
-	cb_body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
+	# **版を指定しない実行では、版を選ぶときに引いた一覧を使う。**もう1回は引かない。
+	# **`--version` の実行では、ここで初めて一覧を引く。引けなくても導入は止めない**（設計 3-36）。
+	if [ -n "$LIST_BODY" ]; then
+		cb_body="$LIST_BODY"
+	else
+		cb_body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
+	fi
 	[ -n "$cb_body" ] || return 0
 
 	# **awk が落ちても導入は止めない。**このスクリプトは `set -eu` なので、`|| true` が無いと
@@ -780,6 +1194,19 @@ report_breaking() {
 	printf '%s\n' "$BREAKING_NOTES"
 	say ""
 	say " 詳しくは https://github.com/${REPO}/releases を見てください。"
+	say "============================================================"
+	say ""
+}
+
+# report_kept は、入れ替えなかったことを最後にもう1度知らせる。
+#
+# **いちばん最後に出す。**「クールダウン:」の数行で言っても、そのあとの道具の確かめと
+# 案内で流れて読まれない（破壊的変更の警告と同じ理由である）。
+report_kept() {
+	[ "$KEEP_INSTALLED" = "1" ] || return 0
+	say "============================================================"
+	say " 実行ファイルは入れ替えていません。いまは ${INSTALLED_VERSION} のままです。"
+	say " ${VERSION} へ下げるときは --force を付けてください（上の案内の1行）。"
 	say "============================================================"
 	say ""
 }
@@ -919,7 +1346,7 @@ main() {
 		say " 取得先が既定ではありません。公式の配布物を取りに行きません。"
 		say ""
 		say "   実行ファイル: $BASE_URL"
-		say "   版の問い合わせ: $API_URL"
+		say "   版の一覧の問い合わせ: $RELEASES_URL"
 		say ""
 		say " HTTPS の強制も外れています。テスト以外で使わないでください。"
 		say "============================================================"
@@ -941,11 +1368,17 @@ main() {
 	# 「まだ配布していません」と、事実と違う案内が出ていた）。
 	have curl || have wget || die "curl も wget もありません。どちらかを入れてください"
 
-	resolve_version
 	# **置き換える前に、いま入っているものへ版を訊く。**あとでは分からない。
+	# **版を選ぶより前に訊く。**クールダウンで選んだ版がいま入っている版より古くなるかを、
+	# 「クールダウン:」の数行の中で言うためである。
 	detect_installed_version
-	collect_breaking
-	install_binary
+	resolve_version
+	# **選んだ版がいま入っている版より古く、`--force` が無ければ、置き換えない。**
+	# いま動いている新しい実行ファイルを残すだけなので、何も壊れない（設計 3-36）。
+	if [ "$KEEP_INSTALLED" != "1" ]; then
+		collect_breaking
+		install_binary
+	fi
 
 	check_deps
 
@@ -979,6 +1412,7 @@ main() {
 	# **破壊的変更の警告は、いちばん最後に出す。**
 	# 上のほうへ出すと、そのあとの案内で流れて読まれない。
 	report_breaking
+	report_kept
 }
 
 main
