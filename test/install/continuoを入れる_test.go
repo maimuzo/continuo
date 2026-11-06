@@ -261,16 +261,19 @@ func Test_continuoを入れる_P001_版を名乗らないものからは警告�
 // **警告は付随的なものである。**release の一覧を引けないことで導入を止めてはならない
 // （設計 3-36「破壊的変更を集めるときの決めごと」の「何も言わない場合」）。
 //
-// 目的: 一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
-// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧を配らない偽サーバ（/api は 404 を返す）。
+// **この決めごとが残るのは `--version` の実行だけである。**版を指定しない実行では、
+// 一覧が入れる版の決め手なので、引けなければ止まる（クールダウン。設計 3-36）。
+//
+// 目的: `--version` の実行で一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧に 404 を返す偽サーバ（FailList）。
 // 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
 func Test_continuoを入れる_P001_一覧を引けなくても入れるのは止めない(t *testing.T) {
-	// **SetReleases を呼ばない。**releases が空なので /api は 404 を返す。
 	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.FailList()
 	dir := t.TempDir()
 	placeInstalled(t, dir, "v0.2.0")
 
-	code, out := runInstaller(t, fr, dir, "--no-deps")
+	code, out := runInstaller(t, fr, dir, "--no-deps", "--version", "v0.10.0")
 	if code != 0 {
 		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
 	}

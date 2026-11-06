@@ -27,6 +27,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // scriptPath は install.sh の絶対パスを返す。
@@ -136,8 +137,14 @@ type fakeRelease struct {
 	// **これを持たないと、どの版を要求しても同じ書庫を返してしまう。**
 	// 「指定した版が無い」を試せなくなる（実際、最初の版では試せていなかった）。
 	available map[string]bool
-	// releases は release の一覧として返す JSON である。空なら 404 を返す。**mu が守る。**
+	// releases は release の一覧として返す JSON である。**mu が守る。**
+	//
+	// **空なら、`Tag` を公開から 200 時間前の正式版1件だけ並べた一覧を返す。**
+	// install.sh は版を指定しない実行で、この一覧から入れる版を選ぶ（クールダウン。設計 3-36）。
+	// 200 時間は既定のクールダウン（168 時間）から十分に離してある。
 	releases []byte
+	// listFail が真なら、一覧に 404 を返す。**mu が守る。**一覧を引けない状況を作る。
+	listFail bool
 }
 
 // releaseNote は、偽の release サーバが返す release 1件である。
@@ -146,6 +153,16 @@ type releaseNote struct {
 	Tag string
 	// Breaking は破壊的変更の説明である。空なら本文に印を置かない。
 	Breaking []string
+	// Age は公開から経った時間である。0 なら 200 時間（既定のクールダウンを越える）とする。
+	//
+	// **公開の時刻は、テストを走らせた今からの差で作る。**固定の時刻を書くと、
+	// 日が経つにつれて既定の 168 時間の境界を越え、テストが黙って意味を失う。
+	// 境界からは1時間以上離して使う（秒の進みで揺れないように）。
+	Age time.Duration
+	// Prerelease が真なら、prerelease として返す。
+	Prerelease bool
+	// Draft が真なら、draft として返す（公開の時刻は null になる）。
+	Draft bool
 }
 
 // releaseJSONEntry は、応答の中の release 1件である。
@@ -154,11 +171,22 @@ type releaseNote struct {
 // **install.sh はその順番を頼りに、印がどの版のものかを決めている**
 // （api.github.com の応答で、どの release でも tag_name の行が body の行より前に来ることを確かめた）。
 // map で作ると鍵の名前の順に並び替えられ、**本物と違う並びの応答を検査することになる。**
+//
+// **欄は本物と同じ順に並べる**（`tag_name`→`name`→`draft`→`prerelease`→`published_at`→`body`。
+// 2026-11-06 に api.github.com の応答で確かめた並びから、install.sh が読む欄だけを残したもの）。
+// install.sh は `tag_name` を拾ったあとに現れる `draft`・`prerelease`・`published_at` を、
+// その release のものとして読む。
 type releaseJSONEntry struct {
 	// TagName はその release の版である。
 	TagName string `json:"tag_name"`
 	// Name は release の題名である。
 	Name string `json:"name"`
+	// Draft は下書きかどうかである。
+	Draft bool `json:"draft"`
+	// Prerelease は prerelease かどうかである。
+	Prerelease bool `json:"prerelease"`
+	// PublishedAt は公開の時刻である（UTC、秒まで）。draft では null になる。
+	PublishedAt *string `json:"published_at"`
 	// Body は release の本文である。破壊的変更の印はここに入る。
 	Body string `json:"body"`
 }
@@ -177,6 +205,21 @@ type releaseJSONEntry struct {
 // 戻り値: 一覧の JSON。
 func releasesJSON(t *testing.T, notes []releaseNote) []byte {
 	t.Helper()
+	b, err := buildReleasesJSON(notes)
+	if err != nil {
+		t.Fatalf("偽の release の一覧を作れません: %v", err)
+	}
+	return b
+}
+
+// buildReleasesJSON は releasesJSON の本体である。
+//
+// **サーバの handler からも呼ぶので、testing.T を受け取らない。**
+//
+// notes: 並べる release（新しい版から順に）。
+// 戻り値: 一覧の JSON と、作れなかったときの誤り。
+func buildReleasesJSON(notes []releaseNote) ([]byte, error) {
+	now := time.Now().UTC()
 	list := make([]releaseJSONEntry, 0, len(notes))
 	for _, n := range notes {
 		body := "## 直したこと\r\n\r\n- いくつか直しました\r\n"
@@ -187,16 +230,32 @@ func releasesJSON(t *testing.T, notes []releaseNote) []byte {
 			}
 			body += "<!-- breaking:end -->\r\n"
 		}
-		list = append(list, releaseJSONEntry{TagName: n.Tag, Name: n.Tag, Body: body})
+		age := n.Age
+		if age == 0 {
+			age = 200 * time.Hour
+		}
+		var published *string
+		if !n.Draft {
+			s := now.Add(-age).Format("2006-01-02T15:04:05Z")
+			published = &s
+		}
+		list = append(list, releaseJSONEntry{
+			TagName:     n.Tag,
+			Name:        n.Tag,
+			Draft:       n.Draft,
+			Prerelease:  n.Prerelease,
+			PublishedAt: published,
+			Body:        body,
+		})
 	}
 	var buf strings.Builder
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(list); err != nil {
-		t.Fatalf("偽の release の一覧を作れません: %v", err)
+		return nil, err
 	}
-	return []byte(buf.String())
+	return []byte(buf.String()), nil
 }
 
 // SetReleases は release の一覧を差し替える。
@@ -210,10 +269,32 @@ func (fr *fakeRelease) SetReleases(body []byte) {
 	fr.releases = body
 }
 
+// FailList は、一覧に 404 を返すようにする。
+//
+// **一覧を引けない状況を作る。**版を指定しない実行は止まり、`--version` の実行は止まらない
+// （設計 3-36）。
+func (fr *fakeRelease) FailList() {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.listFail = true
+}
+
 // releasesBody は、いま配っている一覧を返す。
+//
+// 戻り値: 一覧の JSON。nil なら 404 を返す。
 func (fr *fakeRelease) releasesBody() []byte {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
+	if fr.listFail {
+		return nil
+	}
+	if len(fr.releases) == 0 {
+		b, err := buildReleasesJSON([]releaseNote{{Tag: fr.Tag}})
+		if err != nil {
+			return nil
+		}
+		return b
+	}
 	return fr.releases
 }
 
@@ -285,10 +366,9 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	}
 
 	mux := http.NewServeMux()
-	// 最新の版を返す（install.sh は tag_name だけを読む）。
-	mux.HandleFunc("/api/latest", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"tag_name": %q, "name": "%s"}`, fr.Tag, fr.Tag)
-	})
+	// **`/api/latest` は置かない。**install.sh はもう `/releases/latest` を引かず、
+	// 一覧から版を選ぶ（クールダウン。設計 3-36）。置くと、それに頼る実装を見逃す。
+	//
 	// release の一覧を返す。**install.sh は `/latest` を落とした URL を引く。**
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		body := fr.releasesBody()
