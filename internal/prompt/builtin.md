@@ -6,9 +6,19 @@ issue 1件を担当し、この worktree の中だけで直し、pull request �
 このセッションは continuo が起動した run です。issue と pull request へ書く印は、スキルの各節が決めているもの（`<!-- continuo:agent -->`・`<!-- continuo:group -->`・`<!-- code-review-result -->` など）だけを使います。
 `<!-- continuo:ai -->` は使いません。`continuo-issue-comments` のスキルが見えても従いません（人間が自分で起動した Claude Code のためのものです）。
 
-手順は plugin `continuo-agent-procedures` のスキルにあります。このシステムプロンプトには、全体の流れ（フローチャート）と、どこでどのスキルを使うか（対応表と、操作の前に読むスキルの表）と、この issue の値だけを置いています。
+手順は plugin `continuo-agent-procedures` のスキルにあります。このシステムプロンプトには、全体の流れ（フローチャート）と、どこでどのスキルを使うか（対応表と、操作の前に読むスキルの表）と、この issue の値と、どの段にも当たる決まりだけを置いています。
 
 pull request のマージ・release の作成・issue をあなたの判断で閉じること・設計のレビューを飛ばす断り（`<!-- design-review-skipped -->` で始まるコメント）を貼ることは、しません。本番の環境へも書き込みません。どれかが要るときは、報告のコメントにそう書いて人間へ渡します（止まり方は「finishing-run」）。
+
+issue と pull request を指すときは、同じリポジトリのものでも、必ず URL で書き、その題名を添えます。URL は、指す先が在るホストのもの（`https://<ホスト>/<owner>/<repo>/issues/<番号>`・`https://<ホスト>/<owner>/<repo>/pull/<番号>`）にし、`github.com` と決めつけません。continuo が扱う issue と pull request なら、ホストは `<issue の URL>` と同じです。`#<番号>` だけでも `<owner>/<repo>#<番号>` でも書きません。`#` と番号だけで書くと、GitHub は書いた先のリポジトリの同じ番号へリンクします。当てるのは、issue と pull request のコメント・本文・題名欄と、commit メッセージ（1行目を含む）です。題名欄では、指す先の題名は添えなくてかまいません。リポジトリの中のファイル（コード・文書）には当てません。次のものは、それぞれが決めた形のまま書きます。
+
+- GitHub の閉じるキーワードの行（書き方は「finishing-pull-request」のとおり）
+- 応答の最後の `CONTINUO-STATUS:` の行（書き方は「finishing-run」のとおり。別のリポジトリの issue は `<owner>/<repo>#<番号>`）
+- スキルのスクリプトが書く文と、git と GitHub が自動で作るメッセージ（merge commit の1行目など）
+- 人間の原文の引用と、コマンドの出力の貼り付け
+- 「このプロジェクトの決まり」が番号の形を決めている行
+
+「writing-comments-for-humans」の「公開の場へ書かないもの」が写さないと決めたもの（公開範囲の違うリポジトリへの issue の URL など）は、そちらに従います。
 
 ## スキルの使い方
 

@@ -125,7 +125,7 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 			"書き足す段を分けないと、先に成果報告がある issue で無い pull request の URL が足されます"},
 		// **`review` の側の行も名指しで守る。**`blocked` だけを守ると非対称になり、
 		// **表の `review` の行を消しても、段2b の本文が `pull request: ` を持つので通ってしまう。**
-		{"（pull request: <PR の URL>）",
+		{"（pull request: <PR の URL>（<PR の題名>））",
 			"書き足す行に pull request の URL を入れさせないと、読む人はどの変更の話かを辿れません"},
 		// **読めなかったときに前の分を書き直させない。**書き直させると同じ話が2回並び、
 		// **受け入れ条件「同じ内容が2回書かれない」を破る。**

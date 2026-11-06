@@ -4192,7 +4192,7 @@ CONTINUO-STATUS: #47 blocked         issue ごとに違う結果を書ける
 
 **別のリポジトリの issue が含まれている場合は、直さずに次の行を書いてください。**
 
-    CONTINUO-STATUS: #99 working     （別リポジトリなので、この worktree では直せない）
+    CONTINUO-STATUS: <owner>/<repo>#99 working     （別リポジトリなので、この worktree では直せない。リポジトリ名を付けないと、同じリポジトリの99番を指す）
 ```
 
 #### いつ作るか
@@ -14588,7 +14588,7 @@ continuo とエージェントの pane が別の `TZ` で動いている構成�
 
 | 何 | 置き場所 |
 | --- | --- |
-| 概要の冒頭2文・run の宣言・`<!-- continuo:ai -->` を使わず `continuo-issue-comments` のスキルに従わないこと・「手順は plugin `continuo-agent-procedures` のスキルにあります」・どの時機にも効く「しないこと」（pull request のマージ・release の作成・issue を自分の判断で閉じること・設計のレビューを飛ばす断りを貼ること・本番の環境への書き込み。要るときは人間へ渡す） | システムプロンプト |
+| 概要の冒頭2文・run の宣言・`<!-- continuo:ai -->` を使わず `continuo-issue-comments` のスキルに従わないこと・「手順は plugin `continuo-agent-procedures` のスキルにあります」・どの時機にも効く「しないこと」（pull request のマージ・release の作成・issue を自分の判断で閉じること・設計のレビューを飛ばす断りを貼ること・本番の環境への書き込み。要るときは人間へ渡す）・issue と pull request を URL で指す決まり（5-3zb） | システムプロンプト |
 | スキルの使い方の順番・操作の前に読むスキルの表・目的・フローチャート・対応表・この issue の値（issue の URL・リポジトリ・番号・識別子・進捗の間隔・マージンのファイル・リンクされた branch・plugin のディレクトリ） | システムプロンプト |
 | `WORKFLOW.md` の本文 | 両方（決まりとして compaction のあとも要り、判定役にも読ませる） |
 | 着手の指示・頼む作業の範囲・「会話に前の版の指示書が残っていても、システムプロンプトとスキルに従う」・何回目の試行か | 最初のプロンプト |
@@ -14769,6 +14769,39 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 | 2つ目を別の名前の branch で出す（前の決まり） | **採らない。**次の run はいまの branch 名で PR を探すので見つけられず、3つ目を作る |
 
 **この節の文面を直すときは、スキル writing-comments-for-humans・implementing-and-pushing・finishing-run・finishing-pull-request・starting-run・reporting-progress・trusting-instructions・writing-plan・posting-review-verdict と plugin `continuo-issue-comments` も同時に直す。**スクリプトの条件は [test/internal/prompt/link_branch_test.go](../../test/internal/prompt/link_branch_test.go) が偽の gh と git で見張る。
+
+### 5-3zb. issue と pull request を URL で指させる
+
+**言いたいこと。**issue #330 の人間の指示（「必ずissueやPRを指す時はURLを書かせるルールを作りたい」「これは汎用的なルールなので、システムプロンプトとして使われるbuildin.mdに含めていいと思う」、コメント 6678661139 の「commit メッセージにも当てるか」→「当てて」、「人間が自分で起動する Claude Code 向けの plugin にも足すか」→「足して」）を、システムプロンプトの「概要」と、スキル writing-comments-for-humans と、plugin `continuo-issue-comments` へ書いた。
+
+**なぜ要るか。**GitHub は本文の `#100` を、その本文が在るリポジトリの100番へ自動でリンクする。複数のリポジトリにまたがる作業で別のリポジトリの #100 を指すつもりで書くと、無関係な100番を指し、人間は違うものを開いてレビューする。URL なら、どこへ書いてもその1件を指す。
+
+**採る形。**
+
+| 何 | 決めたこと |
+| --- | --- |
+| **決まり** | issue と pull request は、同じリポジトリのものでも必ず URL で書き、題名を添える。`#<番号>` も `<owner>/<repo>#<番号>` も使わない |
+| **ホスト** | 指す先が在るホストの URL。`github.com` と決めつけない（GitHub Enterprise。3-86）。continuo が扱う issue と pull request なら `<issue の URL>` と同じ |
+| **当てる範囲** | issue と pull request のコメント・本文・題名欄と、commit メッセージ（1行目を含む）。題名欄では指す先の題名を省いてよい。リポジトリの中のファイル（コード・文書）には当てない |
+| **例外** | GitHub の閉じるキーワードの行（形は finishing-pull-request）・`CONTINUO-STATUS:` の行（形は 3-26。Go の `targetPattern` が `#<番号>` と `<owner>/<repo>#<番号>` だけを読む）・スクリプトが書く文と git と GitHub が自動で作るメッセージ・人間の原文の引用とコマンドの出力の貼り付け・「このプロジェクトの決まり」が番号の形を決めている行。「公開の場へ書かないもの」が写さないと決めたものは、そちらに従う |
+| **置き場所** | システムプロンプトの「概要」と、スキル writing-comments-for-humans の節「issue と pull request は URL で指す」の2か所に同じ中身で置く。テストが2か所に同じ例外があることを確かめる |
+| **plugin `continuo-issue-comments`** | section 3（continuo の印があるリポジトリだけ）の4項目の後ろに段落を置く。section 2 に「commit メッセージには印を付けない」を足す。description に commit メッセージを書く場面を足す |
+| **見本** | 番号だけの見本（writing-comments-for-humans の「pull request #<番号> をマージする」・finishing-run の「#45 に書きました」・別リポジトリを `#99` で指す表明）を、URL と題名の形と `<owner>/<repo>#99` へ直した。3-26 の見本も直した |
+
+**2か所に置く理由。**システムプロンプトは compaction のあとも残る（5-3z）ので、決まりの本体はそこに要る。一方、このリポジトリで人間と直接やりとりする AI は、CLAUDE.md に従ってスキルを読み、continuo のシステムプロンプトを持たない。スキルだけに置くと continuo の run で読み落とし、システムプロンプトだけに置くと人間と直接やりとりする AI に例外が届かない。
+
+**比較した案と、採らなかった理由。**
+
+| 案 | 採否 |
+| --- | --- |
+| `Closes` と `CONTINUO-STATUS:` の行も URL にする | **採らない。**`CONTINUO-STATUS:` の対象は Go の `targetPattern` が読む約束で、URL にすると動いている continuo が読めない。`Closes` の形は finishing-pull-request が決めており、`closingIssuesReferences` と CI の `design-review-result` が頼っている |
+| 書いたコメントを機械で検査して `#<番号>` を弾く | **採らない。**引用・閉じるキーワード・コードを見分けられず、正しいコメントまで止める（5-3r の「機械で検査するか」と同じ理由） |
+| plugin の section 2（どのリポジトリにも当たる）へ足す | **採らない。**人間が「足して」と答えたのは section 3 へ足す案だった。issue #321 でも、この plugin の決まりを continuo の印があるリポジトリに絞った |
+| URL のホストを `<issue の URL>` に固定する | **採らない。**別のホストに在る issue（GitHub Enterprise から github.com の上流を指すなど）を書き換えさせる |
+
+**限界。**plugin の段落は section 3 の条件（continuo の印があるリポジトリ）の中にあるので、commit の前にコメントを読んでいないとモデルが当てるかを決められないことがある。plugin の段落は「公開の場へ書かないもの」に当たる例外を持たない（plugin にその決まりが無い）。
+
+**この節の文面を直すときは、`internal/prompt/builtin.md` の「概要」・スキル writing-comments-for-humans の「issue と pull request は URL で指す」・plugin `continuo-issue-comments` の section 3 も同時に直す。**[test/internal/prompt/url_reference_test.go](../../test/internal/prompt/url_reference_test.go) が2か所の例外と、スキルの見本に番号だけの参照が無いことを見張る。
 
 ### 5-4. 2回目以降のプロンプト
 
