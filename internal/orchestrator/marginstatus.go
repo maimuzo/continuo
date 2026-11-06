@@ -208,6 +208,7 @@ const marginStatusPerm = 0o600
 // usable: 判定に使った使える値。
 // 戻り値: 人間へ見せる理由。
 func (o *Orchestrator) marginCutBlockedReason(usable *ratelimit.Snapshot) string {
+	periods := o.marginPeriods(usable)
 	return fmt.Sprintf(
 		"レートリミットのマージンを切ったので、Claude Code に作業を切り上げさせ、Status を戻しました。"+
 			"**担当者はこの機械のままです。**%s"+
@@ -217,19 +218,33 @@ func (o *Orchestrator) marginCutBlockedReason(usable *ratelimit.Snapshot) string
 			"`tracker.provider.handoff.weekly_margin_percent` で変えられます"+
 			"（1週間のマージンは、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` に"+
 			"リセットまでの残り日数ごとの値を書くと、その日はそちらが使われます）。",
-		describeMarginPeriods(o.marginPeriods(usable)), o.daysTableReturnNote())
+		describeMarginPeriods(periods), o.daysTableReturnNote(periods))
 }
 
 // daysTableReturnNote は、`Blocked` へ戻したときの【対処】に足す1文を返す（issue #324）。
 //
-// **`weekly_margin_percent_by_days_until_reset` を書いているときだけ足す。**1週間の期間は、リセットより前でも、
-// 残り日数が変わってマージンが下がれば余裕が戻りうる。「リセットの前に戻すと、もう1度戻る」だけを書くと、
-// 人間は戻せる日数ぶん issue を止めたままにする（実装レビュー1周目の MEDIUM）。
-// **表を書いていない人には足さない。**その人には「リセットの前に戻すと戻る」がそのまま正しい。
+// **足すのは、表を書いていて、かつ切った期間に「リセットまで24時間を超える1週間の枠」があるときだけである。**
+// そのときだけ、リセットより前に、残り日数が変わってマージンが下がり、余裕が戻りうる。
+// 「リセットの前に戻すと、もう1度戻る」だけを書くと、人間は戻せる日数ぶん issue を止めたままにする（実装レビュー1周目の MEDIUM）。
+// **5時間の枠だけで切ったとき・リセット時刻が分からない枠（表を当てない）・リセットまで24時間以内（残り日数はもう1から下がらない）では
+// 足さない**（実装レビュー6周目の MEDIUM）。既定の待つ上限（300分）では、1週間の枠で `Blocked` になるのはリセットの5時間前からなので、
+// この1文が付くのは待つ上限を延ばしたか 0 にした人だけである。
 //
-// 戻り値: 足す1文。表を書いていなければ空。
-func (o *Orchestrator) daysTableReturnNote() string {
+// periods: 理由のコメントに書く、切った期間（と、着手の前なら Claude Code が動けない期間）。
+// 戻り値: 足す1文。足さないときは空。
+func (o *Orchestrator) daysTableReturnNote(periods []marginstatus.Period) string {
 	if len(o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset) == 0 {
+		return ""
+	}
+	now := o.now()
+	found := false
+	for _, p := range periods {
+		if handoff.IsWeeklyKind(p.Kind) && p.ResetsAt != nil && p.ResetsAt.Sub(now) > 24*time.Hour {
+			found = true
+			break
+		}
+	}
+	if !found {
 		return ""
 	}
 	return "ただし1週間の期間は、`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` を書いているので、" +

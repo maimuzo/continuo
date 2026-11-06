@@ -1516,6 +1516,10 @@ const (
 	// tracker.provider.handoff.weekly_margin_percent_by_days_until_reset に値の無い日（`1:` だけ）があるときに出る（issue #324）。
 	// **値が無いと YAML の読み込みで 0（使い切る）になる**ので、黙って通さない。
 	KeyConfigValidateHandoffMarginDaysNoValue Key = "config.validate.handoff_margin_days_no_value"
+	// KeyConfigValidateHandoffMarginDaysNotInteger は
+	// tracker.provider.handoff.weekly_margin_percent_by_days_until_reset に整数でない値（小数・% 付きなど）があるときに出る（issue #324）。
+	// **小数は YAML の読み込みで黙って切り捨てられる**ので、黙って通さない。
+	KeyConfigValidateHandoffMarginDaysNotInteger Key = "config.validate.handoff_margin_days_not_integer"
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
@@ -3387,6 +3391,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffMarginDaysRange,
 	KeyConfigValidateHandoffMarginDaysNoValue,
+	KeyConfigValidateHandoffMarginDaysNotInteger,
 	KeyConfigValidateHandoffOnAssigneeGate,
 	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,

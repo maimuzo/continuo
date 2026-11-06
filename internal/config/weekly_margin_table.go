@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"sort"
 
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -19,12 +20,16 @@ import (
 // `{}` は空の表になる。
 type WeeklyMarginTable map[int]int
 
-// UnmarshalYAML は、表を読む。値の無い日があれば誤りを返す（goccy/go-yaml の `InterfaceUnmarshaler`）。
+// UnmarshalYAML は、表を読む。値の無い日と、値が整数でない日（小数・文字列）があれば誤りを返す
+// （goccy/go-yaml の `InterfaceUnmarshaler`）。
 //
 // unmarshal: goccy が渡す、この欄の中身を読む関数。
-// 戻り値: 値の無い日があれば、その日（小さい順で最初のもの）を名指す誤り。
+// 戻り値: 値の無い日か整数でない日があれば、その日（小さい順で最初のもの）を名指す誤り。
 func (t *WeeklyMarginTable) UnmarshalYAML(unmarshal func(any) error) error {
-	var raw map[int]*int
+	// **値は any で読み、型を自分で見る。**`map[int]int`（や `map[int]*int`）へ直に読むと、goccy は
+	// 小数を黙って切り捨て（`1: 0.5` が 0 になる）、引用符で囲んだ数字の文字列も数として通す
+	// （実装レビュー6周目の LOW）。0 は「使い切る」なので、書いた人が気づかないまま最後の日を使い切られる。
+	var raw map[int]any
 	if err := unmarshal(&raw); err != nil {
 		return err
 	}
@@ -35,12 +40,39 @@ func (t *WeeklyMarginTable) UnmarshalYAML(unmarshal func(any) error) error {
 	sort.Ints(days)
 	out := make(WeeklyMarginTable, len(raw))
 	for _, d := range days {
-		v := raw[d]
-		if v == nil {
+		v, ok := integerValue(raw[d])
+		if raw[d] == nil {
 			return i18n.Errorf(i18n.KeyConfigValidateHandoffMarginDaysNoValue, d)
 		}
-		out[d] = *v
+		if !ok {
+			return i18n.Errorf(i18n.KeyConfigValidateHandoffMarginDaysNotInteger, d, raw[d])
+		}
+		out[d] = v
 	}
 	*t = out
 	return nil
+}
+
+// integerValue は、YAML から any で読んだ値が整数ならその値を返す。
+//
+// goccy/go-yaml は、符号の無い整数を uint64、負の整数を int64、小数を float64、文字列を string で返す。
+// **範囲は見ない。**0以上100未満かは `validateHandoff` が見る（`weekly_margin_percent` と同じ文面で弾くため）。
+//
+// v: 読んだ値。
+// 戻り値の1つ目: 整数の値。
+// 戻り値の2つ目: 整数なら true。
+func integerValue(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case uint64:
+		if n > uint64(math.MaxInt) {
+			return 0, false
+		}
+		return int(n), true
+	default:
+		return 0, false
+	}
 }

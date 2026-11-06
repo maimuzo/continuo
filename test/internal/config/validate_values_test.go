@@ -631,6 +631,9 @@ func TestValidate_残り日数ごとの1週間のマージン(t *testing.T) {
 		{"値に % を付けた", "        2: 5%", "weekly_margin_percent_by_days_until_reset"},
 		// **値の無い日の行は起動しない**（実装レビュー5周目の HIGH）。goccy は値の無い行を 0（使い切る）にするので、黙って通さない。
 		{"値の無い日の行", "        1:\n        2: 5", "1 の行に値が無い"},
+		// **小数は起動しない**（実装レビュー6周目の LOW）。goccy は int へ読むと小数を黙って切り捨てる（0.5 が 0 = 使い切る）。
+		{"値が小数", "        1: 0.5", "1 の値 0.5 は整数でない"},
+		{"値が引用符の数字", "        2: \"5\"", "2 の値 5 は整数でない"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, "weekly_margin_percent", withTable(tc.entries))

@@ -1657,9 +1657,10 @@ func (o *Orchestrator) ownIssueStillAsCandidate(ctx context.Context, issue track
 // usable: 判定に使った使える値。
 // 戻り値: 人間へ見せる理由。
 func (o *Orchestrator) ownIssueBlockedReason(usable *ratelimit.Snapshot) string {
+	periods := o.beforeDispatchPeriods(usable)
 	return fmt.Sprintf(
 		"担当がこの機械の issue ですが、レートリミットのマージンを切っている（または使用率100%%）ので、"+
 			"**Claude Code を起動せずに** Status を戻しました。**担当者はこの機械のままです。**%s"+
 			"\n【対処】リセットのあとに Status を着手待ちへ戻してください。リセットの前に戻すと、もう1度この Status へ戻ります。%s",
-		describeMarginPeriods(o.beforeDispatchPeriods(usable)), o.daysTableReturnNote())
+		describeMarginPeriods(periods), o.daysTableReturnNote(periods))
 }
