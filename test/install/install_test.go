@@ -145,6 +145,9 @@ type fakeRelease struct {
 	releases []byte
 	// listFail が真なら、一覧に 404 を返す。**mu が守る。**一覧を引けない状況を作る。
 	listFail bool
+	// listStatus が 0 でなければ、一覧にその状態コードを返す。**mu が守る。**
+	// レートリミット（403・429）や GitHub の不調（5xx）の状況を作る。
+	listStatus int
 }
 
 // releaseNote は、偽の release サーバが返す release 1件である。
@@ -279,6 +282,22 @@ func (fr *fakeRelease) FailList() {
 	fr.listFail = true
 }
 
+// SetListStatus は、一覧にその状態コードを返すようにする。
+//
+// status: 返す状態コード（例: 503）。
+func (fr *fakeRelease) SetListStatus(status int) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.listStatus = status
+}
+
+// listStatusCode は、一覧に返す状態コードを返す。0 なら差し替えていない。
+func (fr *fakeRelease) listStatusCode() int {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.listStatus
+}
+
 // releasesBody は、いま配っている一覧を返す。
 //
 // 戻り値: 一覧の JSON。nil なら 404 を返す。
@@ -371,6 +390,10 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	//
 	// release の一覧を返す。**install.sh は `/latest` を落とした URL を引く。**
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		if code := fr.listStatusCode(); code != 0 {
+			http.Error(w, "unavailable", code)
+			return
+		}
 		body := fr.releasesBody()
 		if len(body) == 0 {
 			http.NotFound(w, r)

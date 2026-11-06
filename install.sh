@@ -467,6 +467,34 @@ cooldown_label() {
 	fi
 }
 
+# AWK_VCMP は、版を比べる awk の関数である。**select_release と breaking_lines の両方の先頭に付ける。**
+#
+# **1つだけ置く。**下がるかどうかの判定と、破壊的変更を並べる範囲が、同じ規則で版を比べるためである。
+# 片方だけ直すと、2つが「どちらが新しいか」で食い違う。
+#
+# **`-` や `+` から後ろは落として比べる。**そのため `v2.98.0-rc1` と `v2.98.0` は同じ大きさになる
+# （設計 3-36。rc を出すことにするなら、先にここを直すこと）。
+AWK_VCMP='
+		# vpart は版の i 番目の数を返す。先頭の v と、- や + から後ろは落とす。
+		function vpart(v, i,   a, n) {
+			sub(/^[vV]/, "", v)
+			sub(/[-+].*$/, "", v)
+			n = split(v, a, "[.]")
+			if (i > n) { return 0 }
+			return a[i] + 0
+		}
+		# vcmp は2つの版を比べる。**桁ごとに数として比べる。**
+		# 文字列として比べると v0.10.0 が v0.2.0 より小さくなる。
+		function vcmp(x, y,   i, dx, dy) {
+			for (i = 1; i <= 3; i++) {
+				dx = vpart(x, i)
+				dy = vpart(y, i)
+				if (dx != dy) { return (dx < dy) ? -1 : 1 }
+			}
+			return 0
+		}
+'
+
 # select_release は、release の一覧から入れる版を選ぶ。
 #
 # 標準入力: GitHub API の release の一覧（JSON）。**引数では渡さない。**
@@ -497,22 +525,7 @@ cooldown_label() {
 #
 # **経過時間が負なら 0 とみなす。**手元の時計が遅れていても、0 で最新を入れられるようにする。
 select_release() {
-	awk -v now="$1" -v hours="$2" -v installed="$3" '
-		function vpart(v, i,   a, n) {
-			sub(/^[vV]/, "", v)
-			sub(/[-+].*$/, "", v)
-			n = split(v, a, "[.]")
-			if (i > n) { return 0 }
-			return a[i] + 0
-		}
-		function vcmp(x, y,   i, dx, dy) {
-			for (i = 1; i <= 3; i++) {
-				dx = vpart(x, i)
-				dy = vpart(y, i)
-				if (dx != dy) { return (dx < dy) ? -1 : 1 }
-			}
-			return 0
-		}
+	awk -v now="$1" -v hours="$2" -v installed="$3" "$AWK_VCMP"'
 		# epoch は 2026-11-05T06:00:00Z の形を、1970-01-01 からの秒へ直す。
 		# 読めなければ -1 を返す。**mktime は POSIX に無いので、日付から通し日数を出す式で数える。**
 		function epoch(s,   y, m, d, hh, mm, ss, mp, doy, days) {
@@ -548,11 +561,15 @@ select_release() {
 			pre = ""
 			pub = ""
 		}
-		{ buf = buf $0 "\n" }
-		END {
+		BEGIN {
 			re = "\"(tag_name|draft|prerelease|published_at)\"[ \t\r\n]*:[ \t\r\n]*"
-			rest = buf
 			n = 0
+		}
+		# **1行ずつ読む。**応答を1つの文字列に溜めて切り出すと、件数に対して2乗で遅くなる
+		# （整形済みの100件で 2.5 秒かかった）。JSON の文字列は生の改行を含まないので、
+		# 鍵と値は同じ行に在る。release の欄は行をまたいで tag などに持ち越す。
+		{
+			rest = $0
 			while (match(rest, re)) {
 				key = substr(rest, RSTART + 1, RLENGTH)
 				sub(/".*$/, "", key)
@@ -579,6 +596,8 @@ select_release() {
 					pub = val
 				}
 			}
+		}
+		END {
 			flush()
 			printf "N\t%d\n", n
 			if (n == 0) { exit 0 }
@@ -688,8 +707,10 @@ resolve_version() {
 		say ""
 		say "リポジトリが見つかりません: $RELEASES_URL"
 		say ""
-		say "--repo の値を確かめてください。"
-		say ""
+		if [ "$REPO" != "$DEFAULT_REPO" ]; then
+			say "--repo の値を確かめてください。"
+			say ""
+		fi
 		die "リポジトリが見つかりません（${REPO}）"
 	fi
 
@@ -702,7 +723,11 @@ resolve_version() {
 		say ""
 		say "時間をおいて試し直すか、版を指定してください。"
 		say ""
-		say "    $(install_line drop --version v0.1.0)"
+		# **例の版を書かない。**実在の版を書くと、貼った人がそのまま古い版へ下がる
+		# （`--version` の実行は下げない判定を当てない）。版は一覧の画面で選んでもらう。
+		say "    $(install_line drop --version "$(shquote '<版>')")"
+		say ""
+		say "配布している版は https://github.com/${REPO}/releases で確かめられます。"
 		say ""
 		die "配布された版を問い合わせられません（応答: ${http_code:-なし}）"
 	fi
@@ -720,7 +745,7 @@ resolve_version() {
 		say "release の一覧から版を選べませんでした（awk が失敗しました）。"
 		say "版を指定すれば、一覧を読まずに入れられます。"
 		say ""
-		say "    $(install_line drop --version '<版>')"
+		say "    $(install_line drop --version "$(shquote '<版>')")"
 		say ""
 		die "release の一覧を読めません"
 	fi
@@ -806,13 +831,16 @@ EOF
 		fi
 		say "  ${c_tag} へ下げるときは、--force を付けます。"
 		say "    $(install_line keep --force)"
+		if [ "$COOLDOWN_HOURS" != "0" ]; then
+			say "  時間を変えるときは --cooldown-hours <時間> を付けます（例: --cooldown-hours 24）。"
+		fi
 		return 0
 	fi
 
 	say "  入れる版:   ${c_tag}（${c_pub} 公開。公開から ${c_el} 時間）"
 	if [ -n "$rv_down" ]; then
+		# **ここで終えない。**下げて入れるときも、見送った版へ上がる道と時間の変え方を続けて出す。
 		say "  いま入っているのは ${INSTALLED_VERSION} です。--force が付いているので、${INSTALLED_VERSION} → ${c_tag} へ版を下げます。"
-		return 0
 	fi
 	if [ "$rv_n" -gt 0 ]; then
 		say "  見送った版をすぐに入れるときは、クールダウンを 0 にします。"
@@ -1039,25 +1067,7 @@ is_release_version() {
 # **本文は JSON の文字列1つに収まっている**ので、印の始まりと終わりは同じ行に来る。
 # 応答が整形されていても1行にまとめられていても、同じ読み方で拾える。
 breaking_lines() {
-	awk -v from="$1" -v to="$2" '
-		# vpart は版の i 番目の数を返す。先頭の v と、- や + から後ろは落とす。
-		function vpart(v, i,   a, n) {
-			sub(/^[vV]/, "", v)
-			sub(/[-+].*$/, "", v)
-			n = split(v, a, "[.]")
-			if (i > n) { return 0 }
-			return a[i] + 0
-		}
-		# vcmp は2つの版を比べる。**桁ごとに数として比べる。**
-		# 文字列として比べると v0.10.0 が v0.2.0 より小さくなる。
-		function vcmp(x, y,   i, dx, dy) {
-			for (i = 1; i <= 3; i++) {
-				dx = vpart(x, i)
-				dy = vpart(y, i)
-				if (dx != dy) { return (dx < dy) ? -1 : 1 }
-			}
-			return 0
-		}
+	awk -v from="$1" -v to="$2" "$AWK_VCMP"'
 		# unesc は JSON の文字列の中の書き換えを戻す。
 		#
 		# **戻すのは改行・タブ・引用符だけである。**JSON では制御文字が
