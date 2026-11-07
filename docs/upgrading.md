@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。`continuo init` は、その雛形 `WORKFLOW.local.md.template` も置くようになり、終了コードが2つの場面で変わります（下の「`continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -203,7 +203,6 @@ claude plugin update continuo-issue-comments@continuo
 `continuo init` が置くファイルが、`WORKFLOW.md` と `continuo-ci.yaml` に `WORKFLOW.local.md.template` を足した3枚になります。
 中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
 **continuo はこの名前のままでは読みません。**`WORKFLOW.local.md` へ写すと効きます（`mv` は使わず `cp -n` で写してください。`mv` は既にある `WORKFLOW.local.md` を黙って上書きします）。
-**`WORKFLOW.local.md` が既にあるあいだは、`continuo init` は雛形を置きません。**
 
 **既に `WORKFLOW.md` を置いている人は、同じディレクトリで `continuo init` を叩けば、足りないものだけが増えます。**`--force` は付けないでください（`WORKFLOW.md` の本文ごと雛形で上書きされます）。
 
@@ -216,7 +215,7 @@ cp -n WORKFLOW.local.md.template WORKFLOW.local.md   # 使うときだけ。値�
 
 | 場面 | これまで | これから |
 | --- | --- | --- |
-| `WORKFLOW.md` と `continuo-ci.yaml` が在る | `--force` を勧めて 1 | 雛形を置いて 0（`WORKFLOW.local.md` が在れば、雛形を置かずに 1） |
+| `WORKFLOW.md` と `continuo-ci.yaml` が在る | `--force` を勧めて 1 | 雛形を置いて 0 |
 | `WORKFLOW.md` が在り、`continuo-ci.yaml` が書けない（symlink など） | 1 | 雛形を置けたなら 0（警告は標準エラーに出ます） |
 
 ### エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）

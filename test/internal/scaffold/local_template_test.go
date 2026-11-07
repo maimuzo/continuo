@@ -1,7 +1,6 @@
 package scaffold_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,7 +16,7 @@ import (
 // 目的: `continuo init` が置く WORKFLOW.local.md.template の名前が、continuo が重ねるファイルの名前の
 // 末尾に `.template` を足したものであることを確かめる（issue #325・設計 5-1a）。
 //
-// **利用者は末尾の `.template` を消すだけで使える。**名前がずれると、消しても continuo が読まない。
+// **利用者は `cp -n` で写すだけで使える。**名前がずれると、写した先を continuo が読まない。
 //
 // 与える情報: WORKFLOW.md のパス。
 // 成功条件: config.LocalPathFor が返す名前に `.template` を足すと、雛形の名前になること。
@@ -33,14 +32,14 @@ func TestLocalTemplate_名前は重ねるファイルの名前にtemplateを足�
 // continuo がそのまま読み、残り日数ごとの1週間のマージンの表が効くことを確かめる（issue #325 のコメント 6699736243）。
 //
 // **人間の依頼は「WORKFLOW.local.md.template 側には1日ごとの週間レートリミットを上書きする設定を入れておいて」である。**
-// 名前を変えただけで効く形（注釈にしない）にしてある。
+// 写しただけで効く形（注釈にしない）にしてある。
 //
 // **WORKFLOW.md は owner とカンバンの番号を埋める。**埋めないとプレースホルダで落ちる（config.Load の検査）。
 //
-// 与える情報: 値を埋めた WORKFLOW.md の雛形と、名前を変えた WORKFLOW.local.md の雛形。
+// 与える情報: 値を埋めた WORKFLOW.md の雛形と、WORKFLOW.local.md へ写した雛形。
 // 成功条件: config.Load が通り、表の7日ぶんが雛形の値で読め、ほかの値は WORKFLOW.md のまま、
 // 送る本文は WORKFLOW.md の本文であること。
-func TestLocalTemplate_名前を変えると表が効く(t *testing.T) {
+func TestLocalTemplate_写すと表が効く(t *testing.T) {
 	dir := t.TempDir()
 	workflow := filepath.Join(dir, scaffold.WorkflowFileName())
 	if err := os.WriteFile(workflow, []byte(scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 3})), 0o600); err != nil {
@@ -53,7 +52,7 @@ func TestLocalTemplate_名前を変えると表が効く(t *testing.T) {
 
 	loaded, err := config.Load(workflow)
 	if err != nil {
-		t.Fatalf("雛形の名前を変えた WORKFLOW.local.md を読めません: %v", err)
+		t.Fatalf("雛形を写した WORKFLOW.local.md を読めません: %v", err)
 	}
 	if loaded.LocalPath != local {
 		t.Errorf("WORKFLOW.local.md を重ねていません: LocalPath=%q", loaded.LocalPath)
@@ -84,7 +83,7 @@ func TestLocalTemplate_名前を変えると表が効く(t *testing.T) {
 //
 // 与える情報: `continuo init` が置いた3枚（WORKFLOW.md は値を埋めたもの）。
 // 成功条件: config.Load が WORKFLOW.local.md を重ねず、表が空であること。
-func TestLocalTemplate_名前を変えなければ読まない(t *testing.T) {
+func TestLocalTemplate_写さなければ読まない(t *testing.T) {
 	dir := t.TempDir()
 	res := scaffold.WriteAll(dir, false, scaffold.Values{Owner: "octocat", ProjectNumber: 3})
 	if res.WorkflowErr != nil || res.CIErr != nil || res.LocalErr != nil {
@@ -99,10 +98,10 @@ func TestLocalTemplate_名前を変えなければ読まない(t *testing.T) {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
 	}
 	if loaded.LocalPath != "" {
-		t.Errorf("名前を変えていない雛形を重ねています: %q", loaded.LocalPath)
+		t.Errorf("写していない雛形を重ねています: %q", loaded.LocalPath)
 	}
 	if got := loaded.Config.Tracker.Provider.Handoff.WeeklyMarginPercentByDaysUntilReset; len(got) != 0 {
-		t.Errorf("名前を変えていない雛形の表が効いています: %v", got)
+		t.Errorf("写していない雛形の表が効いています: %v", got)
 	}
 }
 
@@ -138,7 +137,7 @@ func TestLocalTemplate_表の値はWORKFLOWmdの雛形の見本と同じ(t *test
 
 // 目的: 雛形の頭書きが、利用者が使う前に知るべきことを書いていることを確かめる（issue #325 の設計レビュー1周目）。
 //
-// **名前を変えて使うこと・立て直しが要ること・要らなければ表ごと消すこと・.gitignore に入れることの4つである。**
+// **写して使うこと・立て直しが要ること・要らなければ表ごと消すこと・.gitignore に入れることの4つである。**
 // 落とすと、効いたと思い込む（立て直し）・写しただけで残り1日に使い切る（表ごと消す）、が起きる。
 //
 // 与える情報: 雛形の全文。
@@ -185,57 +184,48 @@ func TestWriteAll_CIが落ちても雛形は書く(t *testing.T) {
 	}
 }
 
-// 目的: WORKFLOW.local.md が既にあるときは、--force でも雛形を置かず ErrLocalInUse を返し、
-// 3枚とも在る扱いにすることを確かめる（issue #325 の実装レビュー1周目）。
+// 目的: WORKFLOW.local.md が既にあっても雛形を置き、WORKFLOW.local.md には触らないことを確かめる
+// （人間の依頼「continuo init する時に WORKFLOW.md と WORKFLOW.local.md.template を出力し」。issue #325 の実装レビュー2周目）。
 //
-// 与える情報: WORKFLOW.md・continuo-ci.yaml・WORKFLOW.local.md（リンク先の無い symlink も試す）を置いたディレクトリ。
-// 成功条件: LocalErr が ErrLocalInUse で、LocalFailed が偽、force 無しなら AllExisted が真、
-// どちらでも雛形が置かれていないこと。
-func TestWriteAll_WORKFLOWlocalmdが在れば雛形を置かない(t *testing.T) {
-	for _, kind := range []string{"file", "dangling-symlink"} {
-		t.Run(kind, func(t *testing.T) {
-			dir := t.TempDir()
-			if res := scaffold.WriteAll(dir, false, scaffold.Values{}); res.WorkflowErr != nil || res.CIErr != nil {
-				t.Fatalf("1枚目と2枚目を置けません: workflow=%v ci=%v", res.WorkflowErr, res.CIErr)
-			}
-			template := filepath.Join(dir, scaffold.LocalTemplateFileName())
-			if err := os.Remove(template); err != nil {
-				t.Fatalf("雛形を消せません: %v", err)
-			}
-			local := filepath.Join(dir, "WORKFLOW.local.md")
-			switch kind {
-			case "file":
-				if err := os.WriteFile(local, []byte("---\n---\n"), 0o600); err != nil {
-					t.Fatalf("WORKFLOW.local.md を書けません: %v", err)
-				}
-			case "dangling-symlink":
-				if err := os.Symlink(filepath.Join(dir, "nowhere.md"), local); err != nil {
-					t.Fatalf("symlink を作れません: %v", err)
-				}
-			}
+// **既にある WORKFLOW.local.md を守るのは、写し方の案内（cp -n）である。**雛形は別の名前なので、置いても壊さない。
+//
+// 与える情報: WORKFLOW.md・continuo-ci.yaml・WORKFLOW.local.md を置き、雛形だけが無いディレクトリ。
+// 成功条件: 雛形が置かれ、--force でも WORKFLOW.local.md が1バイトも変わらないこと。
+func TestWriteAll_WORKFLOWlocalmdが在っても雛形は置き触らない(t *testing.T) {
+	dir := t.TempDir()
+	if res := scaffold.WriteAll(dir, false, scaffold.Values{}); res.WorkflowErr != nil || res.CIErr != nil || res.LocalErr != nil {
+		t.Fatalf("3枚を置けません: workflow=%v ci=%v local=%v", res.WorkflowErr, res.CIErr, res.LocalErr)
+	}
+	template := filepath.Join(dir, scaffold.LocalTemplateFileName())
+	local := filepath.Join(dir, "WORKFLOW.local.md")
+	// **雛形を WORKFLOW.local.md へ動かす。**雛形が無く、WORKFLOW.local.md が在る状態を作る。
+	if err := os.Rename(template, local); err != nil {
+		t.Fatalf("雛形を WORKFLOW.local.md へ動かせません: %v", err)
+	}
+	const mine = "---\ntracker:\n  provider:\n    handoff:\n      weekly_margin_percent: 30\n---\n"
+	if err := os.WriteFile(local, []byte(mine), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.local.md を書けません: %v", err)
+	}
 
-			res := scaffold.WriteAll(dir, false, scaffold.Values{})
-			if !errors.Is(res.LocalErr, scaffold.ErrLocalInUse) {
-				t.Errorf("LocalErr が ErrLocalInUse ではありません: %v", res.LocalErr)
-			}
-			if res.LocalFailed() {
-				t.Error("WORKFLOW.local.md が在ることを失敗として扱っています")
-			}
-			if !res.AllExisted() {
-				t.Errorf("3枚とも在る扱いになっていません: workflow=%v ci=%v local=%v", res.WorkflowErr, res.CIErr, res.LocalErr)
-			}
-			// **名前で比べる。**macOS の一時ディレクトリは symlink の先（/private/var）で返るので、全体では比べられない。
-			if filepath.Base(res.Local.Path) != filepath.Base(local) {
-				t.Errorf("Local.Path が %q です（WORKFLOW.local.md であるべきです）", res.Local.Path)
-			}
+	res := scaffold.WriteAll(dir, false, scaffold.Values{})
+	if res.LocalErr != nil {
+		t.Errorf("WORKFLOW.local.md が在るのに雛形を置いていません: %v", res.LocalErr)
+	}
+	if res.AllExisted() {
+		t.Error("雛形が無かったのに3枚とも在る扱いになっています")
+	}
+	if _, err := os.Stat(template); err != nil {
+		t.Errorf("雛形が置かれていません: %v", err)
+	}
 
-			forced := scaffold.WriteAll(dir, true, scaffold.Values{})
-			if !errors.Is(forced.LocalErr, scaffold.ErrLocalInUse) {
-				t.Errorf("--force で LocalErr が ErrLocalInUse ではありません: %v", forced.LocalErr)
-			}
-			if _, err := os.Lstat(template); !os.IsNotExist(err) {
-				t.Errorf("WORKFLOW.local.md が在るのに雛形を置いています: %v", err)
-			}
-		})
+	if forced := scaffold.WriteAll(dir, true, scaffold.Values{}); forced.LocalErr != nil || !forced.Local.Overwritten {
+		t.Errorf("--force で雛形を置き換えていません: err=%v overwritten=%v", forced.LocalErr, forced.Local.Overwritten)
+	}
+	got, err := os.ReadFile(local)
+	if err != nil {
+		t.Fatalf("WORKFLOW.local.md を読めません: %v", err)
+	}
+	if string(got) != mine {
+		t.Errorf("WORKFLOW.local.md が変わっています: %q", got)
 	}
 }

@@ -390,17 +390,11 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 
 // printInitLocal は WORKFLOW.local.md.template について1行と、置いたときの案内を出す（設計 5-1a / 5-3o）。
 //
-// **WORKFLOW.local.md が既にあって雛形を置かなかった（`scaffold.ErrLocalInUse`）ときだけ、別の1行を出す。**
-// 「雛形は既にある」と出すと、利用者は雛形がどこにも無いのに探しに行く。
-// それ以外は continuo-ci.yaml と同じ扱いである（printInitSample）。
+// **continuo-ci.yaml と同じ扱いである**（printInitSample）。違うのは置いたときの案内だけである。
 //
 // stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
 // res: WriteAll が返した結果。
 func printInitLocal(stdout, stderr io.Writer, res scaffold.InitResult) {
-	if errors.Is(res.LocalErr, scaffold.ErrLocalInUse) {
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitLocalInUse, scaffold.LocalTemplateFileName(), res.Local.Path))
-		return
-	}
 	printInitSample(stdout, stderr, scaffold.LocalTemplateFileName(), res.Local, res.LocalErr, i18n.KeyCLIInitLocalAdvice)
 }
 

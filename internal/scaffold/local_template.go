@@ -39,7 +39,7 @@ const localTemplate = `---
 #   書き方は WORKFLOW.md と同じです。WORKFLOW.local.md はチームと共有しないので、.gitignore に入れてください。
 # 写しただけで、下の表がそのまま効きます。要らない日の行は消し、表が要らなければ表ごと消してください。
 # 書き換えたら continuo を立て直してください（動いている continuo には効きません）。
-# 表の細かい説明（残り日数の数え方など）は、WORKFLOW.md の同じ表の注釈と docs/FAQ.md にあります。
+# 表の細かい説明（残り日数の数え方など）は、continuo の docs/FAQ.md の「1週間のマージンを、リセットの直前だけ小さくしたい」にあります。
 tracker:
   provider:
     handoff:

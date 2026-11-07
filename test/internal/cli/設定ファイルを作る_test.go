@@ -38,7 +38,7 @@ import (
 //
 // 与える情報: 空のディレクトリ。
 // 成功条件: 終了コードが 0 で、3枚だけが在り、WORKFLOW.md に本文が入っており、
-// 画面に配置の案内と名前を変えて使う案内が出ていること。
+// 画面に配置の案内と写して使う案内が出ていること。
 func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形と個人の上書きの雛形の3枚(t *testing.T) {
 	dir := t.TempDir()
 
@@ -60,9 +60,9 @@ func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形と�
 	if !strings.Contains(stdout, scaffold.LocalTemplateFileName()) {
 		t.Errorf("標準出力に %s の行がありません: %q", scaffold.LocalTemplateFileName(), stdout)
 	}
-	// **名前を変えて使う案内を出すこと。**この名前のままでは continuo は読まない。
+	// **写して使う案内を出すこと。**この名前のままでは continuo は読まない。
 	if !strings.Contains(stdout, "cp -n WORKFLOW.local.md.template WORKFLOW.local.md") {
-		t.Errorf("標準出力に名前を変えて使う案内がありません: %q", stdout)
+		t.Errorf("標準出力に写して使う案内がありません: %q", stdout)
 	}
 
 	entries, err := os.ReadDir(dir)

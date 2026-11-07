@@ -43,16 +43,14 @@ func TestInit_2枚が在れば雛形だけを置いて0で終える(t *testing.T
 	}
 }
 
-// 目的: WORKFLOW.local.md が既にあるときは、雛形を置かず、置かなかったことを出すことを確かめる
-// （issue #325 の実装レビュー1周目）。
+// 目的: WORKFLOW.local.md が既にあっても雛形を置いて 0 で終え、WORKFLOW.local.md には触らないことを確かめる
+// （人間の依頼「continuo init する時に WORKFLOW.md と WORKFLOW.local.md.template を出力し」。issue #325 の実装レビュー2周目）。
 //
-// **雛形を置くと、利用者が案内どおり写して、使っている WORKFLOW.local.md を上書きしかねない。**
-// **使い始めた人の init が毎回雛形を置き直し、「3枚とも在る」に二度と当たらなくなる。**
+// **既にある WORKFLOW.local.md を守るのは、写し方の案内（cp -n）である。**案内が `mv` だと、写した瞬間に消える。
 //
-// 与える情報: WORKFLOW.md・continuo-ci.yaml・WORKFLOW.local.md を置いたディレクトリ。
-// 成功条件: 1回目（--force 無し）は 3枚とも在る扱いで 1、2回目（--force）は 0 で、どちらも雛形を置かず、
-// WORKFLOW.local.md が1バイトも変わらず、置かなかったことが標準出力に出ること。
-func TestInit_WORKFLOWlocalmdが在れば雛形を置かない(t *testing.T) {
+// 与える情報: WORKFLOW.md・continuo-ci.yaml・WORKFLOW.local.md を置き、雛形だけが無いディレクトリ。
+// 成功条件: 終了コードが 0 で、雛形が置かれ、案内が cp -n を勧め、WORKFLOW.local.md が1バイトも変わらないこと。
+func TestInit_WORKFLOWlocalmdが在っても雛形を置き触らない(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	if _, err := scaffold.WriteCIWorkflowWithValues(dir, false, scaffold.Values{}); err != nil {
 		t.Fatalf("%s を置けません: %v", scaffold.CIFileName(), err)
@@ -63,23 +61,15 @@ func TestInit_WORKFLOWlocalmdが在れば雛形を置かない(t *testing.T) {
 		t.Fatalf("WORKFLOW.local.md を書けません: %v", err)
 	}
 
-	code, _, stderr := runInitOffline(dir)
-	if code != 1 {
-		t.Errorf("終了コードが %d です（3枚とも在る扱いで 1 であるべきです）: %q", code, stderr)
-	}
-	if !strings.Contains(stderr, "--force") {
-		t.Errorf("--force の案内がありません: %q", stderr)
-	}
-
-	code, stdout, stderr := runInitOffline("--force", dir)
+	code, stdout, stderr := runInitOffline(dir)
 	if code != 0 {
-		t.Fatalf("--force の終了コードが %d です（0 であるべきです。stderr: %s）", code, stderr)
+		t.Fatalf("終了コードが %d です（0 であるべきです。stderr: %s）", code, stderr)
 	}
-	if !strings.Contains(stdout, local) {
-		t.Errorf("雛形を置かなかったことと WORKFLOW.local.md の場所が出ていません: %q", stdout)
+	if _, err := os.Stat(filepath.Join(dir, scaffold.LocalTemplateFileName())); err != nil {
+		t.Errorf("%s が置かれていません: %v", scaffold.LocalTemplateFileName(), err)
 	}
-	if _, err := os.Lstat(filepath.Join(dir, scaffold.LocalTemplateFileName())); !os.IsNotExist(err) {
-		t.Errorf("WORKFLOW.local.md が在るのに雛形を置いています: %v", err)
+	if !strings.Contains(stdout, "cp -n WORKFLOW.local.md.template WORKFLOW.local.md") {
+		t.Errorf("写し方の案内が cp -n を勧めていません: %q", stdout)
 	}
 	if got := readFile(t, local); got != mine {
 		t.Errorf("WORKFLOW.local.md が変わっています: %q", got)

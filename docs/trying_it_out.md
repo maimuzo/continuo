@@ -372,7 +372,7 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 **3枚とも既にあると `init` は上書きせずに止まる**（終了コード 1）。1枚でも欠けていれば、欠けたものだけを置いて 0 で終える。
 
 ```text
-~/continuo-try/WORKFLOW.md と、continuo-ci.yaml・WORKFLOW.local.md.template（か WORKFLOW.local.md）は既にあります。上書きするなら --force を付けてください（WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template を雛形で置き換えます。WORKFLOW.local.md は触らず、それが在るときは雛形も置きません）
+~/continuo-try/WORKFLOW.md と、continuo-ci.yaml・WORKFLOW.local.md.template は既にあります。上書きするなら --force を付けてください（WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template を雛形で置き換えます。WORKFLOW.local.md は触りません）
 ```
 
 **`WORKFLOW.md` の本文が、エージェントへ送る指示書のうち人間が書く部分である。**

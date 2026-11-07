@@ -574,7 +574,7 @@ const (
 	KeyCLIInitOverwritten Key = "cli.init.overwritten"
 	// KeyCLIInitCreated は新しく書き出したときに出る。
 	KeyCLIInitCreated Key = "cli.init.created"
-	// KeyCLIInitErrAlreadyExists は、`continuo init` が置く3枚とも既にあるときに出る（3枚目は WORKFLOW.local.md でもよい）。
+	// KeyCLIInitErrAlreadyExists は、`continuo init` が置く3枚とも既にあるときに出る。
 	//
 	// **--force で何が置き換わるかを名乗る。**WORKFLOW.md だけを名乗ると、--force を付けた利用者は
 	// 手を入れた continuo-ci.yaml まで置き換わることを知れない（issue #325 の実装レビュー1周目）。
@@ -628,10 +628,6 @@ const (
 	// **`mv` ではなく `cp -n` を勧める。**`mv` は既にある WORKFLOW.local.md を黙って上書きし、
 	// チームで commit している雛形も作業ツリーから消す（issue #325 の実装レビュー1周目）。
 	KeyCLIInitLocalAdvice Key = "cli.init.local_advice"
-	// KeyCLIInitLocalInUse は、WORKFLOW.local.md が既にあるので雛形を置かなかったときに出る。
-	//
-	// **失敗ではない。**標準出力へ出す。1つ目の引数は雛形の名前、2つ目は WORKFLOW.local.md の絶対パスである。
-	KeyCLIInitLocalInUse Key = "cli.init.local_in_use"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
@@ -3055,7 +3051,6 @@ var allKeys = []Key{
 	KeyCLIInitCIAdvice,
 	KeyCLIInitCIWriteFailed,
 	KeyCLIInitLocalAdvice,
-	KeyCLIInitLocalInUse,
 	KeyCLIInitDetectFilled,
 	KeyCLIInitDetectUnfilled,
 	KeyCLIInitDetectCandidate,

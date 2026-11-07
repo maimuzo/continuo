@@ -1324,7 +1324,6 @@ cp -n WORKFLOW.local.md.template WORKFLOW.local.md
 
 **`mv` で名前を変えないでください。**既にある `WORKFLOW.local.md` を黙って上書きし、チームで commit している雛形も消します。
 `cp -n` は、`WORKFLOW.local.md` が既にあれば写しません。
-**`WORKFLOW.local.md` が既にあるあいだは、`continuo init` は雛形を置きません**（`--force` でも置きません）。
 
 既に `WORKFLOW.md` を置いている人も、`continuo init` を叩けば、足りない雛形だけが増えます（`--force` は要りません）。
 
@@ -1694,6 +1693,8 @@ continuo は、その run から1時間 hook が1件も来ていないことを�
 #### 1週間のマージンを、リセットの直前だけ小さくしたい
 
 **`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` に、リセットまでの残り日数ごとの値を書いてください**（issue #324 で増えたキー）。書いた日だけ `weekly_margin_percent` を上書きします。
+
+**自分の機械だけで使うなら、`continuo init` が置く `WORKFLOW.local.md.template` から始められます。**この表だけが有効な形で入っています（`# ` を外す必要はありません）。写し方は上の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
 
 **キーは残り日数（1〜7 の整数）、値はその日のマージンです。**値の単位は `weekly_margin_percent` と同じ %（0以上100未満の整数）で、意味も同じ「あなたが自分で使うぶんとして残しておく割合」です。**`%` は付けずに数字だけを書いてください**（`5%` と書くと起動しません）。`2: 5` なら「残り2日の日は、1週間の使用率が 95% に達したら作業しない」、`1: 0` なら「残り1日の日は、使用率100%まで使い切る」という意味です（5時間の枠の `five_hour_margin_percent` は、表とは別にいつも効きます）。使用率100%に達したあとの動きは、表が無いときと同じです（下の行き先の表）。
 
