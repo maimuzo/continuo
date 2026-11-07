@@ -45,7 +45,7 @@ continuo --help
 
 | コマンド | 何をするか |
 | --- | --- |
-| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形と `continuo-ci.yaml` を置く。`--force` は setup 済みなら使わない |
+| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形と `continuo-ci.yaml` と `WORKFLOW.local.md.template` を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
@@ -208,7 +208,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 
 #### continuo を入れたら、`CLAUDE.md` には何を書けばいい？
 
-**原因。**continuo が置くのは `WORKFLOW.md` と `continuo-ci.yaml` の2枚で、
+**原因。**continuo が置くのは `WORKFLOW.md` と `continuo-ci.yaml` と `WORKFLOW.local.md.template` の3枚で、
 **`CLAUDE.md` には1バイトも書きません。**そのため「進め方の決まりをどこに書くのか」が決まりません。
 
 **直し方。****進め方の決まりは `CLAUDE.md` に書いてください。**
@@ -1312,6 +1312,21 @@ tracker:
 **文法は `WORKFLOW.md` と同じで、書いた分だけが上書きされます。**置かなければ、何も変わりません。
 週のレートリミットのリセットが人によって違うので、マージンだけを自分の値にする、という使い方を想定しています。
 
+**雛形は `continuo init` が置きます。**`WORKFLOW.md` の隣の `WORKFLOW.local.md.template` です。
+中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
+**continuo はこの名前のままでは読みません。**`WORKFLOW.local.md` へ写すと、そのまま効きます。
+**表は見本の値（残り1日 0%・2日 5%・3〜7日 10%）で入っています。**自分の値へ直し、要らなければ表ごと消してください。
+書き換えたら continuo を立て直してください（動いている continuo には効きません）。
+
+```bash
+cp -n WORKFLOW.local.md.template WORKFLOW.local.md
+```
+
+**`mv` で名前を変えないでください。**既にある `WORKFLOW.local.md` を黙って上書きし、チームで commit している雛形も消します。
+`cp -n` は、`WORKFLOW.local.md` が既にあれば写しません。
+
+既に `WORKFLOW.md` を置いている人も、`continuo init` を叩けば、足りない雛形だけが増えます（`--force` は要りません）。
+
 ```markdown
 ---
 tracker:
@@ -1678,6 +1693,8 @@ continuo は、その run から1時間 hook が1件も来ていないことを�
 #### 1週間のマージンを、リセットの直前だけ小さくしたい
 
 **`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` に、リセットまでの残り日数ごとの値を書いてください**（issue #324 で増えたキー）。書いた日だけ `weekly_margin_percent` を上書きします。
+
+**自分の機械だけで使うなら、`continuo init` が置く `WORKFLOW.local.md.template` から始められます。**この表だけが有効な形で入っています（`# ` を外す必要はありません）。写し方は上の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
 
 **キーは残り日数（1〜7 の整数）、値はその日のマージンです。**値の単位は `weekly_margin_percent` と同じ %（0以上100未満の整数）で、意味も同じ「あなたが自分で使うぶんとして残しておく割合」です。**`%` は付けずに数字だけを書いてください**（`5%` と書くと起動しません）。`2: 5` なら「残り2日の日は、1週間の使用率が 95% に達したら作業しない」、`1: 0` なら「残り1日の日は、使用率100%まで使い切る」という意味です（5時間の枠の `five_hour_margin_percent` は、表とは別にいつも効きます）。使用率100%に達したあとの動きは、表が無いときと同じです（下の行き先の表）。
 

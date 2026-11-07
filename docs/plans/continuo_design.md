@@ -13280,7 +13280,8 @@ sequenceDiagram
 | **本文の判定は `prompt` に置く** | 取り除く規則が `prompt` にあり、`prompt` が `config` を import しているので、`config` 側には置けない |
 | **置き場所は `WORKFLOW.md` と同じディレクトリに固定し、CLI のフラグは足さない** | issue が求めていない |
 | **`Loaded.Path` は `WORKFLOW.md` のまま** | 身元ファイルとの一致検査（3-18 / 3-23）と読み直しの宛先に使う |
-| **`continuo init` は `.gitignore` に足さない** | issue が求めていない。利用者のリポジトリへの書き込みを増やさない。FAQ で案内する |
+| **`continuo init` は `.gitignore` に足さない** | issue が求めていない。利用者のリポジトリへの書き込みを増やさない。FAQ と雛形の頭書きで案内する |
+| **`continuo init` は雛形 `WORKFLOW.local.md.template` を置く**（5-3o の「3枚目」） | 人間の依頼（issue #325 のマージのあとのコメント）。中身は残り日数ごとの週のマージンの表で、`WORKFLOW.local.md` へ写すと効く |
 
 **比べて捨てた案。**YAML の木のまま深く重ねて書き出し直す案は捨てた。
 値を書かない行（null）で `WORKFLOW.md` の値ではなく組み込みの既定値に戻る、
@@ -13801,7 +13802,7 @@ issue #288 より前は、本文を1枚の指示書の真ん中に挟み、仕�
 **表を直すときは、そちらも同時に直す。**
 
 **雛形は [internal/scaffold/template.go](../../internal/scaffold/template.go) が持つ。**
-front matter と本文を1つの文字列リテラルとして持つので、`continuo init` が書くのは1枚である。
+front matter と本文を1つの文字列リテラルとして持つので、`continuo init` が書く設定は1枚である（ほかに置く2枚は見本である。5-3o）。
 
 **穴埋めの案内は HTML のコメントで書く。**そのまま送っても害が無く、節ごと消せる。
 **雛形をそのまま送っても検査を通ることを、配る前に確かめる**
@@ -13977,14 +13978,14 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 
 ### 5-3g. `continuo init` が置く設定は1枚
 
-**言いたいこと。****`continuo init` が置く設定は `WORKFLOW.md` の1枚だけである**（個人の上書き `WORKFLOW.local.md` は利用者が自分で置く。5-1a）。
+**言いたいこと。****`continuo init` が置く設定は `WORKFLOW.md` の1枚だけである**（個人の上書き `WORKFLOW.local.md` は、利用者が雛形 `WORKFLOW.local.md.template` を写して置く。5-1a / 5-3o）。
 **front matter（設定）と本文（固有の指示）が、1つのファイルに入っている。**
-**`continuo init` はもう1枚（`continuo-ci.yaml`）も置くが、そちらは設定ではない**（5-3o）。
+**`continuo init` はあと2枚（`continuo-ci.yaml` と `WORKFLOW.local.md.template`）も置くが、どちらも continuo が読まない見本である**（5-3o）。
 
 | 状態 | 何をするか | 終了コード |
 | --- | --- | --- |
 | 無い | 書く | 0 |
-| 在る | 何も書かない。`--force` を勧める | **5-3o の表を見よ。**2枚目を置けたなら 0 |
+| 在る | 何も書かない。`--force` を勧める | **5-3o の表を見よ。**ほかの見本を1枚でも置けたなら 0 |
 | ディレクトリが無い・ディレクトリでない・symlink・書けない | 何も書かない | 1 |
 
 **なぜ設定を2枚に分けないか。**設定も固有の指示も「この project の人が書くもの」である。
@@ -13992,7 +13993,8 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 **利用者の側も、どちらに書けばよいかを毎回思い出すことになる。**
 
 **`WORKFLOW.local.md`（5-1a）はこの決定を一部覆している。**人間の依頼（issue #325）である。
-**`continuo init` は今も1枚しか置かない。**`WORKFLOW.local.md` は利用者が必要なときだけ自分で作り、
+**`continuo init` が置く設定は今も1枚である。**雛形の `WORKFLOW.local.md.template`（5-3o）は、その名前のままでは continuo が読まない。
+`WORKFLOW.local.md` は利用者が必要なときだけ雛形を写すか自分で作り、
 **中身は「`WORKFLOW.md` から変えたい行だけ」なので、どちらに書くかは「チームの値か、自分の値か」で決まる。**
 片方だけ在る状態（`WORKFLOW.local.md` が無い）は、いままでの1枚の状態そのものである。
 
@@ -14030,10 +14032,10 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 
 | 何 | どこ |
 | --- | --- |
-| **2枚を書く口** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteAll`。**エラーは戻り値の中に入れる**（片方だけ落ちる状態を1つのエラーで表せない） |
+| **全部を書く口** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteAll`（3枚目も書く。下の「3枚目」）。**エラーは戻り値の中に入れる**（一部だけ落ちる状態を1つのエラーで表せない） |
 | **2枚目だけを書く口** | 同じファイルの `WriteCIWorkflowWithValues` |
-| **どちらを失敗として扱うか** | 同じファイルの `WorkflowFailed` / `CIFailed` / `BothExisted` |
-| **画面に出す** | [internal/cli/cli.go](../../internal/cli/cli.go) の `runInit` と `printInitCI` |
+| **どれを失敗として扱うか** | 同じファイルの `WorkflowFailed` / `CIFailed` / `LocalFailed` / `AllExisted` |
+| **画面に出す** | [internal/cli/cli.go](../../internal/cli/cli.go) の `runInit` と `printInitCI`（中身は見本に共通の `printInitSample`） |
 
 **中身の要点。**全文は上の雛形にある。
 
@@ -14128,14 +14130,14 @@ continuo を動かすアカウントが「自分のトークンで立場が外�
 | 書き込みの権限を持つ GitHub App の投稿者に `push: true` が返るか | 返るなら、その App が貼った目印も数える。**逃がし口が自己申告であることは、いままでと同じである**（5-3p） |
 | 偽の `gh` と、本物の `gh` が内蔵する jq の差 | 偽の `gh` は式を本物の `jq` で当てる。null の出し方だけ実測に合わせた |
 
-**4通りの組み合わせと終了コード。**
+**組み合わせと終了コード。**3枚目の `WORKFLOW.local.md.template`（下の「3枚目」）も、`continuo-ci.yaml` と同じ扱いである。**`WORKFLOW.local.md` が在っても、3枚目は置く**（別の名前なので `WORKFLOW.local.md` には触らない）。
 
-| `WORKFLOW.md` | `continuo-ci.yaml` | 何をするか | 終了コード |
+| `WORKFLOW.md` | `continuo-ci.yaml` と `WORKFLOW.local.md.template` | 何をするか | 終了コード |
 | --- | --- | --- | --- |
-| 無い | 無い | **2枚とも書く** | 0 |
-| **在る** | 無い | **2枚目だけを書く。**`--force` を要求しない | **0** |
-| 無い | 在る | 1枚目だけを書く | 0 |
-| 在る | 在る | 何も書かない。`--force` を勧める | 1 |
+| 無い | 無い | **3枚とも書く** | 0 |
+| **在る** | 1枚でも無い | **無いものだけを書く。**`--force` を要求しない | **0** |
+| 無い | 在る | 1枚目と、無いものだけを書く | 0 |
+| 在る | 2枚とも在る | 何も書かない。`--force` を勧める | 1 |
 
 **2行目が移行の唯一の手順である。**`--force` を要求してはならない。
 **要求すると、手で書いた本文を潰す `--force` を打たせることになる**（5-3g）。
@@ -14146,10 +14148,11 @@ continuo は起動時に1バイトも読まない。**失敗にすると、CI �
 **ただし黙って落とさない。**理由を標準エラーへ出す。
 
 **1枚も書けなかったときだけ、終了コード 1 で終える。**
-**`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる。
+**`WORKFLOW.md` が既にあり、残りの見本が「既にある」か「既にある」以外の理由で落ちた場合**（少なくとも1枚は「既にある」以外）がこれに当たる。
+**`WORKFLOW.md` が在り、`continuo-ci.yaml` が書けなくても、3枚目を置けたなら 0 である**（3枚目を足す前は 1 だった。docs/upgrading.md に書いた）。
 **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が「置けた」と読む。**
 
-**`WORKFLOW.md` が「既にある」以外で落ちたときは、2枚目を書かない。**
+**`WORKFLOW.md` が「既にある」以外で落ちたときは、2枚目も3枚目も書かない。**
 **2枚目も同じ理由で落ちるとは限らない。**実測では、`WORKFLOW.md` を symlink にすると
 **終了コード 1 で symlink のエラーだけを出しながら、2枚目が黙って置かれていた。**
 **落ちたと言いながらファイルが増えるのは、利用者に説明できない。**
@@ -14162,6 +14165,31 @@ continuo は起動時に1バイトも読まない。**失敗にすると、CI �
 **雛形が YAML として読めることを、配る前に確かめる。**壊れていても Go のビルドは通り、
 他のテストも通る。**そして GitHub Actions は、読めない workflow を「検査が無い」として扱う。**
 pull request の画面では「まだ走っていない」と見分けが付かない。
+
+**3枚目（`WORKFLOW.local.md.template`）。**個人の上書き `WORKFLOW.local.md`（5-1a）の雛形である（issue #325。人間の依頼）。
+**扱いは `continuo-ci.yaml` と同じである**（どれかが在っても残りを書く・書けなくても `continuo init` を失敗にしない・
+`WORKFLOW.md` が「既にある」以外で落ちたら書かない）。**`continuo-ci.yaml` が落ちても、3枚目は書く。**互いに関係の無い見本だからである。
+
+| 何 | 中身 |
+| --- | --- |
+| **雛形の在りか** | [internal/scaffold/local_template.go](../../internal/scaffold/local_template.go) の `localTemplate`（文字列定数） |
+| **書く口** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteLocalTemplate`（`WriteAll` が `continuo-ci.yaml` の次に呼ぶ） |
+| **画面に出す** | [internal/cli/cli.go](../../internal/cli/cli.go) の `printInitLocal`（中身は `continuo-ci.yaml` と同じ `printInitSample`）。作成した・上書きした・既にある・書けない、の文言は `continuo-ci.yaml` と同じキーを使い、写して使う案内だけを別に持つ |
+| **中身** | `tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` の表だけ（3-27a）。本文は空 |
+
+| 決めたこと | 理由 |
+| --- | --- |
+| **名前は `WORKFLOW.local.md` + `.template`** | continuo は `.template` のままでは読まない（`config.LocalPathFor`）。**置いた瞬間に効くと、`continuo init` を叩いただけでチームの値が変わる。**`cp -n` で写すだけで使える |
+| **表は注釈にせず、有効な形で入れる** | 人間の依頼（「上書きする設定を入れておいて」）。写しただけで効く。写すだけで残り1日が 0% になるので、頭書きで「要らなければ表ごと消す」を知らせる |
+| **値は `WORKFLOW.md` の雛形の同じ表の見本と同じ**（残り1日 0%・2日 5%・3〜7日 10%） | 片方だけ直すと、どちらが勧めの値か読めなくなる。揃っていることはテストが確かめる |
+| **本文は空** | 空なら `WORKFLOW.md` の本文が送られる（5-1a）。書くと丸ごと差し替わり、チームの決まりが届かなくなる |
+| **owner などの値を埋めない** | `continuo init` が引いた値は `WORKFLOW.md` へだけ埋める。ここに書くと、チームの値を個人の値で上書きする |
+| **`WORKFLOW.local.md` が既にあっても置く** | 人間の依頼（「continuo init する時に WORKFLOW.md と WORKFLOW.local.md.template を出力し」）に条件が無い。既にある `WORKFLOW.local.md` は、写し方の案内（`cp -n`）が守る。雛形は写したあとも残るので、2回目からは「3枚とも在る」に当たる |
+| **写し方は `mv` ではなく `cp -n` を案内する** | `mv` は既にある `WORKFLOW.local.md` を黙って上書きし、チームで commit している雛形も作業ツリーから消す |
+| **細かい説明は書き写さない** | 残り日数の数え方などは `WORKFLOW.md` の雛形の注釈と FAQ にある。書き写すと片方だけ直って食い違う |
+
+**ユースケース記述「設定ファイルを作る」は、まだ3枚目の段を持たない。**3枚とも在るときだけ終了コード 1 になったので、
+記述の「2枚とも在る」経路はいまの動きと食い違う。記述と CFG の作り直し（経路の作り直し・CFG の再生成・テストの印の付け直し）は範囲が大きいので、issue #325 の pull request では行わない。
 
 ### 5-3p. 設計のレビューを CI で数える
 

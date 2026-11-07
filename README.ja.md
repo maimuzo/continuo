@@ -240,7 +240,7 @@ sh scripts/test-like-ci.sh                       # テストを走らせる（�
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init      # WORKFLOW.md と continuo-ci.yaml を置く。owner とカンバンの番号は gh から引く
+continuo init      # WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template を置く。owner とカンバンの番号は gh から引く
 ```
 
 **ここで一度 `WORKFLOW.md` を開いてください。**`trust.repositories` に、カンバンに載っていたリポジトリが全部並んでいます。**要らない行を消さないと、無関係なリポジトリまで Claude Code に信頼登録されます。**
@@ -317,9 +317,9 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 ### 設定
 
-`continuo init` が2枚置きます。**設定は `WORKFLOW.md` の1枚だけです**（自分で置く `WORKFLOW.local.md` を除きます。下の段落）。先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
+`continuo init` が3枚置きます。**設定は `WORKFLOW.md` の1枚だけです**（`WORKFLOW.local.md.template` を写して置く `WORKFLOW.local.md` を除きます。下の段落）。先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
 
-**`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
+**`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません。`continuo init` が雛形の `WORKFLOW.local.md.template`（リセットまでの残り日数ごとの週のマージンの表）を置くので、`cp -n WORKFLOW.local.md.template WORKFLOW.local.md` で写して continuo を立て直せば効きます（`mv` は既にある `WORKFLOW.local.md` を黙って上書きするので使いません）（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
 
 **2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
 

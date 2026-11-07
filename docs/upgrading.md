@@ -117,7 +117,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.3.0 から次の版へ
 
-**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。`continuo init` は、その雛形 `WORKFLOW.local.md.template` も置くようになり、終了コードが2つの場面で変わります（下の「`continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -128,6 +128,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
 | **エージェントが、issue と pull request を URL で書きます** | 要りません。**本文で番号の形（`Fixes #123` など）を決めているなら、その行はそのまま番号で書きます** |
 | **`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます** | 要りません。**同じ名前のファイルを既に置いていたら、中身を確かめてください**（次の起動から読まれます） |
+| **`continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます** | 要りません。**雛形が欲しい人は、いまのディレクトリで `continuo init` を叩いてください**（足りないものだけが増えます。`--force` は付けません） |
 | **エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）** | 要りません。**使いたいなら、いまの `WORKFLOW.md` の本文へ節を貼り、continuo を再起動してください** |
 | **1週間のマージンを、リセットまでの残り日数ごとに書けるようになりました**（`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset`） | 要りません。**使いたい人だけ足してください**（書かなければ今までどおり） |
 | **エージェントに、本番へのデプロイ・マージ・release を頼めるようになりました** | 要りません。**以前のように禁じたいなら、本文に書いて再起動してください** |
@@ -194,6 +195,28 @@ claude plugin update continuo-issue-comments@continuo
 **既に `WORKFLOW.local.md` という名前のファイルを別の用途で置いていたら、次の起動から読まれます。**front matter の区切りが無いと起動しないので、名前を変えてください。
 **`continuo team.md` のように別の名前で起動している人は、`team.local.md` が読まれます**（拡張子の前に `.local` を挟んだ名前です）。
 使い方と気をつけることは [FAQ.md](FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」にあります。
+
+### `continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます
+
+**誰に関係があるか。**`WORKFLOW.local.md` を使いたい人です。設定の書き換えは要りません。
+
+`continuo init` が置くファイルが、`WORKFLOW.md` と `continuo-ci.yaml` に `WORKFLOW.local.md.template` を足した3枚になります。
+中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
+**continuo はこの名前のままでは読みません。**`WORKFLOW.local.md` へ写すと効きます（`mv` は使わず `cp -n` で写してください。`mv` は既にある `WORKFLOW.local.md` を黙って上書きします）。
+
+**既に `WORKFLOW.md` を置いている人は、同じディレクトリで `continuo init` を叩けば、足りないものだけが増えます。**`--force` は付けないでください（`WORKFLOW.md` の本文ごと雛形で上書きされます）。
+
+```bash
+continuo init
+cp -n WORKFLOW.local.md.template WORKFLOW.local.md   # 使うときだけ。値を自分の値へ直してから continuo を立て直す
+```
+
+**`continuo init` の終了コードが、2つの場面で変わります。**終了コードで分岐する script を持っている人は、確かめてください。
+
+| 場面 | これまで | これから |
+| --- | --- | --- |
+| `WORKFLOW.md` と `continuo-ci.yaml` が在る | `--force` を勧めて 1 | 雛形を置いて 0 |
+| `WORKFLOW.md` が在り、`continuo-ci.yaml` が書けない（symlink など） | 1 | 雛形を置けたなら 0（警告は標準エラーに出ます） |
 
 ### エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）
 

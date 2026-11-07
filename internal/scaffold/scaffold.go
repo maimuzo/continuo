@@ -3,7 +3,8 @@
 // **`continuo init` は雛形を書き出し、`continuo setup` は既にある WORKFLOW.md の
 // Status の割り当てだけを書き換える**（update.go）。**setup は雛形を書き直さない。**
 //
-// **置くのは1枚である**（設計 3-32 / 5-1 / 5-3g）。
+// **置く設定は1枚である**（設計 3-32 / 5-1 / 5-3g）。ほかに置く continuo-ci.yaml（init.go）と
+// WORKFLOW.local.md.template（local_template.go）は、continuo が読まない見本である（設計 5-3o）。
 // `WORKFLOW.md` の front matter が設定で、本文がエージェントへ送る指示書のうち
 // 利用者が書く部分である。**送る指示書の残りは internal/prompt が持っている**
 // （実行ファイルの中にある）。

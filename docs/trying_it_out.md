@@ -114,7 +114,7 @@ mise を使っていない場合は、[go.dev/dl](https://go.dev/dl/) で入れ�
 ```text
 Usage of continuo init:
   -force
-    	既にあっても上書きする（WORKFLOW.md と continuo-ci.yaml の2枚とも。手で直した中身は残りません）
+    	既にあっても上書きする（WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template の3枚とも。手で直した中身は残りません）
   -host string
     	tracker.provider.host に書く接続先の GitHub のホスト名。GitHub Enterprise を使うときに指定する（省略すると、環境変数 GH_HOST が在ればその値、無ければ github.com）
   -owner string
@@ -300,13 +300,17 @@ cd ~/continuo-try
 /tmp/continuo init
 ```
 
-`~/continuo-try/WORKFLOW.md` が1枚できる。
+`~/continuo-try/` に `WORKFLOW.md`・`continuo-ci.yaml`・`WORKFLOW.local.md.template` の3枚ができる（設定は `WORKFLOW.md` の1枚で、残りの2枚は continuo が読まない見本）。
 **front matter（設定）と本文（その project でだけ効く指示）が、このファイルに入っている。**
 **`owner` と `project_number` と `trust.repositories` は `gh` から引いて自動で入る。**
 入った値はその場に出る。実際に叩いた出力。
 
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
+continuo-ci.yaml を作成しました: ~/continuo-try/continuo-ci.yaml
+  （continuo-ci.yaml の案内が2行続く）
+WORKFLOW.local.md.template を作成しました: ~/continuo-try/WORKFLOW.local.md.template
+  （WORKFLOW.local.md.template の案内が2行続く）
 ✓ tracker.provider.owner: <ACCOUNT>（`gh api user` が返した GitHub のログイン名です）
 ✓ tracker.provider.project_number: <PROJECT>（`gh project list` の候補が1件だけでした: #<PROJECT> <カンバンの名前>）
 ✓ trust.repositories: <ACCOUNT>/<REPO-1>, <ACCOUNT>/<REPO-2>, <ACCOUNT>/<REPO-3>, <ACCOUNT>/<REPO-4>, <ACCOUNT>/<REPO-5>（カンバン #<PROJECT> に載っている 5 個のリポジトリを並べました）
@@ -365,10 +369,10 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 埋まらなかった値は WORKFLOW.md の中でプレースホルダのままです。上の案内どおりに書いてください
 ```
 
-**既にあると `init` は上書きせずに止まる**（終了コード 1）。
+**3枚とも既にあると `init` は上書きせずに止まる**（終了コード 1）。1枚でも欠けていれば、欠けたものだけを置いて 0 で終える。
 
 ```text
-~/continuo-try/WORKFLOW.md は既にあります。上書きするなら --force を付けてください
+~/continuo-try/WORKFLOW.md と、continuo-ci.yaml・WORKFLOW.local.md.template は既にあります。上書きするなら --force を付けてください（WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template を雛形で置き換えます。WORKFLOW.local.md は触りません）
 ```
 
 **`WORKFLOW.md` の本文が、エージェントへ送る指示書のうち人間が書く部分である。**
