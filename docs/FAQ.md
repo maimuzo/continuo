@@ -2123,6 +2123,41 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
 
+### v0.3.0 から v0.3.1 へ上げるとき
+
+#### v0.3.1 で、何もしないと動かなくなるものは？
+
+**ほとんどの人には、ありません。**`WORKFLOW.md` に足すものも、消すものもありません。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.3.1
+```
+
+**`--version v0.3.1` を落とさないでください。**インストーラーは既定で、公開から 168 時間（7日）経った版だけを入れます。付けないと、出てから7日のあいだは v0.3.0 が入ります。
+
+**例外は1つです。**pull request の向け先を既定の branch 以外（`develop` など）にしていて、カンバンの自動化 `Pull request linked to issue` を有効にし、`tracker.automated_state_rewrite` が空の人は、エージェントが pull request を作った直後に Status が書き換わり、run が止まることがあります。直し方は「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。
+
+#### v0.3.1 で、変わることは？
+
+**設定を書き換えなくても動きます。**変わる点の一覧は [upgrading.md](upgrading.md) の「v0.3.0 から v0.3.1 へ」にあります。気をつけるのは次の3つです。
+
+| 何が変わるか | 気をつけること |
+| --- | --- |
+| **エージェントに、本番へのデプロイ・マージ・release を頼めるようになります** | 頼まなければ、いままでどおりです。禁じたいなら「エージェントに本番へのデプロイ・マージ・release を頼みたいとき」の「頼めなくしたいとき」 |
+| **`continuo init` が `WORKFLOW.local.md.template` も置き、終了コードが2つの場面で変わります** | `continuo init` の終了コードで分岐する script を持っている人は、[upgrading.md](upgrading.md) の表を確かめてください |
+| **`WORKFLOW.md` の本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** | エージェントは1つの issue に pull request を1つだけ出すようになり、指示が食い違います |
+
+#### v0.3.1 から v0.3.0 へ戻すには？
+
+**版を名指しして入れ直します。**名指しした版は、いまより古くても `--force` 無しで入ります。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.3.0
+```
+
+- **`tracker.provider.handoff.weekly_margin_percent_by_days_until_reset` を書いていたら、先に消してください。**v0.3.0 はこのキーを知らないので、起動しません
+- **`WORKFLOW.local.md` に書いた上書きは、v0.3.0 では効きません。**v0.3.0 は `WORKFLOW.local.md` を読まないので、`WORKFLOW.md` の値がそのまま使われます
+
 ### v0.2.1 から v0.3.0 へ上げるとき
 
 #### v0.3.0 で、何もしないと動かなくなるものは？
