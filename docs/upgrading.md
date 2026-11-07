@@ -115,9 +115,15 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
-## v0.3.0 から次の版へ
+## v0.3.0 から v0.3.1 へ
 
-**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。`continuo init` は、その雛形 `WORKFLOW.local.md.template` も置くようになり、終了コードが2つの場面で変わります（下の「`continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
+**要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.3.0 から v0.3.1 へ上げるとき」を先に読んでください。**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.3.1
+```
+
+**`WORKFLOW.md` に足さなければならないものも、消すものもありません**（pull request の向け先を既定の branch 以外にしていて、カンバンの自動化を有効にしていて、`tracker.automated_state_rewrite` が空の人を除きます。下の「pull request が、issue の Development にリンクされます」を読んでください）。**`continuo init` が置く雛形の本文には、節が1つ増えました。**使いたいなら、いまの `WORKFLOW.md` の本文へ貼ってください（下の「エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）」）。continuo 本体は、`WORKFLOW.md` の隣の `WORKFLOW.local.md` を読むようになります（下の「`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます」）。`continuo init` は、その雛形 `WORKFLOW.local.md.template` も置くようになり、終了コードが2つの場面で変わります（下の「`continuo init` が、`WORKFLOW.local.md` の雛形 `WORKFLOW.local.md.template` も置きます」）。ほかに変わるのは、continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキルと、人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。`continuo-issue-comments` を入れている人は、`claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません）。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
@@ -125,6 +131,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **エージェントが書くコメントの節の題名に、報告・質問・依頼のどれかが付きます** | 要りません。**確認の節の題名は `質問: 頼みが要る操作の確認` になります** |
 | **pull request が、issue の Development にリンクされます** | 要りません。**向け先が既定の branch でない project で、カンバンの自動化が新しく発火することがあります** |
 | **エージェントが、着手のときと pull request を作る前に、issue の受け入れ目標を確かめます** | 要りません。**達成できない目標があると、エージェントは目標を変えずに `Blocked` で止まり、あなたに確かめます** |
+| **エージェントの終わりの報告に、レビューの結果と pull request の状態が入ります** | 要りません |
 | **1つの issue に pull request は1つになります** | 要りません。**本文に「2本目の PR を出すときは別の名前へ」と書いていたら、消してください** |
 | **エージェントが、issue と pull request を URL で書きます** | 要りません。**本文で番号の形（`Fixes #123` など）を決めているなら、その行はそのまま番号で書きます** |
 | **`WORKFLOW.md` の隣に置いた `WORKFLOW.local.md` で、値を自分だけ上書きできます** | 要りません。**同じ名前のファイルを既に置いていたら、中身を確かめてください**（次の起動から読まれます） |
@@ -167,6 +174,12 @@ claude plugin update continuo-issue-comments@continuo
 **誰に関係があるか。**全員です。設定の書き換えは要りません。
 
 着手のたびに、エージェントは issue の本文とコメントから受け入れ目標（その issue を閉じてよい条件）を番号付きで並べます。pull request を作る前と、draft を外す前に、目標を全部達成できるか・したかを1つずつ確かめます。**達成できない目標があると、エージェントは目標を黙って変えたり外したりせず、理由を書いて `Blocked` で止まります。**目標を変えるかは、あなたが決めてください。
+
+### エージェントの終わりの報告に、レビューの結果と pull request の状態が入ります
+
+**誰に関係があるか。**全員です。設定の書き換えは要りません。
+
+開いた pull request があるとき、エージェントが終わりに書く報告の、受け入れ目標の節の直後に「レビューの結果と、pull request の状態」の節が入ります。設計レビューと実装レビューが収まったか・周ごとの CRITICAL / HIGH / MEDIUM / LOW の件数・draft か・検査の件数・マージできる状態か（`mergeStateStatus`）が並びます。中身はスキルのスクリプトが GitHub から読んで出すので、エージェントの記憶で書いたものではありません。`review` で終えるときは、あなたが次にする手（マージする・検査の落ちを直してもらう、など）が1つだけ書かれます。題名は「レビューに回しました」ではなく、状態を書きます。形は、スキル [finishing-run](../plugins/continuo-agent-procedures/skills/finishing-run/SKILL.md) の「runの終了を宣言する」の段4 にあります。
 
 ### 1つの issue に pull request は1つになります
 
@@ -1037,7 +1050,7 @@ grep -n -E "^ *(direct_chat_state|relay_trusted_comments|refresh_interval_ms|wee
 **この版から、エージェントは subagent へ次を渡しません。**
 **pull request のマージ・issue や pull request の削除・ファイルやディレクトリの削除・本番の環境への書き込み・release の作成です。**
 
-**本番の環境へ書き込む必要があるときは、エージェントが人間へ渡して止まります。**（「v0.3.0 から次の版へ」で変わりました。いまは、頼まれたときだけエージェントが自分で行います）
+**本番の環境へ書き込む必要があるときは、エージェントが人間へ渡して止まります。**（「v0.3.0 から v0.3.1 へ」で変わりました。いまは、頼まれたときだけエージェントが自分で行います）
 **カンバンはこれに当たりません。**Status を動かすのは continuo です。
 
 ### 既定が3つ変わりました。**あなたの `WORKFLOW.md` は書き換わりません**
