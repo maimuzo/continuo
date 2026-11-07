@@ -234,7 +234,7 @@ sh scripts/test-like-ci.sh                       # run the tests (~3 min, option
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init      # writes WORKFLOW.md and continuo-ci.yaml; owner and kanban board number come from gh
+continuo init      # writes WORKFLOW.md, continuo-ci.yaml, and WORKFLOW.local.md.template; owner and kanban board number come from gh
 ```
 
 **Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the kanban board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
@@ -311,9 +311,9 @@ cannot be checked — is it reported as a leftover, as before.
 
 ### Configuration
 
-`continuo init` writes two files. **Only `WORKFLOW.md` is config** (plus an optional `WORKFLOW.local.md` you create yourself, below). The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
+`continuo init` writes three files. **Only `WORKFLOW.md` is config** (plus an optional `WORKFLOW.local.md` you make by renaming `WORKFLOW.local.md.template`, below). The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
 
-**To keep `WORKFLOW.md` shared with your team and still change a few values for yourself** (your weekly rate-limit margin, for example), put a `WORKFLOW.local.md` next to it. It uses the same format, and only what you write in it is overridden. Without it, nothing changes. See [docs/FAQ.md](docs/FAQ.md) (Japanese) for how the two files are layered.
+**To keep `WORKFLOW.md` shared with your team and still change a few values for yourself** (your weekly rate-limit margin, for example), put a `WORKFLOW.local.md` next to it. It uses the same format, and only what you write in it is overridden. Without it, nothing changes. `continuo init` places a sample, `WORKFLOW.local.md.template`, holding a table of weekly margins by the number of days left until the weekly reset; drop the trailing `.template` from its name and it takes effect. See [docs/FAQ.md](docs/FAQ.md) (Japanese) for how the two files are layered.
 
 **The second file, `continuo-ci.yaml`, is not config** — continuo never reads it. It is a sample GitHub Actions workflow that fails pull requests whose review results were never posted. Review it, then move it to `.github/workflows/`. continuo works fine if you don't.
 

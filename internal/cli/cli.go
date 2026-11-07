@@ -212,7 +212,8 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 	return runMain(d, args, stdout, stderr)
 }
 
-// runInit は `continuo init` サブコマンドである。WORKFLOW.md の雛形を1つだけ置く（設計 3-32）。
+// runInit は `continuo init` サブコマンドである。設定の雛形 WORKFLOW.md と、continuo が読まない見本の
+// continuo-ci.yaml と WORKFLOW.local.md.template の3枚を置く（設計 3-32 / 5-3o）。
 //
 // **利用者に手で埋めさせない。**tracker.provider.owner と tracker.provider.project_number は
 // gh から引いて雛形に書き込む。引けなかったときはプレースホルダのまま残し、
@@ -298,16 +299,17 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	// **接続先ホストは、検出の実装が何であっても雛形へ書く**（設計 3-86）。
 	detection.Values.Host = host
 
-	// **書くのは2枚である**（設計 5-3o）。
-	// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
-	// **片方が既にあっても、もう片方は書く。**版を上げた利用者が `continuo init` を叩くと、
-	// 足りない continuo-ci.yaml だけが増える。**これが移行の唯一の手順であり、
+	// **書くのは3枚である**（設計 5-3o）。
+	// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本、
+	// WORKFLOW.local.md.template は個人の上書き（WORKFLOW.local.md）の見本である。**
+	// **どれかが既にあっても、残りは書く。**版を上げた利用者が `continuo init` を叩くと、
+	// 足りないものだけが増える。**これが移行の唯一の手順であり、
 	// `--force` を要求してはならない**（要求すると、手で書いた本文を潰す `--force` を打たせる）。
 	res := scaffold.WriteAll(dir, *forceFlag, detection.Values)
 
 	// **WORKFLOW.md の「既にある」以外の失敗は、`continuo init` の失敗である。**
 	// ディレクトリが無い・ディレクトリでない・symlink・書けない、のいずれかで、
-	// **2枚目も同じ理由で落ちている。**同じ案内を2回出さないよう、ここで終える。
+	// **2枚目と3枚目は書いていない**（WriteAll）。同じ案内を何度も出さないよう、ここで終える。
 	if res.WorkflowFailed() {
 		switch {
 		case errors.Is(res.WorkflowErr, scaffold.ErrDirNotFound):
@@ -326,9 +328,9 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// **2枚とも既にあったときだけ、`--force` を勧めて 1 で終える。**
-	// 片方でも置けたなら、置けたことを報告して 0 で終える。
-	if res.BothExisted() {
+	// **3枚とも既にあったときだけ、`--force` を勧めて 1 で終える。**
+	// 1枚でも置けたなら、置けたことを報告して 0 で終える。
+	if res.AllExisted() {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, res.Workflow.Path))
 		return 1
 	}
@@ -349,12 +351,13 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 
 	printInitCI(stdout, stderr, res)
+	printInitLocal(stdout, stderr, res)
 
 	// **1枚も書けなかったなら、成功で終えない。**
-	// **`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる
-	// （`BothExisted` は上で 1 を返しているので、ここへ来るのはその組み合わせだけである）。
+	// **`WORKFLOW.md` が既にあり、残りの2枚が「既にある」か「既にある」以外の理由で落ちた場合**
+	// （少なくとも1枚は「既にある」以外）がこれに当たる（`AllExisted` は上で 1 を返している）。
 	// **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が
-	// 「置けた」と読む。**理由は `printInitCI` が標準エラーへ出してある。
+	// 「置けた」と読む。**理由は `printInitCI` と `printInitLocal` が標準エラーへ出してある。
 	if !res.Wrote() {
 		return 1
 	}
@@ -397,6 +400,34 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.CI.Path))
 	default:
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.CIErr))
+	}
+}
+
+// printInitLocal は WORKFLOW.local.md.template について1行と、置いたときの案内を出す（設計 5-1a / 5-3o）。
+//
+// **作成した・上書きした・既にある・書けない、の4つの文言は continuo-ci.yaml と同じキーを使う。**
+// どれもファイルの名前を引数で受け、「continuo はこのファイルを読まない」もどちらにも当たるためである。
+// **案内だけは別にする。**することが違う（CI へ移すのではなく、名前を変えて使う）。
+//
+// **書けなくても `continuo init` は失敗にしない。**continuo はこの名前のままでは読まない（printInitCI と同じ理由）。
+//
+// stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
+// res: WriteAll が返した結果。
+func printInitLocal(stdout, stderr io.Writer, res scaffold.InitResult) {
+	name := scaffold.LocalTemplateFileName()
+	switch {
+	case res.LocalErr == nil:
+		if res.Local.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, res.Local.Path))
+		} else {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, res.Local.Path))
+		}
+		// **置いたときだけ案内を出す。**既にあるときは、利用者が一度読んでいる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitLocalAdvice))
+	case errors.Is(res.LocalErr, scaffold.ErrAlreadyExists):
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.Local.Path))
+	default:
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.LocalErr))
 	}
 }
 

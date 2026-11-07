@@ -114,7 +114,7 @@ mise を使っていない場合は、[go.dev/dl](https://go.dev/dl/) で入れ�
 ```text
 Usage of continuo init:
   -force
-    	既にあっても上書きする（WORKFLOW.md と continuo-ci.yaml の2枚とも。手で直した中身は残りません）
+    	既にあっても上書きする（WORKFLOW.md と continuo-ci.yaml と WORKFLOW.local.md.template の3枚とも。手で直した中身は残りません）
   -host string
     	tracker.provider.host に書く接続先の GitHub のホスト名。GitHub Enterprise を使うときに指定する（省略すると、環境変数 GH_HOST が在ればその値、無ければ github.com）
   -owner string

@@ -597,6 +597,9 @@ const (
 	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
 	// KeyCLIInitCICreated は continuo-ci.yaml を新しく書き出したときに出る。
 	//
+	// **WORKFLOW.local.md.template にも使う。**下の Overwritten / Kept / WriteFailed も同じである。
+	// どれもファイルの名前を引数で受け、「continuo はこのファイルを読まない」は両方に当たる（cli の printInitLocal）。
+	//
 	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
 	// WORKFLOW.md の文言と書式を分けてあるのは、**どちらのファイルの話かを
 	// 1行だけ読んで分かるようにするためである。**
@@ -616,6 +619,10 @@ const (
 	// **これは continuo init の失敗ではない。**このファイルは設定ではなく、
 	// continuo は起動時に1バイトも読まない。**黙って落とさないために標準エラーへ出す。**
 	KeyCLIInitCIWriteFailed Key = "cli.init.ci_write_failed"
+	// KeyCLIInitLocalAdvice は WORKFLOW.local.md.template を置いたあとの案内に出る。
+	//
+	// **人間がやることを書く。**continuo はこの名前のままでは読まないので、使うには名前を変える。
+	KeyCLIInitLocalAdvice Key = "cli.init.local_advice"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
@@ -3038,6 +3045,7 @@ var allKeys = []Key{
 	KeyCLIInitCIKept,
 	KeyCLIInitCIAdvice,
 	KeyCLIInitCIWriteFailed,
+	KeyCLIInitLocalAdvice,
 	KeyCLIInitDetectFilled,
 	KeyCLIInitDetectUnfilled,
 	KeyCLIInitDetectCandidate,

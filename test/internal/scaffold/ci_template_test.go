@@ -275,15 +275,15 @@ func TestWriteCIWorkflowWithValues_既にあるなら書き換えない(t *testi
 	}
 }
 
-// 目的: WriteAll が2枚を独立に扱うことを確かめる（設計 5-3o）。
+// 目的: WriteAll が3枚を独立に扱うことを確かめる（設計 5-3o）。
 //
-// **片方が既にあっても、もう片方は書く。**
-// **版を上げた利用者が continuo init を叩くと、足りない continuo-ci.yaml だけが増える。**
+// **どれかが既にあっても、残りは書く。**
+// **版を上げた利用者が continuo init を叩くと、足りない continuo-ci.yaml と WORKFLOW.local.md.template だけが増える。**
 // **これが移行の唯一の手順であり、--force を要求してはならない**
 // （要求すると、手で直した WORKFLOW.md の本文を潰す --force を打たせることになる）。
 //
 // 与える情報: WORKFLOW.md だけが在るディレクトリ。
-// 成功条件: continuo-ci.yaml が増え、WORKFLOW.md が1バイトも変わらないこと。
+// 成功条件: continuo-ci.yaml と WORKFLOW.local.md.template が増え、WORKFLOW.md が1バイトも変わらないこと。
 func TestWriteAll_片方だけ在るなら足りないほうを置く(t *testing.T) {
 	dir := t.TempDir()
 	workflow := filepath.Join(dir, "WORKFLOW.md")
@@ -297,8 +297,8 @@ func TestWriteAll_片方だけ在るなら足りないほうを置く(t *testing
 	if !res.Wrote() {
 		t.Error("1枚も書いていません（足りない continuo-ci.yaml を置くべきです）")
 	}
-	if res.BothExisted() {
-		t.Error("2枚とも既にあった扱いになっています")
+	if res.AllExisted() {
+		t.Error("3枚とも既にあった扱いになっています")
 	}
 	if res.WorkflowFailed() {
 		t.Errorf("WORKFLOW.md が「既にある」以外の理由で落ちています: %v", res.WorkflowErr)
@@ -320,30 +320,36 @@ func TestWriteAll_片方だけ在るなら足りないほうを置く(t *testing
 	if _, err := os.Stat(filepath.Join(dir, scaffold.CIFileName())); err != nil {
 		t.Errorf("continuo-ci.yaml が置かれていません: %v", err)
 	}
+	if res.LocalErr != nil {
+		t.Errorf("WORKFLOW.local.md.template が置かれていません: %v", res.LocalErr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, scaffold.LocalTemplateFileName())); err != nil {
+		t.Errorf("WORKFLOW.local.md.template が置かれていません: %v", err)
+	}
 }
 
-// 目的: 2枚とも既にあるときだけ BothExisted が真になることを確かめる（設計 5-3o）。
+// 目的: 3枚とも既にあるときだけ AllExisted が真になることを確かめる（設計 5-3o）。
 //
 // **このときだけ --force を勧めて終了コード 1 で終える。**
-// 片方でも置けたなら、置けたことを報告して 0 で終える。
+// 1枚でも置けたなら、置けたことを報告して 0 で終える。
 //
-// 与える情報: 2枚とも在るディレクトリ。
-// 成功条件: BothExisted が真で、Wrote が偽であること。
-func TestWriteAll_2枚とも在るなら1枚も書かない(t *testing.T) {
+// 与える情報: 3枚とも在るディレクトリ。
+// 成功条件: AllExisted が真で、Wrote が偽であること。
+func TestWriteAll_3枚とも在るなら1枚も書かない(t *testing.T) {
 	dir := t.TempDir()
 	if res := scaffold.WriteAll(dir, false, scaffold.Values{}); !res.Wrote() {
 		t.Fatalf("1枚目から書けていません: workflow=%v ci=%v", res.WorkflowErr, res.CIErr)
 	}
 
 	res := scaffold.WriteAll(dir, false, scaffold.Values{})
-	if !res.BothExisted() {
-		t.Errorf("2枚とも在るのに BothExisted が偽です: workflow=%v ci=%v", res.WorkflowErr, res.CIErr)
+	if !res.AllExisted() {
+		t.Errorf("3枚とも在るのに AllExisted が偽です: workflow=%v ci=%v local=%v", res.WorkflowErr, res.CIErr, res.LocalErr)
 	}
 	if res.Wrote() {
-		t.Error("2枚とも在るのに書いた扱いになっています")
+		t.Error("3枚とも在るのに書いた扱いになっています")
 	}
-	if res.WorkflowFailed() || res.CIFailed() {
-		t.Errorf("「既にある」を失敗として扱っています: workflow=%v ci=%v", res.WorkflowErr, res.CIErr)
+	if res.WorkflowFailed() || res.CIFailed() || res.LocalFailed() {
+		t.Errorf("「既にある」を失敗として扱っています: workflow=%v ci=%v local=%v", res.WorkflowErr, res.CIErr, res.LocalErr)
 	}
 }
 

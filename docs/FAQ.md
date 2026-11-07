@@ -45,7 +45,7 @@ continuo --help
 
 | コマンド | 何をするか |
 | --- | --- |
-| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形と `continuo-ci.yaml` を置く。`--force` は setup 済みなら使わない |
+| `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形と `continuo-ci.yaml` と `WORKFLOW.local.md.template` を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを18の見出し語で調べる |
@@ -208,7 +208,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 
 #### continuo を入れたら、`CLAUDE.md` には何を書けばいい？
 
-**原因。**continuo が置くのは `WORKFLOW.md` と `continuo-ci.yaml` の2枚で、
+**原因。**continuo が置くのは `WORKFLOW.md` と `continuo-ci.yaml` と `WORKFLOW.local.md.template` の3枚で、
 **`CLAUDE.md` には1バイトも書きません。**そのため「進め方の決まりをどこに書くのか」が決まりません。
 
 **直し方。****進め方の決まりは `CLAUDE.md` に書いてください。**
@@ -1311,6 +1311,18 @@ tracker:
 **`WORKFLOW.md` と同じディレクトリに `WORKFLOW.local.md` を置いてください。**
 **文法は `WORKFLOW.md` と同じで、書いた分だけが上書きされます。**置かなければ、何も変わりません。
 週のレートリミットのリセットが人によって違うので、マージンだけを自分の値にする、という使い方を想定しています。
+
+**雛形は `continuo init` が置きます。**`WORKFLOW.md` の隣の `WORKFLOW.local.md.template` です。
+中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
+**continuo はこの名前のままでは読みません。**名前の末尾の `.template` を消すと、そのまま効きます。
+**表は見本の値（残り1日 0%・2日 5%・3〜7日 10%）で入っています。**自分の値へ直し、要らなければ表ごと消してください。
+書き換えたら continuo を立て直してください（動いている continuo には効きません）。
+
+```bash
+mv WORKFLOW.local.md.template WORKFLOW.local.md
+```
+
+既に `WORKFLOW.md` を置いている人も、`continuo init` を叩けば、足りない雛形だけが増えます（`--force` は要りません）。
 
 ```markdown
 ---

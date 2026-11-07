@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "627143c6b99b8e6e2f5d6ce341a98696fefc53ba28e723c5806ed998cfb2b603",
+  "_source_sha256": "77c00e6493974e235b4c859c60b391fb5bced6850f3a168dd5be51d747a1b6e5",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -147,6 +147,7 @@
   "cli.init.ci_created": "Created %[1]s: %[2]s",
   "cli.init.ci_kept": "%[1]s already exists (left untouched): %[2]s",
   "cli.init.ci_overwritten": "Overwrote %[1]s: %[2]s",
+  "cli.init.local_advice": "  This is a sample of a personal override for your own machine. To use it, drop the trailing .template from its name so it becomes WORKFLOW.local.md, and change the values to your own.\n  WORKFLOW.local.md is not shared with your team, so add it to .gitignore.",
   "cli.init.ci_write_failed": "Warning: cannot write %[1]s: %[2]v (continuo does not read this file, so it still works)",
   "cli.init.created": "Created WORKFLOW.md: %s",
   "cli.init.detect_advice": "  → %s",
@@ -163,7 +164,7 @@
   "cli.init.err_symlink": "Error: %v. Remove the symlink or specify a different directory.",
   "cli.init.err_too_many_positional": "Error: continuo init accepts only one positional argument, the directory to place WORKFLOW.md in (%d given: %v)",
   "cli.init.err_write_failed": "Error: cannot write the %s template: %v",
-  "cli.init.flag_force": "Overwrite both WORKFLOW.md and continuo-ci.yaml even if they already exist (hand edits are lost)",
+  "cli.init.flag_force": "Overwrite all three of WORKFLOW.md, continuo-ci.yaml, and WORKFLOW.local.md.template even if they already exist (hand edits are lost)",
   "cli.init.flag_owner": "GitHub user/organization name to write into tracker.provider.owner (defaults to what gh reports)",
   "cli.init.flag_project": "Kanban board number to write into tracker.provider.project_number (defaults to what gh reports)",
   "cli.init.flag_host": "GitHub host name to write into tracker.provider.host; set it when you use GitHub Enterprise (defaults to the GH_HOST environment variable if set, otherwise github.com)",

@@ -23,19 +23,23 @@ import (
 
 // {"RUCM-PATH": "P001"}
 //
-// 目的: `continuo init` が置くのはちょうど2枚であることを確かめる（設計 5-3o）。
+// 目的: `continuo init` が置くのはちょうど3枚であることを確かめる（設計 5-3o）。
 //
-// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
-// **設定は1枚のままである**（設計 5-3g）。2枚目は front matter を持たず、
-// **continuo は起動時に1バイトも読まない。**
+// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本、
+// WORKFLOW.local.md.template は個人の上書き（WORKFLOW.local.md）の見本である。**
+// **設定は1枚のままである**（設計 5-3g）。continuo は、残りの2枚を起動時に1バイトも読まない
+// （WORKFLOW.local.md.template は名前を WORKFLOW.local.md へ変えたときだけ読む）。
 //
-// **3枚目が増えていないことも見る。**置くものが増えるたびに、
-// 利用者は「何を .github/workflows/ へ移すのか」を毎回考えることになる。
+// **4枚目が増えていないことも見る。**置くものが増えるたびに、
+// 利用者は「置かれたものをどうするのか」を毎回考えることになる。
+//
+// **ユースケース記述「設定ファイルを作る」は、まだ WORKFLOW.local.md.template の段を持たない**（issue #325）。
+// この経路の事後条件（WORKFLOW.md と continuo-ci.yaml がある）は、3枚目が増えても成り立つ。
 //
 // 与える情報: 空のディレクトリ。
-// 成功条件: 終了コードが 0 で、2枚だけが在り、WORKFLOW.md に本文が入っており、
-// 画面に配置の案内が出ていること。
-func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形の2枚(t *testing.T) {
+// 成功条件: 終了コードが 0 で、3枚だけが在り、WORKFLOW.md に本文が入っており、
+// 画面に配置の案内と名前を変えて使う案内が出ていること。
+func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形と個人の上書きの雛形の3枚(t *testing.T) {
 	dir := t.TempDir()
 
 	code, stdout, stderr := runInitOffline(dir)
@@ -53,6 +57,13 @@ func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形の2�
 	if !strings.Contains(stdout, ".github/workflows/") {
 		t.Errorf("標準出力に配置の案内がありません: %q", stdout)
 	}
+	if !strings.Contains(stdout, scaffold.LocalTemplateFileName()) {
+		t.Errorf("標準出力に %s の行がありません: %q", scaffold.LocalTemplateFileName(), stdout)
+	}
+	// **名前を変えて使う案内を出すこと。**この名前のままでは continuo は読まない。
+	if !strings.Contains(stdout, "WORKFLOW.local.md にし") {
+		t.Errorf("標準出力に名前を変えて使う案内がありません: %q", stdout)
+	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -63,7 +74,7 @@ func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形の2�
 		names = append(names, e.Name())
 	}
 	sort.Strings(names)
-	want := []string{scaffold.CIFileName(), "WORKFLOW.md"}
+	want := []string{scaffold.CIFileName(), "WORKFLOW.md", scaffold.LocalTemplateFileName()}
 	sort.Strings(want)
 	if !slices.Equal(names, want) {
 		t.Errorf("置かれたファイルが %v ではありません: %v", want, names)
@@ -231,14 +242,20 @@ func Test_設定ファイルを作る_P011_片方だけ在るなら足りない�
 // 与える情報: WORKFLOW.md を置いたディレクトリ。
 // 成功条件: 終了コードが 1 で、`--force` の案内が出ること。
 //
-// **2枚とも在るときだけ 1 で終える**（設計 5-3o）。
-// **WORKFLOW.md だけが在るときは、足りない continuo-ci.yaml を置いて 0 で終える。**
-// そちらは下の `Test_設定ファイルを作る_P011_片方だけ在るなら足りないほうを置いて0で終える` が見る。
-func Test_設定ファイルを作る_P012_2枚とも在るなら終了コード1(t *testing.T) {
+// **3枚とも在るときだけ 1 で終える**（設計 5-3o）。
+// **WORKFLOW.md だけが在るときは、足りない2枚を置いて 0 で終える。**
+// そちらは上の `Test_設定ファイルを作る_P011_片方だけ在るなら足りないほうを置いて0で終える` が見る。
+//
+// **ユースケース記述「設定ファイルを作る」のこの経路は、まだ「WORKFLOW.md と continuo-ci.yaml の2枚とも在る」と書いている**
+// （WORKFLOW.local.md.template の段を持たない。issue #325）。2枚だけでは、いまは3枚目を置いて 0 で終える。
+func Test_設定ファイルを作る_P012_3枚とも在るなら終了コード1(t *testing.T) {
 	dir := writeWorkflowFor(t)
-	// **2枚目も置いてから叩く。**1枚目だけだと、足りないほうを置いて 0 で終わる。
+	// **2枚目と3枚目も置いてから叩く。**1枚でも足りないと、足りないものを置いて 0 で終わる。
 	if _, err := scaffold.WriteCIWorkflowWithValues(dir, false, scaffold.Values{}); err != nil {
 		t.Fatalf("%s を置けません: %v", scaffold.CIFileName(), err)
+	}
+	if _, err := scaffold.WriteLocalTemplate(dir, false); err != nil {
+		t.Fatalf("%s を置けません: %v", scaffold.LocalTemplateFileName(), err)
 	}
 
 	code, _, stderr := runInitOffline(dir)
@@ -257,10 +274,10 @@ func Test_設定ファイルを作る_P012_2枚とも在るなら終了コード
 // **`continuo init` が既にある WORKFLOW.md を黙って上書きすると、
 // 利用者が手で直した行（`trust.repositories` から消した行など）が全部消える。**
 //
-// **`continuo init` は2枚を置く**（設計 5-3o）。**設定は WORKFLOW.md の1枚のままで、
-// 2枚目の continuo-ci.yaml は CI へ移すための見本である**（設計 5-3g）。
+// **`continuo init` は3枚を置く**（設計 5-3o）。**設定は WORKFLOW.md の1枚のままで、
+// continuo-ci.yaml と WORKFLOW.local.md.template は見本である**（設計 5-3g）。
 //
-// **1度目で2枚とも置かれるので、2度目は「2枚とも既にある」に当たり、`--force` を勧めて 1 で終える。**
+// **1度目で3枚とも置かれるので、2度目は「3枚とも既にある」に当たり、`--force` を勧めて 1 で終える。**
 // **1度目を飛ばして2度目だけを見ると、足りないほうを置いて 0 で終えるので、この検査は成り立たない。**
 //
 // **この注釈は、かつて事実でなかった。**commit a4e984c が PROJECT_SPECIFIC_PROMPT.md を
@@ -268,7 +285,7 @@ func Test_設定ファイルを作る_P012_2枚とも在るなら終了コード
 // **コードと整合していない注釈は、読む人を誤らせる。**
 //
 // 目的: 2度目の `init` が、既にある WORKFLOW.md を `--force` 無しでは書き換えないこと。
-// 与える情報: 既に WORKFLOW.md があるディレクトリ。**1度目の init で2枚目も置かれる。**
+// 与える情報: 既に WORKFLOW.md があるディレクトリ。**1度目の init で2枚目と3枚目も置かれる。**
 // 成功条件: WORKFLOW.md の中身が変わらないこと。2度目の終了コードが 0 でないこと。
 func Test_設定ファイルを作る_P012_雛形を置いてから2度目は上書きしない(t *testing.T) {
 	dir := t.TempDir()
