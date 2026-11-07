@@ -202,16 +202,22 @@ claude plugin update continuo-issue-comments@continuo
 
 `continuo init` が置くファイルが、`WORKFLOW.md` と `continuo-ci.yaml` に `WORKFLOW.local.md.template` を足した3枚になります。
 中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
-**continuo はこの名前のままでは読みません。**名前の末尾の `.template` を消して `WORKFLOW.local.md` にすると効きます。
+**continuo はこの名前のままでは読みません。**`WORKFLOW.local.md` へ写すと効きます（`mv` は使わず `cp -n` で写してください。`mv` は既にある `WORKFLOW.local.md` を黙って上書きします）。
+**`WORKFLOW.local.md` が既にあるあいだは、`continuo init` は雛形を置きません。**
 
 **既に `WORKFLOW.md` を置いている人は、同じディレクトリで `continuo init` を叩けば、足りないものだけが増えます。**`--force` は付けないでください（`WORKFLOW.md` の本文ごと雛形で上書きされます）。
 
 ```bash
 continuo init
-mv WORKFLOW.local.md.template WORKFLOW.local.md   # 使うときだけ。値を自分の値へ直してから continuo を立て直す
+cp -n WORKFLOW.local.md.template WORKFLOW.local.md   # 使うときだけ。値を自分の値へ直してから continuo を立て直す
 ```
 
-**3枚とも既にあるときだけ、`continuo init` は `--force` を勧めて終了コード 1 で終えます。**これまでの「2枚とも在るとき」から変わります。`continuo init` の終了コードで分岐する script を持っている人は、確かめてください。
+**`continuo init` の終了コードが、2つの場面で変わります。**終了コードで分岐する script を持っている人は、確かめてください。
+
+| 場面 | これまで | これから |
+| --- | --- | --- |
+| `WORKFLOW.md` と `continuo-ci.yaml` が在る | `--force` を勧めて 1 | 雛形を置いて 0（`WORKFLOW.local.md` が在れば、雛形を置かずに 1） |
+| `WORKFLOW.md` が在り、`continuo-ci.yaml` が書けない（symlink など） | 1 | 雛形を置けたなら 0（警告は標準エラーに出ます） |
 
 ### エージェントが、Claude in Chrome で画面を確かめます（新しく `continuo init` した人だけ）
 

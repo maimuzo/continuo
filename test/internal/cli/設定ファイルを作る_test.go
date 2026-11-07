@@ -61,7 +61,7 @@ func Test_設定ファイルを作る_P001_置くのは設定とCIの雛形と�
 		t.Errorf("標準出力に %s の行がありません: %q", scaffold.LocalTemplateFileName(), stdout)
 	}
 	// **名前を変えて使う案内を出すこと。**この名前のままでは continuo は読まない。
-	if !strings.Contains(stdout, "WORKFLOW.local.md にし") {
+	if !strings.Contains(stdout, "cp -n WORKFLOW.local.md.template WORKFLOW.local.md") {
 		t.Errorf("標準出力に名前を変えて使う案内がありません: %q", stdout)
 	}
 

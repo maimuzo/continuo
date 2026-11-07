@@ -345,7 +345,7 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		// **既にあった。触っていない。**
 		// **`--force` を勧めてはならない。**あれは本文ごと上書きするので、
 		// **利用者が手で書いた指示が1行も残らない**（docs/upgrading.md）。
-		// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+		// **版を上げた利用者は、足りない見本（continuo-ci.yaml・WORKFLOW.local.md.template）を置くためにこの経路を通る。**
 		// そこで破壊的なフラグを勧めると、案内と正面からぶつかる。
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitWorkflowKept, scaffold.WorkflowFileName(), res.Workflow.Path))
 	}
@@ -363,7 +363,7 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 
 	// **検出の結果は、`WORKFLOW.md` を書いたときだけ出す。**
-	// **2枚目にはこの値を1つも埋めない**（`CITemplateWithValues` は `values` を使わない）。
+	// **2枚目と3枚目にはこの値を1つも埋めない**（`CITemplateWithValues` は `values` を使わず、3枚目は値を持たない）。
 	// **出すと、触っていない `WORKFLOW.md` に値が入ったと読める。**
 	// 版を上げた利用者は必ずこの経路を通るので、そこで嘘を出さない。
 	if res.WorkflowErr == nil {
@@ -385,49 +385,50 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 // stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
 // res: WriteAll が返した結果。
 func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
-	name := scaffold.CIFileName()
-	switch {
-	case res.CIErr == nil:
-		if res.CI.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, res.CI.Path))
-		} else {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, res.CI.Path))
-		}
-		// **置いたときだけ案内を出す。**既にあるときは、利用者が一度読んでいる。
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIAdvice))
-	case errors.Is(res.CIErr, scaffold.ErrAlreadyExists):
-		// **既にあることは失敗ではない。**触っていないことが分かるよう、場所を出す。
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.CI.Path))
-	default:
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.CIErr))
-	}
+	printInitSample(stdout, stderr, scaffold.CIFileName(), res.CI, res.CIErr, i18n.KeyCLIInitCIAdvice)
 }
 
 // printInitLocal は WORKFLOW.local.md.template について1行と、置いたときの案内を出す（設計 5-1a / 5-3o）。
 //
-// **作成した・上書きした・既にある・書けない、の4つの文言は continuo-ci.yaml と同じキーを使う。**
-// どれもファイルの名前を引数で受け、「continuo はこのファイルを読まない」もどちらにも当たるためである。
-// **案内だけは別にする。**することが違う（CI へ移すのではなく、名前を変えて使う）。
-//
-// **書けなくても `continuo init` は失敗にしない。**continuo はこの名前のままでは読まない（printInitCI と同じ理由）。
+// **WORKFLOW.local.md が既にあって雛形を置かなかった（`scaffold.ErrLocalInUse`）ときだけ、別の1行を出す。**
+// 「雛形は既にある」と出すと、利用者は雛形がどこにも無いのに探しに行く。
+// それ以外は continuo-ci.yaml と同じ扱いである（printInitSample）。
 //
 // stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
 // res: WriteAll が返した結果。
 func printInitLocal(stdout, stderr io.Writer, res scaffold.InitResult) {
-	name := scaffold.LocalTemplateFileName()
+	if errors.Is(res.LocalErr, scaffold.ErrLocalInUse) {
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitLocalInUse, scaffold.LocalTemplateFileName(), res.Local.Path))
+		return
+	}
+	printInitSample(stdout, stderr, scaffold.LocalTemplateFileName(), res.Local, res.LocalErr, i18n.KeyCLIInitLocalAdvice)
+}
+
+// printInitSample は、continuo が読まない見本1枚について1行と、置いたときの案内を出す（設計 5-3o）。
+//
+// **作成した・上書きした・既にある・書けない、の4つの文言は、どの見本にも同じキーを使う。**
+// どれもファイルの名前を引数で受け、「continuo はこのファイルを読まない」はどの見本にも当たるためである。
+// **案内だけは見本ごとに違う**（することが違う）ので、advice で受ける。
+//
+// stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
+// name: 見本のファイル名。
+// r / err: WriteAll がその見本について返した結果と誤り。
+// advice: 置いたときに出す案内のキー。
+func printInitSample(stdout, stderr io.Writer, name string, r scaffold.Result, err error, advice i18n.Key) {
 	switch {
-	case res.LocalErr == nil:
-		if res.Local.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, res.Local.Path))
+	case err == nil:
+		if r.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, r.Path))
 		} else {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, res.Local.Path))
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, r.Path))
 		}
 		// **置いたときだけ案内を出す。**既にあるときは、利用者が一度読んでいる。
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitLocalAdvice))
-	case errors.Is(res.LocalErr, scaffold.ErrAlreadyExists):
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.Local.Path))
+		fmt.Fprintln(stdout, i18n.T(advice))
+	case errors.Is(err, scaffold.ErrAlreadyExists):
+		// **既にあることは失敗ではない。**触っていないことが分かるよう、場所を出す。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, r.Path))
 	default:
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.LocalErr))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, err))
 	}
 }
 

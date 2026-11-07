@@ -1314,13 +1314,17 @@ tracker:
 
 **雛形は `continuo init` が置きます。**`WORKFLOW.md` の隣の `WORKFLOW.local.md.template` です。
 中身は、リセットまでの残り日数ごとの週のマージンの表（`weekly_margin_percent_by_days_until_reset`）だけです。
-**continuo はこの名前のままでは読みません。**名前の末尾の `.template` を消すと、そのまま効きます。
+**continuo はこの名前のままでは読みません。**`WORKFLOW.local.md` へ写すと、そのまま効きます。
 **表は見本の値（残り1日 0%・2日 5%・3〜7日 10%）で入っています。**自分の値へ直し、要らなければ表ごと消してください。
 書き換えたら continuo を立て直してください（動いている continuo には効きません）。
 
 ```bash
-mv WORKFLOW.local.md.template WORKFLOW.local.md
+cp -n WORKFLOW.local.md.template WORKFLOW.local.md
 ```
+
+**`mv` で名前を変えないでください。**既にある `WORKFLOW.local.md` を黙って上書きし、チームで commit している雛形も消します。
+`cp -n` は、`WORKFLOW.local.md` が既にあれば写しません。
+**`WORKFLOW.local.md` が既にあるあいだは、`continuo init` は雛形を置きません**（`--force` でも置きません）。
 
 既に `WORKFLOW.md` を置いている人も、`continuo init` を叩けば、足りない雛形だけが増えます（`--force` は要りません）。
 

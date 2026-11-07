@@ -574,7 +574,10 @@ const (
 	KeyCLIInitOverwritten Key = "cli.init.overwritten"
 	// KeyCLIInitCreated は新しく書き出したときに出る。
 	KeyCLIInitCreated Key = "cli.init.created"
-	// KeyCLIInitErrAlreadyExists は既に WORKFLOW.md があるときに出る。
+	// KeyCLIInitErrAlreadyExists は、`continuo init` が置く3枚とも既にあるときに出る（3枚目は WORKFLOW.local.md でもよい）。
+	//
+	// **--force で何が置き換わるかを名乗る。**WORKFLOW.md だけを名乗ると、--force を付けた利用者は
+	// 手を入れた continuo-ci.yaml まで置き換わることを知れない（issue #325 の実装レビュー1周目）。
 	KeyCLIInitErrAlreadyExists Key = "cli.init.err_already_exists"
 	// KeyCLIInitErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLIInitErrDirNotFound Key = "cli.init.err_dir_not_found"
@@ -592,7 +595,7 @@ const (
 	//
 	// **--force を勧めてはならない。**あれは本文ごと上書きするので、
 	// 利用者が手で書いた指示が1行も残らない（docs/upgrading.md）。
-	// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+	// **版を上げた利用者は、足りない見本（continuo-ci.yaml・WORKFLOW.local.md.template）を置くためにこの経路を通る。**
 	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
 	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
 	// KeyCLIInitCICreated は continuo-ci.yaml を新しく書き出したときに出る。
@@ -621,8 +624,14 @@ const (
 	KeyCLIInitCIWriteFailed Key = "cli.init.ci_write_failed"
 	// KeyCLIInitLocalAdvice は WORKFLOW.local.md.template を置いたあとの案内に出る。
 	//
-	// **人間がやることを書く。**continuo はこの名前のままでは読まないので、使うには名前を変える。
+	// **人間がやることを書く。**continuo はこの名前のままでは読まないので、使うには WORKFLOW.local.md へ写す。
+	// **`mv` ではなく `cp -n` を勧める。**`mv` は既にある WORKFLOW.local.md を黙って上書きし、
+	// チームで commit している雛形も作業ツリーから消す（issue #325 の実装レビュー1周目）。
 	KeyCLIInitLocalAdvice Key = "cli.init.local_advice"
+	// KeyCLIInitLocalInUse は、WORKFLOW.local.md が既にあるので雛形を置かなかったときに出る。
+	//
+	// **失敗ではない。**標準出力へ出す。1つ目の引数は雛形の名前、2つ目は WORKFLOW.local.md の絶対パスである。
+	KeyCLIInitLocalInUse Key = "cli.init.local_in_use"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
@@ -3046,6 +3055,7 @@ var allKeys = []Key{
 	KeyCLIInitCIAdvice,
 	KeyCLIInitCIWriteFailed,
 	KeyCLIInitLocalAdvice,
+	KeyCLIInitLocalInUse,
 	KeyCLIInitDetectFilled,
 	KeyCLIInitDetectUnfilled,
 	KeyCLIInitDetectCandidate,

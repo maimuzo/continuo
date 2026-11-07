@@ -317,9 +317,9 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 ### 設定
 
-`continuo init` が3枚置きます。**設定は `WORKFLOW.md` の1枚だけです**（`WORKFLOW.local.md.template` の名前を変えて置く `WORKFLOW.local.md` を除きます。下の段落）。先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
+`continuo init` が3枚置きます。**設定は `WORKFLOW.md` の1枚だけです**（`WORKFLOW.local.md.template` を写して置く `WORKFLOW.local.md` を除きます。下の段落）。先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
 
-**`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません。`continuo init` が雛形の `WORKFLOW.local.md.template`（リセットまでの残り日数ごとの週のマージンの表）を置くので、名前の末尾の `.template` を消せばそのまま効きます（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
+**`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません。`continuo init` が雛形の `WORKFLOW.local.md.template`（リセットまでの残り日数ごとの週のマージンの表）を置くので、`cp -n WORKFLOW.local.md.template WORKFLOW.local.md` で写して continuo を立て直せば効きます（`mv` は既にある `WORKFLOW.local.md` を黙って上書きするので使いません）（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
 
 **2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
 

@@ -2,7 +2,21 @@ package scaffold
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+
+	"github.com/maimuzo/continuo/internal/config"
 )
+
+// ErrLocalInUse は、WORKFLOW.md の隣に WORKFLOW.local.md が既にあるので、
+// 雛形の WORKFLOW.local.md.template を置かなかったことを表す（issue #325 の実装レビュー1周目）。
+//
+// **失敗ではない。**「既にある」と同じに数える（AllExisted・hardFailure）。
+// **--force でも置かない。**置くと、利用者が雛形を写して、使っている WORKFLOW.local.md を上書きしかねない。
+// 使い始めた人に雛形は要らず、置くたびに「3枚とも在る」に二度と当たらなくなる。
+//
+// **この番兵の文言は画面に出さない。**出す文言は CLI が `cli.init.local_in_use` で組み立てる。
+var ErrLocalInUse = errors.New("WORKFLOW.local.md already exists")
 
 // ciFileName は `continuo init` が置く2枚目のファイルの名前である（設計 5-3o）。
 //
@@ -77,22 +91,25 @@ func (r InitResult) LocalFailed() bool {
 // **このときだけ `--force` を勧めて終了コード 1 で終える。**
 // 1枚でも置けたなら、置けたことを報告して 0 で終える。
 //
-// 戻り値: 3枚とも `ErrAlreadyExists` なら真。
+// **WORKFLOW.local.md が在るので雛形を置かなかった（`ErrLocalInUse`）ときも、3枚目は在るものと数える。**
+// 数えないと、雛形を使い始めた人の init は毎回「書いた」扱いになり、1 に二度と届かない。
+//
+// 戻り値: 3枚とも `ErrAlreadyExists`（3枚目は `ErrLocalInUse` でもよい）なら真。
 func (r InitResult) AllExisted() bool {
 	return errors.Is(r.WorkflowErr, ErrAlreadyExists) &&
 		errors.Is(r.CIErr, ErrAlreadyExists) &&
-		errors.Is(r.LocalErr, ErrAlreadyExists)
+		(errors.Is(r.LocalErr, ErrAlreadyExists) || errors.Is(r.LocalErr, ErrLocalInUse))
 }
 
 // hardFailure は「既にある」以外の失敗かどうかを判定する。
 //
-// **既にあることは失敗ではない。**片方だけ在る状態から、足りないほうを足せることを
-// 移行の手順にしているためである。
+// **既にあることは失敗ではない。**一部だけ在る状態から、足りないものを足せることを
+// 移行の手順にしているためである。**`ErrLocalInUse` も「既にある」と同じに扱う。**
 //
 // err: 判定するエラー。
-// 戻り値: nil でも ErrAlreadyExists でもないなら真。
+// 戻り値: nil でも ErrAlreadyExists でも ErrLocalInUse でもないなら真。
 func hardFailure(err error) bool {
-	return err != nil && !errors.Is(err, ErrAlreadyExists)
+	return err != nil && !errors.Is(err, ErrAlreadyExists) && !errors.Is(err, ErrLocalInUse)
 }
 
 // WriteAll は `continuo init` が置く3枚を書く（設計 5-3o）。
@@ -136,6 +153,10 @@ func WriteAll(dir string, force bool, values Values) InitResult {
 // dir / force / 戻り値・エラーの扱いは WriteTemplateWithValues と同じである。
 // **書く中身だけが違い、値を1つも埋めない**（localTemplate の説明）。
 //
+// **同じディレクトリに WORKFLOW.local.md が既にあれば、書かずに `ErrLocalInUse` を返す。**
+// `--force` でも書かない（ErrLocalInUse の説明）。そのとき Result.Path は WORKFLOW.local.md のパスである。
+// **名前が在るかを os.Lstat で見る。**リンク先の無い symlink も「在る」と数える（config.Load がそれを読もうとして止まるのと揃える）。
+//
 // dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
 // force: 既に WORKFLOW.local.md.template がある場合に上書きするかどうか。
 // 戻り値: 書いたファイルの絶対パスと、上書きしたかどうか。
@@ -143,6 +164,10 @@ func WriteLocalTemplate(dir string, force bool) (Result, error) {
 	path, err := resolveTarget(dir, localTemplateFileName)
 	if err != nil {
 		return Result{}, err
+	}
+	local := config.LocalPathFor(filepath.Join(filepath.Dir(path), fileName))
+	if _, err := os.Lstat(local); err == nil {
+		return Result{Path: local}, ErrLocalInUse
 	}
 	return writeOne(path, localTemplate, force)
 }

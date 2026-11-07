@@ -1,6 +1,7 @@
 package scaffold_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -145,7 +146,7 @@ func TestLocalTemplate_表の値はWORKFLOWmdの雛形の見本と同じ(t *test
 func TestLocalTemplate_頭書きに使う前に知ることを書く(t *testing.T) {
 	body := scaffold.LocalTemplate()
 	for _, want := range []string{
-		"ファイル名の末尾の .template を消して WORKFLOW.local.md にし",
+		"cp -n WORKFLOW.local.md.template WORKFLOW.local.md を叩いて写し",
 		"書き換えたら continuo を立て直してください（動いている continuo には効きません）",
 		"表が要らなければ表ごと消してください",
 		"WORKFLOW.local.md はチームと共有しないので、.gitignore に入れてください",
@@ -153,5 +154,88 @@ func TestLocalTemplate_頭書きに使う前に知ることを書く(t *testing.
 		if !strings.Contains(body, want) {
 			t.Errorf("雛形の頭書きに「%s」がありません", want)
 		}
+	}
+}
+
+// 目的: continuo-ci.yaml が「既にある」以外の理由で落ちても、WORKFLOW.local.md.template は書くことを確かめる
+// （設計 5-3o の「3枚目」。issue #325 の実装レビュー1周目）。
+//
+// **2枚とも continuo が読まない見本で、互いに関係が無い。**片方の失敗でもう片方まで置けなくなると、利用者には理由が読めない。
+//
+// 与える情報: continuo-ci.yaml の名前でリンク先の無い symlink を置いたディレクトリ（symlink は辿らずに止まる）。
+// 成功条件: CI が失敗として返り、雛形は書けていること。
+func TestWriteAll_CIが落ちても雛形は書く(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Symlink(filepath.Join(dir, "nowhere.yaml"), filepath.Join(dir, scaffold.CIFileName())); err != nil {
+		t.Fatalf("symlink を作れません: %v", err)
+	}
+
+	res := scaffold.WriteAll(dir, false, scaffold.Values{})
+	if res.WorkflowErr != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", res.WorkflowErr)
+	}
+	if !res.CIFailed() {
+		t.Errorf("continuo-ci.yaml が失敗として返っていません: %v", res.CIErr)
+	}
+	if res.LocalErr != nil {
+		t.Errorf("continuo-ci.yaml が落ちたので、雛形まで書いていません: %v", res.LocalErr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, scaffold.LocalTemplateFileName())); err != nil {
+		t.Errorf("雛形が置かれていません: %v", err)
+	}
+}
+
+// 目的: WORKFLOW.local.md が既にあるときは、--force でも雛形を置かず ErrLocalInUse を返し、
+// 3枚とも在る扱いにすることを確かめる（issue #325 の実装レビュー1周目）。
+//
+// 与える情報: WORKFLOW.md・continuo-ci.yaml・WORKFLOW.local.md（リンク先の無い symlink も試す）を置いたディレクトリ。
+// 成功条件: LocalErr が ErrLocalInUse で、LocalFailed が偽、force 無しなら AllExisted が真、
+// どちらでも雛形が置かれていないこと。
+func TestWriteAll_WORKFLOWlocalmdが在れば雛形を置かない(t *testing.T) {
+	for _, kind := range []string{"file", "dangling-symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			if res := scaffold.WriteAll(dir, false, scaffold.Values{}); res.WorkflowErr != nil || res.CIErr != nil {
+				t.Fatalf("1枚目と2枚目を置けません: workflow=%v ci=%v", res.WorkflowErr, res.CIErr)
+			}
+			template := filepath.Join(dir, scaffold.LocalTemplateFileName())
+			if err := os.Remove(template); err != nil {
+				t.Fatalf("雛形を消せません: %v", err)
+			}
+			local := filepath.Join(dir, "WORKFLOW.local.md")
+			switch kind {
+			case "file":
+				if err := os.WriteFile(local, []byte("---\n---\n"), 0o600); err != nil {
+					t.Fatalf("WORKFLOW.local.md を書けません: %v", err)
+				}
+			case "dangling-symlink":
+				if err := os.Symlink(filepath.Join(dir, "nowhere.md"), local); err != nil {
+					t.Fatalf("symlink を作れません: %v", err)
+				}
+			}
+
+			res := scaffold.WriteAll(dir, false, scaffold.Values{})
+			if !errors.Is(res.LocalErr, scaffold.ErrLocalInUse) {
+				t.Errorf("LocalErr が ErrLocalInUse ではありません: %v", res.LocalErr)
+			}
+			if res.LocalFailed() {
+				t.Error("WORKFLOW.local.md が在ることを失敗として扱っています")
+			}
+			if !res.AllExisted() {
+				t.Errorf("3枚とも在る扱いになっていません: workflow=%v ci=%v local=%v", res.WorkflowErr, res.CIErr, res.LocalErr)
+			}
+			// **名前で比べる。**macOS の一時ディレクトリは symlink の先（/private/var）で返るので、全体では比べられない。
+			if filepath.Base(res.Local.Path) != filepath.Base(local) {
+				t.Errorf("Local.Path が %q です（WORKFLOW.local.md であるべきです）", res.Local.Path)
+			}
+
+			forced := scaffold.WriteAll(dir, true, scaffold.Values{})
+			if !errors.Is(forced.LocalErr, scaffold.ErrLocalInUse) {
+				t.Errorf("--force で LocalErr が ErrLocalInUse ではありません: %v", forced.LocalErr)
+			}
+			if _, err := os.Lstat(template); !os.IsNotExist(err) {
+				t.Errorf("WORKFLOW.local.md が在るのに雛形を置いています: %v", err)
+			}
+		})
 	}
 }

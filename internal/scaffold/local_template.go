@@ -6,7 +6,7 @@ package scaffold
 // （config.LocalPathFor）。**置いた瞬間に効かせないための名前である。**
 // 効かせると、`continuo init` を叩いただけで、チームの WORKFLOW.md の値が利用者の知らないうちに変わる。
 //
-// **名前は「重ねるファイルの名前 + `.template`」に揃える。**利用者は末尾の `.template` を消すだけで使える。
+// **名前は「重ねるファイルの名前 + `.template`」に揃える。**利用者は `cp -n` で写すだけで使える（`mv` を勧めない。既にある WORKFLOW.local.md を黙って上書きするため）。
 // 揃っていることは test/internal/scaffold/local_template_test.go が config.LocalPathFor と突き合わせる。
 const localTemplateFileName = "WORKFLOW.local.md.template"
 
@@ -17,7 +17,7 @@ const localTemplateFileName = "WORKFLOW.local.md.template"
 // 週のリセットの時刻は人ごとに違うので、チームで共有する WORKFLOW.md ではなく、
 // 自分の機械だけの WORKFLOW.local.md に書くのが向いている（人間の依頼）。
 //
-// **表は注釈にせず、有効な形で書く。**名前を変えただけで効くようにするためである（人間の依頼「上書きする設定を入れておいて」）。
+// **表は注釈にせず、有効な形で書く。**写しただけで効くようにするためである（人間の依頼「上書きする設定を入れておいて」）。
 // 写すだけで残り1日のマージンが 0% になるので、頭書きで「要らなければ表ごと消す」を知らせる。
 //
 // **値（0・5・10）は WORKFLOW.md の雛形の同じ表の見本と揃える**（template.go）。
@@ -33,17 +33,18 @@ const localTemplateFileName = "WORKFLOW.local.md.template"
 // WORKFLOW.md の雛形の同じ表の注釈と docs/FAQ.md にある。ここに書き写すと、片方だけ直って食い違う。
 const localTemplate = `---
 # WORKFLOW.local.md の雛形です。continuo は、この名前（末尾が .template）のままでは読みません。
-# 使うときは、同じディレクトリでファイル名の末尾の .template を消して WORKFLOW.local.md にし、値を自分の値へ直してください。
+# 使うときは、同じディレクトリで cp -n WORKFLOW.local.md.template WORKFLOW.local.md を叩いて写し、値を自分の値へ直してください。
+#   mv で名前を変えると、既にある WORKFLOW.local.md を黙って上書きします。cp -n は既にあれば写しません。
 # WORKFLOW.local.md は、自分の機械だけの上書きです。ここに書いたキーだけが、隣の WORKFLOW.md の値を上書きします。
 #   書き方は WORKFLOW.md と同じです。WORKFLOW.local.md はチームと共有しないので、.gitignore に入れてください。
-# 名前を変えただけで、下の表がそのまま効きます。要らない日の行は消し、表が要らなければ表ごと消してください。
+# 写しただけで、下の表がそのまま効きます。要らない日の行は消し、表が要らなければ表ごと消してください。
 # 書き換えたら continuo を立て直してください（動いている continuo には効きません）。
 # 表の細かい説明（残り日数の数え方など）は、WORKFLOW.md の同じ表の注釈と docs/FAQ.md にあります。
 tracker:
   provider:
     handoff:
       weekly_margin_percent_by_days_until_reset:  # 1週間の枠のリセットまでの残り日数（1〜7）ごとのマージン（単位は %。% を付けずに 0以上100未満の整数）。
-                                                  # 書かない日は weekly_margin_percent（WORKFLOW.md の値）を使う。
+                                                  # 書かない日は weekly_margin_percent を使う。
                                                   # ここに表を書くと、WORKFLOW.md の表とは日ごとに混ざらず、丸ごと置き換わる。
         1: 0      # 残り1日（リセットの24時間前からリセットまで）はマージン 0%。使用率100%まで使う
         2: 5      # 残り2日（リセットの48時間前から24時間前まで）はマージン 5%
