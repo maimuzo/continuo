@@ -21,7 +21,7 @@ https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
 https://github.com/user-attachments/assets/220bab27-9f60-4cb6-8854-bd202b2e71d5
 
 <details>
-<summary><b>One video per feature (10 × 15 seconds)</b>: click to expand</summary>
+<summary><b>One video per feature (10 × 15 seconds, 2 × 30 seconds)</b>: click to expand</summary>
 
 <br>
 
@@ -64,6 +64,14 @@ https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
 **10. Want to talk? Go direct**: when things get tangled, move the issue to `Direct Chat` (optional) and talk to Claude Code yourself
 
 https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
+
+**11. Always some left for you** (30 seconds): set the margin you keep for yourself out of the weekly usage window by the number of days left until the reset. Keep more on days far from the reset, and every day you still have room to use Claude Code outside continuo; set the last day to `0`, and continuo uses up the rest right before the reset. Without the table, `weekly_margin_percent` (10% by default) applies every day, as before
+
+https://github.com/user-attachments/assets/d0e76ce6-8b6e-4cf2-a10e-1bf7da607827
+
+**12. Override just your part** (30 seconds): keep the team's shared `WORKFLOW.md` as it is; whatever you write in a `WORKFLOW.local.md` next to it applies to you alone (only what you write in it is overridden)
+
+https://github.com/user-attachments/assets/5eeb752b-c516-4e85-9881-bb0335e6983e
 
 </details>
 

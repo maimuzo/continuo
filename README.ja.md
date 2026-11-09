@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/095d04b4-bfcf-4ac1-b57d-473b866b2d9c
 https://github.com/user-attachments/assets/220bab27-9f60-4cb6-8854-bd202b2e71d5
 
 <details>
-<summary><b>機能ごとの紹介動画（15秒 × 10本）</b>：クリックで開きます</summary>
+<summary><b>機能ごとの紹介動画（15秒 × 10本・30秒 × 2本）</b>：クリックで開きます</summary>
 
 <br>
 
@@ -62,6 +62,14 @@ https://github.com/user-attachments/assets/caba4d50-7035-4285-be8e-8974b3b457ad
 **10. 話したいときは、直接**：込み入ってきたら、`Direct Chat`（使うときだけ）へ動かして、Claude Code と直接話せます
 
 https://github.com/user-attachments/assets/3a3db808-2bd1-47e5-8ddd-a5f10dd02429
+
+**11. いつでも、自分の分は残ってる**（30秒）：1週間のレートリミットのうち、あなたのぶんとして残すマージンを、リセットまでの残り日数ごとに決められます。リセットまで日がある日ほど多く残せば、どの日も continuo の外で Claude Code を使うぶんが残ります。残り1日の値を `0` にすれば、リセットの直前に余りを使い切れます。表を書かなければ、今までどおり `weekly_margin_percent`（既定10%）が毎日使われます
+
+https://github.com/user-attachments/assets/d0e76ce6-8b6e-4cf2-a10e-1bf7da607827
+
+**12. 自分の分だけ、上書き**（30秒）：チームで共有する `WORKFLOW.md` はそのまま、隣に置いた `WORKFLOW.local.md` に書いた行は、自分だけに適用されます（書いた分だけが上書きされます）
+
+https://github.com/user-attachments/assets/5eeb752b-c516-4e85-9881-bb0335e6983e
 
 </details>
 
