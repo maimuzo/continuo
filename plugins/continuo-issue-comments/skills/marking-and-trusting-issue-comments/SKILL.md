@@ -70,6 +70,8 @@ This applies to comments, bodies, titles and commit messages (in a title you may
 Keep these as they are: closing keyword lines (`Closes …`), messages that git or GitHub writes (such as the first line of a merge commit),
 quotes of what a human wrote and pasted command output, and lines whose number format the repository's own rules decide.
 
+In such a repository, also explain in every comment and body, in order, so that a third party reading it for the first time can understand what changed.
+
 In other repositories, write as you usually do.
 
 ## 4. When you read

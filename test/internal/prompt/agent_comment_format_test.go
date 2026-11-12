@@ -472,3 +472,32 @@ func hasTrimmedLine(s, want string) bool {
 	}
 	return false
 }
+
+// 目的: 説明を、第三者が初見で変更内容を理解できるように順序立てさせる1文が、
+// システムプロンプトの「概要」と、人間向けの plugin の section 3 に在ることを固定する（issue #350。設計 5-3ze）。
+//
+// **システムプロンプトに置くのは、チャットの応答にも効かせるためである。**
+// スキル writing-comments-for-humans はコメントを書く前にしか読まれない。
+// **plugin の文は section 3 の「In other repositories, write as you usually do.」より前に置く。**
+// 後ろに置くと、continuo の印が無いリポジトリにも当たる（設計 5-3zb と同じ絞り方）。
+//
+// 与える情報: prompt.BuiltinSystem() の「# 概要」と、plugin continuo-issue-comments の SKILL.md の全文。
+// 成功条件: 概要が日本語の1文を持ち、section 3 が英語の1文を「In other repositories」の段落より前に持つこと。
+func TestTemplate_説明を第三者が初見で分かるように順序立てさせる(t *testing.T) {
+	if !strings.Contains(overviewSection(t), "第三者が初見で変更内容を理解できるように順序立てて説明します") {
+		t.Errorf("システムプロンプトの「概要」に、第三者が初見で変更内容を理解できるように順序立てて説明させる文がありません。" +
+			"エージェントのコメントとチャットの説明が、読み手の知らない順で書かれます")
+	}
+
+	body := readSkill(t)
+	_, rest, ok := strings.Cut(body, "\n## 3. ")
+	if !ok {
+		t.Fatalf("%s に「## 3. 」がありません", skillPath)
+	}
+	sec3, _, _ := strings.Cut(rest, "\n## 4. ")
+	rule := strings.Index(sec3, "so that a third party reading it for the first time can understand what changed")
+	other := strings.Index(sec3, "In other repositories, write as you usually do.")
+	if rule < 0 || other < 0 || rule > other {
+		t.Errorf("section 3 に、第三者が初見で分かるように順序立てさせる文が「In other repositories, write as you usually do.」より前にありません（文 %d / その行 %d）", rule, other)
+	}
+}
