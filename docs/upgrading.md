@@ -115,6 +115,50 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.3.1 から次の版へ
+
+### CI の検査ファイル（`continuo-ci.yaml`）で、continuo の pull request だけを検査する運用を選べるようになりました — 置き直した人にだけ効きます
+
+**誰に関係があるか。**`continuo init` が置いた `continuo-ci.yaml` を `.github/workflows/` へ移して使っていて、
+**continuo と人間の両方で開発しているので、人間が直接出した pull request のマージを止められては困る人**です。
+開発をすべて continuo で進めている人は、何もしなくてかまいません。
+
+**次の版まで。**検査は、全部の pull request に判断票を求めていました。人間が直接出した pull request も
+「設計のレビュー結果が貼られていません」「実装のレビュー結果が貼られていません」で赤になり、必須の検査にしているとマージできませんでした。
+
+**次の版から。**雛形の先頭に、どの pull request を検査するかを選ぶ2行が入りました。
+
+```yaml
+env:
+  CONTINUO_REVIEW_GATE_SCOPE: all
+  CONTINUO_BRANCH_PREFIX: continuo/
+```
+
+| 2行目の値 | 何を検査するか |
+| --- | --- |
+| `all`（既定） | 全部の pull request（いままでと同じ） |
+| `continuo` | continuo の branch（`continuo/` で始まるもの）から出た pull request だけ。人間が直接出した pull request は「continuo が作った pull request ではないので、判断票を数えません」と出して緑で終わります |
+
+**あなたがすること。****`continuo init` は、既にある `continuo-ci.yaml` を書き換えません。**新しい雛形を別のディレクトリへ書き出し、
+差分を確かめてから、`.github/workflows/` の検査ファイルと差し替えてください。
+
+```bash
+NEW="$(mktemp -d)" && continuo init "$NEW"
+diff "$NEW/continuo-ci.yaml" .github/workflows/continuo-ci.yaml   # 自分で付けた名前に読み替えてください
+```
+
+**人間の pull request を止めたくない人だけ、差し替えたあとの2行目を `CONTINUO_REVIEW_GATE_SCOPE: continuo` に書き換えて commit してください。**
+**置き直すだけなら、合否は変わりません**（既定は `all`）。
+
+- **`herdr.worktree.branch_template` の頭を変えている人は、3行目の `CONTINUO_BRANCH_PREFIX` も同じ文字列にしてください。**ずれると、continuo の pull request も緑で通ります
+- **job に `if: startsWith(github.head_ref, 'continuo/')` を手で足していた人は、その行を消して、2行目を `continuo` にしてください**
+- **既存の CI へ job だけを組み込んでいる人は、先頭の `env:` の2行も写してください。**写さないと、検査は「どの pull request を検査するかが読めません」と出して赤になります
+- **2行目を書き換える pull request は、書き換えたあとの定義で自分自身を検査します。**`.github/workflows/` の差分は人間がレビューしてからマージしてください
+
+**job の名前（`design-review-result` と `code-review-result`）と `permissions` は変わっていません。**必須の検査の登録は、そのまま使えます。
+
+---
+
 ## v0.3.0 から v0.3.1 へ
 
 **要点だけを読みたいときは、[FAQ.md](FAQ.md) の「v0.3.0 から v0.3.1 へ上げるとき」を先に読んでください。**

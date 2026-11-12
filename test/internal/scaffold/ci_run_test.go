@@ -112,6 +112,9 @@ type ghComment struct {
 type ciRun struct {
 	t   *testing.T
 	dir string // 偽の gh の応答を置く場所
+	// env は、見本の先頭の env: と HEAD_REF を上書きする値である（"名前=値" の形）。
+	// **既定では見本の env: をそのまま渡す。**テストの値と見本の既定値が別物にならないようにするためである。
+	env []string
 }
 
 // newCIRun は、偽の `gh` と応答の置き場を用意する。
@@ -246,7 +249,13 @@ func (r *ciRun) run(script string, draft bool) result {
 		"IS_DRAFT="+map[bool]string{true: "true", false: "false"}[draft],
 		"GITHUB_STEP_SUMMARY="+summary,
 		"GITHUB_SERVER_URL=https://github.com",
+		// **既定の branch は、人間が出した pull request の名前にする。**
+		// 全部を検査する既定（all）なら、branch 名に関わらず数えることを、すべての場面で確かめられる。
+		"HEAD_REF=feature/login",
 	)
+	cmd.Env = append(cmd.Env, workflowEnv(r.t, scaffold.CITemplate())...)
+	// **後ろに置いた値が勝つ**（os/exec は同じ名前の最後の値を使う）。
+	cmd.Env = append(cmd.Env, r.env...)
 	out, err := cmd.CombinedOutput()
 	res := result{output: string(out)}
 	var exitErr *exec.ExitError
@@ -264,6 +273,26 @@ func (r *ciRun) run(script string, draft bool) result {
 		res.calls = string(raw)
 	}
 	return res
+}
+
+// workflowEnv は、YAML の全文から、workflow の最上位の `env:` を "名前=値" の並びで取り出す。
+//
+// **GitHub Actions は、最上位の env: を step の run: の環境変数として渡す。**
+// runOf は run: だけを取り出すので、ここで同じものを足す。
+// このリポジトリの検査（review-gate.yml）の run: は、この値を読まない。
+func workflowEnv(t *testing.T, yamlText string) []string {
+	t.Helper()
+	var parsed struct {
+		Env map[string]string `yaml:"env"`
+	}
+	if err := yaml.Unmarshal([]byte(yamlText), &parsed); err != nil {
+		t.Fatalf("YAML として解釈できません: %v", err)
+	}
+	env := make([]string, 0, len(parsed.Env))
+	for k, v := range parsed.Env {
+		env = append(env, k+"="+v)
+	}
+	return env
 }
 
 // runOf は、YAML の全文から job の最初の step の `run:` を取り出す。
@@ -693,11 +722,11 @@ func shellFunc(script, name string) string {
 // 名乗っているだけでは揃わない。
 //
 // 与える情報: 雛形の2つの job の run。
-// 成功条件: has_pusher・poster_counts・poster_notes・pusher_note の定義が、2つの job で1文字も違わないこと。
+// 成功条件: scope_gate・has_pusher・poster_counts・poster_notes・pusher_note の定義が、2つの job で1文字も違わないこと。
 func TestCITemplate_2つのjobの関数が同じ中身である(t *testing.T) {
 	design := templateRun(t, "design-review-result")
 	code := templateRun(t, "code-review-result")
-	for _, name := range []string{"has_pusher", "poster_counts", "poster_notes", "pusher_note"} {
+	for _, name := range []string{"scope_gate", "has_pusher", "poster_counts", "poster_notes", "pusher_note"} {
 		d, c := shellFunc(design, name), shellFunc(code, name)
 		if d == "" || c == "" {
 			t.Errorf("関数 %s の定義を取り出せません（design=%d バイト、code=%d バイト）", name, len(d), len(c))

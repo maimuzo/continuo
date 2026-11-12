@@ -4418,6 +4418,34 @@ grep -c 'has_pusher' .github/workflows/continuo-ci.yaml   # 自分で付けた�
 
 **緑になったときに `（立場は外れていますが、push できる投稿者 <名前> のコメントを数えました）` と出ることがあります。**立場ではなく、push できるかで数えたという記録です。
 
+#### 人間が直接出した pull request が、`continuo-ci.yaml` の検査で落ちる
+
+**当たるのは、continuo と人間の両方で開発していて、`continuo init` が置いた `continuo-ci.yaml` を `.github/workflows/` へ移して使っている人です。**
+
+**原因。**検査ファイルの2行目 `CONTINUO_REVIEW_GATE_SCOPE` が `all`（既定）だと、全部の pull request に判断票を求めます。
+
+**直し方。**2行目を `continuo` に書き換えて commit してください。continuo の branch から出た pull request だけを検査し、
+人間が直接出した pull request は「continuo が作った pull request ではないので、判断票を数えません」と出して緑で終わります。
+
+```yaml
+env:
+  CONTINUO_REVIEW_GATE_SCOPE: continuo
+  CONTINUO_BRANCH_PREFIX: continuo/
+```
+
+**検査ファイルの先頭にこの2行が無いなら、古い雛形です。**置き直し方は、[upgrading.md](upgrading.md) の「CI の検査ファイル（`continuo-ci.yaml`）で、continuo の pull request だけを検査する運用を選べるようになりました」にあります。
+
+**`continuo` にしたときの注意。**
+
+| 何 | 中身 |
+| --- | --- |
+| **3行目の `CONTINUO_BRANCH_PREFIX`** | `WORKFLOW.md` の `herdr.worktree.branch_template` の頭（既定は `continuo/`）と同じにしてください。**ずれると、continuo の pull request も緑で通り、赤くならないので気づけません。**緑で終えたときの Summary に、branch 名とこの値が出ます |
+| **検査されない pull request** | 人間が直接出したものと、エージェントに別の名前の branch へ出すよう頼んで作らせたもの |
+| **2行目を書き換える pull request** | 書き換えたあとの定義で自分自身を検査します。`.github/workflows/` の差分は人間がレビューしてからマージしてください |
+
+**「どの pull request を検査するかが読めません」と出て赤いとき。**2行目の値が `all` と `continuo` のどちらでもないか、
+既存の CI へ job だけを写して先頭の `env:` が落ちています。上の2行を、検査ファイルの最上位に置いてください。
+
 #### PR にレビューを書いたのに、エージェントが読まずに終わる
 
 **原因。**その PR の本文に `Closes #<issue の番号>` がありません。
