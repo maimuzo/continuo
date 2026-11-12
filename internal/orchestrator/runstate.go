@@ -426,9 +426,11 @@ type runState struct {
 	// 偽のあいだ（`blocked` 以外の引き渡し）は、いま走っているものをそのまま使う。
 	handoffSubagentsFrozen bool
 	// escClosedToolPrompt は、作業の途中で確認の画面に止まり、continuo が esc で閉じたことを表す
-	// （種類がツールの権限の確認か、見分けられなかったときだけ。設計 3-11。issue #347）。
+	// （`blockedScreen.escMayLookLikeRejection` が真のときだけ。種類がツールの権限の確認・AskUserQuestion・
+	// 見分けられなかったもので、読み直して確認の画面でなくなっていなかったとき。設計 3-11。issue #347）。
 	//
-	// **esc で閉じたツールの確認は、会話に「The user doesn't want to proceed with this tool use」を残す。**
+	// **esc で閉じたツールの確認は会話に「The user doesn't want to proceed with this tool use」を、
+	// AskUserQuestion は「User declined to answer questions」を残す。**
 	// 同じ会話へ続けて送る「コメントを書いてください」（`buildCommentRequestPrompt`）に、
 	// 人間の拒否ではないと添えるために持つ。**起動の道では立てない**（そこから書かせ直しへは届かない）。
 	// **run と一緒に消える。**人間が direct chat で引き取ったときは下ろす（`abortTerminalForHuman`）。

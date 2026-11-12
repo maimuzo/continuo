@@ -94,6 +94,52 @@ func PathsWithHome(body, home string) (string, error) {
 	return body, nil
 }
 
+// HomeRanges は、PathsWithHome が `~` に置き換える範囲（body の先頭からのバイトの位置）を返す。
+//
+// **置き換えずに位置だけを返す。**画面の文のように、行の境で割れた home を
+// 行をつないだ文の上で探し、元の行へ戻して縮めたい呼び出し側のためにある（issue #347）。
+// 綴り・symlink を解いた綴り・`-` で綴った形・境界の見方は、PathsWithHome と同じものを使う。
+// **重なる範囲は返さない。**先に当たった（長い綴りの）範囲を残す。
+//
+// body: 走査する文字列。
+// home: 縮める対象の home。
+// 戻り値: [開始, 終端) の並び。home が使えなければ nil。
+func HomeRanges(body, home string) [][2]int {
+	var out [][2]int
+	overlaps := func(i, end int) bool {
+		for _, r := range out {
+			if i < r[1] && r[0] < end {
+				return true
+			}
+		}
+		return false
+	}
+	collect := func(needle string, bounded func(string, int, int) bool) {
+		if needle == "" {
+			return
+		}
+		for next := 0; next <= len(body)-len(needle); {
+			rel := strings.Index(body[next:], needle)
+			if rel < 0 {
+				return
+			}
+			i := next + rel
+			end := i + len(needle)
+			next = end
+			if bounded(body, i, end) && !overlaps(i, end) {
+				out = append(out, [2]int{i, end})
+			}
+		}
+	}
+	for _, spelling := range homeSpellings(home) {
+		collect(spelling, slashBounded)
+		for _, variant := range dashSpellings(spelling) {
+			collect(variant.Text, variant.Bounded)
+		}
+	}
+	return out
+}
+
 // homeSpellings は縮める対象の home の綴りを、長いものから順に返す（設計 3-73b）。
 //
 // **2通りある。**渡された綴りそのものと、**symlink を解いた綴り**である。

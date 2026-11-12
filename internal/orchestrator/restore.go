@@ -868,7 +868,7 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-83f の表の最後の行）。
-		// Status を書かないだけでは足りない。この道の通知は「pane を閉じて人間へ渡した」と書いており、
+		// Status を書かないだけでは足りない。この道の通知は「引き継がずに人間へ渡しました」と書いており、
 		// **pane を閉じないのに投稿すると嘘になる。**
 		// 再起動のたびに1件積まれ、issue のコメントは消せない。
 		if directChat {

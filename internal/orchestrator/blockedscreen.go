@@ -10,6 +10,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/redact"
 )
 
 // 確認の画面で止まったときに、閉じる前に画面を1回読み、何で止まったかと直し方を
@@ -100,7 +101,9 @@ func (s blockedScreen) hasScreen() bool {
 // **ツールの権限の確認・AskUserQuestion・見分けられなかったもの（読めなかったときを含む）**である。
 // esc で閉じたツールの確認は会話の記録に「The user doesn't want to proceed with this tool use」を、
 // AskUserQuestion は画面に「User declined to answer questions」を残す（2026-11-12 に実測）。
-// **読み直したときに確認の画面ではなくなっていたなら出さない。**そのときの esc は確認の画面を閉じていない。
+// **読み直したときに確認の画面ではなくなっていたなら出さない。**そのときの esc は確認の画面を閉じていない
+// （走っている turn を中断しうるが、そのとき会話に残る文は測っていない。補足は測った2つの文を名指しするので、
+// 測っていない場面で言い切らない）。
 // フォルダの信頼は、ツールの呼び出しも質問も無いので出さない。
 //
 // 戻り値: 補足を出すべきなら true。
@@ -268,19 +271,40 @@ func sanitizeScreenText(text string) string {
 }
 
 // screenSecretRules は伏せ字の規則である。**網羅ではない。**知らない形の秘密は残りうる。
+//
+// **伏せるのは `value` 番目の組だけである**（0 なら一致の全体）。前置き（`Authorization:`・`token=`・
+// `://`）と後ろの `@` は残す。`redactScreenSecrets`（1つの文）と `redactScreenLines`（行をまたぐ）の
+// 両方が同じ規則を使い、結果の形を揃える。
 var screenSecretRules = []struct {
-	re   *regexp.Regexp
-	repl string
+	re    *regexp.Regexp
+	value int
 }{
-	{regexp.MustCompile(`(?i)(authorization:[ \t]*)[^\s"'` + "`" + `]+(?:[ \t]+[^\s"'` + "`" + `]+)?`), "${1}***"},
-	{regexp.MustCompile(`(?i)(bearer[ \t]+)[^\s"'` + "`" + `]+`), "${1}***"},
-	{regexp.MustCompile(`(?:ghp_|gho_|ghs_|ghu_|ghr_|github_pat_)[A-Za-z0-9_]+`), "***"},
-	{regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]+`), "***"},
-	{regexp.MustCompile(`xox[abprs]-[A-Za-z0-9\-]+`), "***"},
-	{regexp.MustCompile(`AKIA[0-9A-Z]{16}`), "***"},
+	{regexp.MustCompile(`(?i)(authorization:[ \t]*)([^\s"'` + "`" + `]+(?:[ \t]+[^\s"'` + "`" + `]+)?)`), 2},
+	{regexp.MustCompile(`(?i)(bearer[ \t]+)([^\s"'` + "`" + `]+)`), 2},
+	{regexp.MustCompile(`(?:ghp_|gho_|ghs_|ghu_|ghr_|github_pat_)[A-Za-z0-9_]+`), 0},
+	{regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]+`), 0},
+	{regexp.MustCompile(`xox[abprs]-[A-Za-z0-9\-]+`), 0},
+	{regexp.MustCompile(`AKIA[0-9A-Z]{16}`), 0},
 	// **語の境目を求めない。**`access_token=` のように前に語が付いた形も伏せる。
-	{regexp.MustCompile(`(?i)(token|password|secret|api_key)=[^\s&"'` + "`" + `]+`), "${1}=***"},
-	{regexp.MustCompile(`(://)[^/\s:@]+:[^/\s@]+@`), "${1}***@"},
+	{regexp.MustCompile(`(?i)((?:token|password|secret|api_key)=)([^\s&"'` + "`" + `]+)`), 2},
+	{regexp.MustCompile(`(://)([^/\s:@]+:[^/\s@]+)@`), 2},
+}
+
+// screenSecretRanges は、文の中で伏せる範囲（バイトの位置）を返す。
+//
+// text: 対象の文。
+// 戻り値: [開始, 終端) の並び。
+func screenSecretRanges(text string) [][2]int {
+	var out [][2]int
+	for _, rule := range screenSecretRules {
+		for _, m := range rule.re.FindAllStringSubmatchIndex(text, -1) {
+			i, end := m[2*rule.value], m[2*rule.value+1]
+			if i >= 0 && end > i {
+				out = append(out, [2]int{i, end})
+			}
+		}
+	}
+	return out
 }
 
 // redactScreenSecrets は、資格情報の形の文字列を `***` に置き換える（1つの文の中で当てる）。
@@ -290,10 +314,23 @@ var screenSecretRules = []struct {
 // text: 対象の文。
 // 戻り値: 伏せたあとの文。
 func redactScreenSecrets(text string) string {
-	for _, rule := range screenSecretRules {
-		text = rule.re.ReplaceAllString(text, rule.repl)
+	mask := make([]bool, len(text))
+	for _, r := range screenSecretRanges(text) {
+		for i := r[0]; i < r[1]; i++ {
+			mask[i] = true
+		}
 	}
-	return text
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		if mask[i] {
+			if i == 0 || !mask[i-1] {
+				b.WriteString("***")
+			}
+			continue
+		}
+		b.WriteByte(text[i])
+	}
+	return b.String()
 }
 
 // screenHomeDir は、ホームディレクトリの絶対パスを返す（テストから差し替える）。
@@ -302,13 +339,16 @@ var screenHomeDir = os.UserHomeDir
 // redactScreenLines は、画面の行に伏せ字を当てる。**行の境で割れた秘密とホームのパスも伏せる。**
 //
 // 画面の文は `detection`（画面の格子の平文）なので、pane の幅を超える行は複数の行に割れて届く
-// （`recent_unwrapped` は `blocked` のあいだ読めない。2026-11-12 に実測）。1行ずつ規則を当てると、
-// 行の境で割れたトークンの後半や、`/Users/<名前>` の途中で割れたパスが、公開の issue に残る。
+// （`recent_unwrapped` は `blocked` のあいだ読めない。2026-11-12 に実測）。1行ずつ当てると、
+// 行の境で割れたトークンの後半や、途中で割れたホームのパスが、公開の issue に残る。
 //
-//  1. 行を改行なしでつないだ1つの文を作り、各 rune がどの行のどこかを控える
-//  2. つないだ文に伏せ字の規則を当て、伏せる rune に印を付ける（`${1}` の前置きは残す）
-//  3. つないだ文でホームのパスを探し、1文字目を `~` に、残りを消す印を付ける
-//  4. 印を元の行へ戻す。伏せる rune の連なりは、行ごとに `***` 1つにまとめる
+//  1. 行をつないだ1つの文を作る。**2行目からは行頭の空白を落としてつなぐ**（確認の画面の中の行は
+//     字下げされて描かれるので、割れた続きの行も字下げされている見込みが高い。字下げを残すと、
+//     空白で止まる規則が続きを拾えない）。落とした字下げは、元の行にそのまま残す
+//  2. つないだ文に伏せ字の規則（`screenSecretRanges`）を当て、伏せる位置に印を付ける
+//  3. つないだ文でホームのパスを探す（`redact.HomeRanges`。投稿の直前の縮め（設計 3-73）と同じ綴りと境界）。
+//     1文字目を `~` に、残りを消す印を付ける
+//  4. 印を元の行へ戻す。伏せる文字の連なりは、行ごとに `***` 1つにまとめる
 //
 // **伏せすぎは許す。**つないだせいで、行末の `token=` の次の行の頭の語まで伏せることがある。
 //
@@ -316,74 +356,65 @@ var screenHomeDir = os.UserHomeDir
 // 戻り値: 伏せたあとの行（行の数は変えない）。
 func redactScreenLines(lines []string) []string {
 	type pos struct{ line, idx int }
-	var joined []rune
-	var where []pos
+	var joined strings.Builder
+	var where []pos // joined のバイトごとの元の位置
+	indents := make([]string, len(lines))
+	bodies := make([]string, len(lines))
 	for li, l := range lines {
-		for ri, r := range []rune(l) {
-			joined = append(joined, r)
-			where = append(where, pos{li, ri})
+		body := l
+		if li > 0 {
+			body = strings.TrimLeft(l, " \t")
+			indents[li] = l[:len(l)-len(body)]
 		}
+		bodies[li] = body
+		for bi := 0; bi < len(body); bi++ {
+			where = append(where, pos{li, bi})
+		}
+		joined.WriteString(body)
 	}
+	js := joined.String()
 	const (
 		keep = iota
 		mask
 		drop
 		tilde
 	)
-	mark := make([]int, len(joined))
-	js := string(joined)
-	// バイトの位置を rune の位置へ写す表。**正規表現が返す位置は必ず rune の切れ目なので、切れ目だけを埋める。**
-	byteToRune := make([]int, len(js)+1)
-	ri := 0
-	for bi := range js {
-		byteToRune[bi] = ri
-		ri++
-	}
-	byteToRune[len(js)] = ri
-	for _, rule := range screenSecretRules {
-		for _, m := range rule.re.FindAllStringSubmatchIndex(js, -1) {
-			start := m[0]
-			// `${1}` を残す規則は、前置き（1つ目の組）の後ろから伏せる。
-			if strings.HasPrefix(rule.repl, "${1}") && len(m) >= 4 && m[3] >= 0 {
-				start = m[3]
-			}
-			for i := byteToRune[start]; i < byteToRune[m[1]]; i++ {
-				mark[i] = mask
-			}
+	mark := make([]int, len(js))
+	for _, r := range screenSecretRanges(js) {
+		for i := r[0]; i < r[1]; i++ {
+			mark[i] = mask
 		}
 	}
-	if home, err := screenHomeDir(); err == nil && len(home) > 1 {
-		hr := []rune(home)
-		for i := 0; i+len(hr) <= len(joined); i++ {
-			if string(joined[i:i+len(hr)]) != home {
+	if home, err := screenHomeDir(); err == nil {
+		for _, r := range redact.HomeRanges(js, home) {
+			if mark[r[0]] == mask {
 				continue
 			}
-			mark[i] = tilde
-			for j := i + 1; j < i+len(hr); j++ {
-				mark[j] = drop
+			mark[r[0]] = tilde
+			for i := r[0] + 1; i < r[1]; i++ {
+				mark[i] = drop
 			}
-			i += len(hr) - 1
 		}
 	}
 	out := make([]strings.Builder, len(lines))
-	prevMasked := make([]bool, len(lines))
-	for i, r := range joined {
+	for li := range lines {
+		out[li].WriteString(indents[li])
+	}
+	for i := 0; i < len(js); i++ {
 		w := where[i]
 		b := &out[w.line]
 		switch mark[i] {
 		case mask:
-			if !prevMasked[w.line] {
+			// **行ごとに `***` 1つにまとめる。**同じ行の直前のバイトも伏せたなら書かない。
+			if i == 0 || mark[i-1] != mask || where[i-1].line != w.line {
 				b.WriteString("***")
 			}
-			prevMasked[w.line] = true
-			continue
 		case drop:
 		case tilde:
-			b.WriteRune('~')
+			b.WriteByte('~')
 		default:
-			b.WriteRune(r)
+			b.WriteByte(js[i])
 		}
-		prevMasked[w.line] = false
 	}
 	res := make([]string, len(lines))
 	for i := range lines {
@@ -467,11 +498,13 @@ func parseBlockedScreen(text string) blockedScreen {
 		kept = append(kept, l)
 	}
 	// **伏せ字は、見出し・許可が要る部分・抜粋を取り出す前に、行をまたいで当てる**（`redactScreenLines`）。
-	body = redactScreenLines(trimTrailingBlank(kept))
-
+	kept = trimTrailingBlank(kept)
+	// **種類は伏せる前の文で見分ける。**行をまたいで伏せると、行末の `password=…` の続きとして
+	// 次の行の頭の語（`Do you want to` の `Do`）まで伏せることがあり、見分けが外れる。
+	// 見分けに使うのは決まった英語の言い回しだけで、外へは出さない。
 	s := blockedScreen{Extracted: extracted}
-	full := strings.Join(body, "\n")
-	s.Kind = classifyBlockedScreen(full)
+	s.Kind = classifyBlockedScreen(strings.Join(kept, "\n"))
+	body = redactScreenLines(kept)
 	if s.Kind == blockedKindToolPermission {
 		if extracted {
 			for _, l := range body {
@@ -594,6 +627,9 @@ type blockedScreenOptions struct {
 	StandaloneToolRemedy bool
 	// OmitTrustRemedy は、フォルダの信頼の直し方をもとの文言が持っている道で真にする（起動直後の道）。
 	OmitTrustRemedy bool
+	// OmitStatusAdvice は、再起動の1文から「Status を着手待ちへ戻す」を外す道で真にする（コメントを書かせる道）。
+	// その道では後ろに `failCommentRecovery` の【対処】（完了にするか着手待ちへ戻すかを決める）が続く。
+	OmitStatusAdvice bool
 }
 
 // blockedScreenSection は、引き渡しの通知に足す画面の部分を組み立てる
@@ -609,10 +645,14 @@ func blockedScreenSection(s blockedScreen, opts blockedScreenOptions) string {
 	var b strings.Builder
 	// genericRemedy は、続けて `permissionRemedyText` を出さない道（起動系・コメントの道）で、
 	// 種類が分からないときに出す直し方である。**出さないと、解決方法が1つも書かれない通知になる。**
+	restartText := permissionRestartText
+	if opts.OmitStatusAdvice {
+		restartText = permissionRestartOnlyText
+	}
 	genericRemedy := func() {
 		if opts.StandaloneToolRemedy {
 			b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenRemedyGeneric))
-			b.WriteString(permissionRestartText)
+			b.WriteString(restartText)
 		}
 	}
 	switch {
@@ -644,7 +684,7 @@ func blockedScreenSection(s blockedScreen, opts blockedScreenOptions) string {
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenRemedyTool))
 		if opts.StandaloneToolRemedy {
 			b.WriteString(ja.T(i18n.KeyOrchestratorBlockedScreenRemedyToolAllow))
-			b.WriteString(permissionRestartText)
+			b.WriteString(restartText)
 		}
 	case blockedKindFolderTrust:
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenKindFolderTrust))

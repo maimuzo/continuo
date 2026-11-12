@@ -411,7 +411,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **次を投げる前に必ず esc を送る**（設計 3-11。送らずに投げると保留中の
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
-			// **esc で閉じたツールの確認は、会話に「人間が断った」と読める文を残す**（設計 3-11。issue #347）。
+			// **esc で閉じたツールの確認と AskUserQuestion は、会話に「人間が断った」と読める文を残す**（設計 3-11。issue #347）。
 			// 同じ会話へ続けて送る「コメントを書いてください」に、人間の拒否ではないと添えるための印である。
 			// **送れたかどうかに関わらず立てる。**送れなかったときも、会話には何かが残りうる。
 			if screen.escMayLookLikeRejection() {
@@ -563,7 +563,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 //
 // **閉じる前に読んだ画面の文を載せる**（issue #347）。【止まった画面】【種類】【再発するか】
 // 【止まった確認への直し方】を【確かめ方】のすぐ後ろに置き、`permissionRemedyText` を続け、
-// 最後に【補足】（esc で閉じたツールの確認が会話に残す文は人間の拒否ではない）を置く。
+// 最後に【補足】（esc で閉じたツールの確認と AskUserQuestion が会話に残す文は人間の拒否ではない）を置く。
 // **原因を断定しない。**載せるのは画面の文と、その種類から言えることだけである。
 // 読めなかったときは、その旨だけを書き、汎用の対処（`permissionRemedyText`）に任せる。
 //
@@ -621,7 +621,8 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string, screen
 	b.WriteString(blockedScreenSection(screen, blockedScreenOptions{}))
 	b.WriteString("\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。")
 	b.WriteString(permissionRemedyText(mode, relay))
-	// **esc を送った道なので、ツールの確認か見分けられなかったときは【補足】を最後に置く。**
+	// **esc を送った道なので、`escMayLookLikeRejection` が真なら【補足】を最後に置く**
+	// （ツールの確認・AskUserQuestion・見分けられなかったもの）。
 	b.WriteString(blockedEscNote(screen))
 	return b.String()
 }
@@ -630,8 +631,13 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string, screen
 //
 // **`permissionRemedyText` と、起動系の道の画面の部分（`blockedScreenSection`）の両方から引く。**
 // `claude.permissions` は走行中に読み直さない（差し替えてよい値は `config.Reloadable` の4つだけである）。
-const permissionRestartText = "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
-	"そのうえで Status を着手待ちへ戻してください。"
+const permissionRestartText = permissionRestartOnlyText + "そのうえで Status を着手待ちへ戻してください。"
+
+// permissionRestartOnlyText は、再起動を促す文のうち、Status の扱いを言わない部分である。
+//
+// **コメントを書かせる道で使う。**そこでは後ろに `failCommentRecovery` の【対処】
+// （成果を確かめて完了にするか着手待ちへ戻すかを決める）が続くので、「着手待ちへ戻せ」と言い切ると食い違う。
+const permissionRestartOnlyText = "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。"
 
 // permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
 //

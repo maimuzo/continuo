@@ -308,15 +308,25 @@ func TestBlockedScreen_行の境で割れた秘密とホームのパスも伏せ
 	rule := strings.Repeat("─", 30)
 	text := "prev\n" + rule + "\n Bash command\n" +
 		"  curl -H \"Authorization: Bearer abcdefSECRETFIRST\n" +
-		"HALFSECRETTAIL\" https://x.invalid -d token=ghp_ABCDEFGH\n" +
-		"IJKLMNOPQRSTUV && cat " + home[:len(home)/2] + "\n" +
-		home[len(home)/2:] + "/notes.txt\n" +
+		// **続きの行は字下げされている**（確認の画面の中の行は字下げされて描かれる。実測した4画面）。
+		"  HALFSECRETTAIL\" https://x.invalid -d token=ghp_ABCDEFGH\n" +
+		"  IJKLMNOPQRSTUV && cat " + home[:len(home)/2] + "\n" +
+		"  " + home[len(home)/2:] + "/notes.txt https://u:pw@host.invalid/x password=abc\n" +
 		" Do you want to proceed?\n ❯ 1. Yes\n   2. No\n"
 	got := orchestrator.ParseBlockedScreenForTest(text)
 	for _, ng := range []string{"SECRETFIRST", "HALFSECRETTAIL", "ABCDEFGH", "IJKLMNOPQRSTUV", home[len(home)/2:] + "/notes"} {
 		if strings.Contains(got.Excerpt, ng) {
 			t.Errorf("行の境で割れた %q が残っている:\n%s", ng, got.Excerpt)
 		}
+	}
+	// **前置きと後ろの `@` は残す**（1つの文で伏せる `redactScreenSecrets` と同じ形）。
+	for _, want := range []string{"Authorization: ***", "https://***@host.invalid", "password=***"} {
+		if !strings.Contains(got.Excerpt, want) {
+			t.Errorf("%q が無い:\n%s", want, got.Excerpt)
+		}
+	}
+	if strings.Contains(got.Excerpt, "u:pw") {
+		t.Errorf("URL の user:pass が残っている:\n%s", got.Excerpt)
 	}
 	if !strings.Contains(got.Excerpt, "~") {
 		t.Errorf("ホームのパスが ~ になっていない:\n%s", got.Excerpt)

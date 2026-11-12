@@ -367,7 +367,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		if errors.As(err, &blocked) {
 			o.failCommentRecovery(ctx, rs,
 				blockedScreenCatalog().T(i18n.KeyOrchestratorBlockedScreenCauseRecoveryStartup)+
-					blockedScreenSection(blocked.screen, blockedScreenOptions{StandaloneToolRemedy: true}))
+					blockedScreenSection(blocked.screen, blockedScreenOptions{StandaloneToolRemedy: true, OmitStatusAdvice: true}))
 			return false
 		}
 		o.failCommentRecovery(ctx, rs,
@@ -439,7 +439,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		// **コメントを書かせる途中で確認の画面に止まった**（issue #347）。【補足】は出さない（esc を送らない道）。
 		o.failCommentRecovery(ctx, rs,
 			blockedScreenCatalog().T(i18n.KeyOrchestratorBlockedScreenCauseCommentTurn)+
-				blockedScreenSection(*commentTurnScreen, blockedScreenOptions{StandaloneToolRemedy: true}))
+				blockedScreenSection(*commentTurnScreen, blockedScreenOptions{StandaloneToolRemedy: true, OmitStatusAdvice: true}))
 		return false
 	}
 	o.failCommentRecovery(ctx, rs,

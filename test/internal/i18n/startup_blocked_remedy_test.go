@@ -49,7 +49,7 @@ func TestStartupBlocked_許可の文を持たず信頼の案内を持つ(t *test
 		}
 		// **閉じた pane を見ろと案内しない**（設計 3-34b と同じ決まり）。continuo はこの文言を投稿したあとで
 		// pane を閉じるので、人間が読むときには agent が消えている。
-		// **原因を断定しない。**文言そのものは何が確認の画面を出したかを知らない（画面の文は着手の引き渡しにだけ別に足す。issue #347）。
+		// **原因を断定しない。**文言そのものは何が確認の画面を出したかを知らない（画面の文は、着手の引き渡しとコメントを書かせるための復元の通知に、この文言とは別に足す。issue #347）。
 		for _, ng := range []string{"herdr agent read", "許可されていないコマンド", "a command that is not allowed"} {
 			if strings.Contains(got, ng) {
 				t.Errorf("%v: 起動直後の文言に %q が入っています:\n%s", lang, ng, got)
