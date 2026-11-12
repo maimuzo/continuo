@@ -407,7 +407,7 @@ git worktree remove "$ROLLBACK"
 | 5 | メモリ（`~/.claude/projects/` の下。古い決まりが残っていることがある） |
 
 **とくに次の2つは、プラグインのスキルと食い違っている。**
-- **レビュワーへ渡すものは、running-review-loop の「レビューの回し方」と briefing-subagents の「subagent へ渡すもの」に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（直しを任せる worker にも読ませる）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
+- **レビュワーへ渡すものは、running-review-loop の「レビューの回し方」と briefing-subagents の「subagent へ渡すもの」に従う。**検討の経緯は、issue と pull request の URL を渡して、本文とコメントを1件残らず読ませる（関連処理まで見る役・3つ目の役・直しを任せる worker に読ませる）。**差分を読む役へは、経緯（URL・人間の指示の原文・却下理由・過去の判断票）を渡さない**（経緯を知らない目を1つ残す。人間の決定。issue #346）。「ここを重点的に見ろ」という名指しは、3つ目の役にだけ渡す。差分を読む役へは、差分の外の場所と数える範囲を渡さない（`chat-response` の「worker へ渡すもの」の表は、全 worker へ同じものを渡す形のまま）
 - **MEDIUM と LOW を、新しい issue へ切り出さない**（`general-claude-md` の「スコープ外として放置しない。bug-reporter で issue に登録する」より、下の「このリポジトリに固有の決まり」が勝つ）
 
 **レビューを回すときは、毎周 running-review-loop の「レビューの回し方」を開き直す。**とくに次の2つを落とさない。
