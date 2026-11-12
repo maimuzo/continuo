@@ -9,6 +9,8 @@
 #   1. OS と命令セットを見分ける（Windows なら WSL2 を案内して止まる）
 #   2. GitHub の release から、その組み合わせの実行ファイルを取る
 #      （**既定では公開から 168 時間経った版だけを入れる。**クールダウン。設計 3-36）
+#      **版は release の更新フィード（releases.atom）から選ぶ。認証なしの GitHub の API は呼ばない**
+#      （API は接続元のアドレスごとに1時間60回までで、会社のネットワークでは他の人の分で尽きていることがある）
 #   3. 前提の道具が揃っているかを調べ、**足りないものは1つずつ聞いてから**入れる
 #   4. `~/.local/bin/continuo` へ置き、PATH の通し方を案内する
 #      （**クールダウンで選んだ版がいま入っている版より古ければ、既定では置き換えない**）
@@ -31,6 +33,11 @@
 # **日本語の文言に変数を埋めるときは、必ず `${NAME}` と波括弧で囲むこと。**
 # `${actual}）` のように全角文字が続くと、シェルが `actual）` を変数名として読み、
 # `set -u` の下で `unbound variable` になる（2026-08-21 に実測）。
+#
+# **awk は全部 `LC_ALL=C` を付けて呼ぶこと。**macOS の /usr/bin/awk は `LANG=en_US.UTF-8` の下で、
+# 日本語どうしの `==` を等しいと返す（`"できるようになったこと"=="破壊的変更"` が 1。2026-11-12 に実測）。
+# awk のプログラムは一重引用符で囲むので、中の `'` は `"\047"` と書く。
+# `gsub` の置き換え先の `&` は「一致した文字列」の意味になるので、`&` そのものは `"\\&"` と書く。
 
 set -eu
 
@@ -55,7 +62,7 @@ INSTALL_DIR="${CONTINUO_INSTALL_DIR:-$HOME/.local/bin}"
 ASSUME_YES=0
 # SKIP_DEPS が 1 なら、依存を1つも入れない。
 SKIP_DEPS=0
-# VERSION が空なら、release の一覧からクールダウンを当てて選ぶ。
+# VERSION が空なら、release の更新フィードからクールダウンを当てて選ぶ。
 VERSION=""
 # VERSION_GIVEN が 1 なら、`--version` で版を名指しされている（クールダウンを使わない）。
 VERSION_GIVEN=0
@@ -71,27 +78,23 @@ COOLDOWN_HOURS="$DEFAULT_COOLDOWN_HOURS"
 FORCE=0
 
 # BASE_URL は実行ファイルの取得先である。
-# API_URL は、`/releases/latest` で終わる問い合わせ先である。
-# **これ自体はもう引かない。**末尾の `/latest` を落として、release の一覧（RELEASES_URL）を組み立てるのに使う。
+# FEED_URL は release の更新フィード（`https://github.com/<repo>/releases.atom`）である。
+#
+# **版を指定しない実行では、入れる版をこの更新フィードから決める**（クールダウン。resolve_version）。
+# 破壊的変更も、同じ更新フィードの本文の見出し「破壊的変更」の下から読む（collect_breaking）。
+# **認証なしの GitHub の API（api.github.com）は呼ばない。**API は接続元のアドレスごとに1時間60回までで、
+# アドレスを大勢で共有するネットワークでは、インストーラーを動かす前から尽きていることがある。
+# 更新フィードは API ではないので、この上限の対象外である（設計 3-36）。
 #
 # **どちらも固定である。**環境変数では差し替えられない。
-# **`--base-url` を渡したときだけ差し替わり、そのときは大きな警告を出す。**
+# **`--base-url` / `--feed-url` を渡したときだけ差し替わり、そのときは大きな警告を出す。**
 #
 # 環境変数で差し替えられるようにしていた版では、`curl … | CONTINUO_BASE_URL=http://… sh`
 # の1行を貼らせるだけで、偽の実行ファイルを置けることが実測で確かめられた。
 # **貼られた1行の先頭は公式のままなので、利用者からは正規に見える。**
 # **引数を解釈したあとに組み立てる**（`--repo` を反映するため）。set_urls が行う。
 BASE_URL=""
-API_URL=""
-
-# RELEASES_URL は release の一覧を引く先である。
-#
-# **版を指定しない実行では、入れる版をこの一覧から決める**（クールダウン。resolve_version）。
-# 破壊的変更の印も、同じ一覧から読む（collect_breaking）。
-#
-# **API_URL から組み立てる。**`--api-url` でテストの偽サーバへ向けたときも、
-# 同じ規則（末尾の `/latest` を落とす）で一覧に辿り着ける。set_urls が行う。
-RELEASES_URL=""
+FEED_URL=""
 
 # INSECURE_SOURCE が 1 なら、取得先が差し替えられている（テスト専用）。
 INSECURE_SOURCE=0
@@ -239,10 +242,10 @@ while [ $# -gt 0 ]; do
 			INSECURE_SOURCE=1
 			shift 2
 			;;
-		--api-url)
-			# **テスト専用である。**--base-url と対で使う。
-			[ $# -ge 2 ] || die "--api-url には問い合わせ先を続けてください"
-			API_URL="$2"
+		--feed-url)
+			# **テスト専用である。**--base-url と対で使う。release の更新フィードの取得先を差し替える。
+			[ $# -ge 2 ] || die "--feed-url には更新フィードの取得先を続けてください"
+			FEED_URL="$2"
 			INSECURE_SOURCE=1
 			shift 2
 			;;
@@ -262,7 +265,9 @@ continuo のネットワークインストーラー
 やること:
   1. OS と命令セットを見分ける（Windows なら WSL2 を案内して止まる）
   2. GitHub の release から、その組み合わせの実行ファイルを取る
-     （既定では、公開から 168 時間経った版だけを入れます）
+     （既定では、公開から 168 時間経った版だけを入れます。数えるのは release の
+     最終更新の時刻で、公開より少し遅い側にずれます。版は release の更新フィード
+     releases.atom から選び、認証なしの GitHub の API は呼びません）
   3. 前提の道具が揃っているかを調べ、足りないものは1つずつ聞いてから入れる
   4. ~/.local/bin/continuo へ置き、PATH の通し方を案内する
      （選んだ版がいま入っている版より古ければ、既定では入れ替えません）
@@ -284,10 +289,12 @@ herdr と claude は入れません。どちらも独自の配布経路と認証
   -h, --help    この案内を出す
 
   --repo O/R    fork から入れる（既定 maimuzo/continuo）。使うと警告が出ます
+                タグの名前に - を含む版（v1.0.0-rc1 など）は試験版とみなして選びません
+                （そういう版は --version で入れます）
 
 テスト用（ふだんは使いません）:
   --base-url U  実行ファイルの取得先を差し替える
-  --api-url U   版の一覧の問い合わせ先を差し替える（末尾の /latest を落として使う）
+  --feed-url U  release の更新フィード（releases.atom）の取得先を差し替える
                 どちらも HTTPS の強制が外れます。使うと警告が出ます。
 
 環境変数:
@@ -305,20 +312,16 @@ done
 
 # set_urls は取得先を組み立てる。
 #
-# **`--base-url` / `--api-url` で明示されていれば、それを残す。**
+# **`--base-url` / `--feed-url` で明示されていれば、それを残す。**
 # そうでなければ REPO から組み立てる。
 set_urls() {
 	if [ -z "$BASE_URL" ]; then
 		BASE_URL="https://github.com/$REPO/releases/download"
 	fi
-	if [ -z "$API_URL" ]; then
-		API_URL="https://api.github.com/repos/$REPO/releases/latest"
-	fi
-	if [ -z "$RELEASES_URL" ]; then
-		# **一覧は `/releases/latest` の1つ上である。**
-		# **1回の取得で見渡せるように多めに取る**（既定は30件）。
-		# 飛び越えて上げたとき、あいだの版の印も同じ応答の中に入る。
-		RELEASES_URL="${API_URL%/latest}?per_page=100"
+	if [ -z "$FEED_URL" ]; then
+		# **更新フィードには新しい10件しか載らない**（`?page=2` を付けても同じ10件が返る。2026-11-12 に実測）。
+		# 件数を決め打ちはしない。載っている分だけで版を選び、破壊的変更を読む。
+		FEED_URL="https://github.com/$REPO/releases.atom"
 	fi
 	# **既定と違うリポジトリなら、差し替えられているものとして扱う。**
 	if [ "$REPO" != "$DEFAULT_REPO" ]; then
@@ -467,7 +470,8 @@ cooldown_label() {
 	fi
 }
 
-# AWK_VCMP は、版を比べる awk の関数である。**select_release と breaking_lines の両方の先頭に付ける。**
+# AWK_VCMP は、版を比べる awk の関数である。**版を選ぶ awk（feed_versions・select_release）と
+# 破壊的変更を読む awk（breaking_lines）と version_greater の先頭に付ける。**
 #
 # **1つだけ置く。**下がるかどうかの判定と、破壊的変更を並べる範囲が、同じ規則で版を比べるためである。
 # 片方だけ直すと、2つが「どちらが新しいか」で食い違う。
@@ -495,37 +499,8 @@ AWK_VCMP='
 		}
 '
 
-# select_release は、release の一覧から入れる版を選ぶ。
-#
-# 標準入力: GitHub API の release の一覧（JSON）。**引数では渡さない。**
-# いまの一覧は18件で 290,624 バイトあり、引数の長さの上限に当たりうる。
-# $1: いまの時刻（`date -u '+%Y-%m-%dT%H:%M:%SZ'` の形）。
-# $2: 公開から何時間経った版を入れるか（0 なら時刻で絞らない）。
-# $3: いま入っている版（vN.N.N の形でなければ空を渡す）。
-# 標準出力: 1行に1件、先頭の1文字で種類を分け、欄はタブで区切る。
-#   N <正式版の数>
-#   C <版> <公開の時刻> <公開から何時間>                  選んだ版
-#   S <版> <公開の時刻> <公開から何時間> <あと何時間>     見送った版（選んだ版より大きいもの。大きい順）
-#   E <版> <公開の時刻> <公開から何時間> <あと何時間>     入れてよい版が無いとき、いちばん早く入れられる版
-#   D cooldown|newer                                     選んだ版がいま入っている版より小さい（その理由）
-#   U                                                    見送った版に、いま入っている版より大きいものがある
-#
-# **JSON を厳密に解釈しない**（設計 3-36。POSIX sh に道具が無く、`jq` は前提にできない）。
-# 鍵は、引用符で囲んだ名前の直後に（空白を挟んでもよい）`:` が来るものだけを数える。
-# `"name": "draft"` の値を鍵と取り違えないためである。`"tag_name"` を拾ったら、そのあとに
-# 現れる `"draft"`・`"prerelease"`・`"published_at"` を、その release のものとする。
-# この4つは release の階層にだけ現れる（資産の欄は `created_at` と `updated_at` だけ）。
-#
-# **正式版**は、`draft` も `prerelease` も `false` で、公開の時刻が読めるものである。
-# 版の文字が `--version` と同じ規則（英数字と `. _ + -`）に外れるものは数えない（URL に入るため）。
-#
-# **選ぶのは、入れてよい正式版のうち版の数がいちばん大きいものである。**公開の新しさでは選ばない。
-# 古い系列へ修正版を出しても新しい系列を選び、下がるかどうかの比べと同じ規則に揃えるためである。
-# 版の比べ方は breaking_lines の `vcmp` と同じ（桁ごとに数として比べ、`-` と `+` から後ろは落とす）。
-#
-# **経過時間が負なら 0 とみなす。**手元の時計が遅れていても、0 で最新を入れられるようにする。
-select_release() {
-	awk -v now="$1" -v hours="$2" -v installed="$3" "$AWK_VCMP"'
+# AWK_EPOCH は、時刻を扱う awk の関数である。**feed_versions と select_release の先頭に付ける。**
+AWK_EPOCH='
 		# epoch は 2026-11-05T06:00:00Z の形を、1970-01-01 からの秒へ直す。
 		# 読めなければ -1 を返す。**mktime は POSIX に無いので、日付から通し日数を出す式で数える。**
 		function epoch(s,   y, m, d, hh, mm, ss, mp, doy, days) {
@@ -546,59 +521,148 @@ select_release() {
 		function show(s) {
 			return substr(s, 1, 10) " " substr(s, 12, 5) " UTC"
 		}
-		function flush() {
-			if (tag != "" && draft == "false" && pre == "false" && tag !~ /[^A-Za-z0-9._+-]/) {
-				t = epoch(pub)
-				if (t >= 0) {
-					n++
-					rt[n] = tag
-					rp[n] = pub
-					rs[n] = t
-				}
-			}
-			tag = ""
-			draft = ""
-			pre = ""
-			pub = ""
+'
+
+# AWK_FEED は、release の更新フィードの1件のリンクから版を読む awk の関数である。
+# **feed_versions と breaking_lines の両方の先頭に付ける。**版の読み方が2つで食い違わないようにする。
+AWK_FEED='
+		# linktag は <link … href="…/releases/tag/<版>"/> の href から、/releases/tag/ より後ろ、
+		# 閉じの引用符までを版として返す。**末尾の段だけを読まない**（/ を含むタグを取り違えない）。
+		# --version と同じ文字の規則（英数字と . _ + -）に外れれば空を返す（URL に入るため）。
+		function linktag(s,   i, v) {
+			i = index(s, "href=\"")
+			if (i == 0) { return "" }
+			v = substr(s, i + 6)
+			i = index(v, "\"")
+			if (i == 0) { return "" }
+			v = substr(v, 1, i - 1)
+			i = index(v, "/releases/tag/")
+			if (i == 0) { return "" }
+			v = substr(v, i + 14)
+			if (v == "" || v ~ /[^A-Za-z0-9._+-]/) { return "" }
+			return v
+		}
+'
+
+# feed_versions は、release の更新フィードから版と時刻を読み、正式版を版の大きい順に並べる。
+#
+# 標準入力: 更新フィード（Atom の XML）。**引数では渡さない**（いまの更新フィードは 92,327 バイトある）。
+# $1: いまの時刻（`date -u '+%Y-%m-%dT%H:%M:%SZ'` の形）。
+# $2: 公開から何時間経った版を入れるか（0 なら時刻で絞らない）。
+# 標準出力: 1行に1件、先頭の1文字で種類を分け、欄はタブで区切る。
+#   F                                   応答に `<feed` が在った
+#   N <entry の数>
+#   R <版と時刻を読めた entry の数>
+#   V <版> <最終更新の時刻> <入れてよいなら 1、まだなら 0>   正式版。版の大きい順
+#
+# **`<` で区切って読む**（RS を `<` にする）。XML の中で生の `<` は要素の始まりにしか現れない
+# （本文の HTML は `&lt;` に逃がされている）ので、1件の記録が「要素の名前から、次の要素の手前まで」になる。
+# 1行にまとめられた更新フィードでも、整形されたものでも、同じ読み方で読める。
+#
+# **`<entry>` で区切ってから読む。**最初の `<entry>` より前に、フィード全体の `<updated>` と `<link>` が在る。
+# **版は `<link>` の href から読み、題名（`<title>`）は読まない。**題名は release の名前で、
+# タグと違う名前を付けられるためである。
+#
+# **時刻は1件ごとの `<updated>`（release の最終更新の時刻）である。**更新フィードには公開の時刻が無い。
+# 公開より 22秒〜36分遅い（2026-11-12 に10件を API の `published_at` と比べた）ので、
+# クールダウンが短くなることはない。リリースノートを直すと、その時刻から数え直しになる。
+#
+# **正式版は、版の名前に `-` を含まないものである。**更新フィードには試験版（prerelease）かどうかが載らないので、
+# `-` を含む名前（`v1.0.0-rc1` など）を試験版とみなして除く。draft は持ち主にしか見えないので載らない。
+# **release の無いタグも同じ形で載る**ので、ここで選んだ版は、呼び出し元が書庫の在りかを確かめてから使う。
+feed_versions() {
+	LC_ALL=C awk -v now="$1" -v hours="$2" "$AWK_VCMP$AWK_EPOCH$AWK_FEED"'
+		function flush(   t) {
+			if (tag == "") { return }
+			t = epoch(upd)
+			if (t < 0) { return }
+			readable++
+			if (tag ~ /-/) { return }
+			n++
+			rt[n] = tag
+			ru[n] = upd
+			rs[n] = t
 		}
 		BEGIN {
-			re = "\"(tag_name|draft|prerelease|published_at)\"[ \t\r\n]*:[ \t\r\n]*"
+			RS = "<"
+			n = 0
+			entries = 0
+			readable = 0
+			inentry = 0
+			sawfeed = 0
+		}
+		/^feed[ \t\r\n>]/ { sawfeed = 1; next }
+		/^entry[ \t\r\n>]/ { inentry = 1; entries++; tag = ""; upd = ""; next }
+		/^\/entry[ \t\r\n>]/ { if (inentry) { flush() } inentry = 0; next }
+		inentry && /^link[ \t\r\n]/ { tag = linktag($0); next }
+		inentry && /^updated[ \t\r\n>]/ {
+			upd = $0
+			sub(/^updated[^>]*>/, "", upd)
+			gsub(/[ \t\r\n]/, "", upd)
+			next
+		}
+		END {
+			if (sawfeed) { print "F" }
+			printf "N\t%d\n", entries
+			printf "R\t%d\n", readable
+			if (n == 0) { exit 0 }
+			nowt = epoch(now)
+			if (nowt < 0) { exit 2 }
+			need = hours * 3600
+			# 版の大きい順に並べる（挿入ソート。件数は更新フィードの10件ほど）。
+			for (a = 1; a <= n; a++) { ix[a] = a }
+			for (a = 2; a <= n; a++) {
+				x = ix[a]
+				for (b = a - 1; b >= 1 && vcmp(rt[ix[b]], rt[x]) < 0; b--) { ix[b + 1] = ix[b] }
+				ix[b + 1] = x
+			}
+			for (a = 1; a <= n; a++) {
+				i = ix[a]
+				el = nowt - rs[i]
+				if (el < 0) { el = 0 }
+				ok = (hours == 0 || el >= need) ? 1 : 0
+				printf "V\t%s\t%s\t%d\n", rt[i], ru[i], ok
+			}
+		}
+	'
+}
+
+# select_release は、書庫の在ることを確かめた版から、入れる版を選ぶ。
+#
+# 標準入力: 1行に1件、`<版><タブ><最終更新の時刻>`（resolve_version が書庫を確かめた版だけを渡す）。
+# $1: いまの時刻（`date -u '+%Y-%m-%dT%H:%M:%SZ'` の形）。
+# $2: 公開から何時間経った版を入れるか（0 なら時刻で絞らない）。
+# $3: いま入っている版（vN.N.N の形でなければ空を渡す）。
+# 標準出力: 1行に1件、先頭の1文字で種類を分け、欄はタブで区切る。
+#   N <版の数>
+#   C <版> <公開の時刻> <公開から何時間>                  選んだ版
+#   S <版> <公開の時刻> <公開から何時間> <あと何時間>     見送った版（選んだ版より大きいもの。大きい順）
+#   E <版> <公開の時刻> <公開から何時間> <あと何時間>     入れてよい版が無いとき、いちばん早く入れられる版
+#   D cooldown|newer                                     選んだ版がいま入っている版より小さい（その理由）
+#   U                                                    見送った版に、いま入っている版より大きいものがある
+#
+# 「公開の時刻」は、更新フィードの最終更新の時刻である（feed_versions の注記）。画面の文言は「公開」のままにする。
+#
+# **選ぶのは、入れてよい版のうち版の数がいちばん大きいものである。**公開の新しさでは選ばない。
+# 古い系列へ修正版を出しても新しい系列を選び、下がるかどうかの比べと同じ規則に揃えるためである。
+# 版の比べ方は breaking_lines の `vcmp` と同じ（桁ごとに数として比べ、`-` と `+` から後ろは落とす）。
+#
+# **経過時間が負なら 0 とみなす。**手元の時計が遅れていても、0 で最新を入れられるようにする。
+select_release() {
+	LC_ALL=C awk -F '\t' -v now="$1" -v hours="$2" -v installed="$3" "$AWK_VCMP$AWK_EPOCH"'
+		BEGIN {
 			n = 0
 		}
-		# **1行ずつ読む。**応答を1つの文字列に溜めて切り出すと、件数に対して2乗で遅くなる
-		# （整形済みの100件で 2.5 秒かかった）。JSON の文字列は生の改行を含まないので、
-		# 鍵と値は同じ行に在る。release の欄は行をまたいで tag などに持ち越す。
-		{
-			rest = $0
-			while (match(rest, re)) {
-				key = substr(rest, RSTART + 1, RLENGTH)
-				sub(/".*$/, "", key)
-				rest = substr(rest, RSTART + RLENGTH)
-				if (substr(rest, 1, 1) == "\"") {
-					rest = substr(rest, 2)
-					q = index(rest, "\"")
-					if (q == 0) { break }
-					val = substr(rest, 1, q - 1)
-					rest = substr(rest, q + 1)
-				} else {
-					val = rest
-					sub(/[] \t\r\n,}].*$/, "", val)
-					rest = substr(rest, length(val) + 1)
-				}
-				if (key == "tag_name") {
-					flush()
-					tag = val
-				} else if (key == "draft") {
-					draft = val
-				} else if (key == "prerelease") {
-					pre = val
-				} else if (key == "published_at") {
-					pub = val
-				}
+		NF >= 2 && $1 != "" && $1 !~ /[^A-Za-z0-9._+-]/ {
+			t = epoch($2)
+			if (t >= 0) {
+				n++
+				rt[n] = $1
+				rp[n] = $2
+				rs[n] = t
 			}
 		}
 		END {
-			flush()
 			printf "N\t%d\n", n
 			if (n == 0) { exit 0 }
 
@@ -658,19 +722,174 @@ select_release() {
 	'
 }
 
+# fetch_feed は、release の更新フィードを取り、FETCH_BODY と FETCH_CODE に入れる。
+#
+# **状態コードを見る。**404（リポジトリが無い）と、それ以外の失敗と、200 を分けるためである。
+# **更新フィードは、タグも release も無いリポジトリでは 200 で `<entry>` が0件、
+# リポジトリが無いと 404 を返す**（2026-11-12 に実測）。
+# **`set -eu` の下で代入が落ちないよう、`|| true` で受ける。**
+# wget では状態コードを素直に取れないので、空でない本文を 200、空を「応答なし」とする。
+FETCH_BODY=""
+FETCH_CODE=""
+fetch_feed() {
+	FETCH_BODY=""
+	FETCH_CODE=""
+	if have curl; then
+		# `-w` で状態コードを最終行に足し、あとで切り離す。
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			FETCH_BODY="$(curl --max-time 60 -sSL -w '\n%{http_code}' "$FEED_URL" 2> /dev/null || true)"
+		else
+			FETCH_BODY="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
+				--max-time 60 -sSL -w '\n%{http_code}' "$FEED_URL" 2> /dev/null || true)"
+		fi
+		FETCH_CODE="$(printf '%s' "$FETCH_BODY" | tail -1)"
+		FETCH_BODY="$(printf '%s' "$FETCH_BODY" | sed '$d')"
+	else
+		FETCH_BODY="$(fetch "$FEED_URL" 2> /dev/null || true)"
+		if [ -n "$FETCH_BODY" ]; then
+			FETCH_CODE="200"
+		fi
+	fi
+}
+
+# is_feed は、応答が更新フィード（`<feed` を含む）かを返す。
+#
+# **200 でも更新フィードとは限らない。**ネットワークの中継（proxy）が、確認の画面の HTML を 200 で返すことがある。
+# 見分けずに読むと `<entry>` が0件になり、「release がまだ1つもありません」と事実と違う案内が出る。
+#
+# $1: 応答の本文。
+is_feed() {
+	case "$1" in
+		*"<feed"*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# probe_archive は、その版のこの環境の書庫が配られているかを、先頭の1バイトだけを求める GET で確かめる。
+#
+# **更新フィードには release の無いタグも同じ形で載る**（fork の更新フィードには、元のリポジトリのタグが
+# release の無いまま載る。2026-11-12 に実測）。選ぶ前に書庫が在るかを確かめないと、取得の段で 404 で止まる。
+#
+# **HEAD は使わない。**ネットワークの中継が HEAD を断るかを測れないため。GET は書庫の取得でいまも通っている。
+# **`-L` で転送を追う。**`releases/download` は配布用のホストへ 302 で転送する（2026-11-12 に実測。
+# `-L` 無しは 302、`-L` 付きは転送1回で 206 と1バイト）。**`-f` は付けない**（404 とタイムアウトを
+# 終了コードで見分けられないため。状態コードを `-w` で取る）。
+# 時間の上限は download と同じ 300 秒にする（中継が書庫の全体を取ってから検査することがあるため）。
+#
+# $1: 版。
+# 標準出力: 最後の応答の状態コード（応答が無ければ `000` か空）。
+probe_archive() {
+	pa_url="$BASE_URL/$1/continuo_${GOOS}_${GOARCH}.tar.gz"
+	if have curl; then
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			curl --max-time 300 -sSL -r 0-0 -o /dev/null -w '%{http_code}' "$pa_url" 2> /dev/null || true
+		else
+			curl --proto '=https' --proto-redir '=https' --tlsv1.2 --max-time 300 \
+				-sSL -r 0-0 -o /dev/null -w '%{http_code}' "$pa_url" 2> /dev/null || true
+		fi
+	else
+		# **wget の出力の形は測っていない**（手元に wget が無い。設計 3-36 の限界）。
+		# `-S` は応答の見出しを標準エラーへ出すので `2>&1` で受け、転送のぶん並ぶ状態行のうち最後のものを読む。
+		# `-q` は付けない（`-S` の出力まで消える）。
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			wget --timeout=300 --header='Range: bytes=0-0' -S -O /dev/null "$pa_url" 2>&1 |
+				LC_ALL=C awk '$1 ~ /^HTTP\// { c = $2 } END { print c }' || true
+		else
+			wget --https-only --timeout=300 --header='Range: bytes=0-0' -S -O /dev/null "$pa_url" 2>&1 |
+				LC_ALL=C awk '$1 ~ /^HTTP\// { c = $2 } END { print c }' || true
+		fi
+	fi
+}
+
+# stop_with_version は、版を決められなかった理由を出し、版を指定する1行と releases の画面の URL を案内して止まる。
+#
+# **例の版を書かない。**実在の版を書くと、貼った人がそのまま古い版へ下がる
+# （`--version` の実行は下げない判定を当てない）。版は releases の画面で選んでもらう。
+#
+# $1: 何ができなかったか（1行目）。$2: 理由。$3: 最後の「エラー:」の文。
+stop_with_version() {
+	say ""
+	say "$1"
+	say ""
+	say "$2"
+	say ""
+	say "時間をおいて試し直すか、版を指定してください。"
+	say ""
+	say "    $(install_line drop --version "$(shquote '<版>')")"
+	say ""
+	say "配布している版は https://github.com/${REPO}/releases で確かめられます。"
+	say ""
+	die "$3"
+}
+
+# say_build_from_source は、ソースから作る手順を出す。
+say_build_from_source() {
+	say "いま試したい場合は、ソースから作ってください。"
+	say ""
+	say "    git clone https://github.com/${REPO}.git"
+	say "    cd $(basename "$REPO")"
+	say "    go build -o \"$INSTALL_DIR/continuo\" ./cmd/continuo"
+	say ""
+}
+
+# say_no_release は、正式版の release が1つも無いことを伝えて止まる（終了コード 1）。
+say_no_release() {
+	say ""
+	say "$REPO には release がまだ1つもありません。"
+	say ""
+	say "continuo はまだ配布していません。作者が実機で確かめ、出してよいと判断した時点で"
+	say "タグが打たれ、release に実行ファイルが載ります。"
+	say ""
+	# **ここだけ英語も添える。**英語の README から来た人が最初に当たるのがこの画面である。
+	say "(No release yet. Build from source with the commands below.)"
+	say ""
+	say_build_from_source
+	exit 1
+}
+
+# report_missing_archives は、書庫の無かった版を、大きい順に5行まで出す。残りは1行にまとめる。
+#
+# **「見送った版」（クールダウン中の版）とは別の語にする。**`--cooldown-hours 0` にしても入らないためである。
+# **黙って下の版へ進まない。**release の無いタグか、この環境の書庫を作っていない版である。
+report_missing_archives() {
+	if [ -z "$RV_MISSING" ]; then
+		return 0
+	fi
+	rm_n=0
+	while IFS= read -r rm_tag; do
+		if [ -z "$rm_tag" ]; then
+			continue
+		fi
+		rm_n=$((rm_n + 1))
+		if [ "$rm_n" -le 5 ]; then
+			say "  書庫の無い版: ${rm_tag}（この環境の書庫 continuo_${GOOS}_${GOARCH}.tar.gz がありません。release の無いタグかもしれません）"
+		fi
+	done << EOF
+$RV_MISSING
+EOF
+	if [ "$rm_n" -gt 5 ]; then
+		say "  書庫の無い版は、ほか $((rm_n - 5)) 件"
+	fi
+}
+
 # resolve_version は入れる版を決める。
 #
 # **`--version` があればそれを使い、クールダウンを当てない。**版を名指しした人は、その版が欲しいと決めている。
 #
-# **無ければ release の一覧を1回引き、クールダウンを当てて選ぶ**（設計 3-36）。
-# 引いた一覧は LIST_BODY に残し、破壊的変更の印を読むときにも使う（未認証の 60回/時の上限を食わないように）。
+# **無ければ release の更新フィードを1回取り、クールダウンを当てて選ぶ**（設計 3-36）。
+# 取った更新フィードは FEED_BODY に残し、破壊的変更を読むときにも使う（もう1回は取らない）。
+# **認証なしの GitHub の API は呼ばない**（FEED_URL の注記）。
 #
-# **版を指定しない実行では、一覧を引けなければ止まる。**一覧が版の決め手だからである
-# （以前の `/releases/latest` を引けないときも止まっていた。引く API が替わっただけである）。
+# **版を指定しない実行では、更新フィードを読めなければ止まる。**更新フィードが版の決め手だからである。
+#
+# **選ぶ前に、書庫が在るかを確かめる**（probe_archive）。正式版を版の大きい順に、書庫が在り、
+# かつクールダウンを過ぎた版が1つ見つかるまで確かめる。こうして残った「書庫の在る版」だけで、
+# 入れる版・見送った版・いちばん早く入れられる版・いま入っている版より下がるかを決める。
 #
 # 選んだ版がいま入っている版より古いときは、`--force` が無ければ KEEP_INSTALLED を 1 にする。
 # 呼び出し元は、そのとき実行ファイルを置き換えない。
-LIST_BODY=""
+FEED_BODY=""
+RV_MISSING=""
 KEEP_INSTALLED=0
 resolve_version() {
 	if [ "$VERSION_GIVEN" = "1" ]; then
@@ -678,34 +897,11 @@ resolve_version() {
 		return 0
 	fi
 
-	# **「引けなかった」「リポジトリが無い」「1つも無い」を分ける。**
-	# GitHub の API は未認証だと 60回/時・IP 単位で、NAT の内側では普通に枯れる。
-	#
-	# **一覧の API は、release が1つも無くても 200 と `[]` を返す。**だから 404 は
-	# 「リポジトリが見つからない」（`--repo` の打ち間違いなど）である。403 と 429 はレートリミット、
-	# それ以外は繋がらなかったということである。
-	http_code=""
-	body=""
-	if have curl; then
-		# `-w` で状態コードを最終行に足し、あとで切り離す。
-		if [ "$INSECURE_SOURCE" = "1" ]; then
-			body="$(curl --max-time 60 -sSL -w '\n%{http_code}' "$RELEASES_URL" 2> /dev/null || true)"
-		else
-			body="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
-				--max-time 60 -sSL -w '\n%{http_code}' "$RELEASES_URL" 2> /dev/null || true)"
-		fi
-		http_code="$(printf '%s' "$body" | tail -1)"
-		body="$(printf '%s' "$body" | sed '$d')"
-	else
-		# wget では状態コードを素直に取れない。**空の本文は「問い合わせられなかった」とする。**
-		# 1つも無いリポジトリは `[]` を返すので、空にはならない。
-		body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
-		[ -n "$body" ] && http_code="200" || http_code=""
-	fi
-
-	if [ "$http_code" = "404" ]; then
+	# **「取れなかった」「リポジトリが無い」「1つも無い」「読めなかった」を分ける。**
+	fetch_feed
+	if [ "$FETCH_CODE" = "404" ]; then
 		say ""
-		say "リポジトリが見つかりません: $RELEASES_URL"
+		say "リポジトリが見つかりません: $FEED_URL"
 		say ""
 		if [ "$REPO" != "$DEFAULT_REPO" ]; then
 			say "--repo の値を確かめてください。"
@@ -713,92 +909,135 @@ resolve_version() {
 		fi
 		die "リポジトリが見つかりません（${REPO}）"
 	fi
-
-	if [ "$http_code" != "200" ]; then
-		say ""
-		say "配布された版を問い合わせられませんでした: $RELEASES_URL"
-		say ""
-		say "ネットワークに繋がらないか、GitHub の API の呼び出し回数の上限に達しています"
-		say "（未認証では1時間あたり60回、接続元のアドレスごとに数えられます）。"
-		say ""
-		say "時間をおいて試し直すか、版を指定してください。"
-		say ""
-		# **例の版を書かない。**実在の版を書くと、貼った人がそのまま古い版へ下がる
-		# （`--version` の実行は下げない判定を当てない）。版は一覧の画面で選んでもらう。
-		say "    $(install_line drop --version "$(shquote '<版>')")"
-		say ""
-		say "配布している版は https://github.com/${REPO}/releases で確かめられます。"
-		say ""
-		die "配布された版を問い合わせられません（応答: ${http_code:-なし}）"
+	if [ "$FETCH_CODE" != "200" ]; then
+		stop_with_version "配布された版を問い合わせられませんでした: $FEED_URL" \
+			"ネットワークに繋がらないか、GitHub が一時的に応答していません。" \
+			"配布された版を問い合わせられません（応答: ${FETCH_CODE:-なし}）"
 	fi
-	LIST_BODY="$body"
+	if ! is_feed "$FETCH_BODY"; then
+		stop_with_version "更新フィードから版を読めませんでした: $FEED_URL" \
+			"応答が release の更新フィードの形ではありません（ネットワークの中継が確認の画面を返したなど）。" \
+			"更新フィードから版を読めません"
+	fi
+	FEED_BODY="$FETCH_BODY"
 
 	rv_now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" || die "いまの時刻を読めません（date -u が失敗しました）"
 	rv_installed=""
 	if is_release_version "$INSTALLED_VERSION"; then
 		rv_installed="$INSTALLED_VERSION"
 	fi
-	# **選ぶ処理が落ちたら、理由を出して止める。**`set -eu` の下で代入が落ちると、
+	# **読む処理が落ちたら、理由を出して止める。**`set -eu` の下で代入が落ちると、
 	# 何も出さずに終わってしまう（collect_breaking の注記と同じ落とし穴）。
-	if ! rv_out="$(printf '%s\n' "$LIST_BODY" | select_release "$rv_now" "$COOLDOWN_HOURS" "$rv_installed")"; then
-		say ""
-		say "release の一覧から版を選べませんでした（awk が失敗しました）。"
-		say "版を指定すれば、一覧を読まずに入れられます。"
-		say ""
-		say "    $(install_line drop --version "$(shquote '<版>')")"
-		say ""
-		die "release の一覧を読めません"
+	if ! rv_feed="$(printf '%s\n' "$FEED_BODY" | feed_versions "$rv_now" "$COOLDOWN_HOURS")"; then
+		stop_with_version "更新フィードから版を読めませんでした（awk が失敗しました）。" \
+			"版を指定すれば、更新フィードを読まずに入れられます。" \
+			"更新フィードを読めません"
+	fi
+	rv_entries="$(printf '%s\n' "$rv_feed" | LC_ALL=C awk -F '\t' '$1 == "N" {print $2}')"
+	rv_readable="$(printf '%s\n' "$rv_feed" | LC_ALL=C awk -F '\t' '$1 == "R" {print $2}')"
+	if [ "${rv_entries:-0}" = "0" ]; then
+		say_no_release
+	fi
+	if [ "${rv_readable:-0}" = "0" ]; then
+		# **`<entry>` があるのに版を1件も読めない。**`<link>` の形や `<updated>` の書式が変わったときである。
+		# 「まだ配布していません」と言うと事実と違い、`--version` での回避も伝わらない。
+		stop_with_version "更新フィードから版を読めませんでした: $FEED_URL" \
+			"release は載っていますが、版か時刻を1件も読めませんでした（GitHub が更新フィードの形を変えた可能性があります）。" \
+			"更新フィードから版を読めません"
+	fi
+	rv_formal="$(printf '%s\n' "$rv_feed" | LC_ALL=C awk -F '\t' '$1 == "V"')"
+	if [ -z "$rv_formal" ]; then
+		# 読めた版がすべて `-` 付き（試験版）である。正式版が無いので、0 を勧めても入らない。
+		say_no_release
 	fi
 
-	rv_count="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "N" {print $2}')"
-	if [ "${rv_count:-0}" = "0" ]; then
+	# **書庫が在るかを、版の大きい順に確かめる。**書庫が在り、かつクールダウンを過ぎた版が見つかったら止める
+	# （それより大きい、クールダウン中の版も確かめてあるので、見送った版の判定に足りる）。
+	rv_have=""
+	RV_MISSING=""
+	while IFS='	' read -r v_kind v_tag v_upd v_ok; do
+		if [ "$v_kind" != "V" ]; then
+			continue
+		fi
+		v_code="$(probe_archive "$v_tag")"
+		case "$v_code" in
+			200 | 206)
+				rv_have="${rv_have}${v_tag}	${v_upd}
+"
+				if [ "$v_ok" = "1" ]; then
+					break
+				fi
+				;;
+			404)
+				RV_MISSING="${RV_MISSING}${v_tag}
+"
+				;;
+			*)
+				stop_with_version "配布された版を問い合わせられませんでした: $BASE_URL/${v_tag}/continuo_${GOOS}_${GOARCH}.tar.gz" \
+					"配布物が在るかを確かめる問い合わせに、想定と違う応答が返りました。" \
+					"配布された版を問い合わせられません（応答: ${v_code:-なし}）"
+				;;
+		esac
+	done << EOF
+$rv_formal
+EOF
+
+	if [ -z "$rv_have" ]; then
+		# **正式版はあるのに、どれも書庫が無い。**fork でまだ release を出していないときと、
+		# この環境の組み合わせを作っていない fork のときである。
 		say ""
-		say "$REPO には release がまだ1つもありません。"
+		report_missing_archives
 		say ""
-		say "continuo はまだ配布していません。作者が実機で確かめ、出してよいと判断した時点で"
-		say "タグが打たれ、release に実行ファイルが載ります。"
+		say "この環境（${GOOS} / ${GOARCH}）の書庫が載った release がありません: ${REPO}"
 		say ""
-		# **ここだけ英語も添える。**英語の README から来た人が最初に当たるのがこの画面である。
-		say "(No release yet. Build from source with the commands below.)"
+		say "配布している版は https://github.com/${REPO}/releases で確かめられます。"
 		say ""
-		say "いま試したい場合は、ソースから作ってください。"
-		say ""
-		say "    git clone https://github.com/${REPO}.git"
-		say "    cd $(basename "$REPO")"
-		say "    go build -o \"$INSTALL_DIR/continuo\" ./cmd/continuo"
-		say ""
+		say_build_from_source
 		exit 1
+	fi
+
+	if ! rv_out="$(printf '%s' "$rv_have" | select_release "$rv_now" "$COOLDOWN_HOURS" "$rv_installed")"; then
+		stop_with_version "更新フィードから版を選べませんでした（awk が失敗しました）。" \
+			"版を指定すれば、更新フィードを読まずに入れられます。" \
+			"更新フィードを読めません"
 	fi
 
 	rv_label="$(cooldown_label)"
 
 	# 入れてよい版が1つも無い（公開から時間が経っていない版しか無い）。
-	rv_e="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "E" {print $2 "\t" $3 "\t" $4 "\t" $5}')"
+	rv_e="$(printf '%s\n' "$rv_out" | LC_ALL=C awk -F '\t' '$1 == "E" {print $2 "\t" $3 "\t" $4 "\t" $5}')"
 	if [ -n "$rv_e" ]; then
 		IFS='	' read -r e_tag e_pub e_el e_left << EOF
 $rv_e
 EOF
 		say "クールダウン: ${rv_label}経った版がありません。"
+		report_missing_archives
 		say "  いちばん早く入れられる版: ${e_tag}（${e_pub} 公開。公開から ${e_el} 時間。あと ${e_left} 時間で入れられます）"
 		say "  待たずに入れるときは、クールダウンを 0 にします。"
 		say "    $(install_line drop --cooldown-hours 0)"
+		# **更新フィードには新しい10件しか載らない。**それより古い版は、ここからは選べない。
+		# 版を名指しすれば、更新フィードに載っていない版も入れられる。
+		say "  版を指定して入れるときは、--version を付けます。"
+		say "    $(install_line drop --version "$(shquote '<版>')")"
+		say "  配布している版は https://github.com/${REPO}/releases で確かめられます。"
 		die "公開から ${COOLDOWN_HOURS} 時間経った版が無いので、入れませんでした"
 	fi
 
-	rv_c="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "C" {print $2 "\t" $3 "\t" $4}')"
+	rv_c="$(printf '%s\n' "$rv_out" | LC_ALL=C awk -F '\t' '$1 == "C" {print $2 "\t" $3 "\t" $4}')"
 	IFS='	' read -r c_tag c_pub c_el << EOF
 $rv_c
 EOF
 	VERSION="$c_tag"
-	rv_skipped="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "S"')"
-	rv_down="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "D" {print $2}')"
-	rv_up="$(printf '%s\n' "$rv_out" | awk -F '\t' '$1 == "U" {print "1"}')"
+	rv_skipped="$(printf '%s\n' "$rv_out" | LC_ALL=C awk -F '\t' '$1 == "S"')"
+	rv_down="$(printf '%s\n' "$rv_out" | LC_ALL=C awk -F '\t' '$1 == "D" {print $2}')"
+	rv_up="$(printf '%s\n' "$rv_out" | LC_ALL=C awk -F '\t' '$1 == "U" {print "1"}')"
 
 	if [ "$COOLDOWN_HOURS" = "0" ]; then
 		say "クールダウン: 0 時間を指定されたので、公開からの時間で絞りません。"
 	else
 		say "クールダウン: ${rv_label}経った版だけを入れます。"
 	fi
+	report_missing_archives
 
 	# 見送った版を、大きい順に5行まで並べる。残りは1行にまとめる。
 	rv_n=0
@@ -896,13 +1135,13 @@ verify_checksum() {
 	# `grep -F "  $vasset"` は部分一致なので、`…tar.gz.sig` の行にも当たる
 	# （署名を後から足した日に、正しい release が入らなくなる）。
 	# `grep " $vasset\$"` は行末を見るが、ファイル名の `.` が任意の1文字になる。
-	expected="$(awk -v f="$vasset" '$2 == f {print $1; exit}' "$vdir/checksums.txt")"
+	expected="$(LC_ALL=C awk -v f="$vasset" '$2 == f {print $1; exit}' "$vdir/checksums.txt")"
 	if [ -z "$expected" ]; then
 		checksum_failed "checksums.txt に $vasset の行がありません"
 		return 0
 	fi
 
-	actual="$(cd "$vdir" && $sum_cmd "$vasset" | awk '{print $1}')"
+	actual="$(cd "$vdir" && $sum_cmd "$vasset" | LC_ALL=C awk '{print $1}')"
 	if [ "$expected" != "${actual}" ]; then
 		die "チェックサムが合いません（期待 $expected / 実際 ${actual}）。取得をやり直してください"
 	fi
@@ -1010,6 +1249,9 @@ INSTALLED_VERSION=""
 # BREAKING_NOTES は、上げる範囲で見つかった破壊的変更である（1行に1件）。
 BREAKING_NOTES=""
 
+# BREAKING_UNKNOWN は、破壊的変更があるかを確かめられなかった理由である（1行に1件）。
+BREAKING_UNKNOWN=""
+
 # detect_installed_version は、置き換える前の実行ファイルに版を訊く。
 #
 # **置き換えたあとでは、何版から上げたのかを誰も知らない。**だから install_binary より前に呼ぶ。
@@ -1048,130 +1290,286 @@ is_release_version() {
 	esac
 }
 
-# breaking_lines は、release の一覧から、上げる範囲の破壊的変更を並べる。
+# breaking_lines は、release の更新フィードから、上げる範囲の破壊的変更を読む。
 #
-# 標準入力: GitHub API の release の一覧（JSON）。
-# $1: いま入っている版。$2: これから入れる版。
-# 標準出力: 「  <版>  <説明>」の行。**$1 より後・$2 まで**（$2 を含む）の版だけを出す。
+# 標準入力: 更新フィード（Atom の XML）。
+# $1: いま入っている版（vN.N.N）。$2: これから入れる版（vN.N.N。$1 より大きい）。
+# 標準出力: 1行に1件、先頭の1文字で種類を分け、欄はタブで区切る。
+#   B <版> <説明>   範囲（**$1 より後・$2 まで**。$2 を含む）の版の破壊的変更の1件
+#   U <版>          範囲の版で、破壊的変更があるかを確かめられないもの
+#   G               更新フィードのどの件にも見出しの要素が無い（GitHub が書き方を変えたとみなし、範囲の全部を確かめられない）
+#   R               更新フィードから版を1件も読めない
+#   T               入れる版（$2）が更新フィードに無い（その版の本文を読めていない）
+#   O <版>          いま入っている版（$1）が、更新フィードの正式版のいちばん小さい版（<版>）より小さい（古すぎる）
 #
-# **release の本文に置いた印を読む。**
+# **リリースノートの見出し「破壊的変更」の下の箇条書きを読む。**更新フィードの本文は HTML に変換されていて、
+# 以前の印（HTML のコメント）は消えているが、見出しと箇条書きは残っている（2026-11-12 に実測。
+# 見出しのある6版は、印のあった6版とちょうど同じで、箇条書きは印の中と一字一句同じだった）。
 #
-#     <!-- breaking:start -->
-#     - WORKFLOW.md の … が必須になりました
-#     <!-- breaking:end -->
+# **読み方**（範囲に入る `<entry>` ごとに。設計 3-36）。
+#   1. `<content type="html">` から `</content>` までを取る。取れなければ、その版は確かめられない
+#   2. XML の層を戻す（`&lt;` `&gt;` `&quot;` `&#39;` を戻し、`&amp;` を最後に戻す）
+#   3. 見出し `<h1>`〜`<h6>`（属性が付いていてもよい）のうち、中の要素を外し前後の空白を除いた文字が
+#      「破壊的変更」か「Breaking changes」（英字は大文字小文字を問わない）と完全に一致するものを探す。
+#      **`==` で比べる**（「破壊的変更はありません」は当たらない）。無ければ、その版は「破壊的変更なし」
+#   4. 見出しの直後（空白と改行だけを挟んでよい）の `<ul` から、対になる `</ul>` までを取る。
+#      直後が `<ul` でない・`</ul>` が無い・入れ子の `<ul` か `<ol` がある・`<li` が0件なら、確かめられない。
+#      `</ul>` より後ろは読まない
+#   5. `<li>` か `<li ` から `</li>` までを1件とし、要素を外し、改行とタブを空白にまとめ、HTML の層を戻す
+#   6. 制御文字（0x01〜0x1f と 0x7f、UTF-8 の C1 制御文字 C2 80〜C2 9F）を消す。
+#      **端末を操作できる並びを、release の本文から利用者の画面へ通さない**
 #
-# **JSON を厳密に解釈しない。**POSIX sh に JSON の道具は無く、`jq` は前提にできない。
-# `"tag_name"` と印を、応答に現れた順に拾う。**GitHub の応答では版が本文より先に来る**ので、
-# 直前に拾った版がその印の持ち主である。
+# **見出しの書き方が変わったことの見分け方。**更新フィードの全部の件を通して、見出しの要素が1つも無いときは、
+# 範囲の全部を確かめられないとする（G）。1件ごとには判定しない。見出しの無い短いノートに偽の知らせを出さないため。
 #
-# **本文は JSON の文字列1つに収まっている**ので、印の始まりと終わりは同じ行に来る。
-# 応答が整形されていても1行にまとめられていても、同じ読み方で拾える。
+# このプログラムには、テストの偽の awk が落とす印 `continuo-breaking-reader` を入れてある。
+# 版を選ぶ awk とは別の呼び出しにしてあり、こちらだけが落ちる経路を試せる。
 breaking_lines() {
-	awk -v from="$1" -v to="$2" "$AWK_VCMP"'
-		# unesc は JSON の文字列の中の書き換えを戻す。
-		#
-		# **戻すのは改行・タブ・引用符だけである。**JSON では制御文字が
-		# バックスラッシュと u で始まる6文字の形で書かれる。**ここで戻さないので、
-		# そのままの文字列として出る。**戻すと、release の本文に置かれた並びで
-		# 利用者の端末を操作できてしまう。
-		function unesc(s) {
-			gsub(/\\r/, "", s)
-			gsub(/\\t/, " ", s)
-			gsub(/\\"/, "\"", s)
+	LC_ALL=C awk -v from="$1" -v to="$2" "$AWK_VCMP$AWK_FEED"'
+		# continuo-breaking-reader
+		# xunesc は、文字参照のうち5つだけを戻す。**&amp; を最後に戻す**（先に戻すと &amp;lt; が < になる）。
+		# ほかの &#…; は戻さない。
+		function xunesc(s) {
+			gsub(/&lt;/, "<", s)
+			gsub(/&gt;/, ">", s)
+			gsub(/&quot;/, "\"", s)
+			gsub(/&#39;/, "\047", s)
+			gsub(/&amp;/, "\\&", s)
 			return s
 		}
-		# nlsplit は、JSON の中の改行（バックスラッシュと n の2文字）で分ける。
-		function nlsplit(s, out,   n, i, nl) {
-			nl = "\\" "n"
-			n = 0
-			while ((i = index(s, nl)) > 0) {
-				n++
-				out[n] = substr(s, 1, i - 1)
-				s = substr(s, i + 2)
-			}
-			n++
-			out[n] = s
-			return n
+		function trim(s) {
+			sub(/^[ \t\r\n]+/, "", s)
+			sub(/[ \t\r\n]+$/, "", s)
+			return s
 		}
-		# emit は1つの印の中身を、範囲に入っていれば1行ずつ出す。
-		function emit(tag, block,   n, i, parts, line) {
-			if (tag == "") { return }
-			if (vcmp(tag, from) <= 0) { return }
-			if (vcmp(tag, to) > 0) { return }
-			n = nlsplit(block, parts)
-			for (i = 1; i <= n; i++) {
-				line = unesc(parts[i])
-				sub(/^[ \t]+/, "", line)
-				sub(/[ \t]+$/, "", line)
-				sub(/^[-*][ \t]+/, "", line)
-				if (line == "") { continue }
-				printf "  %s  %s\n", tag, line
-			}
+		# clean は箇条書きの1件を、画面に出す1行にする（読み方の 5 と 6）。
+		function clean(s) {
+			gsub(/<[^>]*>/, "", s)
+			gsub(/[ \t\r\n]+/, " ", s)
+			s = xunesc(s)
+			gsub(/[\001-\037\177]/, "", s)
+			gsub(/\302[\200-\237]/, "", s)
+			return trim(s)
 		}
-		BEGIN {
-			TAGKEY = "\"tag_name\""
-			STMARK = "<!-- breaking:start -->"
-			ENDMARK = "<!-- breaking:end -->"
-		}
-		{
-			rest = $0
-			while (1) {
-				ti = index(rest, TAGKEY)
-				si = index(rest, STMARK)
-				if (ti == 0 && si == 0) { break }
-				if (si == 0 || (ti != 0 && ti < si)) {
-					# 鍵の後ろの、最初の引用符から次の引用符までが版である。
-					rest = substr(rest, ti + length(TAGKEY))
-					q = index(rest, "\"")
-					if (q == 0) { break }
-					rest = substr(rest, q + 1)
-					q = index(rest, "\"")
-					if (q == 0) { break }
-					tag = substr(rest, 1, q - 1)
-					rest = substr(rest, q + 1)
-				} else {
-					rest = substr(rest, si + length(STMARK))
-					ei = index(rest, ENDMARK)
-					if (ei == 0) { break }
-					emit(tag, substr(rest, 1, ei - 1))
-					rest = substr(rest, ei + length(ENDMARK))
+		# findhead は、見出し「破壊的変更」を探す。見つかれば、その閉じ要素より後ろを HREST に入れて 1 を返す。
+		function findhead(s,   q, after, inner) {
+			while (match(s, /<[hH][1-6][ \t\r\n>]/)) {
+				s = substr(s, RSTART + 1)
+				q = index(s, ">")
+				if (q == 0) { return 0 }
+				after = substr(s, q + 1)
+				if (!match(after, /<\/[hH][1-6][ \t\r\n]*>/)) { return 0 }
+				inner = substr(after, 1, RSTART - 1)
+				s = substr(after, RSTART + RLENGTH)
+				gsub(/<[^>]*>/, "", inner)
+				inner = trim(inner)
+				if (inner == "破壊的変更" || tolower(inner) == "breaking changes") {
+					HREST = s
+					return 1
 				}
 			}
+			return 0
+		}
+		# readlist は、見出しの直後の箇条書きを1件ずつ items[k, j] に入れ、件数を返す。読めなければ -1 を返す。
+		function readlist(k, s,   q, seg, item, c, m, j) {
+			s = trim(s)
+			if (s !~ /^<[uU][lL][ \t\r\n>]/) { return -1 }
+			q = index(s, ">")
+			s = substr(s, q + 1)
+			if (!match(s, /<\/[uU][lL][ \t\r\n]*>/)) { return -1 }
+			seg = substr(s, 1, RSTART - 1)
+			if (seg ~ /<[uUoO][lL][ \t\r\n>]/) { return -1 }
+			c = 0
+			m = 0
+			while (match(seg, /<[lL][iI][ \t\r\n>]/)) {
+				seg = substr(seg, RSTART + 1)
+				q = index(seg, ">")
+				if (q == 0) { return -1 }
+				seg = substr(seg, q + 1)
+				if (!match(seg, /<\/[lL][iI][ \t\r\n]*>/)) { return -1 }
+				item = clean(substr(seg, 1, RSTART - 1))
+				seg = substr(seg, RSTART + RLENGTH)
+				c++
+				if (item != "") {
+					m++
+					tmp[m] = item
+				}
+			}
+			if (c == 0) { return -1 }
+			for (j = 1; j <= m; j++) { items[k, j] = tmp[j] }
+			return m
+		}
+		function flush(   s, ok, c) {
+			if (tag == "") { return }
+			ntags++
+			if (tag == to) { seento = 1 }
+			if (tag !~ /-/ && (minf == "" || vcmp(tag, minf) < 0)) { minf = tag }
+			ok = (hascontent && closed) ? 1 : 0
+			s = ""
+			if (ok) {
+				s = xunesc(content)
+				if (s ~ /<[hH][1-6][ \t\r\n>]/) { anyh = 1 }
+			}
+			if (vcmp(tag, from) <= 0 || vcmp(tag, to) > 0) { return }
+			nr++
+			rtag[nr] = tag
+			cnt[nr] = 0
+			if (!ok) { rstate[nr] = "U"; return }
+			if (!findhead(s)) { rstate[nr] = "N"; return }
+			c = readlist(nr, HREST)
+			if (c < 0) { rstate[nr] = "U"; return }
+			rstate[nr] = "B"
+			cnt[nr] = c
+		}
+		BEGIN {
+			RS = "<"
+			inentry = 0
+			ntags = 0
+			nr = 0
+			anyh = 0
+			seento = 0
+			minf = ""
+			expectclose = 0
+		}
+		/^entry[ \t\r\n>]/ {
+			inentry = 1
+			tag = ""
+			content = ""
+			hascontent = 0
+			closed = 0
+			expectclose = 0
+			next
+		}
+		/^\/entry[ \t\r\n>]/ { if (inentry) { flush() } inentry = 0; expectclose = 0; next }
+		inentry && /^content[ \t\r\n>]/ {
+			content = $0
+			sub(/^content[^>]*>/, "", content)
+			hascontent = 1
+			expectclose = 1
+			next
+		}
+		# **</content> が本文のすぐ後ろに来たときだけ、本文を取れたとする。**途中で切れた本文を読まない。
+		inentry && /^\/content[ \t\r\n>]/ { if (expectclose) { closed = 1 } expectclose = 0; next }
+		inentry && /^link[ \t\r\n]/ { tag = linktag($0); expectclose = 0; next }
+		{ expectclose = 0 }
+		END {
+			if (ntags == 0) { print "R"; exit 0 }
+			if (!anyh && nr > 0) {
+				print "G"
+			} else {
+				for (i = 1; i <= nr; i++) {
+					if (rstate[i] == "B") {
+						for (j = 1; j <= cnt[i]; j++) { printf "B\t%s\t%s\n", rtag[i], items[i, j] }
+					} else if (rstate[i] == "U") {
+						printf "U\t%s\n", rtag[i]
+					}
+				}
+			}
+			if (!seento) { print "T" }
+			if (minf != "" && vcmp(from, minf) < 0) { printf "O\t%s\n", minf }
 		}
 	'
 }
 
+# version_greater は、$1 が $2 より大きい版かを返す（版の比べ方は vcmp）。
+#
+# 戻り値: 大きければ 0、そうでなければ 1、awk が落ちたら 2 以上。
+version_greater() {
+	LC_ALL=C awk -v a="$1" -v b="$2" "$AWK_VCMP"'BEGIN { if (vcmp(a, b) > 0) { exit 0 } exit 1 }'
+}
+
+# add_unknown は、破壊的変更を確かめられなかった理由を1行足す。
+#
+# $1: 理由の1行。
+add_unknown() {
+	if [ -z "$BREAKING_UNKNOWN" ]; then
+		BREAKING_UNKNOWN="$1"
+	else
+		BREAKING_UNKNOWN="$BREAKING_UNKNOWN
+$1"
+	fi
+}
+
 # collect_breaking は、上げる範囲に破壊的変更があるかを調べる。
 #
-# **何も言わない場合が6つある。**
+# **上げるとき（いま入っている版が vN.N.N で、入れる版がそれより大きいとき）だけ読む。**
+# `--version` で版を指定したときも同じである。
+#
+# **何も言わない場合が5つある。**
 #   1. 置き先に実行ファイルが無い（新規の導入なので、警告する相手がいない）
 #   2. いま入っているものが版を名乗らない（`dev`。比べられない）
 #   3. これから入れる版が vN.N.N の形でない（同上）
-#   4. release の一覧を引けなかった（**入れるのは止めない。**警告は付随的なものである）
-#   5. 印を読み出す awk が落ちた（同上。**`|| true` で受ける**）
-#   6. `-rc1` などの付いた版から、同じ数字の正式版へ上げる
+#   4. 下げるとき・同じ版を入れ直すとき（範囲が空になる）
+#   5. `-rc1` などの付いた版から、同じ数字の正式版へ上げる
 #      （`vcmp` は `-` から後ろを落とすので `v2.98.0-rc1` と `v2.98.0` が同じ大きさになる。
 #      continuo はまだ rc を出していない。設計 3-36 の「何も言わない場合」の表に載せてある）
 #
-# **下げるときも何も出ない。**範囲が「いま入っている版より後」なので空になる。
+# **確かめられなかったときは、黙らずに知らせる**（BREAKING_UNKNOWN。report_breaking が最後に出す）。
+# 更新フィードを取れなかった（`--version` で上げるとき）・読み出しの awk が落ちた・
+# 範囲に読めない版がある・入れる版が更新フィードに無い・いま入っている版が古すぎる、のときである。
+# **入れるのは止めない。**黙ると、利用者は確かめられなかったことを知らないまま起動し、設定を読めずに落ちうる。
 collect_breaking() {
 	[ -n "$INSTALLED_VERSION" ] || return 0
 	is_release_version "$INSTALLED_VERSION" || return 0
 	is_release_version "$VERSION" || return 0
 
-	# **版を指定しない実行では、版を選ぶときに引いた一覧を使う。**もう1回は引かない。
-	# **`--version` の実行では、ここで初めて一覧を引く。引けなくても導入は止めない**（設計 3-36）。
-	if [ -n "$LIST_BODY" ]; then
-		cb_body="$LIST_BODY"
-	else
-		cb_body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
+	# **`set -eu` の下で落ちないよう、終了コードを受けてから分ける。**
+	cb_rc=0
+	version_greater "$VERSION" "$INSTALLED_VERSION" || cb_rc=$?
+	if [ "$cb_rc" = "1" ]; then
+		return 0
 	fi
-	[ -n "$cb_body" ] || return 0
+	if [ "$cb_rc" != "0" ]; then
+		add_unknown "破壊的変更を読み出す処理（awk）が失敗しました。"
+		return 0
+	fi
 
-	# **awk が落ちても導入は止めない。**このスクリプトは `set -eu` なので、`|| true` が無いと
+	# **版を指定しない実行では、版を選ぶときに取った更新フィードを使う。**もう1回は取らない。
+	# **`--version` の実行では、ここで初めて取る。取れなくても導入は止めない。**
+	if [ -n "$FEED_BODY" ]; then
+		cb_body="$FEED_BODY"
+	else
+		fetch_feed
+		if [ "$FETCH_CODE" != "200" ]; then
+			add_unknown "更新フィードを取れませんでした（応答: ${FETCH_CODE:-なし}）: ${FEED_URL}"
+			return 0
+		fi
+		if ! is_feed "$FETCH_BODY"; then
+			add_unknown "更新フィードの形ではない応答が返りました: ${FEED_URL}"
+			return 0
+		fi
+		cb_body="$FETCH_BODY"
+	fi
+
+	# **awk が落ちても導入は止めない。**このスクリプトは `set -eu` なので、`if !` で受けないと
 	# **代入の時点で終了し、実行ファイルを置く前に落ちる**（collect_breaking は install_binary より
-	# 先に走る）。しかも何のメッセージも出ない。**警告は付随的なものであり、作れなければ黙って続ける。**
-	BREAKING_NOTES="$(printf '%s\n' "$cb_body" | breaking_lines "$INSTALLED_VERSION" "$VERSION" || true)"
+	# 先に走る）。しかも何のメッセージも出ない。
+	if ! cb_out="$(printf '%s\n' "$cb_body" | breaking_lines "$INSTALLED_VERSION" "$VERSION")"; then
+		add_unknown "破壊的変更を読み出す処理（awk）が失敗しました。"
+		return 0
+	fi
+
+	BREAKING_NOTES="$(printf '%s\n' "$cb_out" | LC_ALL=C awk -F '\t' '$1 == "B" { printf "  %s  %s\n", $2, $3 }' || true)"
+	cb_unknown="$(printf '%s\n' "$cb_out" | LC_ALL=C awk -F '\t' '$1 == "U" { printf "%s%s", sep, $2; sep = " " }' || true)"
+	if [ -n "$cb_unknown" ]; then
+		add_unknown "次の版は、リリースノートの「破壊的変更」を読み取れませんでした: ${cb_unknown}"
+	fi
+	if printf '%s\n' "$cb_out" | grep -q '^R$'; then
+		add_unknown "更新フィードから版を1件も読めませんでした（GitHub が更新フィードの形を変えた可能性があります）。"
+		return 0
+	fi
+	if printf '%s\n' "$cb_out" | grep -q '^G$'; then
+		add_unknown "更新フィードのどのリリースノートにも見出しが見つからず、範囲の版を1つも確かめられませんでした"
+		add_unknown "（GitHub がリリースノートの書き方を変えた可能性があります）。"
+	fi
+	if printf '%s\n' "$cb_out" | grep -q '^T$'; then
+		add_unknown "${VERSION} は更新フィードに載っていないため、そのリリースノートを読めませんでした。"
+	fi
+	cb_oldest="$(printf '%s\n' "$cb_out" | LC_ALL=C awk -F '\t' '$1 == "O" { print $2 }' || true)"
+	if [ -n "$cb_oldest" ]; then
+		add_unknown "${INSTALLED_VERSION} より後、${cb_oldest} より前の版は、更新フィードに載っていないため確かめられません。"
+		add_unknown "古すぎるため、ほかにも破壊的変更がある可能性があります。"
+	fi
 }
 
 # report_breaking は、見つかった破壊的変更を目立つ形で出す。
@@ -1183,19 +1581,34 @@ collect_breaking() {
 # すり替えられている」なので止める。こちらは「入れてよいが、設定を直す必要がある」である。
 #
 # **いちばん最後に出す。**先に出すと、そのあとの案内で流れて読まれない。
+#
+# **確かめられなかった版があれば、拾えた行の枠のあとに、もう1つ枠を出す**（拾えた行が無ければ、それだけを出す）。
+# そちらでは「破壊的変更があります」とは言わない。あるかどうかを確かめられていないからである。
 report_breaking() {
-	[ -n "$BREAKING_NOTES" ] || return 0
-	say "============================================================"
-	say " 破壊的変更があります: ${INSTALLED_VERSION} → ${VERSION}"
-	say ""
-	say " 実行ファイルは入れ替えました。次に起動する前に設定を直してください。"
-	say " 直さないまま起動すると、設定を読めずに落ちることがあります。"
-	say ""
-	printf '%s\n' "$BREAKING_NOTES"
-	say ""
-	say " 詳しくは https://github.com/${REPO}/releases を見てください。"
-	say "============================================================"
-	say ""
+	if [ -n "$BREAKING_NOTES" ]; then
+		say "============================================================"
+		say " 破壊的変更があります: ${INSTALLED_VERSION} → ${VERSION}"
+		say ""
+		say " 実行ファイルは入れ替えました。次に起動する前に設定を直してください。"
+		say " 直さないまま起動すると、設定を読めずに落ちることがあります。"
+		say ""
+		printf '%s\n' "$BREAKING_NOTES"
+		say ""
+		say " 詳しくは https://github.com/${REPO}/releases を見てください。"
+		say "============================================================"
+		say ""
+	fi
+	if [ -n "$BREAKING_UNKNOWN" ]; then
+		say "============================================================"
+		say " 破壊的変更があるかを確かめられなかった版があります: ${INSTALLED_VERSION} → ${VERSION}"
+		printf '%s\n' "$BREAKING_UNKNOWN" | while IFS= read -r rb_line; do
+			say "   ${rb_line}"
+		done
+		say " 次に起動する前に、https://github.com/${REPO}/releases で"
+		say " リリースノートの「破壊的変更」を見てください。"
+		say "============================================================"
+		say ""
+	fi
 }
 
 # report_kept は、入れ替えなかったことを最後にもう1度知らせる。
@@ -1346,7 +1759,7 @@ main() {
 		say " 取得先が既定ではありません。公式の配布物を取りに行きません。"
 		say ""
 		say "   実行ファイル: $BASE_URL"
-		say "   版の一覧の問い合わせ: $RELEASES_URL"
+		say "   版を選ぶ更新フィード: $FEED_URL"
 		say ""
 		say " HTTPS の強制も外れています。テスト以外で使わないでください。"
 		say "============================================================"

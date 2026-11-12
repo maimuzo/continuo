@@ -7,15 +7,16 @@
 //
 // **偽の release サーバを立てて、実際に `sh install.sh` を走らせる。**
 // GitHub に release を作る前に、取得・照合・展開・配置が通ることを確かめられる。
-// 取得先は `--base-url` と `--api-url` で差し替える（**テスト専用のフラグである**）。
+// 取得先は `--base-url` と `--feed-url` で差し替える（**テスト専用のフラグである**）。
 package install_test
 
 import (
 	"archive/tar"
+	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -118,6 +120,11 @@ func TestMain(m *testing.M) {
 }
 
 // fakeRelease は偽の release サーバである。
+//
+// **本物の github.com と同じ形で答える。**
+//   - `/feed` は release の更新フィード（releases.atom）を返す
+//   - `/dl/<版>/<ファイル>` は、本物の `releases/download` と同じく 302 で `/assets/<版>/<ファイル>` へ転送する
+//   - `/assets/` は書庫と checksums.txt を返す。**`Range` に 206 で答える**（本物は 206。2026-11-12 に実測）
 type fakeRelease struct {
 	// Server は立てた HTTP サーバである。
 	Server *httptest.Server
@@ -127,7 +134,7 @@ type fakeRelease struct {
 	asset []byte
 	// Checksums は checksums.txt の中身である。空なら 404 を返す。
 	Checksums string
-	// mu は Available を守る。
+	// mu は以下の欄を守る。
 	//
 	// **handler は別の goroutine で走る。**テスト本体が配る版を足すのと同時に読むので、
 	// 排他が無いと `-race` が競合を報告する（実測で2件出た）。
@@ -136,185 +143,223 @@ type fakeRelease struct {
 	//
 	// **これを持たないと、どの版を要求しても同じ書庫を返してしまう。**
 	// 「指定した版が無い」を試せなくなる（実際、最初の版では試せていなかった）。
+	// **配っていない版は、release の無いタグと同じに見える**（書庫が 404 になる）。
 	available map[string]bool
-	// releases は release の一覧として返す JSON である。**mu が守る。**
+	// feed は release の更新フィード（releases.atom）として返す本文である。**mu が守る。**
 	//
-	// **空なら、`Tag` を公開から 200 時間前の正式版1件だけ並べた一覧を返す。**
-	// install.sh は版を指定しない実行で、この一覧から入れる版を選ぶ（クールダウン。設計 3-36）。
+	// **空なら、`Tag` を公開から 200 時間前の release 1件だけ並べた更新フィードを返す。**
+	// install.sh は版を指定しない実行で、この更新フィードから入れる版を選ぶ（クールダウン。設計 3-36）。
 	// 200 時間は既定のクールダウン（168 時間）から十分に離してある。
-	releases []byte
-	// listFail が真なら、一覧に 404 を返す。**mu が守る。**一覧を引けない状況を作る。
-	listFail bool
-	// listStatus が 0 でなければ、一覧にその状態コードを返す。**mu が守る。**
-	// レートリミット（403・429）や GitHub の不調（5xx）の状況を作る。
-	listStatus int
+	feed []byte
+	// feedFail が真なら、更新フィードに 404 を返す。**mu が守る。**リポジトリが無い状況を作る。
+	feedFail bool
+	// feedStatus が 0 でなければ、更新フィードにその状態コードを返す。**mu が守る。**
+	// GitHub の不調（5xx）や中継の拒否（403）の状況を作る。
+	feedStatus int
+	// archiveStatus が 0 でなければ、書庫にその状態コードを返す。**mu が守る。**
+	// 書庫の在りかの確かめ（1バイトの GET）が 206・200・404 のどれでもない状況を作る。
+	archiveStatus int
+	// feedHits は更新フィードが要求された回数である。
+	feedHits atomic.Int64
+	// redirects は `/dl/` が転送（302）を返した回数である。
+	redirects atomic.Int64
+	// rangeHits は書庫に `Range` 付きで要求された回数である。
+	rangeHits atomic.Int64
 }
 
 // releaseNote は、偽の release サーバが返す release 1件である。
 type releaseNote struct {
-	// Tag はその release の版である。
-	Tag string
-	// Breaking は破壊的変更の説明である。空なら本文に印を置かない。
-	Breaking []string
-	// Age は公開から経った時間である。0 なら 200 時間（既定のクールダウンを越える）とする。
+	// Tag はその release の版（タグ）である。
 	//
-	// **公開の時刻は、テストを走らせた今からの差で作る。**固定の時刻を書くと、
+	// **試験版（prerelease）は、タグに `-` を付けて表す**（`v1.0.0-rc1`）。更新フィードには
+	// prerelease かどうかが載らないので、install.sh は `-` を含むタグを試験版とみなす。
+	// **draft は更新フィードに載らない**（持ち主にしか見えない）ので、並べないことで表す。
+	Tag string
+	// Title は release の名前（更新フィードの `<title>`）である。空なら Tag と同じにする。
+	//
+	// **install.sh は題名を読まない。**release の名前はタグと違う名前を付けられるためである。
+	Title string
+	// Breaking は破壊的変更の説明である。空なら本文に見出し「破壊的変更」を置かない。
+	Breaking []string
+	// HTML が空でなければ、本文の HTML をこれに差し替える（見出しや箇条書きの形を崩した本文を作る）。
+	HTML string
+	// Age は最終更新から経った時間である。0 なら 200 時間（既定のクールダウンを越える）とする。
+	//
+	// **時刻は、テストを走らせた今からの差で作る。**固定の時刻を書くと、
 	// 日が経つにつれて既定の 168 時間の境界を越え、テストが黙って意味を失う。
 	// 境界からは1時間以上離して使う（秒の進みで揺れないように）。
 	Age time.Duration
-	// Prerelease が真なら、prerelease として返す。
-	Prerelease bool
-	// Draft が真なら、draft として返す（公開の時刻は null になる）。
-	Draft bool
+	// TagOnly が真なら、release の無いタグとして載せる（cooldownRelease は、その版の書庫を配らない）。
+	//
+	// **本物の更新フィードには、release の無いタグも同じ形で載る**（fork の更新フィードには、
+	// 元のリポジトリのタグが release の無いまま載る。2026-11-12 に実測）。
+	TagOnly bool
 }
 
-// releaseJSONEntry は、応答の中の release 1件である。
+// xmlEscaper は、GitHub の更新フィードと同じ逃がし方で、XML の側の文字を逃がす。
 //
-// **並び順に意味がある。**GitHub は1つの release の中で `tag_name` を `body` より先に返し、
-// **install.sh はその順番を頼りに、印がどの版のものかを決めている**
-// （api.github.com の応答で、どの release でも tag_name の行が body の行より前に来ることを確かめた）。
-// map で作ると鍵の名前の順に並び替えられ、**本物と違う並びの応答を検査することになる。**
+// **Go の標準（`encoding/xml` の `&#34;` や `&#xA;`）を使わない。**本物は `&quot;` と `&#39;` を使い、
+// 改行は生のまま置く（2026-11-12 に取った releases.atom で確かめた）。違う形で配ると、
+// 本物と違う更新フィードを検査することになる。
+var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
+
+// htmlEscaper は、本文の HTML の中の文字を逃がす（GitHub がリリースノートを HTML へ変換したときと同じ）。
 //
-// **欄は本物と同じ順に並べる**（`tag_name`→`name`→`draft`→`prerelease`→`published_at`→`body`。
-// 2026-11-06 に api.github.com の応答で確かめた並びから、install.sh が読む欄だけを残したもの）。
-// install.sh は `tag_name` を拾ったあとに現れる `draft`・`prerelease`・`published_at` を、
-// その release のものとして読む。
-type releaseJSONEntry struct {
-	// TagName はその release の版である。
-	TagName string `json:"tag_name"`
-	// Name は release の題名である。
-	Name string `json:"name"`
-	// Draft は下書きかどうかである。
-	Draft bool `json:"draft"`
-	// Prerelease は prerelease かどうかである。
-	Prerelease bool `json:"prerelease"`
-	// PublishedAt は公開の時刻である（UTC、秒まで）。draft では null になる。
-	PublishedAt *string `json:"published_at"`
-	// Body は release の本文である。破壊的変更の印はここに入る。
-	Body string `json:"body"`
+// **本文の中の `<` は2段に逃がされる。**ここで `&lt;` にし、XML の側でもう一度逃がして `&amp;lt;` にする。
+var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
+
+// noteHTML は、release 1件の本文の HTML を作る。
+//
+// **見出しと `<ul>` のあいだに空の行を1行置く。**本物の6版とも、そうなっている（2026-11-12 に実測）。
+// 破壊的変更の箇条書きのあとに段落を置く（本物の v0.1.15・v0.1.14・v0.1.13 に在る。読まれないこと）。
+//
+// n: release 1件。
+// 戻り値: 本文の HTML（まだ XML の側では逃がしていない）。
+func noteHTML(n releaseNote) string {
+	if n.HTML != "" {
+		return n.HTML
+	}
+	if n.TagOnly {
+		// release の無いタグの件の本文は、commit の文の段落だけである。
+		return "<p>いくつか直しました</p>"
+	}
+	var b strings.Builder
+	b.WriteString("<h2>直したこと</h2>\n<ul>\n<li>いくつか直しました</li>\n</ul>")
+	if len(n.Breaking) > 0 {
+		b.WriteString("\n<h2>破壊的変更</h2>\n\n<ul>\n")
+		for _, s := range n.Breaking {
+			b.WriteString("<li>" + htmlEscaper.Replace(s) + "</li>\n")
+		}
+		b.WriteString("</ul>\n<p>上げる前に、動いている continuo を止めてください。</p>")
+	}
+	return b.String()
 }
 
-// releasesJSON は、GitHub API の release の一覧と同じ形の JSON を作る。
-//
-// **改行は `\r\n` にする。**GitHub が返す本文はその形であり、
-// install.sh は JSON の中の `\r\n` を数えて1行ずつに分けている。
-//
-// **印の `<` を unicode の書き方へ逃がさない。**Go の encoding/json は既定で
-// `<` `>` `&` を `\u003c` のような形に書き換えるが、**GitHub の API はそのままの `<` を返す**
-// （api.github.com の応答に `\u003c` が1つも無いことを数えて確かめた）。
-// 逃がした形で配ると、本物と違う本文を検査することになる。
+// releasesFeed は、GitHub の release の更新フィード（releases.atom）と同じ形の XML を作る。
 //
 // notes: 並べる release（**新しい版から順に**。GitHub の並び順と同じ）。
-// 戻り値: 一覧の JSON。
-func releasesJSON(t *testing.T, notes []releaseNote) []byte {
+// 戻り値: 更新フィードの XML。
+func releasesFeed(t *testing.T, notes []releaseNote) []byte {
 	t.Helper()
-	b, err := buildReleasesJSON(notes)
-	if err != nil {
-		t.Fatalf("偽の release の一覧を作れません: %v", err)
-	}
-	return b
+	return buildReleasesFeed(notes, false)
 }
 
-// buildReleasesJSON は releasesJSON の本体である。
+// buildReleasesFeed は releasesFeed の本体である。
 //
 // **サーバの handler からも呼ぶので、testing.T を受け取らない。**
 //
+// **本物と同じ並びにする。**最初の `<entry>` より前に、フィード全体の `<link>` と `<updated>` を置く
+// （install.sh がこれを1件目と取り違えないことを確かめる）。`<entry>` の中は
+// `<id>`→`<updated>`→`<link>`→`<title>`→`<content>`→`<author>`→`<media:thumbnail>` の順である。
+//
 // notes: 並べる release（新しい版から順に）。
-// 戻り値: 一覧の JSON と、作れなかったときの誤り。
-func buildReleasesJSON(notes []releaseNote) ([]byte, error) {
+// oneLine: 真なら、改行を1つも置かずに1行にまとめる。
+// 戻り値: 更新フィードの XML。
+func buildReleasesFeed(notes []releaseNote, oneLine bool) []byte {
 	now := time.Now().UTC()
-	list := make([]releaseJSONEntry, 0, len(notes))
+	nl := "\n"
+	ind := func(n int) string { return strings.Repeat(" ", n) }
+	if oneLine {
+		nl = ""
+		ind = func(int) string { return "" }
+	}
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + nl)
+	b.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">` + nl)
+	b.WriteString(ind(2) + `<id>tag:github.com,2008:https://github.com/octocat/continuo/releases</id>` + nl)
+	b.WriteString(ind(2) + `<link type="text/html" rel="alternate" href="https://github.com/octocat/continuo/releases"/>` + nl)
+	b.WriteString(ind(2) + `<link type="application/atom+xml" rel="self" href="https://github.com/octocat/continuo/releases.atom"/>` + nl)
+	b.WriteString(ind(2) + `<title>Release notes from continuo</title>` + nl)
+	b.WriteString(ind(2) + `<updated>` + now.Format("2006-01-02T15:04:05Z") + `</updated>` + nl)
 	for _, n := range notes {
-		body := "## 直したこと\r\n\r\n- いくつか直しました\r\n"
-		if len(n.Breaking) > 0 {
-			body += "\r\n## 破壊的変更\r\n\r\n<!-- breaking:start -->\r\n"
-			for _, b := range n.Breaking {
-				body += "- " + b + "\r\n"
-			}
-			body += "<!-- breaking:end -->\r\n"
-		}
 		age := n.Age
 		if age == 0 {
 			age = 200 * time.Hour
 		}
-		var published *string
-		if !n.Draft {
-			s := now.Add(-age).Format("2006-01-02T15:04:05Z")
-			published = &s
+		title := n.Title
+		if title == "" {
+			title = n.Tag
+			if n.TagOnly {
+				title = n.Tag + ": いくつか直しました"
+			}
 		}
-		list = append(list, releaseJSONEntry{
-			TagName:     n.Tag,
-			Name:        n.Tag,
-			Draft:       n.Draft,
-			Prerelease:  n.Prerelease,
-			PublishedAt: published,
-			Body:        body,
-		})
+		body := noteHTML(n)
+		if oneLine {
+			body = strings.ReplaceAll(body, "\n", "")
+		}
+		b.WriteString(ind(2) + `<entry>` + nl)
+		b.WriteString(ind(4) + `<id>tag:github.com,2008:Repository/1/` + xmlEscaper.Replace(n.Tag) + `</id>` + nl)
+		b.WriteString(ind(4) + `<updated>` + now.Add(-age).Format("2006-01-02T15:04:05Z") + `</updated>` + nl)
+		b.WriteString(ind(4) + `<link rel="alternate" type="text/html" href="https://github.com/octocat/continuo/releases/tag/` + xmlEscaper.Replace(n.Tag) + `"/>` + nl)
+		b.WriteString(ind(4) + `<title>` + xmlEscaper.Replace(title) + `</title>` + nl)
+		b.WriteString(ind(4) + `<content type="html">` + xmlEscaper.Replace(body) + `</content>` + nl)
+		b.WriteString(ind(4) + `<author>` + nl + ind(6) + `<name>octocat</name>` + nl + ind(4) + `</author>` + nl)
+		b.WriteString(ind(4) + `<media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1?s=60&amp;v=4"/>` + nl)
+		b.WriteString(ind(2) + `</entry>` + nl)
 	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(list); err != nil {
-		return nil, err
-	}
-	return []byte(buf.String()), nil
+	b.WriteString(`</feed>` + nl)
+	return []byte(b.String())
 }
 
-// SetReleases は release の一覧を差し替える。
+// SetFeed は更新フィードの本文を差し替える。
 //
-// **サーバを立てたあとに呼べる。**破壊的変更の印がある状況と無い状況を作り分ける。
+// **サーバを立てたあとに呼べる。**破壊的変更がある状況と無い状況を作り分ける。
 //
-// body: 一覧の JSON。
-func (fr *fakeRelease) SetReleases(body []byte) {
+// body: 更新フィードの本文（更新フィードでない本文も渡せる）。
+func (fr *fakeRelease) SetFeed(body []byte) {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
-	fr.releases = body
+	fr.feed = body
 }
 
-// FailList は、一覧に 404 を返すようにする。
+// FailFeed は、更新フィードに 404 を返すようにする。
 //
-// **一覧を引けない状況を作る。**版を指定しない実行は止まり、`--version` の実行は止まらない
+// **リポジトリが無い状況を作る。**版を指定しない実行は止まり、`--version` の実行は止まらない
 // （設計 3-36）。
-func (fr *fakeRelease) FailList() {
+func (fr *fakeRelease) FailFeed() {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
-	fr.listFail = true
+	fr.feedFail = true
 }
 
-// SetListStatus は、一覧にその状態コードを返すようにする。
+// SetFeedStatus は、更新フィードにその状態コードを返すようにする。
 //
 // status: 返す状態コード（例: 503）。
-func (fr *fakeRelease) SetListStatus(status int) {
+func (fr *fakeRelease) SetFeedStatus(status int) {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
-	fr.listStatus = status
+	fr.feedStatus = status
 }
 
-// listStatusCode は、一覧に返す状態コードを返す。0 なら差し替えていない。
-func (fr *fakeRelease) listStatusCode() int {
-	fr.mu.Lock()
-	defer fr.mu.Unlock()
-	return fr.listStatus
-}
-
-// releasesBody は、いま配っている一覧を返す。
+// SetArchiveStatus は、書庫にその状態コードを返すようにする。
 //
-// 戻り値: 一覧の JSON。nil なら 404 を返す。
-func (fr *fakeRelease) releasesBody() []byte {
+// status: 返す状態コード（例: 503）。
+func (fr *fakeRelease) SetArchiveStatus(status int) {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
-	if fr.listFail {
+	fr.archiveStatus = status
+}
+
+// statusOverrides は、更新フィードと書庫に返す状態コードの差し替えを返す。0 なら差し替えていない。
+func (fr *fakeRelease) statusOverrides() (feed, archive int) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.feedStatus, fr.archiveStatus
+}
+
+// feedBody は、いま配っている更新フィードを返す。
+//
+// 戻り値: 更新フィードの本文。nil なら 404 を返す。
+func (fr *fakeRelease) feedBody() []byte {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	if fr.feedFail {
 		return nil
 	}
-	if len(fr.releases) == 0 {
-		b, err := buildReleasesJSON([]releaseNote{{Tag: fr.Tag}})
-		if err != nil {
-			return nil
-		}
-		return b
+	if len(fr.feed) == 0 {
+		return buildReleasesFeed([]releaseNote{{Tag: fr.Tag}}, false)
 	}
-	return fr.releases
+	return fr.feed
 }
 
 // placeInstalled は、置き先に「いま入っているもの」を置く。
@@ -385,26 +430,31 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	}
 
 	mux := http.NewServeMux()
-	// **`/api/latest` は置かない。**install.sh はもう `/releases/latest` を引かず、
-	// 一覧から版を選ぶ（クールダウン。設計 3-36）。置くと、それに頼る実装を見逃す。
-	//
-	// release の一覧を返す。**install.sh は `/latest` を落とした URL を引く。**
-	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
-		if code := fr.listStatusCode(); code != 0 {
+	// **API の口（`/api`）は置かない。**install.sh は認証なしの GitHub の API を呼ばず、
+	// 更新フィードから版を選ぶ（設計 3-36）。置くと、それに頼る実装を見逃す。
+	mux.HandleFunc("/feed", func(w http.ResponseWriter, r *http.Request) {
+		fr.feedHits.Add(1)
+		if code, _ := fr.statusOverrides(); code != 0 {
 			http.Error(w, "unavailable", code)
 			return
 		}
-		body := fr.releasesBody()
+		body := fr.feedBody()
 		if len(body) == 0 {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
 		_, _ = w.Write(body)
 	})
+	// **本物の `releases/download` は、配布用のホストへ 302 で転送する**（2026-11-12 に実測）。
+	// 転送を追わない実装を見逃さないよう、偽サーバも必ず転送する。
 	mux.HandleFunc("/dl/", func(w http.ResponseWriter, r *http.Request) {
-		// パスは /dl/<版>/<ファイル名> である。**版を見て、配っていなければ 404 を返す。**
-		rest := strings.TrimPrefix(r.URL.Path, "/dl/")
+		fr.redirects.Add(1)
+		http.Redirect(w, r, "/assets/"+strings.TrimPrefix(r.URL.Path, "/dl/"), http.StatusFound)
+	})
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		// パスは /assets/<版>/<ファイル名> である。**版を見て、配っていなければ 404 を返す。**
+		rest := strings.TrimPrefix(r.URL.Path, "/assets/")
 		ver, file, ok := strings.Cut(rest, "/")
 		if !ok || !fr.serves(ver) {
 			http.NotFound(w, r)
@@ -412,8 +462,16 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 		}
 		switch file {
 		case assetName():
+			if _, code := fr.statusOverrides(); code != 0 {
+				http.Error(w, "unavailable", code)
+				return
+			}
+			if r.Header.Get("Range") != "" {
+				fr.rangeHits.Add(1)
+			}
+			// **`Range` に 206 で答える**（本物と同じ）。http.ServeContent が `Range` を解釈する。
 			w.Header().Set("Content-Type", "application/gzip")
-			_, _ = w.Write(fr.assetBody())
+			http.ServeContent(w, r, file, time.Time{}, bytes.NewReader(fr.assetBody()))
 		case "checksums.txt":
 			if fr.Checksums == "" {
 				http.NotFound(w, r)
@@ -443,6 +501,21 @@ func detachTerminal(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
 
+// sourceArgs は、取得先を偽サーバへ差し替える引数を返す。
+//
+// **取得先の差し替えは、環境変数ではなくフラグである。**
+// 環境変数にしていた版では、`curl … | CONTINUO_BASE_URL=http://… sh` の1行を
+// 貼らせるだけで偽の実行ファイルを置けた（安全性のレビューで実証された）。
+//
+// fr: 偽の release サーバ。
+// 戻り値: `--feed-url` と `--base-url` の4つ。
+func sourceArgs(fr *fakeRelease) []string {
+	return []string{
+		"--feed-url", fr.Server.URL + "/feed",
+		"--base-url", fr.Server.URL + "/dl",
+	}
+}
+
 // runInstaller は install.sh を走らせる。
 //
 // fr: 偽の release サーバ。nil なら取得先を差し替えない。
@@ -451,22 +524,29 @@ func detachTerminal(cmd *exec.Cmd) {
 // 戻り値: 終了コードと、標準出力・標準エラーを混ぜたもの。
 func runInstaller(t *testing.T, fr *fakeRelease, dir string, args ...string) (int, string) {
 	t.Helper()
+	return runInstallerEnv(t, fr, dir, nil, args...)
+}
+
+// runInstallerEnv は、環境変数を足して install.sh を走らせる。
+//
+// fr: 偽の release サーバ。nil なら取得先を差し替えない。
+// dir: 置き先。
+// env: 足す環境変数（`NAME=値`。後ろの重複が勝つので、PATH なども上書きできる）。
+// args: install.sh に渡す引数。
+// 戻り値: 終了コードと、標準出力・標準エラーを混ぜたもの。
+func runInstallerEnv(t *testing.T, fr *fakeRelease, dir string, env []string, args ...string) (int, string) {
+	t.Helper()
 	full := []string{scriptPath(t)}
 	if fr != nil {
-		// **取得先の差し替えは、環境変数ではなくフラグである。**
-		// 環境変数にしていた版では、`curl … | CONTINUO_BASE_URL=http://… sh` の1行を
-		// 貼らせるだけで偽の実行ファイルを置けた（安全性のレビューで実証された）。
-		full = append(full,
-			"--api-url", fr.Server.URL+"/api/latest",
-			"--base-url", fr.Server.URL+"/dl",
-		)
+		full = append(full, sourceArgs(fr)...)
 	}
 	full = append(full, args...)
 	cmd := exec.Command(installShell, full...)
 	// **端末を与えない。**`curl … | sh` と同じく、対話できない状況を作る。
 	cmd.Stdin = nil
 	detachTerminal(cmd)
-	cmd.Env = append(os.Environ(), "CONTINUO_INSTALL_DIR="+dir)
+	// **後ろの重複が勝つ**（os/exec が env を後勝ちで畳む）。
+	cmd.Env = append(append(os.Environ(), "CONTINUO_INSTALL_DIR="+dir), env...)
 	out, err := cmd.CombinedOutput()
 	code := 0
 	if ee, ok := err.(*exec.ExitError); ok {
@@ -490,9 +570,7 @@ func TestInstall_端末が無ければ道具を1つも入れない(t *testing.T)
 
 	// **PATH を絞って、すべての道具を「無い」ことにする。**
 	// それでも1つも入れずに終わることを確かめる。
-	cmd := exec.Command(installShell, scriptPath(t),
-		"--api-url", fr.Server.URL+"/api/latest",
-		"--base-url", fr.Server.URL+"/dl")
+	cmd := exec.Command(installShell, append([]string{scriptPath(t)}, sourceArgs(fr)...)...)
 	cmd.Stdin = nil
 	detachTerminal(cmd)
 	cmd.Env = []string{
@@ -518,6 +596,39 @@ func TestInstall_端末が無ければ道具を1つも入れない(t *testing.T)
 		if strings.Contains(text, forbidden) {
 			t.Errorf("端末が無いのに道具を入れています（%q）:\n%s", forbidden, text)
 		}
+	}
+}
+
+// TestInstall_認証なしのAPIを呼ぶ行が無い は、install.sh が api.github.com を呼ばないことを確かめる。
+//
+// **認証なしの GitHub の API は、接続元のアドレスごとに1時間60回までである。**アドレスを大勢で共有する
+// ネットワークでは、インストーラーを動かす前から尽きていて、そこで止まる（issue の報告）。
+// install.sh は release の更新フィードから版を選び、API を1回も呼ばない（設計 3-36）。
+// 偽サーバのテストは取得先を差し替えるので、既定の取得先に API が残っても見つからない。だから行を数える。
+//
+// 目的: install.sh のコメント以外の行に `api.github.com` が無いこと。
+// 与える情報: install.sh の中身。
+// 成功条件: `#` で始まる行（コメント）を除いて、`api.github.com` を含む行が0件であること。
+func TestInstall_認証なしのAPIを呼ぶ行が無い(t *testing.T) {
+	body, err := os.ReadFile(scriptPath(t))
+	if err != nil {
+		t.Fatalf("install.sh を読めません: %v", err)
+	}
+	sc := bufio.NewScanner(bytes.NewReader(body))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	n := 0
+	for sc.Scan() {
+		n++
+		line := sc.Text()
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if strings.Contains(line, "api.github.com") {
+			t.Errorf("%d 行目が認証なしの GitHub の API を指しています: %s", n, line)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("install.sh を読み切れません: %v", err)
 	}
 }
 
@@ -570,11 +681,12 @@ func runWithFakeUname(t *testing.T, osName, machine, dir string) (int, string) {
 	return code, string(out)
 }
 
-// stubBrokenBreakingAwk は、印を読み出す awk だけが落ちる PATH を作る。
+// stubBrokenBreakingAwk は、破壊的変更を読み出す awk だけが落ちる PATH を作る。
 //
 // **「awk が無い」ではなく「足した awk のプログラムがその処理系で通らない」を模す。**
-// install.sh は checksums.txt の照合にも awk を使うので、awk を丸ごと落とすと
-// **確かめたい経路より前で止まってしまう。**だから `breaking:start` を含むプログラムだけを落とす。
+// install.sh は版を選ぶときと checksums.txt の照合にも awk を使うので、awk を丸ごと落とすと
+// **確かめたい経路より前で止まってしまう。**だから、破壊的変更を読み出すプログラムだけが持つ
+// 印 `continuo-breaking-reader` を含むものだけを落とす（install.sh の breaking_lines）。
 //
 // t: 呼び出し元のテスト。
 // 戻り値: 偽の awk を置いたディレクトリ。PATH の先頭へ足して使う。
@@ -588,7 +700,7 @@ func stubBrokenBreakingAwk(t *testing.T) string {
 	script := "#!/bin/sh\n" +
 		"for a in \"$@\"; do\n" +
 		"\tcase \"$a\" in\n" +
-		"\t\t*breaking:start*) exit 2 ;;\n" +
+		"\t\t*continuo-breaking-reader*) exit 2 ;;\n" +
 		"\tesac\n" +
 		"done\n" +
 		"exec " + real + " \"$@\"\n"

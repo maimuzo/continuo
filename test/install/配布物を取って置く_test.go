@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "0778f36d35db41fbe2cb1ab49f1da01e835f6b5391535ea8866bc20abb10b8c2", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
+// {"RUCM-CFG-SHA256": "f265014505ff451e5403262b781eb860d2a441b9e6909d18a0bbde479222cd59", "SOURCE": "docs/spec/usecases/particular_case/配布物を取って置く.cfg.json"}
 //
 // **ユースケース記述「配布物を取って置く」の経路に対応づけたテストである。**
 // 関数名の `P001` などは、その記述の経路の番号である。経路の中身は 1行目の SOURCE の CFG に在る。
@@ -12,7 +12,6 @@
 package install_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -186,23 +185,24 @@ func Test_配布物を取って置く_P001_置き先を指定できる(t *testin
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
-// Test_配布物を取って置く_P011_releaseが1つも無ければ作り方を案内する は、配布前の状態を確かめる。
+// Test_配布物を取って置く_P012_releaseが1つも無ければ作り方を案内する は、配布前の状態を確かめる。
 //
 // **タグを打つまで release は1つも無い。**そのとき利用者に見えるものが、
 // 「404」ではなく「まだ配布していません。ソースから作れます」であること。
 //
-// **一覧の API は、release が1つも無くても 200 と `[]` を返す**（404 はリポジトリが無いとき）。
+// **更新フィードは、タグも release も無いリポジトリでは 200 で `<entry>` が0件になる**
+// （404 はリポジトリが無いとき。2026-11-12 に実測）。
 //
 // 目的: release が無いとき、理由と代わりの手順を示して止まること。
-// 与える情報: 一覧に 200 の `[]` を返す偽サーバ。
+// 与える情報: 更新フィードに 200 で `<entry>` が0件の XML を返す偽サーバ。
 // 成功条件: ソースから作る手順が出ること。
-func Test_配布物を取って置く_P011_releaseが1つも無ければ作り方を案内する(t *testing.T) {
+func Test_配布物を取って置く_P012_releaseが1つも無ければ作り方を案内する(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("[]\n"))
+	mux.HandleFunc("/feed", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+		_, _ = w.Write(buildReleasesFeed(nil, false))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -252,9 +252,9 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P017"}
 //
-// Test_配布物を取って置く_P016_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
+// Test_配布物を取って置く_P017_WindowsではWSL2を案内して止まる は、対応しない OS の扱いを確かめる。
 //
 // **herdr の Windows 版が安定していないため、continuo は Windows ネイティブに対応しない**
 // （設計 3-32b）。**黙って失敗させず、代わりに何を使えばよいかを示す。**
@@ -262,7 +262,7 @@ func Test_配布物を取って置く_P006_指定した版の配布物が無け�
 // 目的: Windows と見分けたら、何も置かずに WSL2 を案内すること。
 // 与える情報: `uname -s` が MINGW64_NT を返す環境。
 // 成功条件: 終了コードが 0 でなく、案内に WSL2 が入り、置き先に何も無いこと。
-func Test_配布物を取って置く_P016_WindowsではWSL2を案内して止まる(t *testing.T) {
+func Test_配布物を取って置く_P017_WindowsではWSL2を案内して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "MINGW64_NT-10.0", "x86_64", dir)
 	if code == 0 {
@@ -276,14 +276,14 @@ func Test_配布物を取って置く_P016_WindowsではWSL2を案内して止�
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P016"}
 //
-// Test_配布物を取って置く_P015_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
+// Test_配布物を取って置く_P016_対応しない命令セットは対応表を出して止まる は、命令セットの検査を確かめる。
 //
 // 目的: 対応していない命令セットで、何も置かずに止まること。
 // 与える情報: `uname -m` が i386 を返す環境。
 // 成功条件: 終了コードが 0 でなく、対応している命令セットを示すこと。
-func Test_配布物を取って置く_P015_対応しない命令セットは対応表を出して止まる(t *testing.T) {
+func Test_配布物を取って置く_P016_対応しない命令セットは対応表を出して止まる(t *testing.T) {
 	dir := t.TempDir()
 	code, out := runWithFakeUname(t, "Linux", "i386", dir)
 	if code == 0 {
@@ -312,10 +312,8 @@ func Test_配布物を取って置く_P001_照合できず端末も無ければ�
 	dir := t.TempDir()
 
 	// **PATH を絞ってすべての道具を「無い」ことにする。**それでも1つも入れない。
-	cmd := exec.Command(installShell, scriptPath(t),
-		"--api-url", fr.Server.URL+"/api/latest",
-		"--base-url", fr.Server.URL+"/dl",
-		"--insecure-no-checksum")
+	cmd := exec.Command(installShell, append(append([]string{scriptPath(t)}, sourceArgs(fr)...),
+		"--insecure-no-checksum")...)
 	cmd.Stdin = nil
 	detachTerminal(cmd)
 	cmd.Env = []string{
@@ -366,9 +364,9 @@ func pathWithOnly(t *testing.T, tools ...string) string {
 	return dir
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P015"}
 //
-// Test_配布物を取って置く_P014_curlもwgetも無ければ理由を出して止まる は、取ってこられない環境で黙って終わらないことを確かめる。
+// Test_配布物を取って置く_P015_curlもwgetも無ければ理由を出して止まる は、取ってこられない環境で黙って終わらないことを確かめる。
 //
 // **直す前は、理由を1行も出さずに終わっていた。**「curl も wget もありません」は、
 // 標準エラーを捨てている呼び出しの中で出ていたので、画面に届かなかった。
@@ -378,7 +376,7 @@ func pathWithOnly(t *testing.T, tools ...string) string {
 // 与える情報: `uname` だけが在る PATH。版を指定した実行と、指定しない実行の両方。
 // 成功条件: どちらも終了コードが 1 で、「curl も wget もありません」が出て、
 // 「まだ配布していません」は出ず、偽サーバへ1度も繋がず、実行ファイルを置かないこと。
-func Test_配布物を取って置く_P014_curlもwgetも無ければ理由を出して止まる(t *testing.T) {
+func Test_配布物を取って置く_P015_curlもwgetも無ければ理由を出して止まる(t *testing.T) {
 	fr := newFakeRelease(t, "v1.2.3", "#!/bin/sh\necho ok\n", true)
 	var reached atomic.Bool
 	inner := fr.Server.Config.Handler
@@ -399,10 +397,7 @@ func Test_配布物を取って置く_P014_curlもwgetも無ければ理由を�
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			args := append([]string{scriptPath(t),
-				"--api-url", fr.Server.URL + "/api/latest",
-				"--base-url", fr.Server.URL + "/dl",
-				"--no-deps"}, tc.args...)
+			args := append(append(append([]string{scriptPath(t)}, sourceArgs(fr)...), "--no-deps"), tc.args...)
 			// **シェルは絶対パスで起動する。**絞った PATH からは `sh` を引けない。
 			shell, err := exec.LookPath(installShell)
 			if err != nil {
@@ -462,15 +457,21 @@ func installedVersionOf(t *testing.T, dir string) string {
 // **書庫は1つだけ配る**（どの版を要求しても、中身は `echo <body>` の同じもの）。
 // 何を入れたかは、出力の「入れる版:」と、要求された版（Allow で配る版を絞る）で確かめる。
 //
-// tag: 書庫の中身が名乗る版。notes: 一覧に並べる release（新しい版から順に）。
-// 戻り値: 立てたサーバ。notes の版は全部配る。
+// tag: 書庫の中身が名乗る版。notes: 更新フィードに並べる release（新しい版から順に）。
+// 戻り値: 立てたサーバ。notes の版は、release の無いタグ（TagOnly）を除いて全部配る。
+// **tag も、notes に TagOnly で並べたときは配らない**（release の無いタグを作るため）。
 func cooldownRelease(t *testing.T, tag string, notes []releaseNote) *fakeRelease {
 	t.Helper()
 	fr := newFakeRelease(t, tag, "#!/bin/sh\necho "+tag+"\n", true)
+	fr.mu.Lock()
+	fr.available = map[string]bool{}
+	fr.mu.Unlock()
 	for _, n := range notes {
-		fr.Allow(n.Tag)
+		if !n.TagOnly {
+			fr.Allow(n.Tag)
+		}
 	}
-	fr.SetReleases(releasesJSON(t, notes))
+	fr.SetFeed(releasesFeed(t, notes))
 	return fr
 }
 
@@ -600,9 +601,14 @@ func Test_配布物を取って置く_P001_クールダウン_版を指定すれ
 //
 // Test_配布物を取って置く_P010_クールダウン_入れてよい版が無ければ止まる は、公開直後の版しか無いときを確かめる。
 //
-// 目的: 公開から 168 時間経った版が1つも無ければ、何も置かずに止まり、待たずに入れる1行を示すこと。
-// 与える情報: v0.1.0（公開から 12 時間）だけの一覧。
-// 成功条件: 終了コードが 1 で、いちばん早く入れられる版と 0 にする1行を出し、何も置かないこと。
+// **更新フィードには新しい10件しか載らない。**10件とも時間が経っていなければ、それより古い版は
+// 更新フィードからは選べない。だから版を指定する1行（実在の版は書かない）と releases の画面も示す。
+//
+// 目的: 公開から 168 時間経った版が1つも無ければ、何も置かずに止まり、待たずに入れる1行と、
+// 版を指定する1行と、releases の画面の URL を示すこと。
+// 与える情報: v0.1.0（公開から 12 時間）だけの更新フィード。
+// 成功条件: 終了コードが 1 で、いちばん早く入れられる版と 0 にする1行と `--version '<版>'` の1行と
+// releases の画面の URL を出し、何も置かないこと。
 func Test_配布物を取って置く_P010_クールダウン_入れてよい版が無ければ止まる(t *testing.T) {
 	fr := cooldownRelease(t, "v0.1.0", []releaseNote{
 		{Tag: "v0.1.0", Age: 12 * time.Hour},
@@ -618,6 +624,8 @@ func Test_配布物を取って置く_P010_クールダウン_入れてよい版
 		"  いちばん早く入れられる版: v0.1.0（",
 		"公開から 12 時間。あと 156 時間で入れられます）",
 		"--cooldown-hours 0",
+		"--version '<版>'",
+		"配布している版は https://github.com/maimuzo/continuo/releases で確かめられます。",
 		"エラー: 公開から 168 時間経った版が無いので、入れませんでした",
 	} {
 		if !strings.Contains(out, want) {
@@ -629,17 +637,19 @@ func Test_配布物を取って置く_P010_クールダウン_入れてよい版
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
-// Test_配布物を取って置く_P011_クールダウン_正式版が無ければ作り方を案内する は、prerelease と draft だけの一覧を確かめる。
+// Test_配布物を取って置く_P012_クールダウン_正式版が無ければ作り方を案内する は、試験版だけの更新フィードを確かめる。
+//
+// **更新フィードには prerelease かどうかが載らない。**install.sh は `-` を含むタグを試験版とみなして除く。
+// **draft は更新フィードに載らない**ので、並べないことで表す。
 //
 // 目的: 正式版が1つも無ければ、0 を勧めずに「まだ1つもありません」へ行くこと（0 にしても入らないため）。
-// 与える情報: prerelease 1件と draft 1件だけの一覧。
+// 与える情報: `-` を含むタグ（v0.2.0-rc1）1件だけの更新フィード（書庫は配っている）。
 // 成功条件: 「release がまだ1つもありません」を出し、何も置かないこと。
-func Test_配布物を取って置く_P011_クールダウン_正式版が無ければ作り方を案内する(t *testing.T) {
+func Test_配布物を取って置く_P012_クールダウン_正式版が無ければ作り方を案内する(t *testing.T) {
 	fr := cooldownRelease(t, "v0.2.0-rc1", []releaseNote{
-		{Tag: "v0.3.0", Draft: true},
-		{Tag: "v0.2.0-rc1", Prerelease: true},
+		{Tag: "v0.2.0-rc1"},
 	})
 	dir := t.TempDir()
 
@@ -655,16 +665,16 @@ func Test_配布物を取って置く_P011_クールダウン_正式版が無け
 	}
 }
 
-// {"RUCM-PATH": "P013"}
+// {"RUCM-PATH": "P014"}
 //
-// Test_配布物を取って置く_P013_クールダウン_リポジトリが見つからなければ止まる は、一覧が 404 のときを確かめる。
+// Test_配布物を取って置く_P014_クールダウン_リポジトリが見つからなければ止まる は、更新フィードが 404 のときを確かめる。
 //
-// 目的: 版を指定しない実行で一覧が 404 なら、リポジトリが見つからないと言って止まること。
-// 与える情報: 一覧に 404 を返す偽サーバ（FailList）。
+// 目的: 版を指定しない実行で更新フィードが 404 なら、リポジトリが見つからないと言って止まること。
+// 与える情報: 更新フィードに 404 を返す偽サーバ（FailFeed）。
 // 成功条件: 終了コードが 0 でなく、理由を出し、何も置かないこと。
-func Test_配布物を取って置く_P013_クールダウン_リポジトリが見つからなければ止まる(t *testing.T) {
+func Test_配布物を取って置く_P014_クールダウン_リポジトリが見つからなければ止まる(t *testing.T) {
 	fr := newFakeRelease(t, "v0.3.0", "#!/bin/sh\necho v0.3.0\n", true)
-	fr.FailList()
+	fr.FailFeed()
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps")
@@ -707,26 +717,23 @@ func Test_配布物を取って置く_P001_クールダウン_選んだ版より
 
 // {"RUCM-PATH": "P001"}
 //
-// Test_配布物を取って置く_P001_クールダウン_1行のJSONでも読める は、一覧の読み方の丈夫さを確かめる。
+// Test_配布物を取って置く_P001_クールダウン_1行の更新フィードでも読める は、更新フィードの読み方の丈夫さを確かめる。
 //
 // **本物の応答は整形されているが、1行にまとまっていても同じ読み方で読めることにしている**（設計 3-36）。
-// あわせて、題名（`name`）の値が `draft` という文字でも、鍵と取り違えないことを確かめる。
+// あわせて、試験版（`-` を含むタグ）を選ばないことと、release の名前（題名）がタグと違っても
+// 題名ではなくタグで版を選ぶことを確かめる（受け入れ目標の 2 と 5）。
 //
-// 目的: 1行の JSON から、正式版と prerelease を見分けて版を選ぶこと。
-// 与える情報: 1行にまとめた一覧。v0.5.0 は prerelease、v0.4.0 は題名が "draft" の正式版。
-// 成功条件: v0.4.0 を入れること。
-func Test_配布物を取って置く_P001_クールダウン_1行のJSONでも読める(t *testing.T) {
+// 目的: 1行の更新フィードから、正式版と試験版を見分け、タグから版を選ぶこと。
+// 与える情報: 1行にまとめた更新フィード。v0.5.0-rc1 は試験版で題名が "v0.5.0"、
+// v0.4.0 は題名が "v9.9.9 (draft)" の正式版。
+// 成功条件: v0.4.0 を入れ、v0.5.0-rc1 も v9.9.9 も選ばないこと。
+func Test_配布物を取って置く_P001_クールダウン_1行の更新フィードでも読める(t *testing.T) {
 	fr := newFakeRelease(t, "v0.4.0", "#!/bin/sh\necho v0.4.0\n", true)
-	old := time.Now().UTC().Add(-200 * time.Hour).Format("2006-01-02T15:04:05Z")
-	list := []releaseJSONEntry{
-		{TagName: "v0.5.0", Name: "prerelease", Prerelease: true, PublishedAt: &old, Body: "x"},
-		{TagName: "v0.4.0", Name: "draft", PublishedAt: &old, Body: "y"},
-	}
-	b, err := json.Marshal(list)
-	if err != nil {
-		t.Fatalf("一覧を作れません: %v", err)
-	}
-	fr.SetReleases(b)
+	fr.Allow("v0.5.0-rc1")
+	fr.SetFeed(buildReleasesFeed([]releaseNote{
+		{Tag: "v0.5.0-rc1", Title: "v0.5.0"},
+		{Tag: "v0.4.0", Title: "v9.9.9 (draft)"},
+	}, true))
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps")
@@ -735,6 +742,231 @@ func Test_配布物を取って置く_P001_クールダウン_1行のJSONでも�
 	}
 	if !strings.Contains(out, "  入れる版:   v0.4.0（") {
 		t.Errorf("v0.4.0 を選んでいません:\n%s", out)
+	}
+	if strings.Contains(out, "v0.5.0-rc1") || strings.Contains(out, "v9.9.9") {
+		t.Errorf("試験版か題名を版として読んでいます:\n%s", out)
+	}
+}
+
+// {"RUCM-PATH": "P001"}
+//
+// Test_配布物を取って置く_P001_releaseの無いタグを選ばない は、書庫の在りかを確かめてから選ぶことを確かめる。
+//
+// **更新フィードには release の無いタグも同じ形で載る。**fork の更新フィードには、
+// 元のリポジトリのタグが release の無いまま載る（2026-11-12 に実測）。確かめずに選ぶと、
+// 取得の段で 404 で止まる。install.sh は書庫の先頭の1バイトを求めて、在る版だけを選ぶ。
+//
+// **本物と同じ転送と `Range` で答える偽サーバで確かめる。**`releases/download` は 302 で転送し、
+// `Range` には 206 で答える。転送を追わない実装と、206 を「在る」と読まない実装を見逃さない。
+//
+// 目的: 書庫の無い版（release の無いタグ）を飛ばし、そのことを1行出して、その下の版を入れること。
+// 与える情報: v0.3.1（release の無いタグ）と v0.3.0（release）の更新フィード。どちらも 200 時間前。
+// 成功条件: v0.3.0 を入れ、「書庫の無い版: v0.3.1」を出し、`/dl/` が転送を返し、
+// 書庫に `Range` 付きの要求が来ていること。
+func Test_配布物を取って置く_P001_releaseの無いタグを選ばない(t *testing.T) {
+	fr := cooldownRelease(t, "v0.3.0", []releaseNote{
+		{Tag: "v0.3.1", TagOnly: true},
+		{Tag: "v0.3.0"},
+	})
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+	for _, want := range []string{
+		"  書庫の無い版: v0.3.1（この環境の書庫 " + assetName() + " がありません。release の無いタグかもしれません）",
+		"  入れる版:   v0.3.0（",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "見送った版") || strings.Contains(out, "--cooldown-hours 0") {
+		t.Errorf("書庫の無い版を見送った版に数えています（0 にしても入りません）:\n%s", out)
+	}
+	if got := installedVersionOf(t, dir); got != "v0.3.0" {
+		t.Errorf("v0.3.0 を入れていません: %q", got)
+	}
+	if fr.redirects.Load() == 0 {
+		t.Error("偽サーバが転送を1度も返していません（転送を追う経路を確かめられていません）")
+	}
+	if fr.rangeHits.Load() == 0 {
+		t.Error("書庫に Range 付きの要求が来ていません（1バイトの GET で確かめていません）")
+	}
+}
+
+// {"RUCM-PATH": "P010"}
+//
+// Test_配布物を取って置く_P010_クールダウン_出したばかりのreleaseしか無ければ時間の案内を出す は、
+// release の無いタグの下に、出したばかりの release だけがあるときを確かめる。
+//
+// **出したばかりの fork がこれに当たる。**古いタグ（release の無いもの）を飛ばしたうえで、
+// クールダウンの案内（いちばん早く入れられる版と 0 にする1行）を出す。
+//
+// 目的: 書庫の在る版がクールダウン中だけのとき、「入れてよい版が無い」の案内を出して止まること。
+// 与える情報: v0.2.0（release、公開から 10 時間）と v0.1.0（release の無いタグ、300 時間前）。
+// 成功条件: 終了コードが 1 で、「書庫の無い版: v0.1.0」と「いちばん早く入れられる版: v0.2.0」と
+// 0 にする1行を出すこと。
+func Test_配布物を取って置く_P010_クールダウン_出したばかりのreleaseしか無ければ時間の案内を出す(t *testing.T) {
+	fr := cooldownRelease(t, "v0.2.0", []releaseNote{
+		{Tag: "v0.2.0", Age: 10 * time.Hour},
+		{Tag: "v0.1.0", TagOnly: true, Age: 300 * time.Hour},
+	})
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 1 {
+		t.Fatalf("終了コードが 1 ではありません: %d\n%s", code, out)
+	}
+	for _, want := range []string{
+		"  書庫の無い版: v0.1.0（",
+		"  いちばん早く入れられる版: v0.2.0（",
+		"--cooldown-hours 0",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+}
+
+// {"RUCM-PATH": "P011"}
+//
+// Test_配布物を取って置く_P011_この環境の書庫が無ければ作り方を案内する は、書庫が1つも無いときを確かめる。
+//
+// **fork でまだ release を出していないとき**（更新フィードには元のリポジトリのタグだけが載る）と、
+// その組み合わせを作っていない fork のときである。「まだ1つもありません」とは別の文で止まる。
+//
+// 目的: 正式版はあるのに、どれも書庫が無ければ、理由とソースから作る手順を出して止まること。
+// 与える情報: release の無いタグ v0.3.1 と v0.3.0 だけの更新フィード。
+// 成功条件: 終了コードが 1 で、「この環境（…）の書庫が載った release がありません」と
+// releases の画面の URL と go build の手順を出し、何も置かないこと。
+func Test_配布物を取って置く_P011_この環境の書庫が無ければ作り方を案内する(t *testing.T) {
+	fr := cooldownRelease(t, "v0.3.1", []releaseNote{
+		{Tag: "v0.3.1", TagOnly: true},
+		{Tag: "v0.3.0", TagOnly: true},
+	})
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 1 {
+		t.Fatalf("終了コードが 1 ではありません: %d\n%s", code, out)
+	}
+	for _, want := range []string{
+		"  書庫の無い版: v0.3.1（",
+		"  書庫の無い版: v0.3.0（",
+		"の書庫が載った release がありません: maimuzo/continuo",
+		"配布している版は https://github.com/maimuzo/continuo/releases で確かめられます。",
+		"go build",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "release がまだ1つもありません") {
+		t.Errorf("タグはあるのに、まだ1つもないと言っています:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "continuo")); err == nil {
+		t.Error("書庫が無いのに実行ファイルを置いています")
+	}
+}
+
+// {"RUCM-PATH": "P013"}
+//
+// Test_配布物を取って置く_P013_書庫の確かめが想定外の応答なら版の指定を案内する は、
+// 書庫の在りかの確かめが 206・200・404 のどれでもないときを確かめる。
+//
+// **黙って下の版へ進まない。**中継が 403 を返す・GitHub が 503 を返すときに、
+// release の無いタグと同じに扱うと、古い版が黙って入る。
+//
+// 目的: 書庫の確かめに 503 が返ったら、理由と版を指定する1行を出して止まること。
+// 与える情報: 書庫に 503 を返す偽サーバ。
+// 成功条件: 終了コードが 0 でなく、「応答: 503」と `--version '<版>'` の1行を出し、何も置かないこと。
+func Test_配布物を取って置く_P013_書庫の確かめが想定外の応答なら版の指定を案内する(t *testing.T) {
+	fr := newFakeRelease(t, "v0.3.0", "#!/bin/sh\necho v0.3.0\n", true)
+	fr.SetArchiveStatus(http.StatusServiceUnavailable)
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code == 0 {
+		t.Fatalf("確かめられないのに成功しています:\n%s", out)
+	}
+	for _, want := range []string{
+		"配布物が在るかを確かめる問い合わせに、想定と違う応答が返りました。",
+		"--version '<版>'",
+		"応答: 503",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "continuo")); err == nil {
+		t.Error("確かめられないのに実行ファイルを置いています")
+	}
+}
+
+// {"RUCM-PATH": "P013"}
+//
+// Test_配布物を取って置く_P013_更新フィードでない応答なら版の指定を案内する は、中継が別の画面を返したときを確かめる。
+//
+// **200 でも更新フィードとは限らない。**ネットワークの中継が確認の画面の HTML を 200 で返すことがある
+// （報告した方の環境は、クラウドのセキュリティサービスを通っている）。見分けずに読むと `<entry>` が0件になり、
+// 「release がまだ1つもありません」と事実と違う案内が出る。
+//
+// 目的: 200 で `<feed` を含まない応答なら、「更新フィードから版を読めませんでした」と版を指定する1行を出して止まること。
+// 与える情報: 更新フィードの口に、200 で HTML の画面を返す偽サーバ。
+// 成功条件: 終了コードが 0 でなく、その文と `--version '<版>'` の1行を出し、「まだ1つもありません」を出さないこと。
+func Test_配布物を取って置く_P013_更新フィードでない応答なら版の指定を案内する(t *testing.T) {
+	fr := newFakeRelease(t, "v0.3.0", "#!/bin/sh\necho v0.3.0\n", true)
+	fr.SetFeed([]byte("<!DOCTYPE html>\n<html><body>アクセスを確認しています</body></html>\n"))
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code == 0 {
+		t.Fatalf("更新フィードでないのに成功しています:\n%s", out)
+	}
+	for _, want := range []string{
+		"更新フィードから版を読めませんでした",
+		"--version '<版>'",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "release がまだ1つもありません") {
+		t.Errorf("読めていないだけなのに、まだ1つもないと言っています:\n%s", out)
+	}
+}
+
+// {"RUCM-PATH": "P013"}
+//
+// Test_配布物を取って置く_P013_版を1件も読めなければ版の指定を案内する は、更新フィードの形が変わったときを確かめる。
+//
+// 目的: `<entry>` はあるのに版を1件も読めない（`<link>` の形が変わった）とき、
+// 「まだ1つもありません」へ落ちずに、版を指定する1行を出して止まること。
+// 与える情報: `<entry>` の `<link>` に `/releases/tag/` を含まない更新フィード。
+// 成功条件: 終了コードが 0 でなく、「版か時刻を1件も読めませんでした」と `--version '<版>'` の1行を出すこと。
+func Test_配布物を取って置く_P013_版を1件も読めなければ版の指定を案内する(t *testing.T) {
+	fr := newFakeRelease(t, "v0.3.0", "#!/bin/sh\necho v0.3.0\n", true)
+	feed := strings.ReplaceAll(string(buildReleasesFeed([]releaseNote{{Tag: "v0.3.0"}}, false)),
+		"/releases/tag/", "/r/")
+	fr.SetFeed([]byte(feed))
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code == 0 {
+		t.Fatalf("版を読めないのに成功しています:\n%s", out)
+	}
+	for _, want := range []string{
+		"版か時刻を1件も読めませんでした",
+		"--version '<版>'",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出ていません:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "release がまだ1つもありません") {
+		t.Errorf("読めていないだけなのに、まだ1つもないと言っています:\n%s", out)
 	}
 }
 
@@ -951,20 +1183,21 @@ func Test_配布物を取って置く_P001_クールダウン_forceで下げて�
 	}
 }
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P013"}
 //
-// Test_配布物を取って置く_P012_クールダウン_一覧を問い合わせられなければ版の指定を案内する は、
-// レートリミットや GitHub の不調で一覧を引けないときを確かめる。
+// Test_配布物を取って置く_P013_クールダウン_更新フィードを問い合わせられなければ版の指定を案内する は、
+// GitHub の不調や中継の拒否で更新フィードを取れないときを確かめる。
 //
 // **案内の1行に実在の版を書かない。**書くと、貼った人が下げない判定を通らずにその版へ下がる
 // （`--version` の実行は下げない判定を当てない）。
 //
-// 目的: 一覧が 503 のとき、理由と「版を指定する1行」と一覧の画面の URL を出して止まること。
-// 与える情報: v0.3.1 を名乗る実行ファイルと、一覧に 503 を返す偽サーバ。
+// 目的: 更新フィードが 503 のとき、理由と「版を指定する1行」と releases の画面の URL を出して止まること。
+// 与える情報: v0.3.1 を名乗る実行ファイルと、更新フィードに 503 を返す偽サーバ。
 // 成功条件: 終了コードが 0 でなく、`--version '<版>'` の1行を出し、`v0.1.0` を出さず、入れ替えないこと。
-func Test_配布物を取って置く_P012_クールダウン_一覧を問い合わせられなければ版の指定を案内する(t *testing.T) {
+// **API の上限の説明（1時間あたり60回）は出さない**（もう API を呼ばないため）。
+func Test_配布物を取って置く_P013_クールダウン_更新フィードを問い合わせられなければ版の指定を案内する(t *testing.T) {
 	fr := newFakeRelease(t, "v0.3.0", "#!/bin/sh\necho v0.3.0\n", true)
-	fr.SetListStatus(http.StatusServiceUnavailable)
+	fr.SetFeedStatus(http.StatusServiceUnavailable)
 	dir := t.TempDir()
 	placeInstalled(t, dir, "v0.3.1")
 
@@ -984,6 +1217,9 @@ func Test_配布物を取って置く_P012_クールダウン_一覧を問い合
 	}
 	if strings.Contains(out, "v0.1.0") {
 		t.Errorf("実在の古い版を貼らせています:\n%s", out)
+	}
+	if strings.Contains(out, "60回") {
+		t.Errorf("もう呼ばない API の上限の説明を出しています:\n%s", out)
 	}
 	if got := installedVersionOf(t, dir); got != "v0.3.1" {
 		t.Errorf("入れ替えています: %q", got)

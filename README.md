@@ -203,9 +203,11 @@ The installer detects your OS and architecture, pulls the matching binary from [
 | `--version V` | Install a specific release (default: the newest stable release published at least 168 hours ago) |
 | `--cooldown-hours H` | Only install releases published at least H hours ago (default 168 = 7 days; `0` installs the latest) |
 | `--force` | Replace the installed binary even if the chosen release is older than it |
-| `--repo O/R` | Install from a fork. **Using it prints a warning** |
+| `--repo O/R` | Install from a fork. **Using it prints a warning**. A tag whose name contains `-` (such as `v1.0.0-rc1`) is treated as a prerelease and never chosen; install such a release with `--version` |
 
 **By default it only installs a release that was published at least 168 hours (7 days) ago — a cooldown.** If a fresh release turns out to be broken and gets replaced, you will not have picked it up in the meantime.
+The clock starts at the release's last-updated time, which is slightly later than its publish time.
+**The installer picks the release from the releases feed (`releases.atom`) and never calls the unauthenticated GitHub API** — on networks where many people share one outgoing address, that API's 60-requests-per-hour limit is often used up already.
 The installer prints which releases it skipped and which one it installs, in a few lines starting with `クールダウン:` (the installer's messages are in Japanese).
 To install the latest release without waiting, pass `--cooldown-hours 0`; to change the wait, pass `--cooldown-hours <hours>`.
 `--version` skips the cooldown.
