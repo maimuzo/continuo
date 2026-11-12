@@ -329,7 +329,7 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 **`WORKFLOW.md` をチームで共有したまま、自分だけ値を変えたいとき**（週のレートリミットのマージンなど）は、隣に `WORKFLOW.local.md` を置いてください。文法は同じで、書いた分だけが上書きされます。置かなければ何も変わりません。`continuo init` が雛形の `WORKFLOW.local.md.template`（リセットまでの残り日数ごとの週のマージンの表）を置くので、`cp -n WORKFLOW.local.md.template WORKFLOW.local.md` で写して continuo を立て直せば効きます（`mv` は既にある `WORKFLOW.local.md` を黙って上書きするので使いません）（[docs/FAQ.md](docs/FAQ.md) の「共有している WORKFLOW.md の値を、自分だけ上書きしたい」）。
 
-**2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
+**2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。**見本の2行目で、どの pull request を検査するかを選べます。**既定の `CONTINUO_REVIEW_GATE_SCOPE: all` は全部の pull request を検査します。人間も直接 pull request を出すリポジトリでは `continuo` に書き換えると、continuo の branch（`continuo/…`）から出た pull request だけを検査し、ほかはレビュー結果が無くても通します（[docs/FAQ.md](docs/FAQ.md) の「人間が直接出した pull request が、`continuo-ci.yaml` の検査で落ちる」）。
 
 **指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**指示書は2つに分かれています。システムプロンプト（全体の流れのフローチャートと、どこでどのスキルを使うかの表）と、手順の本文を持つ plugin `continuo-agent-procedures` のスキルです（リポジトリの [plugins/continuo-agent-procedures/skills/](plugins/continuo-agent-procedures/skills/) にあり、continuo が Claude Code を起動するたびに実行時ディレクトリへ書き出します）。本文は、システムプロンプトの最後の `# このプロジェクトの決まり` の下へ差し込まれ、同じ本文が最初のプロンプトにも入ります。**送られるシステムプロンプトと最初のプロンプトは `continuo prompt --show` で読めます。スキルの本文は出ません。**（前の回のあとに人間が書いたコメントを最初のメッセージに付ける節は、issue のコメントから送る直前に組み立てるので、ここには出ません）
 

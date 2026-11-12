@@ -27,7 +27,35 @@ package scaffold
 // 壊れた YAML でも Go のビルドは通り、テストも通り、そのまま配られてしまう。
 // **そして GitHub Actions は、読めない workflow を「検査が無い」として扱う。**
 // 画面では「まだ走っていない」と見分けが付かない。
-const ciTemplate = `# レビュー結果が貼られていない pull request を落とす。
+const ciTemplate = `env:
+  CONTINUO_REVIEW_GATE_SCOPE: all
+  CONTINUO_BRANCH_PREFIX: continuo/
+
+# **どの pull request を検査するかは、上の2行目で選びます。**
+#
+#   all       全部の pull request に判断票を求めます（既定）。
+#             開発をすべて continuo で進めるリポジトリ向けです。
+#   continuo  continuo の branch から出た pull request にだけ判断票を求めます。
+#             人間が直接出した pull request は、判断票を数えずに緑で終わります（マージを止めません）。
+#             continuo と人間の両方で開発するリポジトリ向けです。
+#
+# **3行目は continuo の branch 名の頭です。**continuo を動かす WORKFLOW.md の
+# herdr.worktree.branch_template の頭（既定は continuo/）を変えたら、ここも同じ文字列にしてください。
+# **ずれると、continuo の pull request も「continuo の branch ではない」として緑で通ります。**
+# 赤くならないので、気づけません。緑で終えるときは、branch 名とこの値を画面に出します。
+#
+# **continuo を選んだときに検査されないもの。**
+#   - 人間が直接出した pull request
+#   - エージェントに、別の名前の branch へ出すよう頼んで作らせた pull request
+#
+# **この2行を検査の中で使います。**all と continuo 以外の値（空を含む）のときは、赤にして直し方を出します。
+# 既存の CI へ組み込むときは、この env: の2行も一緒に写してください。
+#
+# **2行目を書き換える pull request は、書き換えたあとの定義で自分自身を検査します**
+# （pull_request の検査は、その pull request の中の定義で動くためです）。
+# .github/workflows/ の差分は、人間がレビューしてからマージしてください。
+
+# レビュー結果が貼られていない pull request を落とす。
 #
 # **continuo init が置いた見本です。**ここに在るだけでは何も起きません。
 # **中身を確かめてから .github/workflows/ へ移してください。**
@@ -99,8 +127,69 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
+          # **branch 名は env で渡します。**run: の中へ ${{ }} で直に書くと、branch 名がそのままシェルとして読まれます。
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -eu
+
+          # scope_gate は、この pull request を検査するかを決めます（ファイルの先頭の env: の2行）。
+          #
+          # **検査するなら何もせずに戻ります。**検査しないなら、理由を出して緑で終わります。
+          # all と continuo 以外の値（空を含む）なら、直し方を出して赤で終わります。
+          #
+          # **job の if: で飛ばさず、ここで決めます。**job の if: からは env: を読めず、
+          # ここで決めれば、数えなかった理由を画面に残せます。
+          # **workflow の on: でも絞りません。**workflow ごと飛ばすと検査の結果が届かず、
+          # 必須の検査にしていると Pending のままマージを塞ぎます。
+          #
+          # **空を許して読みます**（:-）。job だけを既存の CI へ写して env: が落ちたとき、
+          # set -u で落ちると、直し方を出せないためです。
+          #
+          # **接頭辞が空なら、全部を検査する側に倒れます**（空の接頭辞は、どの branch 名にも当たります）。
+          #
+          # **下の job にも同じ関数があります。中身を変えるときは、両方を直してください。**
+          scope_gate() {
+            case "${CONTINUO_REVIEW_GATE_SCOPE:-}" in
+              all)
+                return 0
+                ;;
+              continuo)
+                case "${HEAD_REF:-}" in
+                  "${CONTINUO_BRANCH_PREFIX:-}"*)
+                    return 0
+                    ;;
+                esac
+                {
+                  echo "continuo が作った pull request ではないので、判断票を数えません（CONTINUO_REVIEW_GATE_SCOPE: continuo）"
+                  echo ""
+                  echo "- この pull request の branch: ${HEAD_REF:-（空）}"
+                  echo "- continuo の branch 名の頭（CONTINUO_BRANCH_PREFIX）: ${CONTINUO_BRANCH_PREFIX:-（空）}"
+                  echo ""
+                  echo "continuo の pull request なのにこれが出たときは、CONTINUO_BRANCH_PREFIX が"
+                  echo "WORKFLOW.md の herdr.worktree.branch_template の頭と同じかを確かめてください。"
+                } | tee -a "${GITHUB_STEP_SUMMARY}"
+                exit 0
+                ;;
+              *)
+                {
+                  echo "## どの pull request を検査するかが読めません"
+                  echo ""
+                  echo "CONTINUO_REVIEW_GATE_SCOPE の値: ${CONTINUO_REVIEW_GATE_SCOPE:-（空か、書かれていません）}"
+                  echo ""
+                  echo "このファイルの先頭の env: に、次の2行を置いてください。"
+                  echo "all（全部の pull request を検査する）か continuo（continuo の pull request だけを検査する）のどちらかです。"
+                  echo ""
+                  echo "~~~"
+                  echo "env:"
+                  echo "  CONTINUO_REVIEW_GATE_SCOPE: all"
+                  echo "  CONTINUO_BRANCH_PREFIX: continuo/"
+                  echo "~~~"
+                } | tee -a "${GITHUB_STEP_SUMMARY}"
+                exit 1
+                ;;
+            esac
+          }
+          scope_gate
 
           # **gh の宛先を、この検査が走っている GitHub にします。**
           # GITHUB_SERVER_URL は runner が必ず置く環境変数で、github.com なら
@@ -502,8 +591,55 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
+          # **branch 名は env で渡します。**run: の中へ ${{ }} で直に書くと、branch 名がそのままシェルとして読まれます。
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -eu
+
+          # **上の job と同じ scope_gate です。**理由は上の job のコメントに書いてあります。
+          # **中身を変えるときは、両方を直してください。**
+          scope_gate() {
+            case "${CONTINUO_REVIEW_GATE_SCOPE:-}" in
+              all)
+                return 0
+                ;;
+              continuo)
+                case "${HEAD_REF:-}" in
+                  "${CONTINUO_BRANCH_PREFIX:-}"*)
+                    return 0
+                    ;;
+                esac
+                {
+                  echo "continuo が作った pull request ではないので、判断票を数えません（CONTINUO_REVIEW_GATE_SCOPE: continuo）"
+                  echo ""
+                  echo "- この pull request の branch: ${HEAD_REF:-（空）}"
+                  echo "- continuo の branch 名の頭（CONTINUO_BRANCH_PREFIX）: ${CONTINUO_BRANCH_PREFIX:-（空）}"
+                  echo ""
+                  echo "continuo の pull request なのにこれが出たときは、CONTINUO_BRANCH_PREFIX が"
+                  echo "WORKFLOW.md の herdr.worktree.branch_template の頭と同じかを確かめてください。"
+                } | tee -a "${GITHUB_STEP_SUMMARY}"
+                exit 0
+                ;;
+              *)
+                {
+                  echo "## どの pull request を検査するかが読めません"
+                  echo ""
+                  echo "CONTINUO_REVIEW_GATE_SCOPE の値: ${CONTINUO_REVIEW_GATE_SCOPE:-（空か、書かれていません）}"
+                  echo ""
+                  echo "このファイルの先頭の env: に、次の2行を置いてください。"
+                  echo "all（全部の pull request を検査する）か continuo（continuo の pull request だけを検査する）のどちらかです。"
+                  echo ""
+                  echo "~~~"
+                  echo "env:"
+                  echo "  CONTINUO_REVIEW_GATE_SCOPE: all"
+                  echo "  CONTINUO_BRANCH_PREFIX: continuo/"
+                  echo "~~~"
+                } | tee -a "${GITHUB_STEP_SUMMARY}"
+                exit 1
+                ;;
+            esac
+          }
+          scope_gate
 
           # **gh の宛先を、この検査が走っている GitHub にします**（上の job と同じ）。
           GH_HOST="${GITHUB_SERVER_URL#*://}"

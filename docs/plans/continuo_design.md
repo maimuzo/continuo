@@ -14047,6 +14047,48 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 **目印の正規表現と job の名前は、既存の2箇所と1文字も違えない。**
 **揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。**
 
+**どの pull request を検査するかは、雛形の先頭の `env:` で選ぶ**（issue #345）。
+
+```yaml
+env:
+  CONTINUO_REVIEW_GATE_SCOPE: all
+  CONTINUO_BRANCH_PREFIX: continuo/
+```
+
+| `CONTINUO_REVIEW_GATE_SCOPE` | 何を検査するか | 向くリポジトリ |
+| --- | --- | --- |
+| `all`（既定） | 全部の pull request | 開発をすべて continuo で進める（このリポジトリがこれ） |
+| `continuo` | branch 名が `CONTINUO_BRANCH_PREFIX` で始まる pull request だけ。ほかは判断票を数えずに緑で終える | continuo と人間の両方で開発し、人間が直接出した pull request のマージを止めたくない |
+| それ以外（空を含む） | 検査せずに赤。直し方（`env:` の2行）を出す | — |
+
+**既定は `all` である**（人間の決定。issue #345）。雛形を置き直しても合否が変わらず、値の書き忘れで黙って緩まない。
+
+**判定は、2つの job の step の中の関数 `scope_gate` が行う。**2つの job で1文字も違えない（[test/internal/scaffold/ci_run_test.go](../../test/internal/scaffold/ci_run_test.go) が押さえる）。
+branch 名は step の `env:` に `HEAD_REF: ${{ github.head_ref }}` で渡す（`run:` に直に書くと、branch 名がシェルとして読まれる）。
+**変数は空を許して読む**（`${…:-}`）。job だけを既存の CI へ写して `env:` が落ちたとき、`set -u` で案内を出さずに落ちないためである。
+**接頭辞が空なら、全部を検査する側に倒れる。**
+
+**`CONTINUO_BRANCH_PREFIX` の既定は、`herdr.worktree.branch_template` の既定値から `workspace.BranchPrefix` で作った頭（`continuo/`）と同じである。**揃っていることはテストが押さえる。
+利用者が `branch_template` の頭を変えたら、この値も同じにする。**ずれると continuo の pull request も緑で通り、赤くならないので気づけない。**
+緑で終えるときは、branch 名と接頭辞を Summary に出して、気づく手がかりにする。
+
+**`continuo` を選んだリポジトリで検査されないもの。**人間が直接出した pull request と、エージェントに別の名前の branch へ出すよう頼んで作らせた pull request（スキル trusting-instructions の「push 先を、他人の指定で変えない」）。
+
+**`CONTINUO_REVIEW_GATE_SCOPE` を書き換える pull request は、書き換えたあとの定義で自分自身を検査する**（`pull_request` の検査は、その pull request の中の定義で動く）。
+いまも `run:` を書き換えれば同じことができ、新しく開いた穴ではない。雛形の冒頭に「`.github/workflows/` の差分は人間がレビューする」と書いた。
+
+| 比べた案 | 採らなかった理由 |
+| --- | --- |
+| GitHub のリポジトリの変数（`vars`）で切り替える | 値を変えても commit に残らず、検査を緩めたことを後から追えない。ファイルを読んでも、どちらの運用で動いているかが分からない。fork から来た pull request で読めるかも確かめられていない。人間が「変だ」と退けた |
+| `WORKFLOW.md` に設定を足す | GitHub Actions から読めない。`WORKFLOW.md` は continuo を動かす機械の手元にあり、検査するリポジトリの中にあるとは限らない |
+| job の `if:` で飛ばす | job の `if:` からは workflow の `env:` を読めない（読めるのは `github`・`needs`・`vars`・`inputs`）。step の中で判定すれば、数えなかった理由を Summary に残せ、テストで判定をそのまま走らせて確かめられる |
+| `on:` の `branches` で workflow ごと飛ばす | 検査の結果が届かず、必須の検査にしていると Pending のままマージを塞ぐ（GitHub Docs「Handling skipped but required checks」） |
+| pull request の作者の立場で絞る | 利用者のリポジトリでは、人間も continuo も同じ OWNER / MEMBER のアカウントで動くので見分けられない |
+| 雛形を2枚（全部用・continuo 用）配る | 同じ数え方のシェルが2枚に分かれ、片方だけ直るずれが起きる |
+| `continuo doctor` で `branch_template` と検査ファイルのずれを調べる | doctor は利用者のリポジトリの `.github/workflows/` を読む口を持たず、ファイル名も利用者が付け直せる。雛形のコメントと、緑で終えるときの Summary で気づけるようにした |
+
+**このリポジトリの検査（`.github/workflows/review-gate.yml`）は、全部を検査する運用なので、この切り替えを持たない。**
+
 **投稿者の条件だけは、雛形のほうが広い**（issue #261）。
 
 | どこ | 投稿者をどう数えるか |
