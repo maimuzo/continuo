@@ -82,6 +82,8 @@ func assertNoRunningSubagentNotice(t *testing.T, body string) {
 // 成功条件: 通知に「走行中のサブエージェントを止めました」が出ないこと。
 func TestSubagent_background_tasksが空のStopで走行中の印が下りる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(193, "Ready"))
 
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
@@ -119,6 +121,8 @@ func TestSubagent_background_tasksが空のStopで走行中の印が下りる(t 
 // 成功条件: 通知に「走行中のサブエージェントを止めました」が出ないこと。
 func TestSubagent_turnを送るときに走行中の印が下りる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(194, "Ready"))
 
 	// **1回目の turn を正常に終わらせるので、記録が要る**（表明を読みにいくため）。
@@ -178,6 +182,8 @@ func TestSubagent_turnを送るときに走行中の印が下りる(t *testing.T
 // 成功条件: 通知に「走行中のサブエージェントを止めました」が出ないこと。
 func TestSubagent_SubagentStopでbackground_tasks側の印も下りる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(195, "Ready"))
 
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
@@ -215,6 +221,8 @@ func TestSubagent_SubagentStopでbackground_tasks側の印も下りる(t *testin
 // **上限が無ければ、送らなかった72件が走行中として残り、猶予いっぱい待たされる。**
 func TestSubagent_覚える件数の上限を超えたら走っていない側へ倒れる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(196, "Ready"))
 
 	// **上限そのものは非公開の定数である**（`maxTrackedSubagents` = 64）。
@@ -262,6 +270,8 @@ func TestSubagent_覚える件数の上限を超えたら走っていない側�
 // 名前は3件までしか並ばず、残りが「ほか 7 件」とまとめられていること。
 func TestSubagent_通知に並べる名前は記録のパスと同じ件数で切る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
 	// subagent を、走行中のまま止める場面をわざと作っている。
 	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")

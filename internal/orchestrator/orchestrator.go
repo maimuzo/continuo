@@ -182,6 +182,9 @@ type HerdrClient interface {
 	AgentList(ctx context.Context) (*herdr.AgentListResult, error)
 	// AgentSendKeys は agent にキーを送る。**blocked のとき `["esc"]` を送る**（設計 3-11）。
 	AgentSendKeys(ctx context.Context, params herdr.AgentSendKeysParams) error
+	// AgentRead は agent の画面を読む。**確認の画面で止まったときに、閉じる前に1回だけ読む**
+	// （設計 3-11。issue #347）。入力は送らない。
+	AgentRead(ctx context.Context, params herdr.AgentReadParams) (*herdr.AgentReadResult, error)
 }
 
 // **本番の実装がこの2つのインタフェースを満たすことを、コンパイル時に確かめる。**

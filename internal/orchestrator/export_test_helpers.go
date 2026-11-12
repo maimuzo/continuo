@@ -241,3 +241,60 @@ func ResolveStatuslineForwardForTest(worktree, configDir string) (string, []stri
 	})
 	return cmd, skipped
 }
+
+// 以下は、確認の画面で止まったときに読んだ画面を引き渡しに載せる処理（設計 3-11。issue #347）を
+// test/internal/orchestrator から確かめるための入り口である。**本体の振る舞いは変えない。**
+
+// BlockedScreenForTest は、画面の解析結果をテストから読める形にしたものである。
+type BlockedScreenForTest struct {
+	// ReadErr は読めなかったときの理由である。
+	ReadErr string
+	// NotBlocked は読み直したときに確認の画面でなくなっていたことを表す。
+	NotBlocked bool
+	// Excerpt は載せる抜粋である（囲む前）。
+	Excerpt string
+	// Extracted は確認の画面を切り出せたなら true である。
+	Extracted bool
+	// Kind は種類の名前である（"tool_permission" / "folder_trust" / "ask_user_question" / "unknown"）。
+	Kind string
+	// Heading はツールの権限の確認の見出しである。
+	Heading string
+	// NeedsApproval は `don’t ask again for:` の後ろの文字列である。
+	NeedsApproval string
+}
+
+// ParseBlockedScreenForTest は parseBlockedScreen を呼ぶ。
+//
+// text: herdr が返した画面の文。
+// 戻り値: 解析した結果。
+func ParseBlockedScreenForTest(text string) BlockedScreenForTest {
+	s := parseBlockedScreen(text)
+	return BlockedScreenForTest{
+		ReadErr: s.ReadErr, NotBlocked: s.NotBlocked, Excerpt: s.Excerpt, Extracted: s.Extracted,
+		Kind: s.Kind.String(), Heading: s.Heading, NeedsApproval: s.NeedsApproval,
+	}
+}
+
+// BlockedScreenSectionForTest は、画面の文を解析して blockedScreenSection と blockedEscNote を組み立てる。
+//
+// text: herdr が返した画面の文。
+// standaloneToolRemedy: 起動系・コメントの道の組み立て方なら true。
+// omitTrustRemedy: 起動直後の道の組み立て方なら true。
+// 戻り値の1つ目: 画面の部分。
+// 戻り値の2つ目: 【補足】（出さないなら空）。
+func BlockedScreenSectionForTest(text string, standaloneToolRemedy, omitTrustRemedy bool) (string, string) {
+	s := parseBlockedScreen(text)
+	return blockedScreenSection(s, blockedScreenOptions{
+		StandaloneToolRemedy: standaloneToolRemedy, OmitTrustRemedy: omitTrustRemedy,
+	}), blockedEscNote(s)
+}
+
+// BuildCommentRequestPromptForTest は buildCommentRequestPrompt を呼ぶ。
+//
+// issueURL: コメントを書く先の issue の URL。
+// marker: コメントの先頭に書かせる印。
+// escClosed: 作業の途中の確認の画面を continuo が esc で閉じたなら true。
+// 戻り値: 送る本文。
+func BuildCommentRequestPromptForTest(issueURL, marker string, escClosed bool) string {
+	return buildCommentRequestPrompt(issueURL, marker, escClosed)
+}

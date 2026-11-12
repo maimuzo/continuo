@@ -868,20 +868,23 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-83f の表の最後の行）。
-		// Status を書かないだけでは足りない。この道の通知は「continuo が pane を閉じたので画面は
-		// 残っていません」と書いており、**pane を閉じないのに投稿すると嘘になる。**
+		// Status を書かないだけでは足りない。この道の通知は「pane を閉じて人間へ渡した」と書いており、
+		// **pane を閉じないのに投稿すると嘘になる。**
 		// 再起動のたびに1件積まれ、issue のコメントは消せない。
 		if directChat {
 			closePane("確認の画面で止まっている")
 			return adoption{}, false
 		}
+		// **pane を閉じる前に画面を1回読む**（設計 3-11。issue #347）。読むだけで入力は送らない。
+		// **【補足】は出さない。**この道は esc を送らない（pane ごと閉じるので要求も消える）。
+		screen := o.readBlockedScreenOf(ctx, identifier, agentName, false)
 		o.moveToFailure(ctx, issue,
 			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
 				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
 				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
-				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
-				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
-				"\n【よくある原因】フォルダの信頼が切れた。何が確認の画面を出したかは continuo の側に残りません。"+
+				"\n【確かめ方】下の画面と、worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				blockedScreenSection(screen, blockedScreenOptions{})+
+				"\n【よくある原因】フォルダの信頼が切れた・ツールの権限の確認で止まった。"+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg)),
 			handoffContext{WorktreePath: c.Path})
 		closePane("確認の画面で止まっている")

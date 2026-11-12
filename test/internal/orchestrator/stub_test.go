@@ -2,6 +2,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -51,6 +52,15 @@ type stubHerdr struct {
 	// prompts は AgentPrompt に渡された本文である。
 	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-83）。
 	prompts []string
+	// readText は AgentRead が返す画面の文である（issue #347）。readErr が nil のときだけ使う。
+	readText string
+	// readErr は AgentRead が返す誤りである。**既定は「読めない」**（newStubHerdr が入れる）。
+	readErr error
+	// reads は AgentRead に渡された params である。
+	reads []herdr.AgentReadParams
+	// keyEvents は AgentRead と AgentSendKeys が呼ばれた順の記録である（"read" / "send_keys"）。
+	// **esc より前に画面を読んだかを確かめるために持つ**（issue #347）。
+	keyEvents []string
 
 	// sl は statusline取得の agent（名前が `sl-` で始まるもの）に対する台本である（issue #284）。
 	// **issue の run の台本と分ける。**nil の欄は、起動できて入力を受け付ける状態を返す。
@@ -102,7 +112,50 @@ func isSLName(name string) bool {
 // status: AgentGet / AgentWait が返す状態。
 // 戻り値: 組み立てた stub。
 func newStubHerdr(status herdr.AgentStatus) *stubHerdr {
-	return &stubHerdr{status: status, stateSeq: 1}
+	return &stubHerdr{status: status, stateSeq: 1, readErr: errStubReadUnset}
+}
+
+// errStubReadUnset は、AgentRead の台本を入れていないときに返す誤りである。
+var errStubReadUnset = errors.New("stub: agent.read の台本がありません")
+
+// SetRead は AgentRead が返す画面の文と誤りを入れる（issue #347）。
+//
+// text: 返す画面の文。
+// err: 返す誤り。nil なら text を返す。
+func (s *stubHerdr) SetRead(text string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.readText = text
+	s.readErr = err
+}
+
+// Reads は AgentRead に渡された params を渡した順に返す。
+func (s *stubHerdr) Reads() []herdr.AgentReadParams {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]herdr.AgentReadParams(nil), s.reads...)
+}
+
+// KeyEvents は AgentRead と AgentSendKeys が呼ばれた順を返す（"read" / "send_keys"）。
+func (s *stubHerdr) KeyEvents() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.keyEvents...)
+}
+
+// AgentRead は台本の画面の文を返す（issue #347）。
+func (s *stubHerdr) AgentRead(_ context.Context, params herdr.AgentReadParams) (*herdr.AgentReadResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reads = append(s.reads, params)
+	s.keyEvents = append(s.keyEvents, "read")
+	if s.readErr != nil {
+		return nil, s.readErr
+	}
+	return &herdr.AgentReadResult{
+		Type: "pane_read",
+		Read: herdr.PaneRead{Source: params.Source, Format: herdr.ReadFormatText, Text: s.readText},
+	}, nil
 }
 
 // SetStatus は AgentGet が返す状態を差し替える。
@@ -282,6 +335,7 @@ func (s *stubHerdr) AgentSendKeys(_ context.Context, params herdr.AgentSendKeysP
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sentKeys = append(s.sentKeys, params.Keys)
+	s.keyEvents = append(s.keyEvents, "send_keys")
 	return nil
 }
 

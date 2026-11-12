@@ -1467,6 +1467,8 @@ func Test_issueを1件処理する_P024_max_dispatch_turnsに達したらfailure
 // Status は `failure_state` へ落ちる。
 func Test_issueを1件処理する_P020_blockedが返ったらescを送ってから人間へ渡す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
@@ -1938,6 +1940,8 @@ func Test_issueを1件処理する_P011_担当が移っていたらturnの終わ
 // **末尾へ `pane.close == 0` のような検査を足すと落ちる。**実装の欠陥ではない。
 func Test_issueを1件処理する_P030_hookが届いていれば起動していると扱う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	// **これは想定して起こしている失敗である。**1回目の指示のあと `blocked` にして、
 	// run を確実に終わらせている。
 	fx.AllowLog("権限の確認で止まりました", "run を終えます")

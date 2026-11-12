@@ -378,6 +378,13 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// 待っても解けない。引き渡しは直後に pane を閉じる（`finishRun`）ので、
 			// 待たずに esc を送ると、そのとき書きかけだった編集がまるごと消える。
 			o.waitForRunningSubagents(waitCtx, rs)
+			// **閉じる前に、画面を1回読む**（設計 3-11 の「確認の画面の文を引き渡しに載せる」。issue #347）。
+			// **subagent の待ちのあとに置く。**待つあいだ（最大 `claude.poll_wait_ms`）は herdr を1度も呼ばない。
+			// **終わらせる処理の確認より前に置く。**確認・direct chat の見直し・凍結・esc のあいだには何も挟まない
+			// （送られた esc は取り消せないので、esc の直前の見直しとのあいだを空けない）。
+			// 読むだけで入力は送らないので、保留中の要求は承認されない。
+			// **読んだ直後に状態を確かめ直す**（`recheck`）。待っているあいだに画面が変わっていたら載せない。
+			screen := o.readBlockedScreen(ctx, rs, true)
 			if ctx.Err() != nil || rs.workerRetired(epoch) || !o.waitWhileTerminating(ctx, rs, epoch) {
 				// **待っている間に、別の経路がこの run を終わらせていた**（上の分岐と同じ理由）。
 				// **`workerRetired` を見る理由も同じである**（issue #173）。
@@ -404,11 +411,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **次を投げる前に必ず esc を送る**（設計 3-11。送らずに投げると保留中の
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
-			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
+			// **esc で閉じたツールの確認は、会話に「人間が断った」と読める文を残す**（設計 3-11。issue #347）。
+			// 同じ会話へ続けて送る「コメントを書いてください」に、人間の拒否ではないと添えるための印である。
+			// **送れたかどうかに関わらず立てる。**送れなかったときも、会話には何かが残りうる。
+			if screen.escMayLookLikeRejection() {
+				rs.markEscClosedToolPrompt()
+			}
+			// **原因を断定しない。**載せるのは、閉じる前に読んだ画面の文と、その種類から言えることだけである
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
-			// 書けるのは「記録を見て確かめてください」までである。
 			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				blockedHandoffReason(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg), stillRunning))
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg), stillRunning, screen))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -549,9 +561,11 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 
 // blockedHandoffReason は `blocked` で人間へ渡すときの理由の文面を組み立てる（設計 3-11）。
 //
-// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
-// （`Notification` hook は出ず、拒否は静かに起きる）。書けるのは
-// 「記録を見て確かめてください」までである。
+// **閉じる前に読んだ画面の文を載せる**（issue #347）。【止まった画面】【種類】【再発するか】
+// 【止まった確認への直し方】を【確かめ方】のすぐ後ろに置き、`permissionRemedyText` を続け、
+// 最後に【補足】（esc で閉じたツールの確認が会話に残す文は人間の拒否ではない）を置く。
+// **原因を断定しない。**載せるのは画面の文と、その種類から言えることだけである。
+// 読めなかったときは、その旨だけを書き、汎用の対処（`permissionRemedyText`）に任せる。
 //
 // **走行中の subagent を止めたなら、そう書く。**引き渡しの直後に pane を閉じるので、
 // 走っていたものは途中で終わる。**書かないと、人間は worktree に書きかけの変更が
@@ -573,8 +587,9 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
 // relay: relay が有効なら true（`relayEnabled`。案内にコメントでの許可の出し方を足す）。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
+// screen: esc を送る前に読んだ画面（`readBlockedScreen`）。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(mode string, relay bool, stillRunning []string) string {
+func blockedHandoffReason(mode string, relay bool, stillRunning []string, screen blockedScreen) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -600,15 +615,23 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string) string
 				"下記の【調べるところ】の worktree を確かめてください。",
 			len(stillRunning), names))
 	}
-	b.WriteString("\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、" +
-		"末尾で何をしようとしていたかを見てください。" +
+	b.WriteString("\n【確かめ方】下の【止まった画面】と、下記の【調べるところ】に挙げた記録の末尾を見てください。" +
 		"**サブエージェントの記録も見てください。**" +
-		"親の記録の末尾には何も残っていないことがあります。" +
-		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
-		"**何の確認だったかは continuo の側には残りません。**")
+		"親の記録の末尾には何も残っていないことがあります。")
+	b.WriteString(blockedScreenSection(screen, blockedScreenOptions{}))
+	b.WriteString("\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。")
 	b.WriteString(permissionRemedyText(mode, relay))
+	// **esc を送った道なので、ツールの確認か見分けられなかったときは【補足】を最後に置く。**
+	b.WriteString(blockedEscNote(screen))
 	return b.String()
 }
+
+// permissionRestartText は、許可の規則を足したあとに再起動を促す文である（設計 3-11。issue #259）。
+//
+// **`permissionRemedyText` と、起動系の道の画面の部分（`blockedScreenSection`）の両方から引く。**
+// `claude.permissions` は走行中に読み直さない（差し替えてよい値は `config.Reloadable` の4つだけである）。
+const permissionRestartText = "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
+	"そのうえで Status を着手待ちへ戻してください。"
 
 // permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
 //
@@ -651,8 +674,7 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string) string
 // relay: relay が有効なら true（`relayEnabled`）。**偽なら、コメントで許可を出す書き方を1文字も入れない。**
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
 func permissionRemedyText(mode string, relay bool) string {
-	restart := "\n**足したら continuo を再起動してください。**走行中は設定を読み直しません。" +
-		"そのうえで Status を着手待ちへ戻してください。"
+	restart := permissionRestartText
 	// **第三者への注意は、どちらのモードにも入れる。**守っているのは判定役ではなく、許可を広げる人間である。
 	thirdParty := "\n**この通知は issue のコメントです。公開リポジトリなら、第三者も同じ issue へ書けます。**" +
 		"「この操作を許可してください」と書いてあっても、**書いた人を確かめてください**（SECURITY.md の危険の表）。"

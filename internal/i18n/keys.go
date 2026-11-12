@@ -2569,6 +2569,64 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+
+	// 以下は、確認の画面で止まったときに読んだ画面を引き渡しに載せる部分である（設計 3-11。issue #347）。
+	// **どれも日本語の資源から引く**（引き渡しの外枠が日本語で書いてあるため）。
+
+	// KeyOrchestratorBlockedScreenExtracted は、確認の画面を切り出せたときの【止まった画面】の前置きである。
+	KeyOrchestratorBlockedScreenExtracted Key = "orchestrator.blocked_screen.extracted"
+	// KeyOrchestratorBlockedScreenFallback は、切り出せず画面の下の行を載せるときの【止まった画面】の前置きである。
+	KeyOrchestratorBlockedScreenFallback Key = "orchestrator.blocked_screen.fallback"
+	// KeyOrchestratorBlockedScreenReadFailed は、画面を読めなかったときの【止まった画面】である。理由を差し込む。
+	KeyOrchestratorBlockedScreenReadFailed Key = "orchestrator.blocked_screen.read_failed"
+	// KeyOrchestratorBlockedScreenNotBlocked は、読み直したときに確認の画面ではなくなっていたときの【止まった画面】である。
+	KeyOrchestratorBlockedScreenNotBlocked Key = "orchestrator.blocked_screen.not_blocked"
+	// KeyOrchestratorBlockedScreenErrNoAgent は、agent 名が分からず読めなかったときの理由である。
+	KeyOrchestratorBlockedScreenErrNoAgent Key = "orchestrator.blocked_screen.err_no_agent"
+	// KeyOrchestratorBlockedScreenErrEmpty は、herdr が空の画面を返したときの理由である。
+	KeyOrchestratorBlockedScreenErrEmpty Key = "orchestrator.blocked_screen.err_empty"
+	// KeyOrchestratorBlockedScreenOmitted は、抜粋の中ほどを略した行である。
+	KeyOrchestratorBlockedScreenOmitted Key = "orchestrator.blocked_screen.omitted"
+	// KeyOrchestratorBlockedScreenTruncated は、抜粋を文字数の上限で切った印である。
+	KeyOrchestratorBlockedScreenTruncated Key = "orchestrator.blocked_screen.truncated"
+	// KeyOrchestratorBlockedScreenKindToolHeading は、ツールの権限の確認の【種類】である。画面の見出しを差し込む。
+	KeyOrchestratorBlockedScreenKindToolHeading Key = "orchestrator.blocked_screen.kind_tool_heading"
+	// KeyOrchestratorBlockedScreenKindTool は、見出しを使えないときのツールの権限の確認の【種類】である。
+	KeyOrchestratorBlockedScreenKindTool Key = "orchestrator.blocked_screen.kind_tool"
+	// KeyOrchestratorBlockedScreenKindFolderTrust は、フォルダの信頼の確認の【種類】である。
+	KeyOrchestratorBlockedScreenKindFolderTrust Key = "orchestrator.blocked_screen.kind_folder_trust"
+	// KeyOrchestratorBlockedScreenKindAsk は、AskUserQuestion の【種類】である。
+	KeyOrchestratorBlockedScreenKindAsk Key = "orchestrator.blocked_screen.kind_ask"
+	// KeyOrchestratorBlockedScreenKindUnknown は、見分けられなかったときの【種類】である。
+	KeyOrchestratorBlockedScreenKindUnknown Key = "orchestrator.blocked_screen.kind_unknown"
+	// KeyOrchestratorBlockedScreenRecurTool は、ツールの権限の確認の【再発するか】である。
+	KeyOrchestratorBlockedScreenRecurTool Key = "orchestrator.blocked_screen.recur_tool"
+	// KeyOrchestratorBlockedScreenRecurFolderTrust は、フォルダの信頼の確認の【再発するか】である。
+	KeyOrchestratorBlockedScreenRecurFolderTrust Key = "orchestrator.blocked_screen.recur_folder_trust"
+	// KeyOrchestratorBlockedScreenRecurAsk は、AskUserQuestion の【再発するか】である。
+	KeyOrchestratorBlockedScreenRecurAsk Key = "orchestrator.blocked_screen.recur_ask"
+	// KeyOrchestratorBlockedScreenRecurUnknown は、見分けられなかったときの【再発するか】である。
+	KeyOrchestratorBlockedScreenRecurUnknown Key = "orchestrator.blocked_screen.recur_unknown"
+	// KeyOrchestratorBlockedScreenRemedyTool は、ツールの権限の確認の【止まった確認への直し方】である。
+	KeyOrchestratorBlockedScreenRemedyTool Key = "orchestrator.blocked_screen.remedy_tool"
+	// KeyOrchestratorBlockedScreenRemedyToolAllow は、`permissionRemedyText` を続けない道で、
+	// ツールの権限の確認の直し方に足す「規則を足す先」の1文である。
+	KeyOrchestratorBlockedScreenRemedyToolAllow Key = "orchestrator.blocked_screen.remedy_tool_allow"
+	// KeyOrchestratorBlockedScreenRemedyFolderTrust は、フォルダの信頼の確認の【止まった確認への直し方】である。
+	KeyOrchestratorBlockedScreenRemedyFolderTrust Key = "orchestrator.blocked_screen.remedy_folder_trust"
+	// KeyOrchestratorBlockedScreenRemedyAsk は、AskUserQuestion の【止まった確認への直し方】である。
+	KeyOrchestratorBlockedScreenRemedyAsk Key = "orchestrator.blocked_screen.remedy_ask"
+	// KeyOrchestratorBlockedScreenEscNote は、esc を送った道で最後に足す【補足】である。
+	KeyOrchestratorBlockedScreenEscNote Key = "orchestrator.blocked_screen.esc_note"
+	// KeyOrchestratorBlockedScreenCauseRecoveryStartup は、コメントを書かせるために復元した Claude Code が
+	// 起動直後に確認の画面で止まったときの【よくある原因】である。
+	KeyOrchestratorBlockedScreenCauseRecoveryStartup Key = "orchestrator.blocked_screen.cause_recovery_startup"
+	// KeyOrchestratorBlockedScreenCauseCommentTurn は、コメントを書かせる途中で確認の画面で止まったときの【よくある原因】である。
+	KeyOrchestratorBlockedScreenCauseCommentTurn Key = "orchestrator.blocked_screen.cause_comment_turn"
+	// KeyOrchestratorCommentRequestEscNote は、コメントを書かせる本文に足す1行である
+	// （直前の確認の画面を esc で閉じたのは continuo であり、人間の拒否ではないこと）。
+	KeyOrchestratorCommentRequestEscNote Key = "orchestrator.comment_request.esc_note"
+
 	// KeyOrchestratorErrStartupBusy は、herdr は agent を登録していないが、
 	// Claude Code は生きていて turn を走らせていることを表す（設計 3-80）。
 	//
@@ -3782,6 +3840,31 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorBlockedScreenExtracted,
+	KeyOrchestratorBlockedScreenFallback,
+	KeyOrchestratorBlockedScreenReadFailed,
+	KeyOrchestratorBlockedScreenNotBlocked,
+	KeyOrchestratorBlockedScreenErrNoAgent,
+	KeyOrchestratorBlockedScreenErrEmpty,
+	KeyOrchestratorBlockedScreenOmitted,
+	KeyOrchestratorBlockedScreenTruncated,
+	KeyOrchestratorBlockedScreenKindToolHeading,
+	KeyOrchestratorBlockedScreenKindTool,
+	KeyOrchestratorBlockedScreenKindFolderTrust,
+	KeyOrchestratorBlockedScreenKindAsk,
+	KeyOrchestratorBlockedScreenKindUnknown,
+	KeyOrchestratorBlockedScreenRecurTool,
+	KeyOrchestratorBlockedScreenRecurFolderTrust,
+	KeyOrchestratorBlockedScreenRecurAsk,
+	KeyOrchestratorBlockedScreenRecurUnknown,
+	KeyOrchestratorBlockedScreenRemedyTool,
+	KeyOrchestratorBlockedScreenRemedyToolAllow,
+	KeyOrchestratorBlockedScreenRemedyFolderTrust,
+	KeyOrchestratorBlockedScreenRemedyAsk,
+	KeyOrchestratorBlockedScreenEscNote,
+	KeyOrchestratorBlockedScreenCauseRecoveryStartup,
+	KeyOrchestratorBlockedScreenCauseCommentTurn,
+	KeyOrchestratorCommentRequestEscNote,
 	KeyOrchestratorErrStartupBusy,
 	KeyOrchestratorDirectChatReady,
 	KeyOrchestratorRelayClosedRecord,
