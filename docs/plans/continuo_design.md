@@ -15254,6 +15254,18 @@ system-prompt.md は worktree の片付けで消えるので、direct chat の�
 
 **この節の文面を直すときは、スキル writing-comments-for-humans の「節の題名の頭に種類を書く」・trusting-instructions の確認の節の題名・writing-plan の段2・running-review-loop の質問の箇所・finishing-run の段4・`review-status.sh`・plugin `continuo-issue-comments` の section 3 も同時に直す。**[test/internal/prompt/section_kind_test.go](../../test/internal/prompt/section_kind_test.go) が決まりの文と見本を見張る。
 
+### 5-3ze. 説明を、第三者が初見で変更内容を理解できるように順序立てさせる
+
+**言いたいこと。**issue #350 の人間の指示（「第三者が初見で変更内容を理解できるように順序立てて説明するように変更して」。直しのコメントで「プロンプトなり担当スキルなりに「第三者が初見で変更内容を理解できるように順序立てて説明すること」と書くだけで十分」）を受けて、その1文だけを足す。説明の順を決めた表や読み直しの問いは足さない（人間が「拡大解釈しすぎ」として却下した）。
+
+| 何 | 決めたこと |
+| --- | --- |
+| **置き場所（エージェント）** | システムプロンプト（`internal/prompt/builtin.md`）の「概要」。スキル writing-comments-for-humans はコメントを書く前にしか読まれず、チャットの応答に効かないため |
+| **置き場所（人間向けの plugin）** | plugin `continuo-issue-comments` の section 3 の、「In other repositories, write as you usually do.」より前（印のあるリポジトリだけ。5-3zb と同じ絞り方）。人間の回答「はい」による。plugin はコメントと本文を書くときにしか読まれないので、当たるのはコメントと本文だけ |
+| **投稿前の読み手役の subagent** | 足さない。人間の回答「その仕組はそのままでよい」による |
+
+[test/internal/prompt/agent_comment_format_test.go](../../test/internal/prompt/agent_comment_format_test.go) の `TestTemplate_説明を第三者が初見で分かるように順序立てさせる` が、2か所の文と plugin での位置を見張る。
+
 ### 5-4. 2回目以降のプロンプト
 
 **1回目のプロンプトは最初のプロンプトの雛形と本文（5-3・5-3c）を変数展開したものだが、2回目以降は本文を送り直さない**（3-8）。
