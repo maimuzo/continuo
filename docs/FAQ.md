@@ -3539,7 +3539,7 @@ Claude Code を閉じました。このコメントより後に OWNER / MEMBER /
 | 【種類】 | ツールを使ってよいかの確認・フォルダの信頼の確認・AskUserQuestion・見分けられない、のどれか |
 | 【再発するか】 | その種類から言えること |
 | 【止まった確認への直し方】 | その種類の直し方。見分けられないときは出ません（続く【対処】を読んでください） |
-| 【補足】 | esc で閉じたときだけ。会話の記録に残る「The user doesn't want to proceed with this tool use」は、continuo の esc によるもので、人間の拒否ではありません |
+| 【補足】 | 作業の途中で止まり、continuo が esc で閉じたときだけ。種類がツールの権限の確認・AskUserQuestion・見分けられなかったときに出ます（フォルダの信頼と、読み直したときに確認の画面でなくなっていたときは出ません）。会話に残る「The user doesn't want to proceed with this tool use」や「User declined to answer questions」は、continuo の esc によるもので、人間の拒否ではありません。起動直後と再起動の引き継ぎの道では出ません |
 
 **`don’t ask again for:` の行を見てください。**Bash の確認の画面には、たとえば次の行が出ます。
 

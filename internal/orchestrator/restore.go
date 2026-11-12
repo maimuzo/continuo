@@ -877,12 +877,15 @@ func (o *Orchestrator) decideOne(
 		}
 		// **pane を閉じる前に画面を1回読む**（設計 3-11。issue #347）。読むだけで入力は送らない。
 		// **【補足】は出さない。**この道は esc を送らない（pane ごと閉じるので要求も消える）。
+		// esc を送らずに閉じた会話を次の着手で再開すると、記録に入るのは
+		// 「[Tool call interrupted: the session ended before this call's result was recorded, …]」で、
+		// 人間の拒否と読める文ではない（2026-11-12 に実測。Claude Code 2.1.322）。
 		screen := o.readBlockedScreenOf(ctx, identifier, agentName, false)
 		o.moveToFailure(ctx, issue,
 			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
 				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
 				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
-				"\n【確かめ方】下の画面と、worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				"\n【確かめ方】【止まった画面】に画面の文があればそれと、worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				blockedScreenSection(screen, blockedScreenOptions{})+
 				"\n【よくある原因】フォルダの信頼が切れた・ツールの権限の確認で止まった。"+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg)),

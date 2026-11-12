@@ -615,7 +615,7 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string, screen
 				"下記の【調べるところ】の worktree を確かめてください。",
 			len(stillRunning), names))
 	}
-	b.WriteString("\n【確かめ方】下の【止まった画面】と、下記の【調べるところ】に挙げた記録の末尾を見てください。" +
+	b.WriteString("\n【確かめ方】【止まった画面】に画面の文があればそれと、下記の【調べるところ】に挙げた記録の末尾を見てください。" +
 		"**サブエージェントの記録も見てください。**" +
 		"親の記録の末尾には何も残っていないことがあります。")
 	b.WriteString(blockedScreenSection(screen, blockedScreenOptions{}))

@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"os"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -96,12 +97,18 @@ func (s blockedScreen) hasScreen() bool {
 
 // escMayLookLikeRejection は、esc を送ったあとに会話へ残る文が「人間の拒否」に見えうるかを返す。
 //
-// **ツールの権限の確認と、見分けられなかったものだけ**である。esc で閉じたツールの確認は、
-// 会話の記録に「The user doesn't want to proceed with this tool use」を残す（2026-11-12 に実測）。
+// **ツールの権限の確認・AskUserQuestion・見分けられなかったもの（読めなかったときを含む）**である。
+// esc で閉じたツールの確認は会話の記録に「The user doesn't want to proceed with this tool use」を、
+// AskUserQuestion は画面に「User declined to answer questions」を残す（2026-11-12 に実測）。
+// **読み直したときに確認の画面ではなくなっていたなら出さない。**そのときの esc は確認の画面を閉じていない。
+// フォルダの信頼は、ツールの呼び出しも質問も無いので出さない。
 //
 // 戻り値: 補足を出すべきなら true。
 func (s blockedScreen) escMayLookLikeRejection() bool {
-	return s.Kind == blockedKindToolPermission || s.Kind == blockedKindUnknown
+	if s.NotBlocked {
+		return false
+	}
+	return s.Kind == blockedKindToolPermission || s.Kind == blockedKindAskUserQuestion || s.Kind == blockedKindUnknown
 }
 
 // blockedStartupError は、起動直後に確認の画面で止まったことを表す誤りに、読んだ画面を持たせたものである。
@@ -163,6 +170,12 @@ func (o *Orchestrator) readBlockedScreenOf(
 	})
 	if err != nil {
 		s := blockedScreen{ReadErr: blockedScreenErrText(err.Error())}
+		// **context が終わっているなら、ログを下げる。**別の経路が run を終わらせている最中で、
+		// 読めないのは当たり前である（このあとの終わらせる処理の確認で戻る）。
+		if ctx.Err() != nil {
+			o.logger.Debug("確認の画面で止まったときの画面を読めませんでした（止まる途中）", "identifier", identifier, "error", s.ReadErr)
+			return s
+		}
 		o.logger.Warn("確認の画面で止まったときの画面を読めませんでした", "identifier", identifier, "error", s.ReadErr)
 		return s
 	}
@@ -186,7 +199,9 @@ func (o *Orchestrator) readBlockedScreenOf(
 		}
 	}
 	s := parseBlockedScreen(res.Read.Text)
-	o.logger.Warn("確認の画面で止まったときの画面を読みました（引き渡しに載せます）",
+	// **「引き渡しに載せる」とは書かない。**載せない道（復帰の作り直し・direct chat の用意・
+	// 先に引き渡しを投稿した道）では、このログが唯一の記録である。
+	o.logger.Warn("確認の画面で止まったときの画面を読みました",
 		"identifier", identifier, "種類", s.Kind.String(), "切り出せたか", s.Extracted,
 		"見出し", s.Heading, "許可が要る部分", s.NeedsApproval, "抜粋", s.Excerpt)
 	return s
@@ -216,6 +231,11 @@ func blockedScreenErrText(msg string) string {
 		clean = clean[:i]
 	}
 	clean = redactScreenSecrets(strings.TrimSpace(clean))
+	// **囲みの外に出るので、backtick を落とし、`@` を全角にする**（設計 3-23。`sanitizeSubagentField` と同じ理由）。
+	// 誤りの文は herdr の応答の本体（画面の文）を含みうる。落とさないと code span を抜けたり、
+	// `@名前` が人への通知になったりする。
+	clean = strings.ReplaceAll(clean, "`", "")
+	clean = strings.ReplaceAll(clean, "@", "＠")
 	return truncateRunes(clean, blockedScreenErrRunes)
 }
 
@@ -263,7 +283,9 @@ var screenSecretRules = []struct {
 	{regexp.MustCompile(`(://)[^/\s:@]+:[^/\s@]+@`), "${1}***@"},
 }
 
-// redactScreenSecrets は、資格情報の形の文字列を `***` に置き換える。
+// redactScreenSecrets は、資格情報の形の文字列を `***` に置き換える（1つの文の中で当てる）。
+//
+// **画面の行には `redactScreenLines` を使う。**こちらは行をまたがない。
 //
 // text: 対象の文。
 // 戻り値: 伏せたあとの文。
@@ -272,6 +294,102 @@ func redactScreenSecrets(text string) string {
 		text = rule.re.ReplaceAllString(text, rule.repl)
 	}
 	return text
+}
+
+// screenHomeDir は、ホームディレクトリの絶対パスを返す（テストから差し替える）。
+var screenHomeDir = os.UserHomeDir
+
+// redactScreenLines は、画面の行に伏せ字を当てる。**行の境で割れた秘密とホームのパスも伏せる。**
+//
+// 画面の文は `detection`（画面の格子の平文）なので、pane の幅を超える行は複数の行に割れて届く
+// （`recent_unwrapped` は `blocked` のあいだ読めない。2026-11-12 に実測）。1行ずつ規則を当てると、
+// 行の境で割れたトークンの後半や、`/Users/<名前>` の途中で割れたパスが、公開の issue に残る。
+//
+//  1. 行を改行なしでつないだ1つの文を作り、各 rune がどの行のどこかを控える
+//  2. つないだ文に伏せ字の規則を当て、伏せる rune に印を付ける（`${1}` の前置きは残す）
+//  3. つないだ文でホームのパスを探し、1文字目を `~` に、残りを消す印を付ける
+//  4. 印を元の行へ戻す。伏せる rune の連なりは、行ごとに `***` 1つにまとめる
+//
+// **伏せすぎは許す。**つないだせいで、行末の `token=` の次の行の頭の語まで伏せることがある。
+//
+// lines: 画面の行。
+// 戻り値: 伏せたあとの行（行の数は変えない）。
+func redactScreenLines(lines []string) []string {
+	type pos struct{ line, idx int }
+	var joined []rune
+	var where []pos
+	for li, l := range lines {
+		for ri, r := range []rune(l) {
+			joined = append(joined, r)
+			where = append(where, pos{li, ri})
+		}
+	}
+	const (
+		keep = iota
+		mask
+		drop
+		tilde
+	)
+	mark := make([]int, len(joined))
+	js := string(joined)
+	// バイトの位置を rune の位置へ写す表。**正規表現が返す位置は必ず rune の切れ目なので、切れ目だけを埋める。**
+	byteToRune := make([]int, len(js)+1)
+	ri := 0
+	for bi := range js {
+		byteToRune[bi] = ri
+		ri++
+	}
+	byteToRune[len(js)] = ri
+	for _, rule := range screenSecretRules {
+		for _, m := range rule.re.FindAllStringSubmatchIndex(js, -1) {
+			start := m[0]
+			// `${1}` を残す規則は、前置き（1つ目の組）の後ろから伏せる。
+			if strings.HasPrefix(rule.repl, "${1}") && len(m) >= 4 && m[3] >= 0 {
+				start = m[3]
+			}
+			for i := byteToRune[start]; i < byteToRune[m[1]]; i++ {
+				mark[i] = mask
+			}
+		}
+	}
+	if home, err := screenHomeDir(); err == nil && len(home) > 1 {
+		hr := []rune(home)
+		for i := 0; i+len(hr) <= len(joined); i++ {
+			if string(joined[i:i+len(hr)]) != home {
+				continue
+			}
+			mark[i] = tilde
+			for j := i + 1; j < i+len(hr); j++ {
+				mark[j] = drop
+			}
+			i += len(hr) - 1
+		}
+	}
+	out := make([]strings.Builder, len(lines))
+	prevMasked := make([]bool, len(lines))
+	for i, r := range joined {
+		w := where[i]
+		b := &out[w.line]
+		switch mark[i] {
+		case mask:
+			if !prevMasked[w.line] {
+				b.WriteString("***")
+			}
+			prevMasked[w.line] = true
+			continue
+		case drop:
+		case tilde:
+			b.WriteRune('~')
+		default:
+			b.WriteRune(r)
+		}
+		prevMasked[w.line] = false
+	}
+	res := make([]string, len(lines))
+	for i := range lines {
+		res[i] = out[i].String()
+	}
+	return res
 }
 
 // isScreenRule は「全幅の `─`（U+2500）だけの行」かを返す（前後の空白を除いて 10 個以上）。
@@ -299,10 +417,11 @@ var screenHeadingAllowed = regexp.MustCompile(`^[A-Za-z0-9 _\-.:()]+$`)
 // parseBlockedScreen は、読んだ画面を解析する（副作用は無い）。
 //
 //  1. 制御文字と ANSI を落とす
-//  2. 最初の「全幅の `─` だけの行」から下を確認の画面とする。無ければ下の 20 行を使う
+//  2. カーソル（`❯`）がある最後の行より上で、いちばん近い「全幅の `─` だけの行」から下を確認の画面とする。
+//     無ければ下の 20 行を使う
 //  3. 罫線の行と末尾の空行を落とし、各行の右の空白を落とす
-//  4. 種類・見出し・許可が要る部分を見分ける
-//  5. 資格情報の形を伏せ、20 行を超えたら中略し、2000 字で切る
+//  4. 資格情報の形とホームのパスを、行をまたいで伏せる（`redactScreenLines`）
+//  5. 種類・見出し・許可が要る部分を見分け、20 行を超えたら中略し、2000 字で切る
 //
 // text: herdr が返した画面の文。
 // 戻り値: 解析した結果。
@@ -313,9 +432,19 @@ func parseBlockedScreen(text string) blockedScreen {
 		lines[i] = strings.TrimRight(l, " \t")
 	}
 
-	ruleAt := -1
+	// **起点は、選択肢のカーソル（`❯`）がある最後の行のすぐ上の罫線である。**
+	// いちばん上の罫線から始めると、会話の表示に `─` だけの行があったとき、そこから下の会話が
+	// 確認の画面として載る。AskUserQuestion は罫線を2本持つ（見出しの上と、最後の選択肢の上）ので、
+	// カーソルの行より上でいちばん近いものを使う（実測した4画面のどれも、カーソルの行は確認の画面の中にある）。
+	cursorAt := -1
 	for i, l := range lines {
-		if isScreenRule(l) {
+		if strings.Contains(l, "❯") {
+			cursorAt = i
+		}
+	}
+	ruleAt := -1
+	for i := cursorAt - 1; i >= 0; i-- {
+		if isScreenRule(lines[i]) {
 			ruleAt = i
 			break
 		}
@@ -337,7 +466,8 @@ func parseBlockedScreen(text string) blockedScreen {
 		}
 		kept = append(kept, l)
 	}
-	body = trimTrailingBlank(kept)
+	// **伏せ字は、見出し・許可が要る部分・抜粋を取り出す前に、行をまたいで当てる**（`redactScreenLines`）。
+	body = redactScreenLines(trimTrailingBlank(kept))
 
 	s := blockedScreen{Extracted: extracted}
 	full := strings.Join(body, "\n")
@@ -353,7 +483,7 @@ func parseBlockedScreen(text string) blockedScreen {
 				}
 			}
 		}
-		s.NeedsApproval = redactScreenSecrets(needsApprovalOf(body))
+		s.NeedsApproval = needsApprovalOf(body)
 	}
 
 	if len(body) > blockedScreenMaxLines {
@@ -363,7 +493,7 @@ func parseBlockedScreen(text string) blockedScreen {
 		cut = append(cut, body[len(body)-blockedScreenTailLines:]...)
 		body = cut
 	}
-	excerpt := redactScreenSecrets(strings.Join(body, "\n"))
+	excerpt := strings.Join(body, "\n")
 	if utf8.RuneCountInString(excerpt) > blockedScreenMaxRunes {
 		excerpt = truncateRunes(excerpt, blockedScreenMaxRunes) + "\n" + ja.T(i18n.KeyOrchestratorBlockedScreenTruncated)
 	}
@@ -388,14 +518,16 @@ func trimTrailingBlank(lines []string) []string {
 // text: 確認の画面（切り出せなかったときは画面の下の行）。
 // 戻り値: 種類。
 func classifyBlockedScreen(text string) blockedKind {
+	// **AskUserQuestion を先に見る。**質問が「Do you want to …?」で選択肢が Yes だと、ツールの確認の
+	// 文字列にも当たる。ツールの確認は `Esc to cancel · Tab to amend` で終わり、`Enter to select` を持たない（実測）。
 	switch {
+	case strings.Contains(text, "Enter to select") &&
+		(strings.Contains(text, "Type something") || strings.Contains(text, "Chat about this")):
+		return blockedKindAskUserQuestion
 	case strings.Contains(text, "Yes, I trust this folder") || strings.Contains(text, "Accessing workspace:"):
 		return blockedKindFolderTrust
 	case strings.Contains(text, "Do you want to") && strings.Contains(text, "1. Yes"):
 		return blockedKindToolPermission
-	case strings.Contains(text, "Enter to select") &&
-		(strings.Contains(text, "Type something") || strings.Contains(text, "Chat about this")):
-		return blockedKindAskUserQuestion
 	default:
 		return blockedKindUnknown
 	}
@@ -475,12 +607,22 @@ type blockedScreenOptions struct {
 func blockedScreenSection(s blockedScreen, opts blockedScreenOptions) string {
 	ja := blockedScreenCatalog()
 	var b strings.Builder
+	// genericRemedy は、続けて `permissionRemedyText` を出さない道（起動系・コメントの道）で、
+	// 種類が分からないときに出す直し方である。**出さないと、解決方法が1つも書かれない通知になる。**
+	genericRemedy := func() {
+		if opts.StandaloneToolRemedy {
+			b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenRemedyGeneric))
+			b.WriteString(permissionRestartText)
+		}
+	}
 	switch {
 	case s.ReadErr != "":
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenReadFailed, s.ReadErr))
+		genericRemedy()
 		return b.String()
 	case s.NotBlocked:
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenNotBlocked))
+		genericRemedy()
 		return b.String()
 	}
 	if s.Extracted {
@@ -517,13 +659,15 @@ func blockedScreenSection(s blockedScreen, opts blockedScreenOptions) string {
 	default:
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenKindUnknown))
 		b.WriteString("\n" + ja.T(i18n.KeyOrchestratorBlockedScreenRecurUnknown))
+		genericRemedy()
 	}
 	return b.String()
 }
 
 // blockedEscNote は、esc を送った道で最後に足す【補足】を返す。
 //
-// **種類がツールの権限の確認か、見分けられなかったときだけ出す。**それ以外では空を返す。
+// **`escMayLookLikeRejection` が真のときだけ出す**（ツールの権限の確認・AskUserQuestion・見分けられなかったもの。
+// 読み直して確認の画面でなくなっていたときは出さない）。それ以外では空を返す。
 //
 // s: 読んだ画面。
 // 戻り値: 改行で始まる【補足】。出さないなら空。

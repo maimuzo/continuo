@@ -123,15 +123,17 @@ func TestBlockedScreen_実測した画面の種類と見出しを見分ける(t 
 // **上限が外れると、長いコマンドや大きな Edit の画面がコメントを埋める。**
 //
 // 与える情報: 罫線の下に 30 行ある画面と、罫線の下に 3000 字の1行がある画面。
-// 成功条件: 30 行の画面は頭の5行・（中略）・終わりの15行になり、3000 字の画面は 2000 字と（以下略）になること。
+// 成功条件: 30 行＋カーソルの行の画面は頭の5行・（中略）・終わりの15行になり、3000 字の画面は 2000 字と（以下略）になること。
 func TestBlockedScreen_長い画面は中略して文字数でも切る(t *testing.T) {
 	rule := strings.Repeat("─", 40)
 	var lines []string
 	for i := 1; i <= 30; i++ {
 		lines = append(lines, "line "+itoa(i))
 	}
+	// **切り出しの起点はカーソル（`❯`）の行のすぐ上の罫線なので、最後の行にカーソルを置く。**
+	lines = append(lines, "❯ 1. Yes")
 	got := orchestrator.ParseBlockedScreenForTest("prompt above\n" + rule + "\n" + strings.Join(lines, "\n") + "\n\n")
-	want := strings.Join(append(append(append([]string{}, lines[:5]...), "（中略）"), lines[15:]...), "\n")
+	want := strings.Join(append(append(append([]string{}, lines[:5]...), "（中略）"), lines[len(lines)-15:]...), "\n")
 	if got.Excerpt != want {
 		t.Errorf("中略の形が違う:\n got:\n%s\nwant:\n%s", got.Excerpt, want)
 	}
@@ -285,8 +287,86 @@ func TestBlockedScreen_種類ごとに直し方と補足を出し分ける(t *te
 			t.Errorf("AskUserQuestion の画面の部分に %q が無い:\n%s", want, askMid)
 		}
 	}
-	if askNote != "" {
-		t.Errorf("AskUserQuestion なのに【補足】を出した: %q", askNote)
+	// **AskUserQuestion を esc で閉じると画面に「User declined to answer questions」が残る**（実測）ので、【補足】を出す。
+	if !strings.Contains(askNote, "【補足】") || !strings.Contains(askNote, "User declined to answer questions") {
+		t.Errorf("AskUserQuestion なのに【補足】が無い: %q", askNote)
+	}
+}
+
+// 目的: 行の境で割れた資格情報とホームのパスも伏せることを固定する。
+//
+// **画面は `detection`（画面の格子の平文）なので、pane の幅を超える行は割れて届く。**
+// 1行ずつ伏せると、割れたトークンの後半や、途中で割れたホームのパスが公開の issue に残る。
+//
+// 与える情報: 確認の画面の中で、`ghp_` のトークン・`Bearer` の値・ホームのパスが行の境で割れた画面。
+// 成功条件: 割れた後半の文字列がどこにも残らず、ホームのパスが `~` になること。
+func TestBlockedScreen_行の境で割れた秘密とホームのパスも伏せる(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || len(home) < 2 {
+		t.Skip("ホームディレクトリが分からない")
+	}
+	rule := strings.Repeat("─", 30)
+	text := "prev\n" + rule + "\n Bash command\n" +
+		"  curl -H \"Authorization: Bearer abcdefSECRETFIRST\n" +
+		"HALFSECRETTAIL\" https://x.invalid -d token=ghp_ABCDEFGH\n" +
+		"IJKLMNOPQRSTUV && cat " + home[:len(home)/2] + "\n" +
+		home[len(home)/2:] + "/notes.txt\n" +
+		" Do you want to proceed?\n ❯ 1. Yes\n   2. No\n"
+	got := orchestrator.ParseBlockedScreenForTest(text)
+	for _, ng := range []string{"SECRETFIRST", "HALFSECRETTAIL", "ABCDEFGH", "IJKLMNOPQRSTUV", home[len(home)/2:] + "/notes"} {
+		if strings.Contains(got.Excerpt, ng) {
+			t.Errorf("行の境で割れた %q が残っている:\n%s", ng, got.Excerpt)
+		}
+	}
+	if !strings.Contains(got.Excerpt, "~") {
+		t.Errorf("ホームのパスが ~ になっていない:\n%s", got.Excerpt)
+	}
+	if got.Kind != "tool_permission" {
+		t.Errorf("種類: got %q, want tool_permission", got.Kind)
+	}
+}
+
+// 目的: 会話の表示に罫線があっても、確認の画面はカーソルの行のすぐ上の罫線から切り出すことを固定する。
+//
+// 与える情報: 会話の表示に全幅の罫線と `Accessing workspace:` を含み、その下に Bash の確認の画面がある画面。
+// 成功条件: 抜粋に会話の行が入らず、種類がツールの権限の確認であること。
+func TestBlockedScreen_会話の表示の罫線から切り出さない(t *testing.T) {
+	rule := strings.Repeat("─", 30)
+	text := "⏺ 説明\n" + rule + "\nAccessing workspace: の話をしていた会話\n\n" + rule +
+		"\n Bash command\n  ls\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n Esc to cancel · Tab to amend\n"
+	got := orchestrator.ParseBlockedScreenForTest(text)
+	if strings.Contains(got.Excerpt, "会話") {
+		t.Errorf("会話の行が抜粋に入っている:\n%s", got.Excerpt)
+	}
+	if got.Kind != "tool_permission" || got.Heading != "Bash command" {
+		t.Errorf("種類と見出し: got %q / %q", got.Kind, got.Heading)
+	}
+}
+
+// 目的: AskUserQuestion の質問が「Do you want to …?」で選択肢が Yes でも、AskUserQuestion と見分けることを固定する。
+//
+// 与える情報: 質問が「Do you want to merge now?」、選択肢が Yes / No の AskUserQuestion の画面。
+// 成功条件: 種類が ask_user_question であること。
+func TestBlockedScreen_質問がDoYouWantToでもAskUserQuestionと見分ける(t *testing.T) {
+	rule := strings.Repeat("─", 30)
+	text := "❯ 質問して\n" + rule + "\n ☐ Merge\n\nDo you want to merge now?\n\n❯ 1. Yes\n  2. No\n  3. Type something.\n" +
+		rule + "\n  4. Chat about this\n\nEnter to select · ↑/↓ to navigate · Esc to cancel\n"
+	got := orchestrator.ParseBlockedScreenForTest(text)
+	if got.Kind != "ask_user_question" {
+		t.Errorf("種類: got %q, want ask_user_question\n%s", got.Kind, got.Excerpt)
+	}
+}
+
+// 目的: 起動系・コメントの道で、種類が分からないとき・読めないときも直し方を出すことを固定する。
+//
+// 与える情報: 罫線もカーソルも無い画面を、起動系の組み立て方で組み立てる。
+// 成功条件: 汎用の直し方と再起動の1文が入ること。
+func TestBlockedScreen_起動系の道は種類が分からなくても直し方を出す(t *testing.T) {
+	mid, _ := orchestrator.BlockedScreenSectionForTest("何かの出力\nもう1行\n", true, true)
+	for _, want := range []string{"【止まった確認への直し方】", "claude.permissions.allow", "足したら continuo を再起動してください"} {
+		if !strings.Contains(mid, want) {
+			t.Errorf("%q が無い:\n%s", want, mid)
+		}
 	}
 }
 
@@ -449,11 +529,14 @@ func TestBlockedScreen_読めないときと確認の画面でなくなってい
 		recheck  string
 		readText string
 		want     string
+		// wantNote は【補足】を出すかである。**読めなかったときは見分けられないので出す（esc は送っている）。**
+		// **確認の画面でなくなっていたときは出さない**（そのときの esc は確認の画面を閉じていない）。
+		wantNote bool
 	}{
 		// **読めなければ読み直しの `agent.get` は呼ばれない。**次の `agent.get`（書かせ直しの起動の確認）は idle を返す。
-		{name: "読めない", recheck: "idle", readText: "", want: "【止まった画面】画面を読めませんでした（"},
+		{name: "読めない", recheck: "idle", readText: "", want: "【止まった画面】画面を読めませんでした（", wantNote: true},
 		{name: "確認の画面でなくなっていた", recheck: "idle", readText: "x\n" + strings.Repeat("─", 20) + "\nBash command\n",
-			want: "【止まった画面】画面を読んだときには、確認の画面ではなくなっていました。"},
+			want: "【止まった画面】画面を読んだときには、確認の画面ではなくなっていました。", wantNote: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -475,9 +558,8 @@ func TestBlockedScreen_読めないときと確認の画面でなくなってい
 			if strings.Contains(body, "Bash command") {
 				t.Errorf("使わないはずの画面の文が入っている:\n%s", body)
 			}
-			// **見分けられなかったので、【補足】は出す**（esc は送っている）。
-			if !strings.Contains(body, "【補足】") {
-				t.Errorf("esc を送った道なのに【補足】が無い:\n%s", body)
+			if got := strings.Contains(body, "【補足】"); got != tc.wantNote {
+				t.Errorf("【補足】の有無: got %v, want %v:\n%s", got, tc.wantNote, body)
 			}
 		})
 	}
@@ -583,7 +665,7 @@ func TestBlockedScreen_再起動の引き継ぎで止まっていたら画面を
 	})
 	body := handoffBodyOf(fx, "I_node350")
 	for _, want := range []string{
-		"【確かめ方】下の画面と、worktree の中身（下記）を見て",
+		"【確かめ方】【止まった画面】に画面の文があればそれと、worktree の中身（下記）を見て",
 		"【止まった画面】Claude Code は次の確認で止まっていました",
 		"（画面の見出し: Create file）",
 		"【よくある原因】フォルダの信頼が切れた・ツールの権限の確認で止まった。",

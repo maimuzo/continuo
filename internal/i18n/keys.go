@@ -2612,6 +2612,9 @@ const (
 	// KeyOrchestratorBlockedScreenRemedyToolAllow は、`permissionRemedyText` を続けない道で、
 	// ツールの権限の確認の直し方に足す「規則を足す先」の1文である。
 	KeyOrchestratorBlockedScreenRemedyToolAllow Key = "orchestrator.blocked_screen.remedy_tool_allow"
+	// KeyOrchestratorBlockedScreenRemedyGeneric は、`permissionRemedyText` を続けない道で、種類が分からない・
+	// 読めなかったときの【止まった確認への直し方】である。
+	KeyOrchestratorBlockedScreenRemedyGeneric Key = "orchestrator.blocked_screen.remedy_generic"
 	// KeyOrchestratorBlockedScreenRemedyFolderTrust は、フォルダの信頼の確認の【止まった確認への直し方】である。
 	KeyOrchestratorBlockedScreenRemedyFolderTrust Key = "orchestrator.blocked_screen.remedy_folder_trust"
 	// KeyOrchestratorBlockedScreenRemedyAsk は、AskUserQuestion の【止まった確認への直し方】である。
@@ -3859,6 +3862,7 @@ var allKeys = []Key{
 	KeyOrchestratorBlockedScreenRecurUnknown,
 	KeyOrchestratorBlockedScreenRemedyTool,
 	KeyOrchestratorBlockedScreenRemedyToolAllow,
+	KeyOrchestratorBlockedScreenRemedyGeneric,
 	KeyOrchestratorBlockedScreenRemedyFolderTrust,
 	KeyOrchestratorBlockedScreenRemedyAsk,
 	KeyOrchestratorBlockedScreenEscNote,
