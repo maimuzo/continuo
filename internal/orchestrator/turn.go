@@ -620,7 +620,11 @@ func blockedHandoffReason(mode string, relay bool, stillRunning []string, screen
 		"親の記録の末尾には何も残っていないことがあります。")
 	b.WriteString(blockedScreenSection(screen, blockedScreenOptions{}))
 	b.WriteString("\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。")
-	b.WriteString(permissionRemedyText(mode, relay))
+	// **AskUserQuestion とフォルダの信頼では、許可の対処を続けない。**画面の部分の直し方（deny を確かめる・
+	// `continuo trust`）と逆向きの「allow に足す」が並ぶと、人間が逆の直し方に従いかねない。
+	if screen.wantsPermissionRemedy() {
+		b.WriteString(permissionRemedyText(mode, relay))
+	}
 	// **esc を送った道なので、`escMayLookLikeRejection` が真なら【補足】を最後に置く**
 	// （ツールの確認・AskUserQuestion・見分けられなかったもの）。
 	b.WriteString(blockedEscNote(screen))

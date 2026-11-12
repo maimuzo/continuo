@@ -114,6 +114,20 @@ func (s blockedScreen) escMayLookLikeRejection() bool {
 	return s.Kind == blockedKindToolPermission || s.Kind == blockedKindAskUserQuestion || s.Kind == blockedKindUnknown
 }
 
+// wantsPermissionRemedy は、画面の部分のあとに許可の対処（`permissionRemedyText`）を続けるかを返す。
+//
+// **AskUserQuestion とフォルダの信頼だと見分けられたときは続けない。**画面の部分がその種類の直し方
+// （deny を確かめる・`continuo trust`）を出しており、続けて「allow に狭い規則を足す」を出すと逆向きの直し方が並ぶ。
+// 読めなかった・確認の画面でなくなっていた・見分けられなかったときは、汎用の対処として続ける。
+//
+// 戻り値: 続けるなら true。
+func (s blockedScreen) wantsPermissionRemedy() bool {
+	if !s.hasScreen() {
+		return true
+	}
+	return s.Kind != blockedKindAskUserQuestion && s.Kind != blockedKindFolderTrust
+}
+
 // blockedStartupError は、起動直後に確認の画面で止まったことを表す誤りに、読んだ画面を持たせたものである。
 //
 // **`Error()` はもとの誤り（`KeyOrchestratorConfirmStartupBlocked` の文）をそのまま返す。**
@@ -333,7 +347,7 @@ func redactScreenSecrets(text string) string {
 	return b.String()
 }
 
-// screenHomeDir は、ホームディレクトリの絶対パスを返す（テストから差し替える）。
+// screenHomeDir は、ホームディレクトリの絶対パスを返す（`os.UserHomeDir`。テストは手元の本物のホームで動く）。
 var screenHomeDir = os.UserHomeDir
 
 // redactScreenLines は、画面の行に伏せ字を当てる。**行の境で割れた秘密とホームのパスも伏せる。**
@@ -342,11 +356,15 @@ var screenHomeDir = os.UserHomeDir
 // （`recent_unwrapped` は `blocked` のあいだ読めない。2026-11-12 に実測）。1行ずつ当てると、
 // 行の境で割れたトークンの後半や、途中で割れたホームのパスが、公開の issue に残る。
 //
-//  1. 行をつないだ1つの文を作る。**2行目からは行頭の空白を落としてつなぐ**（確認の画面の中の行は
-//     字下げされて描かれるので、割れた続きの行も字下げされている見込みが高い。字下げを残すと、
-//     空白で止まる規則が続きを拾えない）。落とした字下げは、元の行にそのまま残す
-//  2. つないだ文に伏せ字の規則（`screenSecretRanges`）を当て、伏せる位置に印を付ける
-//  3. つないだ文でホームのパスを探す（`redact.HomeRanges`。投稿の直前の縮め（設計 3-73）と同じ綴りと境界）。
+//  1. 行をつないだ文を2つ作る。**2行目からは行頭の空白を落とす**（確認の画面の中の行は字下げされて描かれるので、
+//     割れた続きの行も字下げされている見込みが高い）。落とした字下げは、元の行にそのまま残す
+//     - 行の境に何も挟まない文: 語の途中で割れたトークンをつなぎ直す
+//     - 行の境に空白1つを挟む文: 空白で切って折り返した `Bearer` と値のように、空白を求める規則のため
+//     （何も挟まないと `BearerTOKEN` になって当たらない）
+//  2. 両方の文に伏せ字の規則（`screenSecretRanges`）を当て、伏せる位置を元の行の位置へ戻して合わせる
+//  3. 何も挟まない文と、その文を各行の境で切った手前の文で、ホームのパスを探す
+//     （`redact.HomeRanges`。投稿の直前の縮め（設計 3-73）と同じ綴りと境界）。切った手前の文で探すのは、
+//     割れて行末で終わったパスの次の行が英数字で始まると、つないだ文では境界の判定で外れるためである。
 //     1文字目を `~` に、残りを消す印を付ける
 //  4. 印を元の行へ戻す。伏せる文字の連なりは、行ごとに `***` 1つにまとめる
 //
@@ -356,8 +374,6 @@ var screenHomeDir = os.UserHomeDir
 // 戻り値: 伏せたあとの行（行の数は変えない）。
 func redactScreenLines(lines []string) []string {
 	type pos struct{ line, idx int }
-	var joined strings.Builder
-	var where []pos // joined のバイトごとの元の位置
 	indents := make([]string, len(lines))
 	bodies := make([]string, len(lines))
 	for li, l := range lines {
@@ -367,58 +383,97 @@ func redactScreenLines(lines []string) []string {
 			indents[li] = l[:len(l)-len(body)]
 		}
 		bodies[li] = body
-		for bi := 0; bi < len(body); bi++ {
-			where = append(where, pos{li, bi})
-		}
-		joined.WriteString(body)
 	}
-	js := joined.String()
+	// build は、行の境に sep を挟んでつないだ文と、そのバイトごとの元の位置（挟んだ文字は line = -1）を返す。
+	// starts は、各行（2行目から）が始まるバイトの位置である。
+	build := func(sep string) (string, []pos, []int) {
+		var b strings.Builder
+		var where []pos
+		var starts []int
+		for li, body := range bodies {
+			if li > 0 {
+				for range sep {
+					where = append(where, pos{-1, 0})
+				}
+				b.WriteString(sep)
+				starts = append(starts, b.Len())
+			}
+			for bi := 0; bi < len(body); bi++ {
+				where = append(where, pos{li, bi})
+			}
+			b.WriteString(body)
+		}
+		return b.String(), where, starts
+	}
 	const (
 		keep = iota
 		mask
 		drop
 		tilde
 	)
-	mark := make([]int, len(js))
-	for _, r := range screenSecretRanges(js) {
-		for i := r[0]; i < r[1]; i++ {
-			mark[i] = mask
+	marks := make([][]int, len(lines))
+	for li, body := range bodies {
+		marks[li] = make([]int, len(body))
+	}
+	set := func(where []pos, i int, m int) {
+		if w := where[i]; w.line >= 0 {
+			marks[w.line][w.idx] = m
+		}
+	}
+	for _, sep := range []string{"", " "} {
+		js, where, _ := build(sep)
+		for _, r := range screenSecretRanges(js) {
+			for i := r[0]; i < r[1]; i++ {
+				set(where, i, mask)
+			}
 		}
 	}
 	if home, err := screenHomeDir(); err == nil {
-		for _, r := range redact.HomeRanges(js, home) {
-			if mark[r[0]] == mask {
-				continue
-			}
-			mark[r[0]] = tilde
-			for i := r[0] + 1; i < r[1]; i++ {
-				mark[i] = drop
-			}
+		js, where, starts := build("")
+		ranges := redact.HomeRanges(js, home)
+		for _, p := range starts {
+			ranges = append(ranges, redact.HomeRanges(js[:p], home)...)
 		}
-	}
-	out := make([]strings.Builder, len(lines))
-	for li := range lines {
-		out[li].WriteString(indents[li])
-	}
-	for i := 0; i < len(js); i++ {
-		w := where[i]
-		b := &out[w.line]
-		switch mark[i] {
-		case mask:
-			// **行ごとに `***` 1つにまとめる。**同じ行の直前のバイトも伏せたなら書かない。
-			if i == 0 || mark[i-1] != mask || where[i-1].line != w.line {
-				b.WriteString("***")
+		taken := make([]bool, len(js))
+	ranges:
+		for _, r := range ranges {
+			for i := r[0]; i < r[1]; i++ {
+				if taken[i] {
+					continue ranges
+				}
+				if w := where[i]; w.line >= 0 && marks[w.line][w.idx] == mask {
+					continue ranges
+				}
 			}
-		case drop:
-		case tilde:
-			b.WriteByte('~')
-		default:
-			b.WriteByte(js[i])
+			for i := r[0]; i < r[1]; i++ {
+				taken[i] = true
+				if i == r[0] {
+					set(where, i, tilde)
+				} else {
+					set(where, i, drop)
+				}
+			}
 		}
 	}
 	res := make([]string, len(lines))
-	for i := range lines {
-		res[i] = out[i].String()
+	for li, body := range bodies {
+		var b strings.Builder
+		b.WriteString(indents[li])
+		for bi := 0; bi < len(body); bi++ {
+			switch marks[li][bi] {
+			case mask:
+				// **行ごとに `***` 1つにまとめる。**同じ行の直前のバイトも伏せたなら書かない。
+				if bi == 0 || marks[li][bi-1] != mask {
+					b.WriteString("***")
+				}
+			case drop:
+			case tilde:
+				b.WriteByte('~')
+			default:
+				b.WriteByte(body[bi])
+			}
+		}
+		res[li] = b.String()
 	}
 	return res
 }
@@ -480,31 +535,45 @@ func parseBlockedScreen(text string) blockedScreen {
 			break
 		}
 	}
-	var body []string
+	// **伏せ字は、行を切る前に、読んだ行の全体へ行をまたいで当てる**（`redactScreenLines`。行の数は変えない）。
+	// 切ってから当てると、窓の頭で割れた秘密の前半が窓の外にあり、後半が規則に当たらずに残る。
+	// 切り出しの起点・罫線・種類は、伏せる前の行（raw）で決める。
+	red := redactScreenLines(lines)
+	var idx []int
 	extracted := ruleAt >= 0
 	if extracted {
-		body = lines[ruleAt+1:]
+		for i := ruleAt + 1; i < len(lines); i++ {
+			idx = append(idx, i)
+		}
 	} else {
-		body = trimTrailingBlank(lines)
-		if len(body) > blockedScreenMaxLines {
-			body = body[len(body)-blockedScreenMaxLines:]
+		end := len(lines)
+		for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
+			end--
+		}
+		from := 0
+		if end > blockedScreenMaxLines {
+			from = end - blockedScreenMaxLines
+		}
+		for i := from; i < end; i++ {
+			idx = append(idx, i)
 		}
 	}
-	kept := make([]string, 0, len(body))
-	for _, l := range body {
-		if isScreenRule(l) {
+	var raw, body []string
+	for _, i := range idx {
+		if isScreenRule(lines[i]) {
 			continue
 		}
-		kept = append(kept, l)
+		raw = append(raw, lines[i])
+		body = append(body, red[i])
 	}
-	// **伏せ字は、見出し・許可が要る部分・抜粋を取り出す前に、行をまたいで当てる**（`redactScreenLines`）。
-	kept = trimTrailingBlank(kept)
+	for len(raw) > 0 && strings.TrimSpace(raw[len(raw)-1]) == "" {
+		raw, body = raw[:len(raw)-1], body[:len(body)-1]
+	}
 	// **種類は伏せる前の文で見分ける。**行をまたいで伏せると、行末の `password=…` の続きとして
 	// 次の行の頭の語（`Do you want to` の `Do`）まで伏せることがあり、見分けが外れる。
 	// 見分けに使うのは決まった英語の言い回しだけで、外へは出さない。
 	s := blockedScreen{Extracted: extracted}
-	s.Kind = classifyBlockedScreen(strings.Join(kept, "\n"))
-	body = redactScreenLines(kept)
+	s.Kind = classifyBlockedScreen(strings.Join(raw, "\n"))
 	if s.Kind == blockedKindToolPermission {
 		if extracted {
 			for _, l := range body {

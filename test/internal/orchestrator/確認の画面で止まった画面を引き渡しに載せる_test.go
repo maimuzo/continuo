@@ -336,6 +336,45 @@ func TestBlockedScreen_行の境で割れた秘密とホームのパスも伏せ
 	}
 }
 
+// 目的: 空白で切って折り返した `Bearer` と値・行末で終わる割れたホームのパス・窓の頭で割れた秘密も伏せることを固定する。
+//
+// **行の境に何も挟まずにつなぐと `BearerTOKEN` になり、空白を求める規則に当たらない**（実装レビュー3周目）。
+// **割れて行末で終わったホームのパスの次の行が英数字で始まると、つないだ文では境界の判定で外れる。**
+// **切ってから伏せると、窓の頭で割れた秘密の前半が窓の外に出る。**
+//
+// 与える情報: `X-Auth: Bearer` の直後で折り返した画面・行末で終わる割れたホームのパスの画面・罫線の無い長い画面。
+// 成功条件: トークンの後半・ホームの後半が残らないこと。
+func TestBlockedScreen_折り返しの位置によらず伏せる(t *testing.T) {
+	rule := strings.Repeat("─", 30)
+	bearer := "prev\n" + rule + "\n Bash command\n  curl -H \"X-Auth: Bearer\n  eyJhbGciOiJIUzI1NiJ9.SECRETTAIL\" https://x.invalid\n" +
+		" Do you want to proceed?\n ❯ 1. Yes\n   2. No\n"
+	if got := orchestrator.ParseBlockedScreenForTest(bearer); strings.Contains(got.Excerpt, "SECRETTAIL") {
+		t.Errorf("Bearer の直後で折り返したトークンが残っている:\n%s", got.Excerpt)
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && len(home) > 4 {
+		cut := len(home) - 2
+		tail := home[cut:]
+		text := "prev\n" + rule + "\n Bash command\n  ls " + home[:cut] + "\n  " + tail + "\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n"
+		got := orchestrator.ParseBlockedScreenForTest(text)
+		if strings.Contains(got.Excerpt, home[:cut]) {
+			t.Errorf("行末で終わる割れたホームのパスが残っている:\n%s", got.Excerpt)
+		}
+	}
+
+	var lines []string
+	lines = append(lines, "x token=ghp_FIRSTHALF")
+	lines = append(lines, "  SECONDHALFOFTOKEN")
+	for i := 0; i < 19; i++ {
+		lines = append(lines, "filler "+itoa(i))
+	}
+	// 罫線もカーソルも無いので、下の 20 行を載せる。2行目（トークンの後半）は窓の頭に入る。
+	got := orchestrator.ParseBlockedScreenForTest(strings.Join(lines, "\n"))
+	if strings.Contains(got.Excerpt, "SECONDHALFOFTOKEN") {
+		t.Errorf("窓の頭で割れた秘密の後半が残っている:\n%s", got.Excerpt)
+	}
+}
+
 // 目的: 会話の表示に罫線があっても、確認の画面はカーソルの行のすぐ上の罫線から切り出すことを固定する。
 //
 // 与える情報: 会話の表示に全幅の罫線と `Accessing workspace:` を含み、その下に Bash の確認の画面がある画面。

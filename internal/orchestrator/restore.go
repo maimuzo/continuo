@@ -881,6 +881,11 @@ func (o *Orchestrator) decideOne(
 		// 「[Tool call interrupted: the session ended before this call's result was recorded, …]」で、
 		// 人間の拒否と読める文ではない（2026-11-12 に実測。Claude Code 2.1.322）。
 		screen := o.readBlockedScreenOf(ctx, identifier, agentName, false)
+		// **AskUserQuestion とフォルダの信頼では、許可の対処を続けない**（turn.go の `blockedHandoffReason` と同じ理由）。
+		remedy := ""
+		if screen.wantsPermissionRemedy() {
+			remedy = permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg))
+		}
 		o.moveToFailure(ctx, issue,
 			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
 				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
@@ -888,7 +893,7 @@ func (o *Orchestrator) decideOne(
 				"\n【確かめ方】【止まった画面】に画面の文があればそれと、worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				blockedScreenSection(screen, blockedScreenOptions{})+
 				"\n【よくある原因】フォルダの信頼が切れた・ツールの権限の確認で止まった。"+
-				permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg)),
+				remedy,
 			handoffContext{WorktreePath: c.Path})
 		closePane("確認の画面で止まっている")
 		return adoption{}, false
