@@ -19,6 +19,10 @@
 # 実際に通っており、自分たちのマージの門の判定を、ここで起きていない症状のために変えない
 # （[docs/plans/continuo_design.md](../../docs/plans/continuo_design.md) の 5-3o）。
 #
+# **どの PR を検査するかの切り替え（`CONTINUO_REVIEW_GATE_SCOPE`）も、雛形にだけある**（issue #345）。
+# **このリポジトリは、開発をすべて continuo と、人間が自分で起動した Claude Code で進め、
+# 全部の PR にレビュー結果を求める運用である。**雛形の既定（`all`）と同じなので、切り替えを持たない。
+#
 # **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、1枚目の仕掛けである。**
 # もう1枚は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) で、タグを打つ前に止める。
 #
