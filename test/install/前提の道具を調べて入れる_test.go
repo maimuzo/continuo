@@ -83,9 +83,7 @@ func runDeps(t *testing.T, path string, args ...string) string {
 	t.Helper()
 	fr := newFakeRelease(t, "v1.2.3", "#!/bin/sh\necho ok\n", true)
 	dir := t.TempDir()
-	full := append([]string{scriptPath(t),
-		"--api-url", fr.Server.URL + "/api/latest",
-		"--base-url", fr.Server.URL + "/dl"}, args...)
+	full := append(append([]string{scriptPath(t)}, sourceArgs(fr)...), args...)
 	// **シェルは絶対パスで起動する。**絞った PATH からは `sh` を引けない。
 	shell, err := exec.LookPath(installShell)
 	if err != nil {
