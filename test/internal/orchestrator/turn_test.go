@@ -235,6 +235,8 @@ func TestTurn_空のStopのあとに来た走行中のStopも捨てない(t *tes
 // 【確かめ方】が【調べるところ】を指していること。**原因を断定していないこと。**
 func TestTurn_blockedで引き渡すときサブエージェントの記録も案内する(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(189, "Ready"))
 
 	transcriptDir := t.TempDir()
@@ -296,7 +298,7 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
 		}
 	}
-	// **原因を断定してはならない。**何が確認の画面を出したかは continuo の側に残らない。
+	// **原因を断定してはならない。**載せてよいのは、閉じる前に読んだ画面の文と、その種類から言えることだけである（issue #347）。
 	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
 		t.Errorf("確かめていない原因を断定している:\n%s", body)
 	}
@@ -408,6 +410,8 @@ func handoffCommentBody(fx *fixture, nodeID string) string {
 // **glob ではなく `agent_id` から組み立てたパスが「走っていた」印つきで載ること。**
 func TestTurn_走行中のサブエージェントを止めたら通知にそう書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
 	// subagent を、走行中のまま止める場面をわざと作っている。
 	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")
@@ -491,6 +495,8 @@ func TestTurn_escを送る前に走行中のサブエージェントが終わる
 		// **猶予を、遅れて届く `SubagentStop` より十分に長くする。**
 		cfg.Claude.PollWaitMs = 5000
 	}})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(191, "Ready"))
 
 	var timerMu sync.Mutex
@@ -572,6 +578,8 @@ func runningStopEvent(sessionID, transcriptPath, promptID, agentID, agentType st
 // 成功条件: 走行中として扱われ、その `id` から組み立てた記録が通知に載ること。
 func TestTurn_SubagentStartを取りこぼしてもbackground_tasksが走行中を拾う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
 	// subagent を、走行中のまま止める場面をわざと作っている。
 	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")

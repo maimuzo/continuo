@@ -425,6 +425,16 @@ type runState struct {
 	// **0件で凍結した場合と、1度も凍結していない場合を区別するために持つ。**
 	// 偽のあいだ（`blocked` 以外の引き渡し）は、いま走っているものをそのまま使う。
 	handoffSubagentsFrozen bool
+	// escClosedToolPrompt は、作業の途中で確認の画面に止まり、continuo が esc で閉じたことを表す
+	// （`blockedScreen.escMayLookLikeRejection` が真のときだけ。種類がツールの権限の確認・AskUserQuestion・
+	// 見分けられなかったもので、読み直して確認の画面でなくなっていなかったとき。設計 3-11。issue #347）。
+	//
+	// **esc で閉じたツールの確認は会話に「The user doesn't want to proceed with this tool use」を、
+	// AskUserQuestion は「User declined to answer questions」を残す。**
+	// 同じ会話へ続けて送る「コメントを書いてください」（`buildCommentRequestPrompt`）に、
+	// 人間の拒否ではないと添えるために持つ。**起動の道では立てない**（そこから書かせ直しへは届かない）。
+	// **run と一緒に消える。**人間が direct chat で引き取ったときは下ろす（`abortTerminalForHuman`）。
+	escClosedToolPrompt bool
 	// turnLoopRunning は turn ループの goroutine が走っているかどうかである。
 	// **同じ run に2本目を立てない**ための印である。
 	turnLoopRunning bool
@@ -992,6 +1002,29 @@ func (rs *runState) runningBackgroundTasks() []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// markEscClosedToolPrompt は「作業の途中の確認の画面を continuo が esc で閉じた」印を立てる（issue #347）。
+func (rs *runState) markEscClosedToolPrompt() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.escClosedToolPrompt = true
+}
+
+// clearEscClosedToolPrompt は印を下ろす（人間が direct chat で引き取ったとき。issue #347）。
+func (rs *runState) clearEscClosedToolPrompt() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.escClosedToolPrompt = false
+}
+
+// escClosedToolPromptMarked は印が立っているかを返す（issue #347）。
+//
+// 戻り値: 立っていれば true。
+func (rs *runState) escClosedToolPromptMarked() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.escClosedToolPrompt
 }
 
 // freezeHandoffSubagents は「esc を送る時点で走っていた subagent」を凍結する（設計 3-11）。

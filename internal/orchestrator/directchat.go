@@ -1098,6 +1098,9 @@ func (o *Orchestrator) abortTerminalForHuman(ctx context.Context, rs *runState, 
 	if !rs.inDirectChatMode() {
 		return false
 	}
+	// **esc で閉じた印を下ろす**（issue #347）。人間が引き取ったあとの会話では、
+	// 「直前の確認の画面は continuo が閉じた」が当てはまるとは限らない。
+	rs.clearEscClosedToolPrompt()
 	paneID, started := rs.paneState()
 	if paneID != "" && started {
 		o.logger.Info("人間が引き取ったので、この run を終わらせるのをやめます（pane も印も worktree も残します）",

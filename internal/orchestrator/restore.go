@@ -868,21 +868,32 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		// **direct chat のカードでは、通知ごと投稿しない**（設計 3-83f の表の最後の行）。
-		// Status を書かないだけでは足りない。この道の通知は「continuo が pane を閉じたので画面は
-		// 残っていません」と書いており、**pane を閉じないのに投稿すると嘘になる。**
+		// Status を書かないだけでは足りない。この道の通知は「引き継がずに人間へ渡しました」と書いており、
+		// **pane を閉じないのに投稿すると嘘になる。**
 		// 再起動のたびに1件積まれ、issue のコメントは消せない。
 		if directChat {
 			closePane("確認の画面で止まっている")
 			return adoption{}, false
 		}
+		// **pane を閉じる前に画面を1回読む**（設計 3-11。issue #347）。読むだけで入力は送らない。
+		// **【補足】は出さない。**この道は esc を送らない（pane ごと閉じるので要求も消える）。
+		// esc を送らずに閉じた会話を次の着手で再開すると、記録に入るのは
+		// 「[Tool call interrupted: the session ended before this call's result was recorded, …]」で、
+		// 人間の拒否と読める文ではない（2026-11-12 に実測。Claude Code 2.1.322）。
+		screen := o.readBlockedScreenOf(ctx, identifier, agentName, false)
+		// **AskUserQuestion とフォルダの信頼では、許可の対処を続けない**（turn.go の `blockedHandoffReason` と同じ理由）。
+		remedy := ""
+		if screen.wantsPermissionRemedy() {
+			remedy = permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg))
+		}
 		o.moveToFailure(ctx, issue,
 			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
 				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
 				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
-				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
-				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
-				"\n【よくある原因】フォルダの信頼が切れた。何が確認の画面を出したかは continuo の側に残りません。"+
-				permissionRemedyText(o.cfg.Claude.PermissionMode, relayEnabled(o.cfg)),
+				"\n【確かめ方】【止まった画面】に画面の文があればそれと、worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				blockedScreenSection(screen, blockedScreenOptions{})+
+				"\n【よくある原因】フォルダの信頼が切れた・ツールの権限の確認で止まった。"+
+				remedy,
 			handoffContext{WorktreePath: c.Path})
 		closePane("確認の画面で止まっている")
 		return adoption{}, false

@@ -1047,7 +1047,19 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		return
 	}
 	o.logger.Warn(label+"に失敗しました", "identifier", issue.Identifier, "error", err)
-	o.failRun(ctx, rs, fmt.Sprintf("%sに失敗しました: %v", label, err))
+	// **起動直後に確認の画面で止まったなら、閉じる前に読んだ画面を足す**（設計 3-11。issue #347）。
+	// **【補足】は出さない。**起動直後は保留中のツール操作が無いことが多く、会話も新しい。
+	// ツールの権限の確認なら、規則を足す先と再起動の1文を添える（`permissionRemedyText` を続けないため）。
+	// フォルダの信頼の直し方は、もとの文言の【対処】が持っているので重ねない。
+	reason := fmt.Sprintf("%sに失敗しました: %v", label, err)
+	var blocked *blockedStartupError
+	if errors.As(err, &blocked) {
+		reason += blockedScreenSection(blocked.screen, blockedScreenOptions{
+			StandaloneToolRemedy: true,
+			OmitTrustRemedy:      true,
+		})
+	}
+	o.failRun(ctx, rs, reason)
 }
 
 // redispatch はバックオフが明けた run を再 dispatch する（設計 3-25 の「明けたらどう再開するか」）。
@@ -1814,14 +1826,22 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 				}
 				return nil
 			case herdr.AgentStatusBlocked:
+				// **esc を送る前に画面を1回読む**（設計 3-11。issue #347）。読むだけで入力は送らない。
+				// **読み直しはしない。**起動の確認は `blocked` を見た直後なので、待ちを挟んでいない。
+				// 読んだ画面は誤りに持たせて返し、載せられる出口（着手の引き渡し・コメントを書かせるための復元）が
+				// `errors.As` で取り出す。**`Error()` はもとの文のまま**なので、取り出さない出口の文は変わらない。
+				screen := o.readBlockedScreen(ctx, rs, false)
 				o.sendEscape(ctx, rs)
 				// **起動直後の文言は、issue のコメントに書く許可の文を持たない**（設計 3-11。issue #259）。
 				// この文言は、公開かどうかを見ずに issue のコメントとして投稿される。
-				// **何の確認だったかは continuo の側に残らない**ので、許可の出し方を案内しても合っているか分からない。
 				// 案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。
-				return i18n.Errorf(
-					i18n.KeyOrchestratorConfirmStartupBlocked,
-					rs.agentName())
+				// 画面からツールの権限の確認だと分かったときの直し方は、画面の部分（`blockedScreenSection`）が足す。
+				return &blockedStartupError{
+					screen: screen,
+					err: i18n.Errorf(
+						i18n.KeyOrchestratorConfirmStartupBlocked,
+						rs.agentName()),
+				}
 			case herdr.AgentStatusWorking:
 				if o.now().After(deadline) {
 					return i18n.Errorf(

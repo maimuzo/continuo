@@ -108,7 +108,7 @@ func testRestoredBlockedRemedy(t *testing.T, tc remedyCase, relay bool) {
 		cfg.Agent.RelayTrustedComments = relay
 	}})
 	// **この WARN はテスト自身が起こしている。**blocked の pane を台本で置いているためである。
-	fx.AllowLog("権限の確認で止まっているので引き継ぎません")
+	fx.AllowLog("権限の確認で止まっているので引き継ぎません", blockedScreenLog)
 	issue := sampleIssue(188, "In Progress")
 	issue.RepoIsPrivate = tc.repoIsPrivate
 	fx.Tracker.AddIssue(issue)
@@ -145,7 +145,7 @@ func TestHandoff_起動直後のblockedは許可の文を持たず信頼を案�
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newFixture(t, fixtureOptions{})
 			// **この WARN はテスト自身が起こしている。**`agent.get` が blocked を返す台本のためである。
-			fx.AllowLog("着手に失敗しました")
+			fx.AllowLog("着手に失敗しました", blockedScreenLog)
 			issue := sampleIssue(188, "Ready")
 			issue.RepoIsPrivate = tc.repoIsPrivate
 			fx.Tracker.AddIssue(issue)

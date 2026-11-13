@@ -62,7 +62,7 @@ var expectedWarnings = map[string][]string{
 	"Test_issueを1件処理する_P028_unknownのまま期限を過ぎたら人間へ渡さず試し直す":              {"着手に失敗しました"},
 	"Test_issueを1件処理する_P064_既に印を持っているissueは二重にdispatchしない":            {"着手に失敗しました"},
 	"TestDispatch_状態ごとの上限はrunning_stateのバケツで数える":                      {"run を諦めてリトライを積みました", "着手に失敗しました"},
-	"Test_issueを1件処理する_P026_起動直後にblockedならescを送ってから失敗にする":             {"着手に失敗しました"},
+	"Test_issueを1件処理する_P026_起動直後にblockedならescを送ってから失敗にする":             {"着手に失敗しました", "確認の画面で止まったときの画面を"},
 	"Test_issueを1件処理する_P037_paneのlabelを書けなければ着手しない":                   {"着手に失敗しました"},
 	"Test_issueを1件処理する_P038_paneを引けなければ着手しない":                         {"着手に失敗しました"},
 	"Test_issueを1件処理する_P005_turnの終わりにissueが消えていたら手放す":                 {"run を諦めてリトライを積みました"},
@@ -147,7 +147,7 @@ var expectedWarnings = map[string][]string{
 	"TestUnknownState_見送る条件を切ってあれば残っていれば片付けないと書かない": {
 		"continuo が知らない Status になったので worker を止めます",
 	},
-	"Test_再起動して実行中のissueを引き継ぐ_P007_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
+	"Test_再起動して実行中のissueを引き継ぐ_P007_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません", "確認の画面で止まったときの画面を"},
 	"Test_再起動して実行中のissueを引き継ぐ_P009_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"Test_再起動して実行中のissueを引き継ぐ_P033_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},
 	"Test_再起動して実行中のissueを引き継ぐ_P013_agent名の無いpaneは閉じてworktreeとStatusを残す":                   {"pane に agent 名が無いので、この Claude Code へはもう送れません"},

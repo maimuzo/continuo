@@ -7,6 +7,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -359,6 +360,16 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 		if o.abortTerminalForHuman(ctx, rs, why) {
 			return true
 		}
+		// **確認の画面で止まったなら、閉じる前に読んだ画面を原因に載せる**（設計 3-11。issue #347）。
+		// **【補足】は出さない**（起動直後の道。esc で閉じたのは起動直後の確認である）。
+		// 先に引き渡しを投稿した道では、この通知は出ず、画面はログにだけ残る（`takeHandoffPost`）。
+		var blocked *blockedStartupError
+		if errors.As(err, &blocked) {
+			o.failCommentRecovery(ctx, rs,
+				blockedScreenCatalog().T(i18n.KeyOrchestratorBlockedScreenCauseRecoveryStartup)+
+					blockedScreenSection(blocked.screen, blockedScreenOptions{StandaloneToolRemedy: true, OmitStatusAdvice: true}))
+			return false
+		}
 		o.failCommentRecovery(ctx, rs,
 			"復元した Claude Code が入力を受け付けられる状態にならなかった。**本文は送っていない。**")
 		return false
@@ -375,18 +386,30 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	// **待ちの上限には `claude.turn_timeout_ms` を使う**（進んだ形跡が無いまま待てる時間）。
 	// **この run はもう印から外れる途中なので、巡回の stall 検知は見ていない。**
 	// 返らなければこの上限で切り上げて段8（コメントの読み直し）へ進む。
-	if _, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
+	//
+	// **作業の途中で確認の画面を esc で閉じた run なら、それが人間の拒否ではないと1行添える**（issue #347）。
+	// 同じ会話には「The user doesn't want to proceed with this tool use」が残っている。
+	//
+	// **返った状態が `blocked` なら、画面を読んでおく**（設計 3-11。issue #347）。esc は送らない
+	// （このあと段8 か段9 で pane を閉じる）。コメントが見つからなければ段9 の原因に載せ、見つかればログにだけ残る。
+	var commentTurnScreen *blockedScreen
+	res, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
 		Target: name,
-		Text:   buildCommentRequestPrompt(issueURL(rs.issue()), o.cfg.Tracker.Comments.Marker),
+		Text: buildCommentRequestPrompt(
+			issueURL(rs.issue()), o.cfg.Tracker.Comments.Marker, rs.escClosedToolPromptMarked()),
 		Wait: &herdr.AgentWaitOptions{
 			TimeoutMs: o.cfg.Claude.TurnTimeoutMs,
 			Until:     waitUntilStatuses(o.cfg.Claude.WaitUntil),
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return false
 		}
 		o.logger.Warn("コメントを書かせるプロンプトを送れません", "identifier", snap.Identifier, "error", err)
+	} else if res != nil && res.Agent.AgentStatus == herdr.AgentStatusBlocked {
+		screen := o.readBlockedScreen(ctx, rs, false)
+		commentTurnScreen = &screen
 	}
 
 	// 段8: コメントを読み直す。
@@ -411,6 +434,13 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) boo
 	// **ここだけが「送ったのに書かれなかった」である。**上の `failCommentRecovery` は、どれも本文を1文字も送っていない。
 	if o.abortTerminalForHuman(ctx, rs, why) {
 		return true
+	}
+	if commentTurnScreen != nil {
+		// **コメントを書かせる途中で確認の画面に止まった**（issue #347）。【補足】は出さない（esc を送らない道）。
+		o.failCommentRecovery(ctx, rs,
+			blockedScreenCatalog().T(i18n.KeyOrchestratorBlockedScreenCauseCommentTurn)+
+				blockedScreenSection(*commentTurnScreen, blockedScreenOptions{StandaloneToolRemedy: true, OmitStatusAdvice: true}))
+		return false
 	}
 	o.failCommentRecovery(ctx, rs,
 		"エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。")

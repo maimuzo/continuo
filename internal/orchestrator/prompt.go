@@ -209,10 +209,15 @@ const marginCutFirstTurnNote = "\n\n---\n\nレートリミットのマージン�
 // 書き分けは [docs/upgrading.md](docs/upgrading.md) の「途中経過だけで終えた run に、成果の報告を書かせ直します」の、
 // 「成果の報告の中で、この印について書くときは」で始まる段落に揃える。
 //
+// **作業の途中で確認の画面を continuo が esc で閉じた run では、最後に1行足す**（issue #347）。
+// 同じ会話には「The user doesn't want to proceed with this tool use」が残っており、
+// 足さないとエージェントは人間に止められたと思い、人間が答えられない質問をする。
+//
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
+// escClosed: 作業の途中の確認の画面を continuo が esc で閉じたなら true（`runState.escClosedToolPrompt`）。
 // 戻り値: 送る本文。
-func buildCommentRequestPrompt(issueURL, marker string) string {
+func buildCommentRequestPrompt(issueURL, marker string, escClosed bool) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n")
 	// **run の宣言をここでも名乗る**（issue #245。設計 3-82b）。
@@ -258,6 +263,9 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 			"囲み付きのまま書くと、次の途中経過の報告が、この報告へ書き足されます。\n"+
 			"**%[2]s のほうは、囲みを外さないでください。**外すと、この報告が数えられません。\n",
 		bareProgressMarker(), marker)
+	if escClosed {
+		b.WriteString("\n" + blockedScreenCatalog().T(i18n.KeyOrchestratorCommentRequestEscNote) + "\n")
+	}
 	return b.String()
 }
 

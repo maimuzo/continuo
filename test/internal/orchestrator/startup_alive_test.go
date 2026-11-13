@@ -236,6 +236,8 @@ func TestStartup_permission_promptだけでは走っているとみなさない(
 // 成功条件: 通知に `shell` の1件が載ること。**`subagent` に限らないことがここで決まる。**
 func TestFinish_道連れにしたバックグラウンド処理を通知へ書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	// **これは想定して起こしている失敗である。**申告が残ったまま pane を閉じる場面を
 	// わざと作っている。
 	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
@@ -358,6 +360,8 @@ func TestFinish_走っているあいだは待ってから閉じる(t *testing.T
 // **「pane を閉じる前に待ちます」が出ないこと。**
 func TestFinish_確認の画面で止まっているなら待たない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
 	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
 
@@ -479,6 +483,8 @@ func TestFinish_復元した先が走っていたらコメントの依頼で殺�
 // 成功条件: 通知に「ほかに 1 件」が載ること。
 func TestFinish_切り捨てたバックグラウンド処理の件数を書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
 	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
 
@@ -542,6 +548,8 @@ func manyShellStopEvent(sessionID, transcriptPath, promptID string, n int) hooks
 // **`AllowLog` を宣言していないので、出れば fixture の検査がこのテストを落とす。**
 func TestFinish_申告が空なら待たずに閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **確認の画面で止まる台本なので、閉じる前に画面を読んだ結果の WARN が出る**（issue #347）。
+	fx.AllowLog(blockedScreenLog)
 	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
 
 	transcriptDir := t.TempDir()
