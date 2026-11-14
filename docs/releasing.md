@@ -90,6 +90,29 @@ gh workflow run release.yml --ref main
 **本番のカンバン（project #3）には触れない。**使うのは検証用のカンバンだけである。
 **その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
 
+**出そうとしている版で回す。**下の段三〜段五と片付けの `continuo` を PATH の名前のまま叩くと、
+**手元に入っている前の版を確かめることになる。**出そうとしている commit を一時の worktree へ取り出してビルドし、
+**段三〜段五と片付けの `continuo` を、すべてそのパスへ置き換えて叩く。**
+
+```bash
+# continuo リポジトリの root で実行する
+git fetch origin
+SHA=$(git rev-parse origin/main)          # 出そうとしている commit
+TMP=$(mktemp -d)
+git worktree add --detach "$TMP/src" "$SHA"
+# mise で go を入れているなら、取り出した worktree を先に信頼する（CONTRIBUTING.md と同じ前提）
+mise trust "$TMP/src/mise.toml"
+go build -C "$TMP/src" \
+  -ldflags "-X github.com/maimuzo/continuo/internal/cli.version=e2e-$(git rev-parse --short "$SHA")" \
+  -o "$TMP/bin/continuo" ./cmd/continuo
+"$TMP/bin/continuo" version              # e2e-<短い SHA> が返ること
+```
+
+**`-ldflags` を落とさない。**付けないと `version` は `dev` しか返さず、どの commit を確かめているのかが分からない。
+**`~/.local/bin` へは置かない。**動いている continuo は、走っている run の hook と statusline に
+そのパスを書いている。release の前に差し替えると、確かめていない実行ファイルを走っている run が exec する。
+**使い終わった worktree は `git worktree remove "$TMP/src"` で片付ける**（下の片付けで検証用の continuo を止めたあとに行う）。
+
 **一、テスト用の `WORKFLOW.md` で、隔離する設定を2つ変える。**
 
 **本番とは別のディレクトリに `WORKFLOW.md` を1枚置き、そちらだけを書き換える。**
@@ -166,6 +189,9 @@ continuo --id e2e "$WORK"
 走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
+**エージェントは計画を書くと、了承を訊いて一度 `Blocked` で止まる。**計画を読み、検証用の issue に了承のコメントを書いてから、Status を着手待ちへ戻す。
+**前の回の pull request が開いたまま残っているときは、着手待ちへ動かす前に閉じ、新しく作業してほしいとコメントしておく。**
+残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。
 **`In Review` になれば成功である。**
 **issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
@@ -453,6 +479,19 @@ git push origin "$next"
 
 **タグは main の先頭に打つ。**CI はタグが指す commit をビルドするので、
 別の commit に打つと、その中身が配られる。
+
+**`main` を別の worktree が checkout していると、`git checkout main` は断られる。**そのときは、取ってきた
+`origin/main` の SHA を名指しして打つ。手元の `main` は古いことがあるので、そこへは打たない。
+
+```bash
+# continuo リポジトリの root で実行する
+next=v0.1.9   # 「4. 版を決める」で決めた版に書き換える
+git fetch origin
+SHA=$(git rev-parse origin/main)   # 「1. 打つ前に確かめる」を通した commit と同じであることを確かめる
+git tag "$next" "$SHA"
+git rev-parse "$next"              # $SHA と同じであること
+git push origin "refs/tags/$next"
+```
 
 ## 8. CI が作るもの
 

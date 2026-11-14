@@ -52,6 +52,10 @@ gh project item-list 10 --owner "$(gh repo view --json owner --jq .owner.login)"
 
 **設定は毎回作り直してよい。**`continuo init` がカンバンから値を引く。
 
+**リリースの前に確かめるときは、下の `continuo` を、出そうとしている commit からビルドした実行ファイルのパスへ置き換えて叩く。**
+PATH の `continuo` は手元に入っている前の版なので、そのまま叩くと出そうとしている版を確かめたことにならない。
+ビルドのしかたは [docs/releasing.md](releasing.md) の「実機で issue を1件通す」の「出そうとしている版で回す」にある。
+
 ```bash
 OWNER="$(gh repo view --json owner --jq .owner.login)"
 WORK=~/continuo-e2e-work        # 置き場所は好きにしてよい
@@ -114,6 +118,10 @@ gh project item-edit \
 ```bash
 gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.title) → \(.status)"'
 ```
+
+**エージェントは計画を書くと、了承を訊いて一度 `Blocked` で止まる。**計画を読み、issue に了承のコメントを書いてから、上の Ready の1行で戻す。
+**前の回の pull request が開いたまま残っているときは、Ready へ動かす前に閉じ、新しく作業してほしいとコメントしておく。**
+残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。
 
 **`In Review` になれば成功である。**手元の実測では、`Ready` から `In Review` まで**2分8秒**だった
 （2026-08-25。途中で `agent_prompt_stalled` により1回リトライし、2回目で通った）。

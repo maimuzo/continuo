@@ -2123,6 +2123,38 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 **版ごとの詳しい説明は [upgrading.md](upgrading.md) にあります。**ここには、上げる前に知っておかないと止まるものだけを置きます。
 
+### v0.3.1 から v0.3.2 へ上げるとき
+
+#### v0.3.2 で、何もしないと動かなくなるものは？
+
+**ありません。**`WORKFLOW.md` に足すものも、消すものもありません（増えた設定のキーも、消えたキーもありません）。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.3.2
+```
+
+**`--version v0.3.2` を落とさないでください。**インストーラーは既定で、公開から 168 時間（7日）経った版だけを入れます。付けないと、出てから7日のあいだは v0.3.1 が入ります。
+
+#### v0.3.2 で、変わることは？
+
+**設定を書き換えなくても動きます。**変わる点の一覧は [upgrading.md](upgrading.md) の「v0.3.1 から v0.3.2 へ」にあります。気をつけるのは次の3つです。
+
+| 何が変わるか | 気をつけること |
+| --- | --- |
+| **確認の画面で止まったときの引き渡しのコメントに、止まった画面の文が載ります** | 引き渡しのコメントは公開かどうかを見ずに issue へ投稿されます。資格情報の形の文字列は `***` に伏せますが網羅ではなく、ほかのコマンドや引数は公開リポジトリでは誰でも読めます。読み方は「通知に載る確認の画面の文の読み方」 |
+| **`continuo init` が置く `continuo-ci.yaml` で、continuo の pull request だけを検査できるようになります** | 置き直した人にだけ効きます。既にある検査ファイルは書き換わりません。人間が直接出した pull request が落ちて困っている人は「人間が直接出した pull request が、`continuo-ci.yaml` の検査で落ちる」 |
+| **plugin `continuo-issue-comments` の決まりが1文増えます** | 入れている人は `claude plugin marketplace update continuo` と `claude plugin update continuo-issue-comments@continuo` で上げてください（自動では新しくなりません） |
+
+#### v0.3.2 から v0.3.1 へ戻すには？
+
+**版を名指しして入れ直します。**名指しした版は、いまより古くても `--force` 無しで入ります。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh -s -- --version v0.3.1
+```
+
+**`WORKFLOW.md` は書き換えなくてかまいません。**v0.3.2 で増えた設定のキーはありません。
+
 ### v0.3.0 から v0.3.1 へ上げるとき
 
 #### v0.3.1 で、何もしないと動かなくなるものは？
