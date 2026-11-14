@@ -62,18 +62,22 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 git fetch origin
 REL_SHA=$(git rev-parse origin/main)    # この commit を確かめ、この commit にタグを打つ
 echo "REL_SHA=$REL_SHA"                 # 控える（「7. タグを打つ」で使う）
-git rev-parse HEAD                      # REL_SHA と同じであること。違えば、その commit を checkout してから下を叩く
-# **`--workflow` で絞る。**絞らないと、直前に走った release の run を掴んで、
-# ci が赤でも `success` が返る。
-gh run list --workflow ci.yml --branch main --limit 1 --json headSha,status,conclusion \
-  --jq '.[] | "\(.headSha) \(.status)/\(.conclusion)"'
-sh scripts/test-like-ci.sh
-sh scripts/check-rucm.sh --strict
-sh scripts/check-release-ready.sh
+if [ "$(git rev-parse HEAD)" != "$REL_SHA" ]; then
+  echo "HEAD が REL_SHA と違います。REL_SHA を checkout した場所で、この塊を叩き直してください"
+else
+  # **`--workflow` で絞る。**絞らないと、直前に走った release の run を掴んで、
+  # ci が赤でも `success` が返る。
+  gh run list --workflow ci.yml --branch main --limit 1 --json headSha,status,conclusion \
+    --jq '.[] | "\(.headSha) \(.status)/\(.conclusion)"'
+  sh scripts/test-like-ci.sh
+  sh scripts/check-rucm.sh --strict
+  sh scripts/check-release-ready.sh
+fi
 ```
 
 **CI の行の SHA が `REL_SHA` と同じで、`completed/success` でなければ止まる。**
-`test-like-ci.sh` と `check-rucm.sh` は、いまいるディレクトリのファイルを測るので、`REL_SHA` を checkout した場所で叩く。
+`test-like-ci.sh` と `check-rucm.sh` は、いまいるディレクトリのファイルを測るので、HEAD が `REL_SHA` でないときは何も叩かずに止まる。
+`main` を別の worktree が checkout しているときは、`git worktree add --detach <一時のディレクトリ> "$REL_SHA"` で取り出し、そこで叩く。
 
 **タグを打たずに CI を試せる。**
 
@@ -204,7 +208,7 @@ continuo --id e2e "$WORK"
 走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
-**前の回の作業が残っているときは、着手待ちへ動かす前に片付ける。**残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。次の順で行う。
+**前の回の作業が残っているときは、段四で起動する前に片付ける**（起動したあとに検証用の issue が着手待ちにあると、片付ける前に拾われる）。残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。次の順で行う。
 
 1. 前の回の pull request が開いていれば閉じる（マージはしない）
 2. 手元の worktree と branch を、控えた絶対パスの `abandon --id e2e` で片付ける
@@ -214,7 +218,7 @@ continuo --id e2e "$WORK"
 
 **エージェントは計画を書くと、了承を訊いて `Blocked` で止まる。**計画を読み、検証用の issue に了承のコメントを書いてから、Status を着手待ちへ戻す。
 レビューの途中で質問して、また止まることもある。そのときは回答を書いて戻す。
-**了承と回答のコメントの先頭に、AI の印（`<!-- continuo:` で始まる HTML コメント）を付けない。**エージェントは印の付いたコメントを人間の指示として数えないので、また止まる。
+**了承と回答のコメントの先頭に、AI の印（`<!-- continuo:` で始まる HTML コメントと、`<!-- code-review-result -->`・`<!-- design-review-result -->`・`<!-- design-review-skipped -->`）を付けない。**エージェントは印の付いたコメントを人間の指示として数えないので、また止まる。
 **`In Review` になれば成功である。**
 **issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
@@ -494,14 +498,19 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 ```bash
 # continuo リポジトリの root で実行する
 next=v0.1.9                 # 「4. 版を決める」で決めた版に書き換える
-REL_SHA=                    # 「1.」で控えた full の SHA を = の右に書く
+REL_SHA=                    # 「1.」で控えた SHA を = の右に書く
+E2E_SHA=                    # 「実機で issue を1件通す」で控えた SHA を = の右に書く
 git fetch origin
-if [ -z "$REL_SHA" ]; then
-  echo "REL_SHA が空です。「1.」で控えた full の SHA を書いてください"
-elif [ "$(git rev-parse origin/main)" != "$REL_SHA" ]; then
+REL=$(git rev-parse --verify --quiet "${REL_SHA:-x}^{commit}")
+E2E=$(git rev-parse --verify --quiet "${E2E_SHA:-x}^{commit}")
+if [ -z "$REL" ] || [ -z "$E2E" ]; then
+  echo "REL_SHA か E2E_SHA が空か、commit として読めません。控えた SHA を書いてください"
+elif [ "$(git rev-parse origin/main)" != "$REL" ]; then
   echo "origin/main が確かめた commit から進んでいます。打たずに、新しい commit で「1.」を回し直してください"
+elif git diff --name-only "$E2E" "$REL" | grep -qv '^docs/'; then
+  echo "実機の確認を回した commit とのあいだに docs/ の外の変更があります。打たずに、REL_SHA で実機の確認を回し直してください"
 else
-  git tag "$next" "$REL_SHA" && git rev-parse "$next" && git push origin "refs/tags/$next"
+  git tag "$next" "$REL" && git rev-parse "$next" && git push origin "refs/tags/$next"
 fi
 ```
 
@@ -510,8 +519,14 @@ fi
 あいだに別の pull request が入ると、実機の確認も `check-release-ready.sh` も通っていない commit にタグを打つことになる。
 手元の `main` は古いことがあり、別の worktree が checkout していると `git checkout main` も断られるので、SHA を名指しして打つ。
 
-**`origin/main` が進んでいたら、新しい commit で「1.」を回し直す。**ただし、「実機で issue を1件通す」で控えた commit との差が
-`docs/` の下だけなら（`git diff --name-only <実機で控えた SHA> <新しい commit>`）、実機の確認だけは回し直さなくてよい。
+**実機の確認を回した commit とタグを打つ commit は、別でもよい。**実機の確認を先に回し、そのあと文書を直した
+pull request をマージしてから打つことがあるためである。**ただし、2つの差が `docs/` の下だけのときに限る。**
+塊はこれを `git diff --name-only` で確かめ、`docs/` の外が1行でもあれば打たない。
+
+**`origin/main` が進んでいたら、新しい commit で「1.」を回し直す。**
+
+**push に落ちたら、手元のタグを `git tag -d "$next"` で消してから塊を叩き直す。**残したまま叩き直すと `already exists` で落ちる。
+`git tag -f` は使わない（タグを黙って別の commit へ動かしうる）。
 
 ## 8. CI が作るもの
 
