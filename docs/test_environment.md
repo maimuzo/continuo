@@ -52,7 +52,7 @@ gh project item-list 10 --owner "$(gh repo view --json owner --jq .owner.login)"
 
 **設定は毎回作り直してよい。**`continuo init` がカンバンから値を引く。
 
-**リリースの前に確かめるときは、下の `continuo` を、出そうとしている commit からビルドした実行ファイルのパスへ置き換えて叩く。**
+**リリースの前に確かめるときは、このファイルの `continuo`（「終わったあとの片付け」の `abandon` も含む）を、出そうとしている commit からビルドした実行ファイルのパスへ置き換えて叩く。**
 PATH の `continuo` は手元に入っている前の版なので、そのまま叩くと出そうとしている版を確かめたことにならない。
 ビルドのしかたは [docs/releasing.md](releasing.md) の「実機で issue を1件通す」の「出そうとしている版で回す」にある。
 

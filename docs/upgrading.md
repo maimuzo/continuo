@@ -154,7 +154,7 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 
 **誰に関係があるか。**全員です。設定の書き換えは要りません。**公開リポジトリで continuo を動かしている人は、とくに読んでください。**
 
-**v0.3.1 まで。**Claude Code が確認の画面（ツールを使ってよいか・フォルダを信頼するか・AskUserQuestion など）で止まると、continuo は画面を読まずに esc で閉じ、引き渡しのコメントには「何の確認だったかは continuo の側には残りません」と書いていました。
+**v0.3.1 まで。**Claude Code が確認の画面（ツールを使ってよいか・フォルダを信頼するか・AskUserQuestion など）で止まると、continuo は画面を読まずに閉じ、引き渡しのコメントには「何の確認だったかは continuo の側には残りません」と書いていました。
 
 **v0.3.2 から。**閉じる前に画面を1回読み（読むだけで、Claude Code へは何も送りません）、引き渡しのコメントの【止まった画面】に画面の文を、【種類】【再発するか】【止まった確認への直し方】にその種類から言えることを載せます。esc で閉じたツールの確認と AskUserQuestion が会話に残す「The user doesn't want to proceed with this tool use」などの文は人間の拒否ではない、という【補足】も付きます（作業の途中で止まり、continuo が esc で閉じたときだけ。起動直後と再起動の引き継ぎの道では付きません）。同じ文は continuo のログ（`確認の画面で止まったときの画面を読みました` の WARN）にも残ります。読み方は [FAQ.md](FAQ.md) の「通知に載る確認の画面の文の読み方」にあります。
 

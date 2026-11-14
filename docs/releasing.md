@@ -60,16 +60,20 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 ```bash
 # continuo リポジトリの root で実行する
 git fetch origin
+REL_SHA=$(git rev-parse origin/main)    # この commit を確かめ、この commit にタグを打つ
+echo "REL_SHA=$REL_SHA"                 # 控える（「7. タグを打つ」で使う）
+git rev-parse HEAD                      # REL_SHA と同じであること。違えば、その commit を checkout してから下を叩く
 # **`--workflow` で絞る。**絞らないと、直前に走った release の run を掴んで、
 # ci が赤でも `success` が返る。
 gh run list --workflow ci.yml --branch main --limit 1 --json headSha,status,conclusion \
-  --jq '.[] | "\(.headSha[0:7]) \(.status)/\(.conclusion)"'
+  --jq '.[] | "\(.headSha) \(.status)/\(.conclusion)"'
 sh scripts/test-like-ci.sh
 sh scripts/check-rucm.sh --strict
 sh scripts/check-release-ready.sh
 ```
 
-**`completed/success` でなければ止まる。**
+**CI の行の SHA が `REL_SHA` と同じで、`completed/success` でなければ止まる。**
+`test-like-ci.sh` と `check-rucm.sh` は、いまいるディレクトリのファイルを測るので、`REL_SHA` を checkout した場所で叩く。
 
 **タグを打たずに CI を試せる。**
 
@@ -104,13 +108,13 @@ go build -C "$TMP/src" \
   -ldflags "-X github.com/maimuzo/continuo/internal/cli.version=e2e-$(git rev-parse --short "$SHA")" \
   -o "$TMP/bin/continuo" ./cmd/continuo
 "$TMP/bin/continuo" version              # e2e-<短い SHA> が返ること
-echo "SHA=$SHA BIN=$TMP/bin/continuo"    # この2つを控える
+echo "SHA=$SHA BIN=$TMP/bin/continuo SRC=$TMP/src"    # この3つを控える
 ```
 
 **表示した `BIN=` の絶対パスを控え、段三〜段五と片付けでは `continuo` をその絶対パスへ書き換えて叩く。**
-段三以降は別のシェルで叩くことがあり、そこでは `$TMP` も `$SHA` も空になる。空のまま叩くと、
-`"$TMP/bin/continuo"` は `/bin/continuo` になって見つからないか、PATH の前の版へ戻る。
-控えた `SHA=` は、「7. タグを打つ」で確かめた commit と比べるのに使う。
+段三以降は別のシェルで叩くことがあり、そこでは `$TMP` も `$SHA` も空になる。空のまま `"$TMP/bin/continuo"` を叩くと
+`/bin/continuo` になって見つからない。`continuo` と名前だけで叩くと、PATH の前の版になる。
+控えた `SHA=` は、「7. タグを打つ」で「実機の確認を回した commit」として比べるのに使う。
 
 **`-ldflags` を落とさない。**付けないと `version` は `dev` しか返さず、どの commit を確かめているのかが分からない。
 **`~/.local/bin` へは置かない。**動いている continuo は、走っている run の hook と statusline に
@@ -120,9 +124,9 @@ echo "SHA=$SHA BIN=$TMP/bin/continuo"    # この2つを控える
 （`(cd "$TMP/src" && mise trust)`。CONTRIBUTING.md と同じ前提）。上の `go build -C` は root を cwd にして叩くので、信頼しなくても通る。
 
 **片付けは、[docs/test_environment.md](test_environment.md) の「終わったあとの片付け」で検証用の continuo を止め、
-`abandon --id e2e` を済ませてから行う。**検証用の run の hook と statusline は控えた絶対パスを exec するので、
-それより先に消すと、残った pane の hook が無いパスを叩く。済ませたら `git worktree remove "$TMP/src"` で worktree を片付ける
-（`$TMP/bin` は一時のディレクトリの下にあるので、残しておいてかまわない）。
+`abandon --id e2e` を済ませてから、控えた `SRC=` のパスを `git worktree remove <SRC>` で片付ける。**
+**`$TMP/bin` は消さない。**検証用の run の hook と statusline は控えた `BIN=` を exec するので、消すと、
+残った pane の hook が無いパスを叩く。一時のディレクトリの下にあるので、残しておいてかまわない。
 
 **一、テスト用の `WORKFLOW.md` で、隔離する設定を2つ変える。**
 
@@ -203,9 +207,10 @@ continuo --id e2e "$WORK"
 **前の回の作業が残っているときは、着手待ちへ動かす前に片付ける。**残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。次の順で行う。
 
 1. 前の回の pull request が開いていれば閉じる（マージはしない）
-2. その branch を origin から消す（[docs/test_environment.md](test_environment.md) の「終わったあとの片付け」の `push origin --delete` の1行）
-3. 手元の worktree と branch を、控えた絶対パスの `abandon --id e2e` で片付ける
-4. **検証用の issue に**、前の回の作業を片付けたので新しく作業してほしい、とコメントする（pull request の側に書いても、エージェントは指示として読まない）
+2. 手元の worktree と branch を、控えた絶対パスの `abandon --id e2e` で片付ける
+3. そのあとで、その branch を origin から消す（[docs/test_environment.md](test_environment.md) の「終わったあとの片付け」の `push origin --delete` の1行）。
+   **先に消すと、手元のリモート追跡 ref も消えて、2 の `abandon` が「失うものがある」と見て止まる**
+4. **検証用の issue に**、前の回の作業を片付けたので新しく作業してほしい、とコメントする（エージェントは閉じた pull request のコメントも読むので、いちばん新しい指示として issue に書く）
 
 **エージェントは計画を書くと、了承を訊いて `Blocked` で止まる。**計画を読み、検証用の issue に了承のコメントを書いてから、Status を着手待ちへ戻す。
 レビューの途中で質問して、また止まることもある。そのときは回答を書いて戻す。
@@ -488,35 +493,25 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 
 ```bash
 # continuo リポジトリの root で実行する
-next=v0.1.9   # 「4. 版を決める」で決めた版に書き換える
-git checkout main
-git pull --ff-only
-git tag "$next"
-git push origin "$next"
-```
-
-**タグは main の先頭に打つ。**CI はタグが指す commit をビルドするので、
-別の commit に打つと、その中身が配られる。
-
-**`main` を別の worktree が checkout していると、`git checkout main` は断られる。**そのときは、
-「1. 打つ前に確かめる」を通した commit の SHA を名指しして打つ。手元の `main` は古いことがあるので、そこへは打たない。
-
-```bash
-# continuo リポジトリの root で実行する
-next=v0.1.9      # 「4. 版を決める」で決めた版に書き換える
-SHA=<「1.」を通した commit の full の SHA>   # 打つ時点の origin/main から取り直さない
+next=v0.1.9                 # 「4. 版を決める」で決めた版に書き換える
+REL_SHA=                    # 「1.」で控えた full の SHA を = の右に書く
 git fetch origin
-if [ "$(git rev-parse origin/main)" != "$SHA" ]; then
-  echo "origin/main が確かめた commit から進んでいます。打たずに「1.」からやり直してください"
+if [ -z "$REL_SHA" ]; then
+  echo "REL_SHA が空です。「1.」で控えた full の SHA を書いてください"
+elif [ "$(git rev-parse origin/main)" != "$REL_SHA" ]; then
+  echo "origin/main が確かめた commit から進んでいます。打たずに、新しい commit で「1.」を回し直してください"
 else
-  git tag "$next" "$SHA" && git rev-parse "$next" && git push origin "refs/tags/$next"
+  git tag "$next" "$REL_SHA" && git rev-parse "$next" && git push origin "refs/tags/$next"
 fi
 ```
 
-**`SHA` を打つ時点の `origin/main` から取り直さない。**あいだに別の pull request が入ると、
-実機の確認も `check-release-ready.sh` も通っていない commit にタグを打つことになる。
-**「実機で issue を1件通す」で控えた commit と `SHA` の差が `docs/` の下だけなら**（`git diff --name-only <控えた SHA> "$SHA"`）、
-実機の確認は回し直さなくてよい。ほかのファイルが入っていれば、`SHA` で回し直す。
+**タグは main の先頭、それも「1.」で確かめた commit に打つ。**CI はタグが指す commit をビルドするので、
+別の commit に打つと、その中身が配られる。**打つ時点の `origin/main` や手元の `main` から取り直さない。**
+あいだに別の pull request が入ると、実機の確認も `check-release-ready.sh` も通っていない commit にタグを打つことになる。
+手元の `main` は古いことがあり、別の worktree が checkout していると `git checkout main` も断られるので、SHA を名指しして打つ。
+
+**`origin/main` が進んでいたら、新しい commit で「1.」を回し直す。**ただし、「実機で issue を1件通す」で控えた commit との差が
+`docs/` の下だけなら（`git diff --name-only <実機で控えた SHA> <新しい commit>`）、実機の確認だけは回し直さなくてよい。
 
 ## 8. CI が作るもの
 
