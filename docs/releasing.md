@@ -100,18 +100,29 @@ git fetch origin
 SHA=$(git rev-parse origin/main)          # 出そうとしている commit
 TMP=$(mktemp -d)
 git worktree add --detach "$TMP/src" "$SHA"
-# mise で go を入れているなら、取り出した worktree を先に信頼する（CONTRIBUTING.md と同じ前提）
-mise trust "$TMP/src/mise.toml"
 go build -C "$TMP/src" \
   -ldflags "-X github.com/maimuzo/continuo/internal/cli.version=e2e-$(git rev-parse --short "$SHA")" \
   -o "$TMP/bin/continuo" ./cmd/continuo
 "$TMP/bin/continuo" version              # e2e-<短い SHA> が返ること
+echo "SHA=$SHA BIN=$TMP/bin/continuo"    # この2つを控える
 ```
+
+**表示した `BIN=` の絶対パスを控え、段三〜段五と片付けでは `continuo` をその絶対パスへ書き換えて叩く。**
+段三以降は別のシェルで叩くことがあり、そこでは `$TMP` も `$SHA` も空になる。空のまま叩くと、
+`"$TMP/bin/continuo"` は `/bin/continuo` になって見つからないか、PATH の前の版へ戻る。
+控えた `SHA=` は、「7. タグを打つ」で確かめた commit と比べるのに使う。
 
 **`-ldflags` を落とさない。**付けないと `version` は `dev` しか返さず、どの commit を確かめているのかが分からない。
 **`~/.local/bin` へは置かない。**動いている continuo は、走っている run の hook と statusline に
 そのパスを書いている。release の前に差し替えると、確かめていない実行ファイルを走っている run が exec する。
-**使い終わった worktree は `git worktree remove "$TMP/src"` で片付ける**（下の片付けで検証用の continuo を止めたあとに行う）。
+
+**取り出した worktree の中でスクリプト（`sh scripts/test-like-ci.sh` など）を叩くなら、mise を使っている人は先に信頼する**
+（`(cd "$TMP/src" && mise trust)`。CONTRIBUTING.md と同じ前提）。上の `go build -C` は root を cwd にして叩くので、信頼しなくても通る。
+
+**片付けは、[docs/test_environment.md](test_environment.md) の「終わったあとの片付け」で検証用の continuo を止め、
+`abandon --id e2e` を済ませてから行う。**検証用の run の hook と statusline は控えた絶対パスを exec するので、
+それより先に消すと、残った pane の hook が無いパスを叩く。済ませたら `git worktree remove "$TMP/src"` で worktree を片付ける
+（`$TMP/bin` は一時のディレクトリの下にあるので、残しておいてかまわない）。
 
 **一、テスト用の `WORKFLOW.md` で、隔離する設定を2つ変える。**
 
@@ -189,9 +200,16 @@ continuo --id e2e "$WORK"
 走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
-**エージェントは計画を書くと、了承を訊いて一度 `Blocked` で止まる。**計画を読み、検証用の issue に了承のコメントを書いてから、Status を着手待ちへ戻す。
-**前の回の pull request が開いたまま残っているときは、着手待ちへ動かす前に閉じ、新しく作業してほしいとコメントしておく。**
-残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。
+**前の回の作業が残っているときは、着手待ちへ動かす前に片付ける。**残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。次の順で行う。
+
+1. 前の回の pull request が開いていれば閉じる（マージはしない）
+2. その branch を origin から消す（[docs/test_environment.md](test_environment.md) の「終わったあとの片付け」の `push origin --delete` の1行）
+3. 手元の worktree と branch を、控えた絶対パスの `abandon --id e2e` で片付ける
+4. **検証用の issue に**、前の回の作業を片付けたので新しく作業してほしい、とコメントする（pull request の側に書いても、エージェントは指示として読まない）
+
+**エージェントは計画を書くと、了承を訊いて `Blocked` で止まる。**計画を読み、検証用の issue に了承のコメントを書いてから、Status を着手待ちへ戻す。
+レビューの途中で質問して、また止まることもある。そのときは回答を書いて戻す。
+**了承と回答のコメントの先頭に、AI の印（`<!-- continuo:` で始まる HTML コメント）を付けない。**エージェントは印の付いたコメントを人間の指示として数えないので、また止まる。
 **`In Review` になれば成功である。**
 **issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
@@ -480,18 +498,25 @@ git push origin "$next"
 **タグは main の先頭に打つ。**CI はタグが指す commit をビルドするので、
 別の commit に打つと、その中身が配られる。
 
-**`main` を別の worktree が checkout していると、`git checkout main` は断られる。**そのときは、取ってきた
-`origin/main` の SHA を名指しして打つ。手元の `main` は古いことがあるので、そこへは打たない。
+**`main` を別の worktree が checkout していると、`git checkout main` は断られる。**そのときは、
+「1. 打つ前に確かめる」を通した commit の SHA を名指しして打つ。手元の `main` は古いことがあるので、そこへは打たない。
 
 ```bash
 # continuo リポジトリの root で実行する
-next=v0.1.9   # 「4. 版を決める」で決めた版に書き換える
+next=v0.1.9      # 「4. 版を決める」で決めた版に書き換える
+SHA=<「1.」を通した commit の full の SHA>   # 打つ時点の origin/main から取り直さない
 git fetch origin
-SHA=$(git rev-parse origin/main)   # 「1. 打つ前に確かめる」を通した commit と同じであることを確かめる
-git tag "$next" "$SHA"
-git rev-parse "$next"              # $SHA と同じであること
-git push origin "refs/tags/$next"
+if [ "$(git rev-parse origin/main)" != "$SHA" ]; then
+  echo "origin/main が確かめた commit から進んでいます。打たずに「1.」からやり直してください"
+else
+  git tag "$next" "$SHA" && git rev-parse "$next" && git push origin "refs/tags/$next"
+fi
 ```
+
+**`SHA` を打つ時点の `origin/main` から取り直さない。**あいだに別の pull request が入ると、
+実機の確認も `check-release-ready.sh` も通っていない commit にタグを打つことになる。
+**「実機で issue を1件通す」で控えた commit と `SHA` の差が `docs/` の下だけなら**（`git diff --name-only <控えた SHA> "$SHA"`）、
+実機の確認は回し直さなくてよい。ほかのファイルが入っていれば、`SHA` で回し直す。
 
 ## 8. CI が作るもの
 

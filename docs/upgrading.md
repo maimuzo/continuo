@@ -141,14 +141,14 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 ```
 
 **`WORKFLOW.md` に足さなければならないものも、消すものもありません。**増えた設定のキーも、消えたキーもありません。`continuo init` が置く `WORKFLOW.md` の雛形も変わっていません。
-ほかに変わるのは、`continuo init` が置く CI の検査ファイルの見本（`continuo-ci.yaml`）・continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキル・人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。
+変わるのは、continuo 本体が確認の画面で止まったときに書く引き渡しのコメント・`continuo init` が置く CI の検査ファイルの見本（`continuo-ci.yaml`）・continuo が Claude Code へ渡すシステムプロンプトと plugin `continuo-agent-procedures` のスキル・人間が自分で起動する Claude Code 向けの plugin `continuo-issue-comments` です。
 
 | 何が変わったか | 設定の書き換え |
 | --- | --- |
-| **CI の検査ファイル（`continuo-ci.yaml`）で、continuo の pull request だけを検査する運用を選べるようになりました** | 要りません。**使いたい人だけ、検査ファイルを置き直してください**（既にある検査ファイルは書き換わりません） |
-| **レビューの「差分を読む役」へ、検討の経緯を渡さなくなります** | 要りません |
 | **確認の画面で止まったときの引き渡しのコメントに、止まった画面の文と、その種類と直し方が載ります** | 要りません。**公開リポジトリで使っている人は、画面の文が公開の issue に載ることを知っておいてください** |
 | **エージェントが、第三者が初見で分かる順序で説明します** | 要りません。**plugin `continuo-issue-comments` を入れている人は、上げてください** |
+| **CI の検査ファイル（`continuo-ci.yaml`）で、continuo の pull request だけを検査する運用を選べるようになりました** | 要りません。**使いたい人だけ、検査ファイルを置き直してください**（既にある検査ファイルは書き換わりません） |
+| **レビューの「差分を読む役」へ、検討の経緯を渡さなくなります** | 要りません |
 
 ### 確認の画面で止まったときの引き渡しのコメントに、止まった画面の文が載ります
 
@@ -156,7 +156,7 @@ curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | 
 
 **v0.3.1 まで。**Claude Code が確認の画面（ツールを使ってよいか・フォルダを信頼するか・AskUserQuestion など）で止まると、continuo は画面を読まずに esc で閉じ、引き渡しのコメントには「何の確認だったかは continuo の側には残りません」と書いていました。
 
-**v0.3.2 から。**閉じる前に画面を1回読み（読むだけで、Claude Code へは何も送りません）、引き渡しのコメントの【止まった画面】に画面の文を、【種類】【再発するか】【止まった確認への直し方】にその種類から言えることを載せます。esc で閉じたツールの確認と AskUserQuestion が会話に残す「The user doesn't want to proceed with this tool use」などの文は人間の拒否ではない、という【補足】も付きます。同じ文は continuo のログ（`確認の画面で止まったときの画面を読みました` の WARN）にも残ります。読み方は [FAQ.md](FAQ.md) の「通知に載る確認の画面の文の読み方」にあります。
+**v0.3.2 から。**閉じる前に画面を1回読み（読むだけで、Claude Code へは何も送りません）、引き渡しのコメントの【止まった画面】に画面の文を、【種類】【再発するか】【止まった確認への直し方】にその種類から言えることを載せます。esc で閉じたツールの確認と AskUserQuestion が会話に残す「The user doesn't want to proceed with this tool use」などの文は人間の拒否ではない、という【補足】も付きます（作業の途中で止まり、continuo が esc で閉じたときだけ。起動直後と再起動の引き継ぎの道では付きません）。同じ文は continuo のログ（`確認の画面で止まったときの画面を読みました` の WARN）にも残ります。読み方は [FAQ.md](FAQ.md) の「通知に載る確認の画面の文の読み方」にあります。
 
 **気をつけること。****引き渡しのコメントは、公開かどうかを見ずに issue へ投稿されます。**資格情報の形の文字列（`ghp_…` などのトークン・`Bearer` の値・`Authorization:` の値・`password=` などの値・URL の `user:pass@`）は `***` に伏せますが、**伏せ字は網羅ではありません。**ほかのコマンドや引数は、公開リポジトリでは誰でも読めます。Claude Code に秘密を含むコマンドを打たせない作りにしてください。
 

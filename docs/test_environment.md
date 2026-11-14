@@ -119,9 +119,8 @@ gh project item-edit \
 gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.title) → \(.status)"'
 ```
 
-**エージェントは計画を書くと、了承を訊いて一度 `Blocked` で止まる。**計画を読み、issue に了承のコメントを書いてから、上の Ready の1行で戻す。
-**前の回の pull request が開いたまま残っているときは、Ready へ動かす前に閉じ、新しく作業してほしいとコメントしておく。**
-残っていると、エージェントは前の回の続きとして扱い、新しく確かめずに終えることがある。
+**前の回の作業が残っているときの片付けと、計画の確認で止まったときの手は、[docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。**
+エージェントは計画を書くと了承を訊いて `Blocked` で止まるので、了承を書いてから上の Ready の1行で戻す。
 
 **`In Review` になれば成功である。**手元の実測では、`Ready` から `In Review` まで**2分8秒**だった
 （2026-08-25。途中で `agent_prompt_stalled` により1回リトライし、2回目で通った）。
